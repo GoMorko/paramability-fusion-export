@@ -18,11 +18,13 @@ def _origin_axis(record, curve):
     return length > 0 and abs((bx - ax) * (oy - ay) - (by - ay) * (ox - ax)) / length < 1e-6
 
 
-def own_origin(record, reference):
+def own_origin(record, reference, fixed_plane):
     """True when `reference` (of an entity of the sketch graph `record`) is a projection of the origin point, an
-    origin axis or an origin plane (`origin`) of the sketch's own component: it sits still in the sketch, whatever
-    the sizes. The graph names its component by token; a graph that names none counts the target's own (`own`)."""
-    if not isinstance(reference, dict) or not reference.get("origin"):
+    origin axis or an origin plane (`origin`) of the sketch's own component, and the sketch plane moves with no size
+    (`fixed_plane`, from the caller): it then sits still in the sketch. On a plane that a size moves or turns, the
+    projection moves in the sketch and stays a measured input. The graph names its component by token; a graph that
+    names none counts the target's own (`own`)."""
+    if not fixed_plane or not isinstance(reference, dict) or not reference.get("origin"):
         return False
     component = record.get("component")
     token = component.get("token") if isinstance(component, dict) else None
@@ -31,18 +33,19 @@ def own_origin(record, reference):
     return reference.get("source") == "own"
 
 
-def constants_of(record, linked):
+def constants_of(record, linked, fixed_plane=False):
     """The refs of the projected entities that no size moves, for `solve_sketch`: a projection of another component
-    when no parameter reaches the sketch through that component (`linked` false), and projections of the origin of
-    the sketch's own component (`own_origin`, or an origin axis the reader did not mark). Other projections stay
-    measured inputs: a size can move the body edge or sketch they come from."""
+    when no parameter reaches the sketch through that component (`linked` false), projections of the origin of the
+    sketch's own component when the caller knows that no size moves the sketch plane (`fixed_plane`, `own_origin`),
+    and an origin axis the reader did not mark. Other projections stay measured inputs: a size can move the body edge
+    or sketch they come from."""
     points = {p["id"]: p for p in record.get("points") or [] if isinstance(p, dict) and "id" in p}
     out = []
     for curve in record.get("curves") or []:
         reference = curve.get("reference")
         if not isinstance(reference, dict):
             continue
-        if (reference.get("source") == "other" and not linked) or own_origin(record, reference) \
+        if (reference.get("source") == "other" and not linked) or own_origin(record, reference, fixed_plane) \
                 or _origin_axis(record, curve):
             out.append(("curve", curve["id"]))
             out.extend(("point", p) for p in list(curve.get("points") or []) + [curve.get("center")]
@@ -50,6 +53,6 @@ def constants_of(record, linked):
     for pid, point in points.items():
         reference = point.get("reference")
         if isinstance(reference, dict) and ((reference.get("source") == "other" and not linked)
-                                            or own_origin(record, reference)):
+                                            or own_origin(record, reference, fixed_plane)):
             out.append(("point", pid))
     return out

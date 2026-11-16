@@ -342,6 +342,16 @@ def _looks_like_origin(frame):
     return abs(sum(a * b for a, b in zip(origin, z))) <= 1e-6 and sorted(abs(c) for c in z)[-2] <= 1e-9
 
 
+def plane_fixed(table, timeline, profile, before):
+    """True when no ticked size moves or turns the plane the sketch of `profile` (`sketch`, `frame`, `reference`) sits
+    on (`placement_sizes` gives none): the projections of the origin of the sketch's own component then sit still in
+    the sketch (`sketch_solve.constants.own_origin`). False for a sketch of another component (`foreign`,
+    `borrowed`) and a face used as an outline, whose plane this cannot tell."""
+    if not isinstance(profile, dict) or profile.get("foreign") or profile.get("borrowed") or profile.get("face"):
+        return False
+    return not placement_sizes(table, timeline, profile, before)
+
+
 def _plane_on_part(reference, frame):
     """True when the plane of a sketch reference may move with the part's geometry: a face, or a construction plane
     built on the part. A construction plane described by an older capture (a token only) counts as built on the part

@@ -210,7 +210,8 @@ def _line_gaps(capture, table, source, line):
         return None
     try:
         linked = bool(reach.linked_sizes(table, record.get("sketch")))
-        solution = solve_sketch(record, None, constants_of(record, linked))
+        fixed = reach.plane_fixed(table, capture.get("items") or [], source, None)
+        solution = solve_sketch(record, None, constants_of(record, linked, fixed))
         a, b = solution.points.get(ids[0]), solution.points.get(ids[1])
         if not a or not b or not all(v.derived for v in a + b):
             return None

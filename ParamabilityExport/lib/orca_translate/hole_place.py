@@ -124,7 +124,9 @@ def _followed(ctx, item, data, normal, positions):
     if abs(abs(turn) - 1.0) > 1e-6:
         return "they are not drilled straight into their sketch"
     try:
-        formulas = SketchFormulas(ctx.table, record)
+        plane = {"sketch": data.get("sketch"), "frame": frame, "reference": data.get("reference")}
+        fixed = reach.plane_fixed(ctx.table, ctx.capture.get("items") or [], plane, item.get("index"))
+        formulas = SketchFormulas(ctx.table, record, fixed)
     except Exception:  # a sketch that cannot be solved keeps its numbers
         return "their sketch cannot be worked out"
     ctx.doubt(formulas.unconfirmed, UNCONFIRMED % (data.get("sketch") or "a sketch"))

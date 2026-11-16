@@ -331,7 +331,9 @@ curves). A borrowed sketch is read through its native object, so its numbers are
   target's component, `other` one in another component, `none` a reference with no source (not parametric). A
   projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
   component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
-  the sketch's own component sits still in the sketch, whatever the sizes (`sketch_solve.constants.own_origin`).
+  the sketch's own component sits still in the sketch when no ticked size moves or turns the sketch plane
+  (`design_model.reach.plane_fixed`, `sketch_solve.constants.own_origin`); on a plane that a size moves, it stays a
+  measured input like other projected geometry.
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
   `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.

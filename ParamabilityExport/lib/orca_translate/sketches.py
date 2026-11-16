@@ -191,20 +191,23 @@ class SketchFormulas:
     """The point and radius formulas of one sketch over the sizes, from its graph record. Each `*_expr` gives an
     `Expr` over size names, or None with `why` set."""
 
-    def __init__(self, table, record):
+    def __init__(self, table, record, fixed_plane=False):
+        """`fixed_plane`: no ticked size moves the sketch plane (`reach.plane_fixed`), so projections of the origin
+        of the sketch's component are fixed numbers (`constants.own_origin`)."""
         self.table = table
         self.record = record
         self.formulas = dimension_formulas(table, record)
         settings = [leaf_values(self.formulas, size_env(table, o))
                     for o in override_sets(moving_sizes(table, self.formulas))]
-        self.solution = solve_sketch(record, settings or None, constants_of(record, False), extended=True)
+        constants = constants_of(record, False, fixed_plane)
+        self.solution = solve_sketch(record, settings or None, constants, extended=True)
         self.points = {p["id"]: tuple(p["xy"]) for p in record.get("points") or []
                        if isinstance(p, dict) and isinstance(p.get("id"), int) and p.get("xy")}
         self.curves = [c for c in record.get("curves") or [] if isinstance(c, dict)]
         self.why = ""
         self.unconfirmed = ()
         if self.solution.parallel_by_distance and not DISTANCE_KEEPS_PARALLEL:
-            plain = solve_sketch(record, settings or None, constants_of(record, False), extended=True,
+            plain = solve_sketch(record, settings or None, constants, extended=True,
                                  distance_parallel=False)
             self.unconfirmed = self._resting(plain)
 
