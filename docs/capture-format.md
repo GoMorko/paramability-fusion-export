@@ -752,7 +752,8 @@ against `samples`.
   the part). `made_box`: `{ "min", "max" }` around the boxes of the faces the revolve made (`faces`), or null. Absent
   for a full turn; older captures have only `start_face_normal`. The measured check of the turning sense
   (`design_model/steps/revolve.py`): the caps decide, and when they do not (a quarter turn ends with the same cap
-  normal either way) the made faces must fit the box the outline sweeps one way only.
+  normal either way) the made faces must fit the box the outline sweeps one way only. For two sides `start_face_normal` is the end face of one side, which tells which side each
+  angle turns to (`back_sides`).
 
 **HoleFeature** (`holeType`, `holeTapType`, `holeDiameter`, `tipAngle`, `counterboreDiameter`, `counterboreDepth`,
 `countersinkDiameter`, `countersinkAngle`, `position`, `direction`, `extentDefinition`, `holePositionDefinition`,
@@ -1660,7 +1661,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | Type | Field paths |
 |---|---|
 | ExtrudeFeature | `side_one.distance`, `side_two.distance`, `side_one.taper_deg`, `side_two.taper_deg`, `side_one.offset` (to entity), `side_two.offset`, `symmetric.distance`, `symmetric.taper_deg`, `start.offset` |
-| RevolveFeature | `extent.angle_deg` |
+| RevolveFeature | `extent.angle_deg`; two sides: `extent.angle_one_deg`, `extent.angle_two_deg` |
 | HoleFeature | `diameter`, `tip_angle_deg`, `extent.depth`, `counterbore.diameter`, `counterbore.depth`, `countersink.diameter`, `countersink.angle_deg` |
 | FilletFeature | `sets.<n>.radius` |
 | ChamferFeature | `sets.<n>.distance`, `sets.<n>.distance_two`, `sets.<n>.angle_deg` |
@@ -2095,7 +2096,8 @@ values are the answer. A motion file without `unmeasured` (written by hand) says
   not be tried at other values" (`sketch_motion.placement_doubts`).
 - A reversed placement negates the y formulas of its loops.
 - Hole points write `origin` as formulas (the drill tip revolve too); a revolve axis from a sketch line writes
-  `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
+  `axis.point` in the sketch plane. A symmetric revolve, and a revolve to two sides whose angle before the sketch is a
+  number, turn the moving origin about the axis.
 - Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
   between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
   circle with its centre and radius, and a face picked by a point inside an end face with the first of its 3 nearest

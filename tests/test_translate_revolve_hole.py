@@ -111,11 +111,6 @@ class RevolveTest(unittest.TestCase):
         (step,) = result.recipe["features"]
         self.assertNotIn("angleDeg", step)
 
-    def test_two_sides_refuse(self):
-        result = translate_fixture("revolve_two_sides")
-        self.assertIsNone(result.recipe)
-        self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "RevolveFeature"))
-
     def test_cut_start_face_points_along_the_travel(self):
         result = translate_fixture("revolve_cut_quarter")
         step = result.recipe["features"][1]

@@ -355,7 +355,91 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     part thicker at some places, and `Tilt` moves the copies. On the copy without the boss, the thread reason names
     `Plate` only. Export the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same
     pattern reason. Afterwards the design is as before.
-36. RC1, revolves whose start face is gone, and a symmetric revolve. On the XY plane make a 40 x 20 x 10 mm box with
+36. NC1, extrude, revolve and loft with the operation "New Component". Units mm, Z up. Use a new design with Direct
+    Modeling off (timeline on) and no user parameters. Build three cases, each on the top level, in one design.
+    (a) On the XY plane draw a 30 x 20 mm rectangle (2 point rectangle, corner at the origin). Use Create > Extrude,
+    distance 10 mm, Operation "New Component". (b) On the XZ plane draw a 10 x 20 mm rectangle at X from 50 to 60
+    and Z from 0 to 20. Use Create > Revolve around the Z axis, 360 deg, Operation "New Component". (c)
+    On the XY plane draw a 20 x 20 mm square centred at (100, 0); make a plane 15 mm above the XY plane (Construct >
+    Offset Plane); draw a 10 x 10 mm square centred at (100, 0) on it. Use Create > Loft with both squares,
+    Operation "New Component". Do not activate any component and do not move any occurrence.
+    Export: Export for Paramability once for the body of each of the three new components (pick the body), then
+    open `report.json`. Per case read the item of the extrude, of the revolve and of the loft: `type`, `name`,
+    `component` (a token), `in_target_component`, `data.operation` (extrude and revolve; the loft too if the
+    field exists) and `bodies_after`. Then read the sketch item of the same case: its `component`. Send back, per
+    case: the item `type`, `data.operation`, whether the feature `component` equals the `component` of the
+    sketch, whether it differs from the top level component `capture.component` (name and token), and the name
+    of the component that holds the new body. In Fusion look at the browser tree: write down the name of the new
+    component ("Component1" and so on), which node holds the sketch (the top level or the new component), which
+    holds the body, and in the timeline whether the feature shows a component icon. Open Inspect > Properties
+    on the new component and write down its origin offset from the top level (should be 0, 0, 0 for all three).
+37. AL1, what an Align step reads as. Units mm, Z up. Make two components: Part A with a 20 x 20 x 20 mm box on
+    the XY plane (corner at the origin) and Part B with a 10 x 10 x 10 mm box on the XY plane (corner at the origin
+    of its own component). On the top level, use Modify > Align on Part B: From face = the bottom face of Part B,
+    To face = the top face of Part A, with "Flip" off and "Align" mode (faces touch and are aligned), so that Part B
+    rests on top of Part A. Do the same once in a second design with Modify > Move/Copy (type Free Move, 0 0 0,
+    Z 20 mm) as a comparison.
+    Export: in the Align design export the body of Part A and of Part B (two exports), tick no parameters. In
+    `report.json` read the `items` list: for the Align step write down `type` (the timeline item type, such as
+    `MoveFeature` or another name), `name`, `health`, `message`, the verdict of the item (`verdict`, with `gap`,
+    `note` and `cause` when it is left out), and `component`. The current add-in does not read an Align step as a
+    move; note whether it appears in `items` at all. In Fusion, right-click the timeline item and read its name
+    and icon (the tooltip names the feature kind). Send back the same fields for the Move comparison.
+38. TA1, where a Join extrude with extent "All" ends. Units mm, Z up. On the XY plane make two bodies in one
+    component: body 1 a 20 x 20 mm square at (0, 0) to (20, 20) extruded 10 mm up (new body), and body 2 a 20 x 20
+    mm square at (40, 0) to (60, 20) extruded 30 mm up (new body). They do not touch. Draw a 10 x 10 mm square on
+    the XY plane at (5, 5) to (15, 15). Use Create > Extrude on it, Direction One, Extent "All", Direction
+    Positive (up), Operation Join, with only body 1 as the target (not "All bodies" if the dialog offers a choice
+    of bodies, pick body 1). Make this a copy of the design. In a second copy do the same but start from a sketch
+    on a plane at Z 5 mm (Offset Plane) with the same square, so the sketch starts inside body 1.
+    Export: Export for Paramability of body 1 in each copy, with no parameters ticked. In `report.json` read the
+    item of the extrude: `data.side_one.kind` (it reads `throughAll` or `all`), `data.end_offset` (the distance from the
+    sketch plane to the measured end face), `data.end_area`, `data.end_normal` and `data.target_box_before`. Send
+    back those fields. In Fusion measure (Inspect > Measure) the top of body 1 after the step and write down its
+    Z height: 10 mm means the extrude ends at the far side of the target body; 30 mm means it ends at the far
+    side of all bodies in the component; another value gets written down too. Write down also whether body 2
+    changed.
+39. PI1, Pipe: start plane, section placement, hollow section. Units mm, Z up. Make a path on the XZ plane: a line
+    from (0, 0) to (0, 40) mm (so it runs along Z), then a tangent arc, 90 deg, radius 15 mm, ending at
+    (15, 55) pointing along +X (one sketch, three curves joined). Make five pipes from the same path, each as a
+    new body (use Undo or copies of the design between them). Use Create > Pipe, path = the sketch, and: (a)
+    Section Circle, Section Size (outside diameter) 10 mm, Hollow off. (b) Circle 10 mm, Hollow on, Section
+    Thickness 2 mm. (c) Section Square, size 10 mm, Hollow off. (d) Section Triangle, size 10 mm, Hollow off.
+    (e) Circle 10 mm, with Distance One 0 and Distance Two 1 as default (a repeat of (a) to check the defaults).
+    Export: the Export dialog does not read Pipe yet, so it leaves the pipe out or stops. Read the item of the
+    pipe in `report.json` (`items`: `type` should be `PipeFeature`, `health`, verdict, `note`). Send back
+    the `type` and note. In Fusion, per pipe, write down: where the section starts (use Inspect > Section
+    Analysis or hide the pipe and look at the end face) as a position and the plane normal at the start of the
+    path: is the end face at Z 0 and square to Z; the outer diameter of the end face (Inspect > Measure); for (b)
+    the inner diameter; for (c) and (d) which way the corners point (a corner toward +X, +Y or another way) and
+    the side length; the body volume (Inspect > Properties); and in the timeline dialog (double click the feature)
+    the values of Distance One and Distance Two. Say whether the section is centred on the path.
+40. T2-open, a thin extrude of an open line. Units mm, Z up. On the XY plane draw one open line from (0, 0) to
+    (40, 0) and a second sketch with two joined lines (0, 0) to (30, 0) to (30, 20) (not closed). Use Create >
+    Extrude on each: the dialog picks the open line as the profile; set Thin Extrude on, Wall Location "Side 1",
+    Thickness 2 mm, distance 15 mm, Operation New Body. Repeat the line with Wall Location "Side 2" and with
+    "Center Line". Use one new body for each.
+    Export: export one of the bodies with no parameters ticked (the export may stop with a reason for an open
+    line; read the report anyway). In `report.json` read the extrude item: `data.thin_wall.profile_type` (what the
+    open line reads as, such as `Path` or `Profile`), `data.thin_wall.location`, `data.thin_wall.thickness`,
+    `data.profiles` (each entry, `kind` and `type`), `data.end_area`, `data.end_normal` and `data.end_offset`.
+    Send back these for every body. In Fusion, look at the end of the wall in the section view (zoom on the end of
+    the line): is the end square or round, and for the two joined lines is the corner at (30, 0) sharp or round
+    on the outside. For each location say on which side of the line (looking along it from the start) the wall
+    stands: left or right.
+41. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
+    plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
+    about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with
+    angle one 90 deg (the start face then fits both sides). Third design: a 60 x 60 x 30 mm box centred on the Z axis,
+    then the same sketch with a second rectangle 25 to 28 mm away from the Z axis, both revolved Two Sides with
+    `Ahead` and `Back` as an intersect.
+    Export: export the first body with `Ahead` and `Back` ticked. Both are sizes. In Paramability the ring segment
+    matches the Fusion body; set `Back` to 80: the body grows only on the side of angle two, as in Fusion. The second
+    design leaves the revolve out with the tip "Make two revolves, one to each side of the sketch." The third copy
+    matches the Fusion body (the box keeps both ring segments). Export the first body for Orca: it matches, and
+    `Ahead` and `Back` keep their numbers with the reason "turns to two sides". Afterwards the design is as before.
+
+42. RC1, revolves whose start face is gone, and a symmetric revolve. On the XY plane make a 40 x 20 x 10 mm box with
     its corner at the origin. Sketch on its front face (y = 0) a 5 by 8 mm rectangle from x = 10 to 15 whose top side
     lies on the top front edge (z = 2 to 10). Revolve it about that top front edge by 90 degrees away from the box
     (toward -Y), Join. In a second design, sketch on the XZ plane a 10 by 15 mm rectangle from x = 20 to 30, z = 0 to
@@ -367,7 +451,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     turn to each side) with `Sweep` a fixed number; the volume equals Fusion's (7853.98 mm3). The third is a closed
     ring (23561.94 mm3).
 
-37. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
+43. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
     high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular
     pattern of the hole about the Z axis: Type Full, quantity 6. In a second design: Type Angle, total angle 120
     degrees, quantity 3.
@@ -377,7 +461,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Fusion gives, and whether the holes in Fusion sit at 0, 60, 120 and so on: they decide how the reader must read
     `PatternElement.transform`.
 
-38. SK1, what a sketch on a face says it sits on. Make a 30 x 20 x 10 mm box (user parameter `Height` for the 10 mm).
+44. SK1, what a sketch on a face says it sits on. Make a 30 x 20 x 10 mm box (user parameter `Height` for the 10 mm).
     Sketch a 6 mm circle on its top face and extrude it 5 mm up (Join). Sketch a point on the top face and drill a
     simple 3 mm hole there from that one point.
     Export: Export for Orca with `Height` ticked. In `report.json` note whether the boss profile has `reference`

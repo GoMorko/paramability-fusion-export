@@ -69,7 +69,7 @@ can be.
 | Thin extrude: several outlines, holes, two ways, To object, taper | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Revolve: full turn or angle | Copied | - | Copied | - | Orca: one outline without holes, the axis in the sketch plane. |
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
-| Revolve: two sides with two angles | Left out | Yes, add-in only | Left out | Yes, add-in only | |
+| Revolve: two sides with two angles | Copied | - | Partly | Needs Orca | Left out when one angle is 90 or 270 degrees and the start face fits both sides. Two equal angles keep their numbers. Orca: both angles keep their numbers. |
 | Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | |
 | Sweep: path in one plane (lines, arcs, splines) | Copied | - | Partly | Needs Orca | Paramability: a path of lines and arcs follows sizes; a spline path is copied as measured. Orca: the path keeps its numbers, one outline without holes, no sharp corners. |
 | Sweep: path in 3D | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: lines joined by tangent arcs, as measured. Splines in 3D are left out. |
@@ -194,7 +194,7 @@ Sorted by how many printing projects it helps:
 4. Join or new body extrudes through all (app change).
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
 6. Extrudes to a tilted or curved face, and extrudes that start from a face with an offset (add-in only).
-7. Two sided revolves and two sided intersect extrudes (add-in only).
+7. Two sided intersect extrudes (add-in only).
 8. Coils with a taper or a spiral (app change), and half turns (add-in only).
 9. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
 10. Emboss on a curved face (app change).

@@ -9,6 +9,12 @@ removed, is not given; the other cap can still tell (`sense`). A quarter turn en
 way, so when the caps do not tell, the box of the faces the revolve made (`made_box`) must fit inside the box the
 outline sweeps one way and not the other. For a symmetric revolve the caps must sit the angle before and after the
 sketch (`symmetric_ok`): that also proves how Fusion counts the angle.
+
+A revolve to two sides turns by `angle one` to one side of the sketch and by `angle two` to the other, and Fusion does
+not say which side is which. The result covers one turn of `angle one + angle two` that starts a number of degrees back
+from the sketch: `angle two` back when side one is the right hand turn about the axis, `angle one` back when it is the
+other. The start face is one of the two end faces of that turn, so the way the material leaves it (`travel`) tells the
+two apart (`back_sides`). How the travel is measured, and how the result is written, stay with the destination.
 """
 import math
 
@@ -17,6 +23,8 @@ from ...geometry import vec
 FULL_TURN_DEG = 360.0
 # How far apart two unit normals may be and still count as the same direction.
 NORMAL_TOL = 1e-3
+# How far apart (unit vectors) the measured and the expected travel of a two sided revolve may be.
+TRAVEL_TOL = 1e-3
 # Steps per full turn when the box an outline sweeps is sampled, and how far (mm) a made face may stand out of it.
 BOX_STEPS = 720
 BOX_TOL = 1e-2
@@ -103,3 +111,24 @@ def symmetric_ok(data, turn, axis, per_side_deg, cut):
         return None
     caps = _caps(turn, axis, -per_side_deg, 2.0 * per_side_deg, cut)
     return all(any(_same(n, cap) for cap in caps) for n in measured)
+
+
+def back_sides(travel, turn, axis, angle_one, angle_two):
+    """The sides (1 for `angle one`, 2 for `angle two`) whose angle the turn may start back from the sketch.
+
+    `travel` is the unit direction the material leaves the start face in, `turn` the unit direction the outline moves
+    in at the start of a right hand turn about the unit `axis`, both in one frame. The answer is empty when no end face
+    of either turn matches the start face, and holds both sides when the start face fits both turns (equal angles, or
+    an angle of a quarter turn). The turn then covers from `back` degrees back to `angle one + angle two - back`
+    degrees ahead, by the right hand rule about `axis`.
+    """
+    angles = {1: float(angle_one), 2: float(angle_two)}
+    found = set()
+    for sense in (1.0, -1.0):
+        for side, back in angles.items():
+            expected = vec.rotate(vec.scale(turn, sense), axis, -sense * back)
+            if vec.length(vec.sub(expected, travel)) < TRAVEL_TOL:
+                # Turning the other way from `back` ahead covers the same turn as the right hand way from the other
+                # angle back.
+                found.add(side if sense > 0 else 3 - side)
+    return sorted(found)

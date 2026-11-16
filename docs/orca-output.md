@@ -120,7 +120,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Split Body by a solid body | that body as a tool, then a Boolean (Intersect inside it, Cut outside it) | as the tool's steps |
 | Move of the body: a turn about an axis (a negative angle turns about the reversed axis) | Transform about that axis | `xf_angle_deg` |
 | Move of the body: any other move | Transform by the measured turn and shift | no |
-| Revolve of one outline without holes, the axis in its sketch plane: a full turn, an angle, an angle to both sides | sketch entities with a construction line on the axis (`revolve_axis_entity`), Revolve | `revolve_angle` (not for both sides) |
+| Revolve of one outline without holes, the axis in its sketch plane: a full turn, an angle, an angle to both sides, two sides with two angles | sketch entities with a construction line on the axis (`revolve_axis_entity`), Revolve | `revolve_angle` (not for both sides or two sides) |
 | Sweep along a straight path | Extrude of the outline, as long as the path | the outline's sizes |
 | Sweep along one arc or a full circle | Revolve of the outline about the arc's axis | no |
 | Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed (a closed path without splines), one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
@@ -529,8 +529,11 @@ not judged to meet material where Orca removes nothing.
   same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only. A
   full turn needs none. Fusion's angle of a symmetric revolve is the turn to each side: the copy turns the sketch
   plane that angle back and turns twice the angle, so its angle keeps its number, and the measured caps must sit
-  there; 180 degrees or more to each side is a full turn. Left out: an axis off the sketch plane, an outline across the axis,
-  an outline with holes, several outlines, two angles. A cut is checked against the copied part like any cut.
+  there; 180 degrees or more to each side is a full turn. A turn to two sides with two angles turns the sketch plane
+  back by the angle of one side and turns by the sum: the start face tells which side (`back_sides`), and both angles
+  keep their numbers. When the start face fits both sides (one angle of 90 or 270 degrees), it is left out with the
+  cause `revolveSides`. Left out: an axis off the sketch plane, an outline across the axis, an outline with holes,
+  several outlines. A cut is checked against the copied part like any cut.
 
 ### Sweeps, lofts and splines
 

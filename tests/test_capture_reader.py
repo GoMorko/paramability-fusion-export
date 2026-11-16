@@ -604,6 +604,14 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(odd["axis"], {"kind": "other", "type": "Vertex"})
         self.assertEqual(odd["extent"], {"kind": "other", "type": "NewExtentDefinition"})
 
+    def test_two_sides_name_the_parameters_of_both_angles(self):
+        two = Obj("fusion::TwoSidesAngleExtentDefinition",
+                  angleOne=Obj(name="d4", expression="30 deg", value=math.radians(30)),
+                  angleTwo=Obj(name="d5", expression="turn", value=math.radians(60)))
+        data = self.read(None, two)
+        self.assertEqual(data["params"], {"extent.angle_one_deg": {"name": "d4", "expression": "30 deg", "value": 30.0},
+                                          "extent.angle_two_deg": {"name": "d5", "expression": "turn", "value": 60.0}})
+
 
 class HoleTest(unittest.TestCase):
     def read(self, **kw):

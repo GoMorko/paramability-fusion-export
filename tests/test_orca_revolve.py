@@ -7,6 +7,7 @@ from tests import context  # noqa: F401
 from tests.orca_sized import fixture, revolve_sized, table_of
 from tests.probe_helpers import user
 
+from lib.capture_model import gap_hints
 from lib.orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from lib.orca_translate import FIXED, causes, translate
 from lib.orca_translate.place import plane_point
@@ -99,6 +100,23 @@ class RevolveTest(unittest.TestCase):
         capture = fixture("revolve_quarter")
         capture["items"][-1]["data"].update(end_face_normal=[1, 0, 0])
         self.assertEqual([g["index"] for g in translate(capture).left_out], [capture["items"][-1]["index"]])
+    def test_a_turn_to_two_sides_starts_the_angle_of_one_side_back(self):
+        # Turned 30 degrees one way and 60 the other about +Y: the start face at -60 degrees (side one turns the right
+        # hand way) or at -30 degrees (the other way) puts the sketch plane there.
+        for back in (60, 30):
+            capture = fixture("revolve_two_sides")
+            r = math.radians(-back)
+            capture["items"][-1]["data"]["start_face_normal"] = [math.sin(r), 0.0, math.cos(r)]
+            made, sketch = revolve_of(translate(capture))
+            self.assertEqual(made.revolve_angle, 90.0)
+            self.assertAlmostEqual(sketch.plane.normal[0], -math.sin(math.radians(back)))
+            self.assertEqual([round(v, 9) for v in axis_of(made, sketch)[1]], [0.0, 1.0, 0.0])
+
+    def test_a_turn_to_two_sides_that_does_not_tell_the_side_is_left_out(self):
+        capture = fixture("revolve_two_sides")
+        capture["items"][-1]["data"].update(start_face_normal=[-1.0, 0.0, 0.0])
+        capture["items"][-1]["data"]["extent"].update(angle_one_deg=90.0, angle_two_deg=30.0)
+        self.assertEqual([g["cause"] for g in translate(capture).left_out], [gap_hints.REVOLVE_SIDES])
 
     def test_sizes_that_move_the_sketch_plane_are_marked(self):
         capture = fixture("revolve_quarter")
@@ -126,7 +144,6 @@ class RevolveTest(unittest.TestCase):
         holed["items"][1]["data"]["profiles"][0]["loops"].append(
             {"outer": False, "curves": [{"kind": "circle", "center": [7.5, 10], "radius": 1}]})
         cases = {"axis off the plane": (fixture("revolve_axis_off_plane"), causes.REVOLVE_AXIS),
-                 "two angles": (fixture("revolve_two_sides"), causes.REVOLVE_TWO_ANGLES),
                  "across the axis": (across, causes.REVOLVE_ACROSS_AXIS),
                  "outline with holes": (holed, causes.OUTLINE_HOLES)}
         for name, (capture, cause) in cases.items():
