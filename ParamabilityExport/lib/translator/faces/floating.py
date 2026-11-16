@@ -294,6 +294,7 @@ def _material_boxes(placers, motion=None):
             if placer.distance.n <= 0:
                 continue
             boxes = [_face_box(frame, footprint, placer.distance.n) for frame, footprint in placer.faces]
+            boxes += [ring.box(max(ring.radius, ring.moved_radius(placer.distance.n))) for ring in placer.rings]
             box, corners = (_union(boxes) if boxes else None), []
         elif isinstance(placer, (ToolPlacer, MovedPlacer)):
             inner = placer.placers if isinstance(placer, ToolPlacer) else [placer.inner]

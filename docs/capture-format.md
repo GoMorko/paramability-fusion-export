@@ -1378,16 +1378,22 @@ in all and 8 threads, and leaves other profiles, tapered threads and a thread in
 (`threadProfile` and `threadLimits` hints).
 
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
-`distance`; `faces` after it. When no face is readable before the item, `faces` holds the flat faces of
-`feature.faces` read after it, moved back by `distance`):
+`distance`; `faces` after it. When no face is readable before the item, `faces` holds the faces of `feature.faces`
+read after it: a flat face moved back by `distance`, a cylinder as `{ "kind": "round", "token": "..." }` without
+geometry, any other face as `{ "kind": "other", "type": ... }`; the translator copies only flat faces read this way):
 
 ```json
 {
   "distance": 2.0,
   "faces": [
-    { "token": "...", "frame": FRAME, "space": "sketch", "loops": [LOOP, ...], "sides": "square", "meets_offset": false }
+    { "token": "...", "frame": FRAME, "space": "sketch", "loops": [LOOP, ...], "sides": "square", "meets_offset": false },
+    { "kind": "round", "token": "...", "origin": [x, y, z], "axis": [x, y, z], "radius": 2.5, "point": [x, y, z],
+      "outward": false, "meets_offset": false,
+      "ends": [{ "kind": "circle", "center": [x, y, z], "normal": [x, y, z], "radius": 2.5,
+                 "face": { "frame": FRAME, "space": "sketch", "loops": [LOOP, ...] } }, ...] }
   ],
-  "faces_after": [{ "point": [x, y, z], "normal": [x, y, z] }]
+  "faces_after": [{ "point": [x, y, z], "normal": [x, y, z] }],
+  "rounds_after": [{ "origin": [x, y, z], "axis": [x, y, z], "radius": 2.7 }]
 }
 ```
 
@@ -1398,9 +1404,20 @@ in all and 8 threads, and leaves other profiles, tapered threads and a thread in
   `{ "kind": "other", "type": "Cylinder" }`.
 - `sides`: `square` when every face next to it (`edge.faces`) is a plane across it or a cylinder along its normal,
   else `other`. `meets_offset`: a face next to it is moved by the same step.
+- A round face (`Cylinder` geometry): `origin`, `axis` (unit) and `radius` (mm) of the cylinder, `point`
+  (`pointOnFace`), and `outward`: true when the outward normal at `point` points away from the axis (a pin or a boss),
+  false when it points towards it (a bore), null when the normal cannot be read. `ends` has one entry per loop of the
+  face: a loop of one `Circle3D` edge is `{ kind: circle, center, normal, radius, face }`, where `face` is the face
+  across that edge: its outline (`frame` with `z` its outward normal, `loops`, as a flat moved face) when it is a
+  plane, `{ kind: other, type }` when it is not, null when the edge has not exactly one other face. A loop of more
+  edges is `{ kind: other, type: "edges" }`, a loop of one other curve `{ kind: other, type }`, an end that cannot be
+  read null. When the axis, the radius or the point cannot be read, the record is `{ kind: round, token }` only.
 - `faces_after`: a point and the outward normal of each flat face of `feature.faces` with the marker after the item.
-  The translator copies a face only when one of them lies on the face plane moved by `distance`; each face becomes an
-  extrude of its outline (join outwards, cut inwards).
+  The translator copies a face only when one of them lies on the face plane moved by `distance`.
+- `rounds_after`: `{ origin, axis, radius }` of each cylinder face of `feature.faces` with the marker after the item.
+  The translator copies a round face only when one of them lies on its axis with the radius `radius + distance` (a
+  pin) or `radius - distance` (a bore). The step is written as `offsetFaces` with one `near` point per face, and
+  needs recipe version 17 when it moves a round face.
 
 **CoilFeature** (`roles`, `volumes_before`, `made`, `faces`, `params`; `fusion_reader/read_coil.py`; Fusion's API gives
 an existing coil no type, axis, hand, section or operation, so these are worked out from what the reader measures):
@@ -1929,7 +1946,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`; 17 with a `scale` step, or a `shell` step that has `outside` or `corners` or has no `openFaces`: `SHELL_VERSION`, or a `draft` step that has `angleTwoDeg`: `DRAFT_VERSIONS`). It always carries `sizesAsWritten: true`; with a size table it also carries `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`; 17 with a `scale` step, a `shell` step that has `outside` or `corners` or has no `openFaces`: `SHELL_VERSION`, a `draft` step that has `angleTwoDeg`: `DRAFT_VERSIONS`, or an `offsetFaces` step that moves a round face, which the step carries as `NewerStep.version`). It always carries `sizesAsWritten: true`; with a size table it also carries `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`.
 
@@ -2225,7 +2242,7 @@ values are the answer. A motion file without `unmeasured` (written by hand) says
   those sizes. An edge inside one flat side wall, away from its corners, where no second flat wall crosses it (a round
   meets the wall), follows that wall: the outline curve under it and the length. The same holds for pattern and mirror
   copies, shell inner walls, crossing edges and faces an `offsetFaces` step moved (the point moves back by the
-  distance, then follows what made the face).
+  distance, then follows what made the face; on a moved round face it moves back along the radius).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
 - Symmetric patterns (`lib/translator/repeat/symmetric.py`, `lib/translator/repeat/`). A symmetric direction is written as a forward and a
@@ -2784,6 +2801,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Occurrence.sourceComponent` and `Occurrence.assemblyContext` of a timeline occurrence; `ConstructionPlane.component` | the item `component`; the "Bodies inside components" hand tests |
 | Feature inputs (profiles, edges, planes, faces) of a component feature come as proxies through the occurrence; `nativeObject` gives the component's own entity | records of the target's own inputs carry no `foreign`; the "Bodies inside components" hand tests |
 | `OffsetFacesFeature.inputFaces` (or `faces` before the item), `distance`, `faces` after it; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `Plane.uDirection`; positive distance moves the face outwards | `faces_after` must show the face moved by `distance`; the Offset faces hand test |
+| A whole cylinder face has two loops of one `Circle3D` edge each (no seam edge); `Cylinder.origin`, `axis`, `radius`; `Circle3D.center`, `normal`, `radius`; `BRepEdge.faces` gives the face across an end circle; `feature.faces` after the item lists the moved cylinder | a face with a seam or part of a circle has other loops and is left out; `rounds_after` must hold the cylinder with the new radius, else the step is left out; hand check PF1 in `docs/hand-checks.md` |
 | `EmbossFeature.profiles` (`Profile` and `SketchText` items; the area of a text is computed from its outlines), `inputFaces`, `faces` after the item, `isTangentChain`, `depth`, `horizontalDistance`, `verticalDistance`, `rotationAngle`; `BRepFace.area`, `BRepFace.body`; a positive `depth` raises and a negative one sinks; the feature exists only in Fusion builds from September 2025 and is marked preview in the API reference | `volume_after` must differ from `volume_before` by `sum(areas) * abs(depth)` with the sign of `depth`, else the translator refuses; the Emboss hand tests (section 10 of `docs/hand-tests.md`) |
 | `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch or model space; `SketchText.boundingBox` is in sketch space | `space` is decided by the bounding box and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
 | Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |

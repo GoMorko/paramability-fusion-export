@@ -518,7 +518,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
                   + [DRAFT_VERSIONS.get(key, 0) for step in written if step["kind"] == "draft" for key in step]
                   + [_counts_version(step, ctx.table) for step in written]
                   + [_sweep_version(step) for step in written]
-                  + [_shell_version(step) for step in written])
+                  + [_shell_version(step) for step in written]
+                  + [getattr(step, "version", 0) for step in written])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps, "sizesAsWritten": True}
     over = _over_caps(recipe, ctx)
     if over:

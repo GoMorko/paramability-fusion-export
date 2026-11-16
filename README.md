@@ -34,7 +34,8 @@ For some steps the add-in measures the shape that Fusion made, for example the r
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
 A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
-Scale of a body is copied only when the body measured after it has the size and volume that its factors give.
+Scale of a body is copied only when the body measured after it has the size and volume that its factors give. A Press
+Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).

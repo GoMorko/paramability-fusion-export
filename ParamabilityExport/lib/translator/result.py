@@ -50,6 +50,18 @@ class Doubt:
         return "Doubt(%r, %r)" % (self.names, str(self.why))
 
 
+class NewerStep(dict):
+    """A recipe step (a plain dict for JSON and copying) that needs recipe version `version`, although its kind and
+    fields do not show it: an offsetFaces step that moves a round face, say."""
+    version = 0
+
+    @classmethod
+    def of(cls, fields, version):
+        step = cls(fields)
+        step.version = version
+        return step
+
+
 class Entry:
     """One recipe step a handler writes, with what the walk keeps about it once the step has its id.
 
