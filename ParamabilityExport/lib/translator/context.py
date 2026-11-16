@@ -11,7 +11,7 @@ from ..capture_model import lineage as body_lineage, tool_items
 from ..capture_model.capture import same_body
 from .result import Doubt, StepResult
 from ..capture_model.step_kinds import recipe_kind
-from ..design_model import tool_chains
+from ..design_model import tool_chains, words
 from ..design_model.values import reads_in
 
 MAX_ID = 64
@@ -161,6 +161,11 @@ class Context:
         if isinstance(component, dict) and (component.get("name") or component.get("token")):
             (self._recordings[-1] if self._recordings else self).follows.add(
                 (component.get("token") or "", component.get("name") or ""))
+
+    def movers_unknown(self, phrase):
+        """The capture cannot say which sizes may move what `phrase` names: the recipe keeps it where it is now and
+        says so in a note (`note`)."""
+        self.note(words.movers_unknown(phrase))
 
     def doubted(self):
         """Fusion names of the sizes marked so far (a doubt without a cut), in this handler and in the walk."""

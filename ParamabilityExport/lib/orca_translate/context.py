@@ -6,7 +6,7 @@ its number, and the sizes are recorded with the reason (`doubt`), so the result 
 """
 import re
 
-from ..design_model import reach, tool_chains
+from ..design_model import reach, tool_chains, words
 from ..design_model.values import Quantity
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
@@ -197,6 +197,13 @@ class Context:
         """A value follows the sizes of another component (`{ token, name }` or its name)."""
         if component and component not in self.followed_components:
             self.followed_components.append(component)
+
+    def movers_unknown(self, phrase):
+        """The capture cannot say which sizes may move what `phrase` names, which keeps its number in Orca. Any ticked
+        size may act on another component (one parameter can drive steps of several), so every ticked size is
+        doubted."""
+        if self.table is not None:
+            self.doubt(self.table.ticked, words.movers_unknown_doubt(phrase))
 
     def depends(self, param_names):
         """Fusion names of the free sizes behind parameters (user or model)."""

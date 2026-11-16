@@ -7,6 +7,7 @@ import unittest
 import unittest.mock
 
 from tests import context  # noqa: F401
+from tests.borrowed_helpers import known_movers, projected, with_own_rim
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
 
 from lib.capture_model import gap_hints
@@ -265,13 +266,36 @@ class SizesTest(unittest.TestCase):
 
 
 class BorrowedOutlineTest(unittest.TestCase):
+    OUTLINE = Motion({"1/p0/l0/radius": Affine(0, {"rim_mm": 0.5}, "Rim")})
+
     def test_an_outline_from_another_component_is_copied_with_its_sizes_marked(self):
-        outline = Motion({"1/p0/l0/radius": Affine(0, {"rim_mm": 0.5}, "Rim")})
-        result = sized(load_capture("sweep_borrowed"), outline)
+        result = sized(load_capture("sweep_borrowed"), self.OUTLINE)
         (step,) = steps_of(result.recipe, "sweep")
         self.assertEqual(step["sketch"]["outer"]["radius"], {"expr": "0.5 * rim_mm"})
         self.assertEqual([f["name"] for f in result.loose], ["rim_mm"])
         assert_schema_ok(self, result.recipe)
+
+    @staticmethod
+    def unused(result):
+        return sorted(d["name"] for d in result.dropped if not d.get("used"))
+
+    def test_an_outline_the_motion_follows_also_marks_the_sizes_on_its_component(self):
+        result = sized(known_movers(load_capture("sweep_borrowed")), self.OUTLINE)
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["sketch"]["outer"]["radius"], {"expr": "0.5 * rim_mm"})
+        self.assertEqual(self.unused(result), ["cap_w"])
+
+    def test_a_sketch_of_the_part_with_the_same_name_is_not_marked(self):
+        result = sized(with_own_rim(load_capture("sweep_borrowed")), self.OUTLINE)
+        self.assertIn("own_mm", self.unused(result))
+
+    def test_an_outline_written_as_numbers_marks_the_sizes_that_may_move_its_sketch(self):
+        result = sized(known_movers(load_capture("sweep_borrowed")), Motion({}))
+        self.assertEqual(self.unused(result), ["cap_w"])
+
+    def test_geometry_of_a_third_component_projected_into_the_sketch_marks_the_sizes_on_it(self):
+        result = sized(known_movers(load_capture("sweep_borrowed"), projected("other", "cCap")), Motion({}))
+        self.assertEqual(self.unused(result), [])
 
 
 class PathPlaceTest(unittest.TestCase):

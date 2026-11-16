@@ -564,8 +564,11 @@ The translator copies such a profile like its own when `frame`, `native_frame` a
 (`lib/design_model/borrowed.py`: the profile loses `foreign` and the place keys and gets `borrowed`, the name of its
 component; it keeps `sketch` and `sketch_token`, so it must never be matched to a sketch of the part by name). The size probe reads the sketch at every state (section 5, "Probe states"), so the
 outline follows the sizes through the motion file under the usual keys (`<item>/p<profile>/...`). Where the motion
-holds no value for the profile, the outline is written as numbers and every size that `sketch_params` read becomes a
-fixed number; the first translation of an export (no sizes fixed for sketches) skips that. The step gets a note that
+holds no value for the profile, the outline is written as numbers and every size that may move the sketch becomes a
+fixed number (`borrowed.movers`: the sizes that `sketch_params` read, those that act on the sketch's component or on
+an item that may place an occurrence, those that may move its plane, and those that may move geometry projected into
+it, from its sketch graph found by token); the first translation of an export (no sizes fixed for sketches) skips
+that. The step gets a note that
 names the sketch and its component. Without the frames and the place the step is refused as before.
 
 Nothing ties such a step to the walls of the part, so it must keep meeting the part as measured
@@ -1579,8 +1582,11 @@ capture places it and marks the sizes that act on its component (`orca_translate
   - not measured (`probe.motion.refs` holds a reason, or the size was left without rows), not looked at (no entry),
     or no motion file: every such size is marked loose with the step and the component named.
   The first translation of an export (`OPTIMISTIC`) marks nothing. An `origin` reference is handled like any other: it
-  moves with the occurrence of its component. A capture that
-  lists no `dependents`, or a record without a component, gives the step a note instead.
+  moves with the occurrence of its component. The sizes whose user parameter acts on a joint, another assembly item
+  or a Move whose `input_kind` is not `bodies` or `faces` (a Move of occurrences) count for every reference of another
+  component as well (`refs.acting_sizes`): the capture does not say which occurrence such an item places. A capture
+  that lists no `dependents`, or a record without a component, does not say which sizes may move the record: the
+  translator gives the step a note, and the Orca output marks every ticked size.
 - A plane or face moves along its captured `normal`; an axis moves across its direction. A pattern direction stays the
   number read; only a turn marks sizes.
 

@@ -1750,9 +1750,9 @@ one folder per family of steps.
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
-  centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (`mark_unchecked`: the sizes of
-  an outline from another component's sketch in a sweep or a loft. The outline itself is brought in by
-  `design_model/borrowed.py`).
+  centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (`mark_unchecked`: the sizes that
+  can move an outline from another component's sketch in a sweep or a loft, from the `borrowed_movers` key of the
+  profile. The outline itself is brought in by `design_model/borrowed.py`).
 - Checks over the size ranges, `ranges/`: `range_check.py` (`size_env` gives the value of every size at a setting) and
   `kept_ranges.py` (range cuts, `part_step`, `built_ranges`).
 - Gaps, `gaps/`: `stops.py` (the gap record, the gap names, `stop_reason`, `MAX_GAPS`), `gap_place.py`,
@@ -1768,15 +1768,23 @@ does not use the words of one output, and it does not refuse a step. It gives fa
 which sizes can move it) and doubts (sizes that can move something whose motion is not known).
 
 - `recorder.py`: `Recorder`, the declared interface of what the layer asks of a translation: `table`, `capture`,
-  `cache`, `motion` (None for the Orca output), `doubt(names, why)`, `note(text)` and `follow_component(component)`.
-  The context of the translator and the context of the Orca output have every member. `tests/test_interfaces.py`
-  checks this. It also checks that the layer asks a recorder only for these members.
+  `cache`, `motion` (None for the Orca output), `doubt(names, why)`, `note(text)`, `follow_component(component)` and
+  `movers_unknown(phrase)`. The context of the translator and the context of the Orca output have every member.
+  `tests/test_interfaces.py` checks this. It also checks that the layer asks a recorder only for these members.
+  - The layer calls `movers_unknown` when the copy keeps something of another component where it is now and the
+    capture cannot say which sizes can move it. `phrase` tells what the step does with it ("Mirror1 mirrors across a
+    plane of Cover"). The layer does not decide what to do. Each output decides:
+  - The translator writes a note on the step (`words.movers_unknown`).
+  - The Orca output marks every ticked size with a doubt (`words.movers_unknown_doubt`). One parameter can drive steps
+    of several components, so any ticked size can move the other component.
 - `refs.py`: planes, faces, axes, directions and points of other components. The shape names (`PLANE`, `AXIS`,
   `POINT`, `DIRECTION`), `BODY_LISTS`, `is_foreign`, `bring_in`, `acting_sizes`, `reaching`, `mark_all`,
   `from_old_export` and `why_foreign`. These came from `translator/ref_motion.py` and `translator/walk.py`.
-- `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `BORROWED_KEYS`). This came from
-  `translator/sketch/borrowed.py`. The probe flow reads `usable` and `BORROWED_KEYS` (`export_plan/probe_flow/
-  borrowed_view.py`).
+- `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `movers`, `BORROWED_KEYS`,
+  `MOVERS`). This came from `translator/sketch/borrowed.py`. The probe flow reads `usable` and `BORROWED_KEYS`
+  (`export_plan/probe_flow/borrowed_view.py`). `movers` gives the sizes that can move such a sketch (see "A place of
+  another component" in 3.3). `bring_in` writes them in the `borrowed_movers` key (`MOVERS`) of the profile that it
+  brings in.
 - `steps/`: one reader per kind of step, as facts. `steps/repeat.py`: the copies a pattern kept (`kept_elements`), their
   frames in the frame of the part (`in_component`, `read_in_component`), the grid index of a copy (`solve_lattice`),
   the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
@@ -1913,8 +1921,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - The plane of a sketch. `placement_sizes` gives the sizes that can move the plane a sketch sits on: the sizes behind
     its construction plane and, for a plane on the part, every size that an earlier step reads. `sketch_plane_sizes`
     does this for an outline, also when the outline is a face of the body. `hole_plane_sizes` does this for the holes
-    of one step. `on_part` and `offset_param` say if a plane sits on the part and which parameter is the own
-    distance of an offset plane.
+    of one step. `borrowed_plane_sizes` does this for a sketch of another component: a face, or a construction
+    plane built on geometry, can be of the part, so it gives every size that the body's component reads before the
+    step. `on_part` and `offset_param` say if a plane sits on the part and which parameter is the own distance of an
+    offset plane.
   - A face or plane that a step starts from or reaches to. `moving_reaches` lists the flat faces and planes of the part
     that can move, and that the probe can find again. `reach_sizes` gives the sizes that can move one of them.
     `any_face_sizes` gives the sizes that can change any face of the body: every size an earlier step reads.
@@ -2013,9 +2023,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     the tool, then the inverse of the frame of the exported body at that time. When the place cannot be used,
     `move` is None and `problem` is a `Problem` (see `problem.py` above): a code (`PLACE_UNREAD` or
     `PLACE_UNUSABLE`), the plain reason and the cause `otherComponent`. `moves_with` is the reference for the sizes
-    that can move the component of the tool (`refs.mark_all`, type `Place`). It is None for a tool of the root component, because the
-    root has no place of its own. `planes` are the measured references of the origin planes of the component, which
-    the probe reads again at other sizes.
+    that can move the component of the tool (`refs.mark_all`, type `Place`). For a tool of the root component, the
+    reference has the mark `root`. The root has no place of its own, but a joint or a Move can move the occurrence of
+    the exported body. Thus only the sizes of such assembly items apply (`refs.acting_sizes`). `planes` are the
+    measured references of the origin planes of the component, which the probe reads again at other sizes. A tool of
+    the root component has no `planes`.
   - `component_frame(capture, bodies)` gives the frame of the component that a walk builds in. `bodies` are the tool
     bodies that the walk is inside, the outermost first. The innermost tool of another component gives the frame of
     its component. Without such a tool, the frame of the component of the exported body applies. The copies of a
@@ -2531,11 +2543,17 @@ was not measured.
 
 The facts that do not need the probe are in the shared layer, `lib/design_model/refs.py`. Both translators use them:
 
-- `acting_sizes` gives the ticked sizes whose user parameter acts on the component that owns the reference
-  (`params.geometry_links.acts`). It also tells if the capture can say this. An old capture has no data on where the
-  parameters act.
+- `acting_sizes` gives the ticked sizes that can move the reference. It also tells if the capture can say this. An old
+  capture has no data on where the parameters act. The sizes are of two kinds:
+  - The sizes whose user parameter acts on the component that owns the reference (`params.geometry_links.acts`).
+  - The sizes of the assembly. These are the sizes whose user parameter acts on an item that can
+    place an occurrence: a joint, another assembly item of the timeline (a rigid group, a motion link), or a Move whose
+    inputs are not bodies or faces. Such an item is usually in the root component, not in the component that it
+    moves. The capture does not say which occurrence such an item places. Thus these sizes apply to every reference
+    of another component. They do not apply to a reference of the component of the exported body (`own`).
 - `mark_all` marks those sizes with a doubt: the copy keeps the reference where it is now. When the capture cannot say
-  which sizes act on the component, the step gets a note instead.
+  which sizes can move the reference, `mark_all` calls `movers_unknown` on the recorder, and the output decides (see
+  `recorder.py` in 2.2).
 - `is_foreign`, `bring_in`, `why_foreign` and `from_old_export` read the `foreign` and `assembly` records (see 1.9.1
   and 3.10).
 
@@ -2553,9 +2571,10 @@ The Orca output also copies a tool body of another component (`orca_translate/to
 2. It writes an Orca Transform on the tool. The Transform carries the tool by the move of `tool_chains.place_of`. Orca
    turns the tool about the origin of the component, then moves it. The shape that the copy keeps for its checks
    moves in the same way.
-3. It marks the sizes that act on the component of the tool (`refs.mark_all`, "Combine1 puts its tool at the place of
-   Rod that may move with it"). Thus such a size shows as "partly" or "fixed", and never as "variable" only. A tool of
-   the root component gets no mark, because the root has no place of its own.
+3. It marks the sizes that can move the component of the tool (`refs.mark_all`, "Combine1 puts its tool at the place
+   of Rod that may move with it"). Thus such a size shows as "partly" or "fixed", and never as "variable" only. These
+   are also the sizes of a joint or a Move in the root that places the occurrence. For a tool of the root component,
+   only the sizes of the assembly apply, because the root has no place of its own.
 
 The Orca output leaves the Combine out (cause `otherComponent`, `refused` or the cause of the step) when one of these
 is true:
@@ -2575,10 +2594,29 @@ Inside a tool of another component, the copies of a pattern are carried into the
 
 An outline of another component's sketch follows the same rules (`design_model/borrowed.py`). When the motion file has
 values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
-is written as numbers, and every size that moves that sketch is marked. A borrowed outline keeps the name of its sketch.
-That name can be the same as the name of a sketch of the part. Thus no code may find the sketch of a borrowed outline by
-its name. `reach.placement_sizes` gives no sizes for the plane of such a sketch, and the Orca output finds no sketch
-graph for it.
+is written as numbers, and every size that can move that sketch is marked. `borrowed.movers` finds these sizes:
+
+1. The sizes that the dimensions of the sketch read. These come from the `sketch_params` of the profile, from the model
+   parameters of its dimensions (the name of the sketch in the component of the sketch), from the `dependents` that
+   name the sketch by its token, and from the dimensions of its sketch graph.
+2. The sizes that can move the component of the sketch (`refs.acting_sizes`). These include the sizes of a joint or a
+   Move that places an occurrence.
+3. The sizes that can move the plane of the sketch (`reach.borrowed_plane_sizes`). The plane can be on a face of the
+   part. Thus a face, or a construction plane built on geometry, gives every size that the body's component reads
+   before the step.
+4. The sizes that can move geometry projected into the sketch. The sketch graph of the sketch (found by its token)
+   tells where each projection comes from. A projection of the part gives every size that the body's component reads
+   before the step. A projection of a third component gives the sizes that can move that component.
+
+When the capture cannot say which sizes act on a component, or the sketch has no graph, `bring_in` calls
+`movers_unknown` on the recorder. The translator then writes a note. The Orca output then marks every ticked size.
+
+A sweep or a loft cannot check that a borrowed outline still meets the part. Thus it marks the sizes that `movers`
+found (`translator/sketch/borrowed.py`, `mark_unchecked`). It reads them from the `borrowed_movers` key of the profile.
+
+A borrowed outline keeps the name of its sketch. That name can be the same as the name of a sketch of the part. Thus no
+code may find the sketch of a borrowed outline by its name. `reach.placement_sizes` gives no sizes for the plane of such
+a sketch, and the Orca output finds no sketch graph for it.
 
 ### 3.4 How a Split Body is translated
 

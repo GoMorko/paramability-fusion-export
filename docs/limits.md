@@ -50,7 +50,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move
-  it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A hole placed
+  it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A parameter of a joint, or of a move that places a component, counts as one that may move every such place, since the export cannot tell which component it places. A hole placed
   on an edge of another component, and an extrude that starts from or reaches to a curved face of one, are left out of
   the copy.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to

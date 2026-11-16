@@ -10,6 +10,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.borrowed_helpers import known_movers, projected, with_own_rim
 from tests.orca_sized import fixture, split_by_plane, table_of
 from tests.probe_helpers import user
 from tests.translator_helpers import verdict_of
@@ -71,14 +72,14 @@ class MirrorPlaneTest(unittest.TestCase):
         # gap_mm also drives the plane of Cover: the copy follows it in Extrude1 only.
         self.assertEqual(outcomes(result), {"gap_mm": "partly", "depth_mm": "variable"})
 
-    def test_without_data_on_where_sizes_act_the_mirror_is_copied_with_a_note(self):
+    def test_without_data_on_where_sizes_act_the_mirror_is_copied_and_every_size_is_marked(self):
         capture = fixture("component_foreign_mirror")
         for p in capture["parameters"]["user"]:
             p.pop("dependents")
         result = run(capture)
         self.assertEqual(verdict_of(result, 4)["verdict"], "copied")
-        self.assertEqual(outcomes(result)["gap_mm"], "variable")
-        self.assertEqual(len(result.notes), 1)
+        self.assertNotIn("variable", outcomes(result).values())
+        self.assertEqual(result.notes, [])
 
     def test_a_mirror_whose_copies_stay_apart_marks_nothing(self):
         capture = fixture("component_foreign_mirror")
@@ -158,26 +159,28 @@ class ReachAndHoleTest(unittest.TestCase):
         self.assertEqual(outcomes(result), {"gap_mm": "fixed", "ear_mm": "fixed", "lid_mm": "unused"})
 
 
-def with_own_rim(capture):
-    """`sweep_borrowed` with a sketch of the part also named Rim, whose dimension own_mm drives."""
-    capture["parameters"]["user"].append(user("own_mm", "8 mm", 8))
-    capture["parameters"]["model"].append({
-        "name": "d9", "expression": "own_mm", "value": 0.8, "unit": "mm", "kind": "derived", "role": "",
-        "dependency_parameters": ["own_mm"],
-        "created_by": {"kind": "sketchDimension", "token": "tok_d9", "name": "", "sketch": "Rim", "component": ""}})
-    capture["sketch_graphs"] = [{"sketch": "Rim", "token": "own_rim", "dimensions": [{"param": "d9"}]}]
-    return capture
-
-
 class BorrowedOutlineTest(unittest.TestCase):
     def test_a_sweep_of_an_outline_of_another_component_is_copied_as_numbers(self):
         result = run(fixture("sweep_borrowed"))
         self.assertEqual(verdict_of(result, 1)["verdict"], "copied")
         self.assertEqual(outcomes(result)["rim_mm"], "fixed")
 
+    def test_a_size_that_acts_on_the_component_of_the_outline_is_fixed(self):
+        result = run(known_movers(fixture("sweep_borrowed")))
+        self.assertEqual(verdict_of(result, 1)["verdict"], "copied")
+        self.assertEqual([outcomes(result)[n] for n in ("rim_mm", "lid_w", "cap_w")], ["fixed", "fixed", "unused"])
+
+    def test_geometry_of_a_third_component_projected_into_the_sketch_fixes_the_sizes_on_it(self):
+        result = run(known_movers(fixture("sweep_borrowed"), projected("other", "cCap")))
+        self.assertEqual(outcomes(result)["cap_w"], "fixed")
+
+    def test_without_a_sketch_graph_every_size_is_fixed(self):
+        capture = known_movers(fixture("sweep_borrowed"))
+        capture.pop("sketch_graphs")
+        self.assertEqual(set(outcomes(run(capture)).values()), {"fixed"})
+
     def test_the_outline_is_not_taken_for_a_sketch_of_the_part_with_the_same_name(self):
-        capture = with_own_rim(fixture("sweep_borrowed"))
-        capture["items"][1]["data"]["profiles"][0].pop("sketch_token")
+        capture = known_movers(with_own_rim(fixture("sweep_borrowed")))
         result = run(capture)
         self.assertEqual(verdict_of(result, 1)["verdict"], "copied")
         self.assertEqual(outcomes(result)["own_mm"], "unused")

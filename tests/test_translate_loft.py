@@ -186,7 +186,10 @@ class LoftSizesTest(unittest.TestCase):
 
     def test_an_outline_from_another_component_marks_the_sizes_of_its_sketch(self):
         capture = load_capture(SQUARES)
-        loft_data(capture)["profiles"][0]["borrowed"] = "Lid"
+        profile = loft_data(capture)["profiles"][0]
+        profile.update(foreign=True, native_frame=dict(profile["frame"]), component={"token": "cLid", "name": "Lid"},
+                       placement={"frame": dict(profile["frame"])},
+                       sketch_params=[{"name": "d1", "expression": "base_mm", "reads": ["base_mm"]}])
         result = run(capture, SIZES, motion_of(SQUARES))
         self.assertEqual([f["name"] for f in result.loose], ["base_mm"])
 
