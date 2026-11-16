@@ -26,6 +26,7 @@ HANDLERS = {
     "OffsetFacesFeature": offset.handle,
     "RectangularPatternFeature": body_copies.rectangular,
     "CircularPatternFeature": body_copies.circular,
+    "PathPatternFeature": body_copies.path,
     "MirrorFeature": body_copies.mirror,
     "SplitBodyFeature": split.handle,
     "CopyPasteBody": paste.handle,

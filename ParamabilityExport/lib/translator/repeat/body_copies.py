@@ -158,6 +158,11 @@ def circular(ctx, step):
     return _in_walk(ctx, step, TURN_PATHS) if _of_bodies(step.brought_data) else repeat.circular(ctx, step)
 
 
+def path(ctx, step):
+    """A path pattern; one of bodies is refused by the pattern it is written as."""
+    return repeat.path(ctx, step)
+
+
 def mirror(ctx, step):
     if _of_bodies(step.brought_data) and not step.brought_data.get("combine"):
         return _in_walk(ctx, step, ())

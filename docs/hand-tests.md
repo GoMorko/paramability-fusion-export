@@ -2131,6 +2131,19 @@ Written from the API reference and a version 0.7.2 export, never run on the new 
       `CircularPatternFeature.isSymmetric` (a flag that fails reads as not symmetric, then the measured copies are
       refused). Which element is the identity (not always the first).
 
+Path patterns (`read_repeat.path_before`, hand check PP1 in `docs/hand-checks.md`):
+
+- [ ] Members read: `PathPatternFeature.path` (read as a sweep path), `quantity`, `distance`, `patternDistanceType`,
+      `startPoint` (a number from 0 to 1), `isFlipDirection`, `isSymmetric`, `isOrientationAlongPath`,
+      `patternElements`, `suppressedElementsIds`; `Path.count`, `Path.item`, `PathEntity.entity` for the edge of
+      `path_place`. A member that fails reads as null and the step is left out.
+- [ ] `startPoint` counts from the start of the `Path`, also when the path entity is opposed to its curve
+      (`isOpposedToEntity`), and the flip sends the copies toward that start. A pattern that the copy leaves out with
+      "do not run along the path the way it was read" shows that this guess is wrong.
+- [ ] The `elements` of a path pattern are the moves of the copies from the original, as for the other patterns.
+- [ ] What Fusion does with copies past an end of the path (set the count high): until this is known, the copy stops
+      the ranges where the copies would leave the path.
+
 ## Capture reader calls to watch (tool bodies)
 
 These members were written from the API reference and never run. A member that cannot be read gives `null` or `other`,

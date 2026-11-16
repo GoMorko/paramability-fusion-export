@@ -1,4 +1,4 @@
-"""Pattern and mirror handlers (RectangularPatternFeature, CircularPatternFeature, MirrorFeature).
+"""Pattern and mirror handlers (RectangularPatternFeature, CircularPatternFeature, PathPatternFeature, MirrorFeature).
 
 The copies are read from the measured transform of every pattern element, so the spacing, the turning sense and
 the copies Fusion left out come from what Fusion built, not from flags. Solid sources (extrudes, revolves, holes,
@@ -26,8 +26,9 @@ kinds of repeat, the mirror reach check); this module is the entry point the wal
 from .repeat_build import MAX_COPIED_BODIES, copied_bodies
 from .repeat_circular import axis_shift, circular, turn_motion
 from .repeat_mirror import mirror
+from .repeat_path import path
 from .repeat_rectangular import rectangular
 from .repeat_sources import MAX_REFERENCES
 
 __all__ = ["MAX_COPIED_BODIES", "MAX_REFERENCES", "axis_shift", "circular", "copied_bodies", "mirror",
-           "rectangular", "turn_motion"]
+           "path", "rectangular", "turn_motion"]

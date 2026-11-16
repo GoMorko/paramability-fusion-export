@@ -100,8 +100,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    give; the edge loft names what Fusion gave for the section.
 
 6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
-   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path with a sketch
-   curve, and Boundary Fill between two bodies.
+   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path along a sketch
+   spline, and Boundary Fill between two bodies.
    Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
    ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
    ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
@@ -526,3 +526,19 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     x and `sizeEnd` at the other, and the round in Paramability looks like Fusion's. When the middle radii are off
     the straight line (for example 1.6 and 4.4 at a quarter and three quarters), Fusion blends in a curve: the round
     is left out with the reason that the radius does not change evenly. Note the measured radii in both cases.
+51. PP1, a path pattern along a line, an arc and a circle. Add user parameters `Count` = 3 and `Pitch` = 15 mm.
+    Model a 80 x 40 x 10 mm plate with its corner at the origin. On the top face draw a sketch line from (5, 10) to
+    (35, 10), a circle of radius 2 mm at (5, 10), and in a second sketch on the top face an arc of radius 10 mm
+    centred at (60, 20) from (70, 20) counter clockwise to (50, 20) with a circle of radius 2 mm at (70, 20). Cut each
+    small circle 4 mm deep. Make a Pattern on Path of the first cut along the line: quantity `Count`, distance `Pitch`,
+    spacing, orientation Path Direction, start point at the line's start. Make a second Pattern on Path of the second
+    cut along the arc: quantity 3, distance 5 mm, spacing, orientation Path Direction. On a copy of the design, set
+    the second pattern's orientation to Identical; on another copy, make it along a full circle of radius 10 mm.
+    Export: export the plate with `Count` and `Pitch` ticked. Both path patterns are copied: in Paramability the holes
+    sit where Fusion has them. The first pattern follows `Count` and `Pitch`, and the cut ranges stop where the last
+    hole would pass x = 35 (a count of 3 and a pitch of 15 mm). The copy with orientation Identical leaves the second
+    pattern out with a reason and a tip. The full circle copy turns the holes evenly round the circle. In
+    `report.json` the path pattern data has `start_point` 0, `flip` false and `along_path` true, and `elements` hold
+    the moves of the copies from the original. Then set `Count` to 4 in Fusion: note whether Fusion puts the fourth
+    hole past the end of the line, leaves it out, or fails (the copy keeps the copies on the path). Afterwards the
+    design is as before.

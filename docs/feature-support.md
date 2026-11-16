@@ -99,7 +99,7 @@ can be.
 | Pattern with suppressed copies | Copied | - | Left out | Needs Orca | Orca's pattern cannot leave copies out. |
 | Pattern of bodies, joined by a Combine | Copied | - | Left out | Yes, add-in only | |
 | Pattern or mirror of faces | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Path pattern | Left out | Yes, needs an app change | Left out | Yes, add-in only | The app has only straight and round patterns. Orca has a pattern along a curve. |
+| Path pattern | Partly | Yes, needs an app change | Left out | Yes, add-in only | Paramability: a path of one line, arc or circle; count and distance follow, and their ranges stop where the copies would leave the path. Other paths need an app change. Orca has a pattern along a curve. |
 | Mirror of features | Copied | - | Copied | - | Orca: the mirror plane keeps its place. |
 | Mirror of bodies, joined to the part | Copied | - | Copied | - | |
 | Thicken | Left out | Yes, needs an app change | Left out | Needs Orca | The app does not rebuild surfaces. |
@@ -199,7 +199,7 @@ Sorted by how many printing projects it helps:
 7. Coils with a taper or a spiral (app change), and half turns (add-in only).
 8. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
 9. Emboss on a curved face (app change).
-10. Path pattern, and patterns and mirrors of faces (app change).
+10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
 12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
 13. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,

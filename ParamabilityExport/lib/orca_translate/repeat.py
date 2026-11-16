@@ -18,7 +18,7 @@ the rounds. A hole whose place follows a variable keeps its place: the copies ar
   both sides of the original is two tool bodies with their numbers fixed.
 - Mirror of features: the tool body joined with its mirror image. Mirror of the body joined to it: an Orca Mirror of
   the part (Add). A mirror or pattern of bodies that leaves separate copies does not change the part.
-- Pattern along a path: Fusion's path pattern is not read, so it is left out by its step type.
+- Pattern along a path: Fusion's path pattern has no Orca handler, so it is left out by its step type.
 
 The copies the shape check works with (`solid.Moved`) are the ones Orca builds from the numbers written.
 """

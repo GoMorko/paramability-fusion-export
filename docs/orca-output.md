@@ -501,8 +501,8 @@ not judged to meet material where Orca removes nothing.
   Fusion 2706 gave such copy places for plain circular patterns of a hole (hand check CP1).
 - Orca's pattern cannot leave copies out, so a pattern with suppressed copies is left out; so is one whose copies are
   turned, do not sit on an even grid, or whose direction or axis is of another component and could not be brought into
-  the part's place. Fusion's path pattern is
-  not read, so it is left out by its step type.
+  the part's place. Fusion's path pattern
+  has no Orca handler, so it is left out by its step type.
 - Mirror of features: the tool body and an Orca Mirror of it (Add), then the Boolean. Mirror of the body joined to it
   (`combine` true): an Orca Mirror of the part. A pattern or mirror of bodies that leaves its copies apart does not
   change the part and is passed by; a part that is such a copy, or a Combine that takes such a copy, is left out.

@@ -223,9 +223,11 @@ def _symmetric_circular(item, ctx, setup):
     return result
 
 
-def circular(ctx, step, sources=None):
+def circular(ctx, step, sources=None, total_angle=None):
     """The pattern of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
-    the pattern repeats."""
+    the pattern repeats. `total_angle(count)` gives the angle of a pattern that turns less than a full circle as a
+    Quantity, for a caller whose angle comes from other values (a path pattern on an arc); by default it is the
+    pattern's own `total_angle_deg`."""
     item = step.brought
     data = data_in_component(step.brought_data, ctx.component_frame())
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
@@ -287,6 +289,8 @@ def circular(ctx, step, sources=None):
     if full:
         values.pin(ctx, item, "total_angle_deg", "%s turns a full circle only while its angle is a plain 360"
                    % item.get("name", "a pattern"))
+    elif total_angle is not None:
+        angle_q = total_angle(count_q)
     else:
         angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
                                   sign=-1 if raw_total < 0 else 1, absolute=True)

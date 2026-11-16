@@ -837,7 +837,8 @@ def evaluate(capture):
                 bodies[key] = apply_op(bodies[key], "join" if data["distance"] > 0 else "cut", offset_shape(data))
             elif kind in ("RectangularPatternFeature", "CircularPatternFeature") and data.get("entity_type") == "bodies":
                 copied_bodies(data, bodies, key_of)
-            elif kind in ("RectangularPatternFeature", "CircularPatternFeature"):
+            elif kind in ("RectangularPatternFeature", "CircularPatternFeature", "PathPatternFeature"):
+                # A path pattern is modelled by its measured copies, as the other patterns are.
                 if data.get("entity_type") != "features" or data.get("symmetric") or data.get("symmetric_one"):
                     raise Unmodelled("pattern kind")
                 skipped = set(data.get("suppressed_ids") or [])
