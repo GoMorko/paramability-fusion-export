@@ -18,7 +18,7 @@ from ..design_model.dimension_sizes import size_env
 from ..geometry import vec
 from ..sketch_values.expr import ExprDomainError
 from ..design_model.values import Quantity
-from .sketches import UNCONFIRMED, SketchFormulas, reads_input
+from .sketches import UNCONFIRMED, SketchFormulas, open_reason, reads_input
 
 # A hole point lies on its sketch plane, and matches a graph point, when it is this close (mm).
 POINT_TOL = 1e-4
@@ -93,7 +93,7 @@ def _coordinate(ctx, formulas, pair, k, number):
     """(`Quantity` of one sketch coordinate, the reason it keeps its number although sizes may move it, the Fusion names
     of the sizes held at their value). Sizes an earlier step does not follow (`ctx.held`) are held."""
     if pair is None or not pair[k].derived:
-        return Quantity(number), (pair[k].reason if pair is not None and pair[k].reason else "it has no formula"), ()
+        return Quantity(number), open_reason(pair[k] if pair is not None else None, "the place of a hole centre"), ()
     formulas.why = ""
     over = formulas.over_sizes(pair[k].expr)
     if over is None:
@@ -140,7 +140,7 @@ def _followed(ctx, item, data, normal, positions):
         pid = _point_id(record, token, (u, v))
         pair = formulas.solution.points.get(pid) if pid is not None else None
         if pid is None:
-            reasons.append("a hole point is not in the sketch record")
+            reasons.append("the export did not read a hole point from the sketch")
         if pair is not None and any(v.derived and reads_input(v.expr) for v in pair):
             ctx.doubt(reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item),
                       "%s: the hole centres are placed by geometry projected into %s, and Orca keeps that "

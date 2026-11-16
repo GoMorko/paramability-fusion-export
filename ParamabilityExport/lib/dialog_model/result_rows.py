@@ -81,7 +81,7 @@ def kept_number_lines(manifest):
 def _row(name, rng, check, found=()):
     """A size row: `condition` and `why` come from the reasons found for it (joined when there are several)."""
     return {"name": name, "range": rng, "check": check,
-            "condition": "; ".join(c for c, _ in found if c), "why": "; ".join(dict.fromkeys(d for _, d in found if d))}
+            "condition": "; ".join(dict.fromkeys(c for c, _ in found if c)), "why": "; ".join(dict.fromkeys(d for _, d in found if d))}
 
 
 def _size_rows(table, report, ticked):

@@ -1612,7 +1612,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
 | `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
-| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. |
+| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
@@ -1691,7 +1691,8 @@ alphabetical order by module.
 - `stop_warning.py`: the early warning under the body picker (`summarize`, `summarize_many`) and the texts after the
   export (`saved_message`, `status_text`). `left_out_preview.py`: the steps that the copy will probably leave out, as the
   dialog lists them before the export (`Found`, `find` for the recipe, `find_orca` for the Orca copy, `lines`, see 1.2).
-  `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`).
+  `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`). When two
+  reasons of a parameter have the same text, the line of the parameter shows that text one time only.
 - `dialog_rows.py`: the texts and the checks of the rows of the parameter table. `result_rows.py`: what the result
   window shows. `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
   text.
