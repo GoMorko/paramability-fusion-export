@@ -7,6 +7,7 @@ import unittest
 import unittest.mock
 
 from tests import context  # noqa: F401
+from tests import orca_sweeps
 from tests.borrowed_helpers import known_movers, projected, with_own_rim
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
 
@@ -550,6 +551,19 @@ class PathShapeTest(unittest.TestCase):
         twisted = translate(edited("sweep_sharp_corner", 4, lambda d: d.update(twist_deg=90.0)))
         self.assertEqual(left_out(twisted, 4)["reason"], path_words.SHARP_CORNER)
         self.assertEqual([gap["hint"] for gap in twisted.gaps], [gap_hints.HINTS[gap_hints.SHARP_CORNER]])
+
+    def test_a_spline_that_turns_at_a_joint_of_its_own_is_a_sharp_corner(self):
+        unreadable = orca_sweeps.pipe_along(orca_sweeps.STRAIGHT_POLYLINE)
+        sweep_of(unreadable, 2)["path"]["curves"][1]["flat"]["nurbs"]["knots"] = [0, 0, 1, 1]
+        cases = (("a cubic knot three times", orca_sweeps.pipe_along(orca_sweeps.KINKED_SPLINE),
+                  path_words.SHARP_CORNER),
+                 ("a polyline with a corner", orca_sweeps.pipe_along(orca_sweeps.CORNERED_POLYLINE),
+                  path_words.SHARP_CORNER),
+                 ("a definition whose knots do not fit its poles", unreadable, path_words.UNREADABLE))
+        for name, capture, reason in cases:
+            with self.subTest(name):
+                self.assertEqual(stopped(translate(capture))["reason"], reason)
+        only_sweep(self, translate(orca_sweeps.pipe_along(orca_sweeps.STRAIGHT_POLYLINE)))
 
     def test_an_outline_wider_than_the_bend_is_refused(self):
         capture = edited(PIPE, PIPE_ITEM, lambda d: d["profiles"][0]["loops"][0]["curves"][0].update(radius=12.0))

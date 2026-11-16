@@ -1,7 +1,7 @@
 """Curves of a sweep path: arcs, directions, points along a curve, and chaining curves end to end. Pure."""
 import math
 
-from ...geometry import vec
+from ...geometry import spline_joints, vec
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
@@ -95,6 +95,18 @@ def tangents(curve):
     last = curve.get("tangent_end")
     return (vec.unit(first if first is not None else vec.sub(samples[1], samples[0])),
             vec.unit(last if last is not None else vec.sub(samples[-1], samples[-2])))
+
+
+def inner_turn(curve):
+    """The sharpest turn (degrees) at a joint inside a free curve, read from its spline definition (`flat.nurbs`,
+    `spline_joints.joint_turns`): 0.0 for a line, an arc, a circle and a free curve without a definition (an edge
+    of a body), None when the definition cannot be read."""
+    flat = curve.get("flat") if curve.get("kind") == "other" else None
+    nurbs = flat.get("nurbs") if isinstance(flat, dict) else None
+    if nurbs is None:
+        return 0.0
+    turns = spline_joints.joint_turns(nurbs)
+    return None if turns is None else max(turns, default=0.0)
 
 
 def polyline(curve):

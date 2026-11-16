@@ -8,7 +8,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6 and RV1 to RV4, which are described here.
+except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6, RV1 to RV5 and SW1, which are described here.
 
 - [ ] RV1, a revolve about a line of another sketch. Sketch1 on the XZ plane: a 10 by 30 mm rectangle, its left side
       20 mm from the origin. Sketch2 on the XZ plane: a vertical construction line whose distance from the origin is
@@ -42,6 +42,20 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6 and RV1 to RV4, 
       A hole at a corner, then a rectangular pattern of 3 holes along the line of Sketch2.
       Export: tick `Height`, export for Paramability and for Orca. `direction_one_sketch` has `reference` with
       `kind: "face"` and `projected: true`. Both results mark `Height` ("spreads copies along a sketch line").
+- [ ] RV5, a revolve about a line of a sketch on a face. A box from a 40 by 20 mm rectangle on the XY plane, extruded
+      by the user parameter `Height` = 10 mm. Sketch2 on the top face: a line along x through (0, 0, 10) and
+      (40, 0, 10), on the front top edge. Sketch3 on the XZ plane: a 10 by 3 mm rectangle from (0, 12) to (10, 15).
+      Revolve the rectangle of Sketch3 90 degrees about the line of Sketch2, as a join.
+      Export: tick `Height`, export for Paramability. With the tries on, the revolve axis point follows `Height` (its
+      height is a formula of `Height`) and `Height` is not marked for the revolve. With the tries off (or a time
+      limit that leaves `Height` without a try), `Height` is marked "may give unexpected results" with the reason
+      that Revolve1 turns about a sketch line that may move with it.
+- [ ] SW1, a sweep along a spline with a corner inside it. Sketch1 on the YZ plane: a circle of 1 mm diameter at the
+      origin. Sketch2 on the XY plane: a control point spline of degree 1 through (0, 0), (20, 0) and (30, 10), so it
+      turns 45 degrees at (20, 0). Sweep the circle along the spline as a new body. Make a second design the same, but
+      with a fit point spline through the same three points (no corner).
+      Export: export each for Paramability. The first sweep is left out ("The path of this sweep has a sharp corner",
+      hint: round the corner with a sketch fillet). The second one is copied as a sweep step.
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
       with the projection link on, once with it off, so the sketch may hold a reference Fusion gives no source for). After the Cup steps,
