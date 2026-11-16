@@ -28,7 +28,7 @@ import copy
 from ...capture_model import step_kinds, tool_items
 from ...design_model.values import Quantity, reads_in
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from ...design_model import refs, roles, tool_chains
+from ...design_model import design, refs, roles, tool_chains
 from ...design_model import words as shared
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
@@ -72,9 +72,8 @@ def tool_key(body):
     return "%s/%s" % (component, name) if component and name else name
 
 
-def _uses_face(item):
-    """True when a step starts from or reaches to a face, or takes a flat face as its outline."""
-    data = item.get("data") or {}
+def _uses_face(data):
+    """True when a step (its data) starts from or reaches to a face, or takes a flat face as its outline."""
     kinds = ((data.get("start") or {}).get("kind"), (data.get("side_one") or {}).get("kind"),
              (data.get("side_two") or {}).get("kind"))
     drawn_on_face = any(isinstance(p, dict) and p.get("face") for p in data.get("profiles") or [])
@@ -87,16 +86,17 @@ def _writes_flat(tool):
     if tool.gaps:
         return False
     joining = False
-    for item in tool.chain:
-        data = item.get("data") or {}
+    read = [design.as_read(item) for item in tool.chain]
+    for step in read:
+        item, data = step.brought, step.brought_data
         # A step that names the bodies it made or changed (`made`, a coil) is judged by those, not by every body of
         # its component.
         listed = data["made"] if isinstance(data.get("made"), list) else item.get("bodies_after")
-        if (data.get("tools") or len(listed or []) != 1 or refs.is_foreign(data) or roles.copies_bodies(item)
+        if (data.get("tools") or len(listed or []) != 1 or step.foreign or roles.copies_bodies(item)
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True
-    reaches = any(_uses_face(item) for item in tool.chain)
+    reaches = any(_uses_face(step.brought_data) for step in read)
     # A step written onto the part is worked out in the part's frame, which is not the frame of another component,
     # and against the part alone, which does not hold the faces of the tool's earlier steps.
     return not (reaches and (len(tool.entries) > 1 or tool_items.is_foreign_tool(tool.body)))
