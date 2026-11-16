@@ -2044,6 +2044,10 @@ read the capture in `report.json`.
   versions (a collection in older ones). When it gives no faces, `OffsetFacesFeature.faces` with the marker after the
   item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
   is moved back by `distance` and copied.
+- `OffsetFacesFeature` on a cylinder face: `Cylinder.origin`, `axis` and `radius`; `BRepFace.loops` of a whole
+  cylinder (two loops of one `Circle3D` edge each, no seam edge); `Circle3D.center`, `normal` and `radius`;
+  `BRepEdge.faces` across an end circle; and `OffsetFacesFeature.faces` after the item, which must list the moved
+  cylinder with its new radius (hand check PF1 in `docs/hand-checks.md`).
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.

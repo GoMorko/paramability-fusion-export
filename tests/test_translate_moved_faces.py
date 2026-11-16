@@ -4,6 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_offset import plate_with_offset
+from tests.test_translate_offset_round import round_face, tube_with_offset
 from tests.test_translate_sized import TRAY, run
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
@@ -63,6 +64,16 @@ class MovedFacesTest(unittest.TestCase):
         for distance, point, held in ((2.0, [20, 10, 11], True), (-3.0, [20, 10, 8], False), (-3.0, [20, 10, 6], True)):
             with self.subTest(distance=distance, z=point[2]):
                 _, ctx = _walk(plate_with_offset(distance), dict(HANDLERS), None)
+                self.assertEqual(follow.inside(ctx, point), held)
+
+    def test_material_the_ring_added_or_removed_counts_for_the_part(self):
+        cases = ((round_face(6, False), -0.5, [6.2, 0, 5], False),
+                 (round_face(10, True), 0.5, [10.2, 0, 5], True),
+                 (round_face(10, True), 0.5, [10.2, 0, 11], False))
+        for face, distance, point, held in cases:
+            with self.subTest(point=point, distance=distance):
+                capture = tube_with_offset(distance, face, face["radius"] + (1 if face["outward"] else -1) * distance)
+                _, ctx = _walk(capture, dict(HANDLERS), None)
                 self.assertEqual(follow.inside(ctx, point), held)
 
 

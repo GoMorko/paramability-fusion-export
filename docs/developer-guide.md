@@ -998,7 +998,7 @@ imports translator code, and only the translator reads `HANDLERS`.
 | `CombineFeature` | `combine.step.handle` |
 | `FilletFeature`, `ChamferFeature`, `ShellFeature` | `finishes.finish.fillet`, `.chamfer`, `.shell` |
 | `DraftFeature` | `finishes.draft.handle` |
-| `OffsetFacesFeature` | `finishes.offset.handle` |
+| `OffsetFacesFeature` | `finishes.offset.handle` (see 3.18) |
 | `RectangularPatternFeature`, `CircularPatternFeature`, `MirrorFeature` | `repeat.body_copies.rectangular`, `.circular`, `.mirror` |
 | `PathPatternFeature` | `repeat.body_copies.path` (see 3.17) |
 | `SplitBodyFeature` | `bodies.split.handle` |
@@ -1287,8 +1287,12 @@ rows, then the offset) that map a point of the capture to the recipe.
 
 The recipe version is the lowest version that holds every written step and selector: 12 as the base, 13 with an
 `offsetFaces` step, 14 with a `chain` or `faceEdges` pick, 15 with a `toolBody` or `move` step or a pattern of more
-than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path. So a simple part still
-opens in an older app.
+than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path, 17 with an
+`offsetFaces` step that moves a round face. So a simple part still opens in an older app.
+
+The step of a round face has no field that shows version 17. So the handler writes it as a `NewerStep`
+(`lib/translator/result.py`). This is a plain dict for JSON, with the attribute `version`. `translate.py` reads this
+attribute from each written step and takes it into the version.
 
 `_over_caps` checks the app's limits at the current values: at most 400 steps, tool steps nested at most 3 deep, at most
 256 copies per pattern. A limit that is broken stops the copy. A pattern count that can pass its limit somewhere in the
@@ -1760,7 +1764,7 @@ one folder per family of steps.
     mirror plane is in `design_model/steps/repeat.py`. The plain pattern that a path pattern equals is in
     `design_model/steps/path_pattern.py` (see 3.17). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
-  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py`.
+  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py` and `offset_round.py` (offsets of faces, see 3.18).
   - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
@@ -3999,6 +4003,71 @@ The Orca output has no handler for a path pattern, so it leaves the step out.
 Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and a spacing of 15 mm. The recipe gets a
 `pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
 Thus the ranges of the count and the spacing stop at their values now.
+
+### 3.18 How an offset of faces (press pull) is translated
+
+`offset.handle` (`lib/translator/finishes/offset.py`) writes one recipe `offsetFaces` step for one Press Pull (Offset
+Faces) item. The step has one `near` point for each face that the item moves, and the distance. Fusion and the app
+use the same sign: a positive distance moves the face along its outward normal, out of the material.
+
+A flat face gets a point inside its outline, away from its edges and holes (`inside_point`). The face is copied only
+when Fusion left a flat face on the plane of the face, moved by the distance (`faces_after`). The app lets the faces
+around a moved face extend or shrink, so a leaning side wall and two moved faces that meet need no special case.
+
+A round face is a cylinder. It is a pin or a boss when its outward normal points away from the axis. It is a bore when
+the normal points towards the axis. The move changes the radius:
+
+- For a pin or a boss, the new radius is the radius plus the distance.
+- For a bore, the new radius is the radius minus the distance.
+
+So a Press Pull of -0.2 mm on the wall of a bore of radius 2.5 mm gives a bore of radius 2.7 mm. This is the usual way
+to tune a hole for a fit.
+
+The app (recipe version 17) moves a round face only when these conditions are true. `offset_round.py` checks each
+condition before the step is written:
+
+1. The face goes all the way round. The reader gives one entry for each edge loop of the face (`ends`). A whole
+   cylinder has two loops, and each loop has one circle edge. Part of a circle, or a face with a seam edge, has other
+   loops. Then the step is left out.
+2. Both ends are flat faces square to the axis. The face across each end circle must be a plane. Its normal must be
+   parallel to the axis. A round or a chamfer at an end is not a plane, and an end on a slope is not square. Then the
+   step is left out.
+3. The ring does not run into other faces. The reader gives the outline of each end face. The circle of the round
+   face is one curve of that outline. Each other curve of the outline must stay clear of the ring between the old
+   radius and the new radius (`_limits`, with a margin of 0.01 mm). A curve inside the circle sets the lowest radius,
+   and a curve outside the circle sets the highest radius. A curve that touches or crosses the circle leaves the step
+   out.
+4. The face does not touch another face that the same item moves (`meets_offset`).
+5. The new radius stays above zero.
+6. Fusion left a cylinder on the same axis with the new radius (`rounds_after`). This checks the sign rule on the real
+   part. If no such cylinder is found, the step is left out.
+
+The pick point of a round face is on the face, halfway between its two ends. It is on the side of the point that
+Fusion gave for the face (`pointOnFace`).
+
+The distance can follow a size. Then the translator checks the size range:
+
+- The distance must not reach zero.
+- For each round face, the new radius must stay between the lowest and the highest radius of step 3 over the whole
+  range (`clear_over_range`).
+
+If one of these checks fails, the distance is written as a number. The size then gets the reason "the round face
+that ... moves could close or run into other faces".
+
+The step adds a `MovedFaces` placer (`lib/translator/faces/offset_faces.py`). This placer knows the material that the
+move added or removed, and the faces after the move:
+
+- A later pick on a moved flat face moves back along the normal of the face by the distance.
+- A later pick on a moved round face moves back along the radius by the distance. Then it follows the step that made
+  the face, and the distance.
+- The ring between the old and the new radius counts as added material when the distance is positive. It counts as
+  removed material when the distance is negative. `follow.inside` and the check for joins that float use this.
+
+Example, made up: a plate 40 x 20 x 10 mm has a hole of radius 2.5 mm through it. A Press Pull on the hole wall has
+the distance `-Fit`, with `Fit` = 0.2 mm. Fusion leaves a cylinder of radius 2.7 mm. The recipe gets
+`{ "kind": "offsetFaces", "faces": { "near": [[12, 7.5, 5]] }, "distance": { "expr": "-Fit" } }` and version 17. The
+default range of `Fit` is 0.1 to 0.4 mm. The new radius stays between 2.6 and 2.9 mm, far from the plate edges, so the
+distance follows `Fit`.
 
 ## 4. Debugging
 

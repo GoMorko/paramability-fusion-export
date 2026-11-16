@@ -109,8 +109,9 @@ can be.
 
 | Fusion action | Paramability now | Paramability possible later | Orca now | Orca possible later | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Press Pull of a flat face (Offset Faces) | Copied | - | Left out | Needs Orca | Paramability: not two faces that meet, not a face with a leaning or rounded side. |
-| Press Pull of a curved face | Left out | Yes, needs an app change | Left out | Needs Orca | The app moves flat faces only. |
+| Press Pull of a flat face (Offset Faces) | Copied | - | Left out | Needs Orca | Paramability: faces that meet and faces with a leaning or rounded side are copied too; the app lets the faces around them follow. |
+| Press Pull of a whole round face (a pin, a boss or a bore) | Copied | - | Left out | Needs Orca | Paramability: needs an app that reads recipe version 17. The face goes all the way round, both ends are flat and square to its axis, and the new radius stays clear of the other edges of the end faces (also over the size range of the distance). |
+| Press Pull of another curved face, or of part of a round face | Left out | Yes, needs an app change | Left out | Needs Orca | The app moves flat faces and whole round faces only. |
 | Fillet: constant radius | Copied | - | Partly | Needs Orca | Orca: only when the edges are all, top, bottom or side edges of the part, or corners of straight extrudes. Other edges are left out, because Orca names edges by its own numbering. |
 | Fillet: variable radius | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one straight or arc edge alone in its fillet, no radii between the ends, and only when the radius changes evenly along the edge. Radii between the ends need an app change. |
 | Fillet: chord length | Partly | - | Left out | Needs Orca | Paramability: a plain round of the radius the chord gives, where the faces meet at the same angle along each edge. |
@@ -202,7 +203,7 @@ Sorted by how many printing projects it helps:
 10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
 12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
-13. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
+13. Scale, Press Pull of curved faces other than whole round faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
     Boundary Fill and sheet metal (app change).
 
 ## Orca does not support

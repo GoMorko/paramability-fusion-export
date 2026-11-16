@@ -578,3 +578,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. PF1, Press Pull on a whole round face (a press fit). Add user parameters `Fit` = 0.2 mm and `HoleSize` = 5 mm.
+    On the XY plane draw a 40 x 20 mm rectangle with its corner at the origin and extrude it 10 mm. On the top face
+    draw a circle of diameter `HoleSize` with its centre at (12, 10) and cut it through all. On the XY plane draw a
+    circle of 6 mm diameter with its centre at (30, 10) and extrude it 15 mm as a Join, so a pin stands 5 mm above
+    the plate. Use Press Pull (Offset Faces) on the wall of the hole with the distance `-Fit`. Use Press Pull on the
+    round side of the pin with the distance -0.1 mm.
+    Export: tick `Fit` and `HoleSize`. In `report.json`, each Offset Faces item has a face of `kind` "round" with two
+    `ends` of `kind` "circle", each with a flat `face`; `outward` is false for the hole and true for the pin;
+    `rounds_after` holds a radius of 2.7 for the hole and 2.9 for the pin. The recipe is version 17 with two
+    `offsetFaces` steps; the distance of the hole follows `Fit`. In Paramability, set `Fit` to 0.4 mm: the hole is
+    5.8 mm across, and the pin stays 5.8 mm across. When `rounds_after` is empty, Fusion does not list the moved face
+    after the step and both steps are left out with "could not be measured": report this. Afterwards the design is as
+    before.
