@@ -4,12 +4,14 @@ a closed path's seam. These are the limits of the Paramability app's sweep, whic
 import math
 
 from ...geometry import spline_fit, vec
-from .curves import arc_of, curve_length, polyline, tangents, turn_deg
+from .curves import arc_of, curve_length, inner_turn, polyline, tangents, turn_deg
 from .tolerances import (
     MAX_MITRE_DEG, MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG, OVERLAP_MAX_CORNER_DEG,
     OVERLAP_STEP_SHARE, REACH_SHARE, SMOOTH_JOIN_DEG, SQUARE_TOL_DEG, STRAIGHT_DEG, TOUCH_TOL,
 )
-from .words import CORNER_TOO_TIGHT, OVERLAP, REACHES_BEND, TURNS_BACK, problem, sharp_corner as sharp_problem
+from .words import (
+    CORNER_TOO_TIGHT, OVERLAP, REACHES_BEND, TURNS_BACK, UNREADABLE, problem, sharp_corner as sharp_problem,
+)
 
 
 def off_square(direction, normal):
@@ -72,7 +74,14 @@ def corners_problem(ordered, reach, mitres, closed=False):
     """A problem for a sharp corner of the chain the app cannot build. A corner between two lines is mitred when
     `mitres` is true: it may not turn back past `MAX_MITRE_DEG`, and its mitre takes the outline's `reach` across the
     path's plane times tan(turn / 2) of straight path on both sides, so a line between two corners needs room for
-    both mitres. Any other sharp corner is refused. On a closed chain the last curve meets the first."""
+    both mitres. Any other sharp corner is refused, also one inside a spline (`inner_turn`): the destination fits a
+    smooth curve through the spline and would round it off. On a closed chain the last curve meets the first."""
+    for curve in ordered:
+        turn = inner_turn(curve)
+        if turn is None:
+            return problem(UNREADABLE)
+        if turn > SMOOTH_JOIN_DEG:
+            return sharp_problem()
     count = len(ordered)
     pairs = [((i - 1) % count, i) for i in range(count)] if closed else [(i, i + 1) for i in range(count - 1)]
     needs = [0.0] * count

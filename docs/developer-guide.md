@@ -2039,7 +2039,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     size that an earlier step reads. The Orca output marks the sizes of each such place that it writes as numbers
     (`orca_translate/kept_refs.py`). The recipe output does this for a revolve axis that the probe does not follow
     (`ref_motion.check_own_axis`) and for a mirror plane or pattern axis that it cannot follow
-    (`follow.place_plane`).
+    (`follow.place_plane`). For a revolve axis on a line of another sketch, the recipe output marks only the sizes
+    that the probe did not try (see "A turning axis").
   - The direction of a rectangular pattern. `direction_sizes` gives the sizes that can turn it. For a direction
     taken from an edge, an axis or a face of the part (the `own` place that the reader writes), these are the sizes
     of `reference_sizes`. For a direction taken from a sketch line, these are the sizes of `sketch_line_sizes`. A
@@ -2273,6 +2274,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   times in a cubic spline, or any inner knot of a spline of degree one). `sweep_splines` gives the largest turn at
   these joints (`inner_turn_deg`, from `splines.joint_turns`), and the check for sharp corners uses it too. An
   outline keeps such a corner, because Orca draws the same corner.
+  The planner itself also finds a corner inside a spline, for both outputs. The spline fit of the recipe makes a
+  smooth curve through the points of the spline. Thus it rounds off such a corner, and the copy is wrong. The
+  shared fact is `geometry/spline_joints.joint_turns`. It reads the definition of the spline (`flat.nurbs`) and
+  gives the turn at each inner knot that occurs as many times as the degree. The weights of a rational spline do not
+  change the turn. `curves.inner_turn` gives the largest turn of one curve. `checks.corners_problem` gives the
+  problem `sharp_corner` when this turn is more than `SMOOTH_JOIN_DEG`. When the definition cannot be read (the knots
+  do not agree with the poles, or the curve breaks at a knot), it gives the problem `unreadable`. A free curve
+  without a definition (an edge of a body) has no such check.
 - `steps/`: one reader for each kind of step:
   - `sweep.py`: the settings of a sweep: `settings_problem` gives the problem of a guide surface, a guide rail, a
     setting that Fusion did not give, or an orientation that is not perpendicular or parallel, and `cover_problem`
@@ -2760,6 +2769,17 @@ Sketch1 about that line.
 - The record of the axis has `entity_type: "SketchLine"`, the name of Sketch2, `sketch_reference` (what Sketch2 sits
   on) and `sketch_projected` (true when Sketch2 holds projected geometry).
 - The probe follows the line in Sketch2, so the recipe writes the axis point as a formula of `AxisAt`.
+- The probe reads the line in world coordinates at every try. Thus a try also measures a move of the plane of
+  Sketch2. But the probe measures only the sizes that it tries. The probe tries each size that can move or turn the
+  line (`probe/plane_sizes.axis_sizes`, which uses `reach.reference_sizes`). These are the sizes of Sketch2, the sizes
+  that can move the plane or face that Sketch2 sits on, and the sizes that can move the projected geometry in
+  Sketch2.
+- Sketch2 is not the sketch of the outline. Thus the outline does not mark the sizes that move the plane of Sketch2.
+  The recipe output marks them at the axis (`ref_motion.check_own_axis`, `_check_axis_line`): each size of
+  `reach.reference_sizes` that the probe did not try with Sketch2 measured (`sketch_motion.tried`). When there is no
+  motion file, it marks all these sizes. The axis point then stays as measured.
+- When the line is in the sketch of the outline, the outline marks the sizes of its plane
+  (`sketch_motion.placement_doubts`). The axis adds no mark.
 - The Orca output writes the axis as numbers. `reach.reference_sizes` gives `AxisAt`, so the Orca result marks it.
 - For an axis on an edge, a face or a construction axis, the probe does not follow the axis. Both outputs write it as
   numbers and mark the sizes that can move it (`ref_motion.check_own_axis` in the recipe output, `kept_refs.mark` in
@@ -3112,6 +3132,9 @@ copy does the same (`design_model/paths/checks.corners_problem`):
    left out.
 4. Any other sharp corner is left out with the cause `sharpCorner`: a corner next to an arc or a spline, a corner in a
    3D path, or a corner on a sweep that twists or tapers. The hint says to round the corner with a sketch fillet.
+5. A corner inside a spline is left out with the cause `sharpCorner` too (`curves.inner_turn`). Examples are a
+   spline of degree one (a polyline) that turns, and a cubic spline with a corner point. The recipe writes a spline
+   as a smooth fitted curve, which cannot keep such a corner.
 
 The check of the size ranges (`path_rebuilt.rebuilt_refusal(mitres=...)`) uses the same rule. The volume check counts
 each mitred corner too. For a closed path, Pappus' rule counts 2 tan(t/2) for a corner that turns by t, instead of t.
