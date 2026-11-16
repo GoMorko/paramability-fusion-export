@@ -101,7 +101,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   past it, on such a face of another body or after a left out step, or on such a face that a size may move when no
   copied extrude made it, extrudes that end on a flat face that Fusion joins with the faces next to it (Chain Faces
   on) when the outline does not land on that face alone (the sizes that may move the face or the outline are marked
-  when it does), extrudes that start at a
+  when it does; a slot or hole of the face under the outline counts as not landing), extrudes that end on a curved
+  face with Chain Faces on, extrudes that end on a curved face with Chain Faces off when the outline reaches past
+  that face (the sizes that may move the face or the outline are marked when it does not), extrudes that end on a
+  face whose surface could not be read, extrudes that start at a
   distance from a face or plane when Fusion gives no start face that shows which way, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
   does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when

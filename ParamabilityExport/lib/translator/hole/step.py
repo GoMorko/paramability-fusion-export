@@ -207,6 +207,17 @@ def _sizes(item, data, ctx, diameter, depth, counterbore, countersink, depth_q=N
     return _Sizes(diameter_q, depth_q, bore, sink)
 
 
+def _thread_start(sizes):
+    """How far below its position the thread of a tapped hole starts, as a Quantity that follows the sizes: the depth
+    of the counterbore, where the cone of the countersink narrows to the bore, or zero (`thread.thread_mouth`)."""
+    if sizes.counterbore:
+        return sizes.counterbore["depth"]
+    if sizes.countersink:
+        half = math.tan(math.radians(sizes.countersink["angle_deg"].n) / 2.0)
+        return sizes.countersink["diameter"].plus(sizes.diameter.scaled(-1)).scaled(0.5 / half)
+    return Quantity(0.0)
+
+
 def hole(ctx, step):
     item, data = step.brought, step.brought_data
     problem = facts.placed(data)
@@ -272,7 +283,8 @@ def hole(ctx, step):
         steps = [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
                  for p in points]
     if spec is not None:
-        cut = threads.hole_threads(ctx, item, data, spec, points, direction, sizes.depth, through)
+        cut = threads.hole_threads(ctx, item, data, spec, points, direction, sizes.depth, through,
+                                   _thread_start(sizes))
         if isinstance(cut, Refusal):
             return cut
         steps += cut

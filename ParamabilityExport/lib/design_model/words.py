@@ -124,6 +124,9 @@ EXTRUDE_ON_START = "This extrude ends on the surface it starts from."
 EXTRUDE_SAME_SIDE = "Both sides of this extrude end on the same side of its sketch, which is not copied."
 EXTRUDE_CHAINED = ("This extrude %s a face and the faces next to it, and its outline may reach past that face, so it "
                    "is not copied.")
+EXTRUDE_FACE_UNREAD = "Whether the face this extrude %s is flat or curved could not be read, so it is not copied."
+EXTRUDE_PAST_CURVED = ("This extrude %s a curved face, and its outline reaches past that face or could not be checked "
+                       "against it, so it is not copied.")
 EXTRUDE_WAY_UNSURE = "The face Fusion measured does not show which way this extrude goes, so it is not copied."
 EXTRUDE_START_OFFSET = "This extrude starts at a distance from a face or plane, which is not copied."
 TAPER_WAY = "The taper direction does not match what was measured, so it is not copied."
@@ -191,8 +194,8 @@ THREAD_OFFSET = "A thread that starts away from the end of its face is not copie
 THREAD_LENGTH_UNREAD = "How long this thread runs could not be read."
 THREAD_HOLE_MISMATCH = "The thread size of %s does not match the hole that was measured."
 THREAD_DEPTH_UNREAD = "How deep the thread of this hole runs could not be read."
-THREAD_HOLE_SPAN = ("The thread of this hole does not start at the top of the hole and run as deep as Fusion says, "
-                    "so it is not copied.")
+THREAD_HOLE_SPAN = ("The thread of this hole does not start at the top of the hole (or below its counterbore or "
+                    "countersink) and run as deep as Fusion says, so it is not copied.")
 THREAD_HOLE_ENDS_UNREAD = "The depth of this threaded hole could not be measured."
 THREAD_LONGER_THAN_FACE = "The thread is longer than its face."
 THREAD_DEEPER_THAN_HOLE = "The thread is deeper than its hole."

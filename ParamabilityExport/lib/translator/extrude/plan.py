@@ -31,7 +31,7 @@ def _through_both(ctx, item, sides):
 def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
     """The `RecipeSide` of one side with a distance, through all or up to a face or plane, or a Refusal."""
     if side.kind == dm.UP_TO:
-        return up_to_side(ctx, item, data, side, z)
+        return up_to_side(ctx, item, side)
     taper = taper_degrees(side.taper)
     if isinstance(taper, Refusal):
         return taper

@@ -474,14 +474,20 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (30, 36) and extrude it down "To object" up to the chamfer face as a join, with Chain Faces off. Make the same
     post at (20, 36) with Chain Faces on. On the YZ plane draw a 10 mm radius circle centred at y = 20, z = 10, and
     extrude it 60 mm along +X as a join (a round roof on the box). Sketch a 6 mm circle on the plane
-    30 mm up at (30, 25) and extrude it down "To object" up to the round face as a join.
+    30 mm up at (30, 25) and extrude it down "To object" up to the round face as a join, with Chain Faces off. Make
+    the same roof post at (45, 25) with Chain Faces on, and one at (57, 25) with Chain Faces off, whose circle
+    reaches past the end of the roof at x = 60.
     Export: tick no size. In `report.json`, note `side_one.chained` of the two chamfer posts and `end_offset` of the
-    roof post. Expect `chained` false and true. The two chamfer posts and the roof post are copied with
-    `extent: { upTo: { near } }` and match the STEP: the posts land on the chamfer face alone. Then move the post with
+    roof posts. Expect `chained` false and true. The roof posts have `side_one.surface` "Cylinder". The first roof
+    post has `outline_hits_face` true, the one at (57, 25) false, and the one with Chain Faces on has none. The two
+    chamfer posts and the first roof post are copied with `extent: { upTo: { near } }` and match the STEP: the posts
+    land on their faces alone. The roof post with Chain Faces on is left out with "a face and the faces next to it",
+    and the one at (57, 25) with "reaches past that face". Then move the chamfer post with
     Chain Faces on to (20, 33), so it reaches past the chamfer onto the top face, and export again: Fusion ends it on
-    both faces, and the post is left out with "its outline may reach past that face". Move it back. Export again with `Height` ticked: the roof post is still copied (the extrude that
-    made the roof places its point); the chamfer post is left out with "may move when the sizes change". Afterwards
-    the design is as before.
+    both faces, and the post is left out with "its outline may reach past that face". Move it back. Export again with
+    `Height` ticked: the first roof post is still copied (the extrude that made the roof places its point), and
+    `Height` is marked with "ends on a curved face"; the chamfer post is left out with "may move when the sizes
+    change". Afterwards the design is as before.
 46. EX4, an extrude that starts at a distance from a face, both ways. Add user parameters `Height` = 10 mm and
     `Lift` = 3 mm. On the XY plane draw a 40 x 40 mm rectangle from the origin and extrude it up by `Height`. On the
     XY plane draw a 10 mm square centred at (20, 20) and extrude it 5 mm up as a new body, with Start set to "From
@@ -507,7 +513,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: tick no size. In `report.json`, `side_one.chained` is true and `side_one.face_outline` holds the bottom
     face of the shelf. The first post is copied and matches the STEP. The second post is left out with "its outline
     may reach past that face"; note where Fusion ended it. Turn Chain Faces off on the second post: it is copied and
-    ends on the plane of the shelf bottom, as Fusion then makes it.
+    ends on the plane of the shelf bottom, as Fusion then makes it. Then delete the second post, and cut a 2 mm wide
+    slot through the shelf from (19, 0) to (21, 18), across the first post: no corner of the slot lies in the post.
+    Export again: the first post is left out with "its outline may reach past that face".
 49. CR1, a round set by chord length. Model a 40 x 20 x 10 mm box with its corner at the origin, and add user
     parameter `Chord` = 3 mm. Round the four top edges with a fillet whose type is Chord Length, chord length `Chord`.
     On a second box, draw a triangle on the XZ plane with corners (0, 0), (30, 0) and (0, 20), extrude it 40 mm, and
@@ -542,3 +550,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the moves of the copies from the original. Then set `Count` to 4 in Fusion: note whether Fusion puts the fourth
     hole past the end of the line, leaves it out, or fails (the copy keeps the copies on the path). Afterwards the
     design is as before.
+52. TD3, a tapped hole with a counterbore and one with a countersink. Make a plate 40 x 40 x 12 mm. Add a Hole at
+    (10, 20) on the top face: Counterbore, counterbore 10 mm across and 3 mm deep, "Tapped", "Modeled" ticked,
+    M6x1, 10 mm deep, full length thread. Add a Hole at (30, 20): Countersink, 12 mm across at 90 degrees, tapped
+    and modeled M6x1, through all. Add a user parameter `Bore` = 3 mm and set the counterbore depth to `Bore`.
+    Export: tick `Bore`. In `report.json` note `thread.made_span` of each hole: expect it to start near 3 mm for the
+    counterbore hole and near 3.5 mm for the countersink hole (where the cone narrows to the 5 mm bore). Both holes
+    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In Paramability,
+    change `Bore` to 5 mm: the thread of the counterbore hole starts 5 mm down and ends at the bottom of the hole.
+    When `made_span` starts at 0 instead, Fusion starts its thread at the top: the holes are left out with "does not
+    start at the top of the hole (or below its counterbore or countersink)". Afterwards the design is as before.

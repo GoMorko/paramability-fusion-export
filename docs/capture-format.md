@@ -651,12 +651,16 @@ against `samples`.
   true when Fusion also stops at the faces next to the face, false when it extends the face, null when it cannot be
   read; `face_outline` is the outline of a flat face for which `chained` is not false (`read_face.face_loops`: `{
   frame, loops }`, null when it cannot be read; for a face of another component it is in `ref`, in the part's
-  coordinates); its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`),
+  coordinates); `outline_hits_face` is set only for a curved face of the part when `chained` is false: true when a
+  ray along the sketch normal from every sample point of every outline meets the face, false when one misses it, null
+  when Fusion gives no answer (`read_face_rays.py`, `Component.findBRepUsingRay`, at most 200 rays, with the marker
+  before the step); its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`),
   `{ "kind": "other", "type": "..." }`
   (also a distance extent whose `distance` Fusion refuses to give; a symmetric one then has `symmetric` null, so the
   step is left out instead of stopping the copy).
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
   the face), `entity_type` the entity's type name (`BRepFace`, `ConstructionPlane`, or null), and for a face
+  `surface` (`Plane`, `Cylinder`, `Cone` or `other`, null when it cannot be read; older exports leave it out),
   `face_point` (`BRepFace.pointOnFace`) and `body` (`{ token, name }`, the body it lies on). These keys are optional;
   without `face_point` the translator cannot tell whether the face moves with sizes, and without `body` a step of a tool
   body cannot tell a face of the tool from a face of the part at the same place. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
@@ -689,10 +693,13 @@ against `samples`.
   (within 1e-3 mm), else the step is left out (`design_model/steps/extrude.py`, `start_of`).
 - A side up to a tilted or curved `BRepFace` of the body is written as `extent: { upTo: { near: [face_point] } }`
   for an extrude of one side, without taper and without `offset`. A curved face needs `end_offset` on the same side
-  of the sketch as `face_point`.
+  of the sketch as `face_point`, `surface` that is not `Plane` or null, `chained` false and `outline_hits_face`
+  true; the sizes that may move the face or the outline are then marked. A face without `plane` whose `surface` is
+  `Plane` or unknown is left out.
 - A side up to a flat face for which `chained` is not false (also a face square to the sketch) is copied only when
-  every outline, moved along the sketch normal, lands on `face_outline` (`outline_on_face`); the sizes that may move
-  the face or the outline are then marked. See the developer guide, section "Extrudes: a tilted or curved end face,
+  every outline, moved along the sketch normal, lies in the region of `face_outline` (outer loop less its holes, no
+  edge of the face crossing it, touching within 0.001 mm; `outline_on_face`); the sizes that may move the face or the
+  outline are then marked. See the developer guide, section "Extrudes: a tilted or curved end face,
   a start at a distance from a face, an intersect to two sides".
 - `end_normal` (optional; null when it cannot be read): the unit normal of the measured end
   face at `pointOnFace` (`BRepFace.evaluator.getNormalAtPoint`). Older captures do not have it.
@@ -806,7 +813,9 @@ against `samples`.
   the mouth of the first hole the vertices of the thread's faces (`thread.faces`) reach along `direction`, `[low,
   high]` in mm, or null. Null for a hole that is not tapped. `params["thread.depth"]` holds the length parameter. A
   modeled thread is copied as a hole at the minor diameter plus an internal `thread` step for each position when its
-  faces start at the mouth and, for a thread over part of the hole, end at `depth`.
+  faces start at the mouth of the thread and, for a thread over part of the hole, end `depth` below it. The mouth is
+  the hole's position, the bottom of a counterbore, or the depth where the cone of a countersink narrows to the
+  minor diameter (`design_model/steps/thread.py`, `thread_mouth`).
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
 - `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item, or the one
   `SketchPointHolePositionDefinition.sketchPoint` (`worldGeometry`), else `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets
