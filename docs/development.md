@@ -29,6 +29,33 @@ package may import only packages above it in this list (not every one of them). 
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
 - `commands/`: the two buttons, their flows and the panel; also uses `adsk`.
 
+## Output difference check
+
+A change that should not alter what the translators write must prove it. Two scripts compare the output of both
+translators (the `.paramability` recipe and the Orca recipe) for every test capture, before and after a change.
+
+```
+python3 scripts/output_snapshot.py /tmp/before.json     # on the code before the change
+python3 scripts/output_snapshot.py /tmp/after.json      # on the code after the change
+python3 scripts/output_diff.py /tmp/before.json /tmp/after.json
+```
+
+Write a snapshot under `/tmp` or `tests/local` (git-ignored), never into a tracked folder; the script refuses other
+places inside the repository. A snapshot takes about 30 to 45 seconds. It runs each capture of `tests/fixtures/captures`
+without sizes (`plain`) and with every user parameter ticked (`sized`), each capture that has a file in
+`tests/fixtures/motion` with that motion (`motion`), and, when `tests/local/captures.json` exists, the local packages
+replayed with their own probe states (`local`) and the local Orca reports (`orca`). More capture or report files can be
+named after the output path. A capture that raises is kept as its exception type and message.
+
+The diff prints one line per change: `capture | mode | translator | what changed`. It lists changed verdicts, gaps,
+fixed, loose, cut and dropped sizes, left out steps and parameter outcomes, and a changed recipe by JSON path (at most
+12 paths per output, `--all` shows every one). For a changed formula it works out the old and the new text at the
+current values and with each size 25% lower and higher, and says "same values" when they agree. The exit status is 1
+when anything differs.
+
+Rule: every line of the diff needs a reason in the commit message, and a line must be neutral or an improvement. A line
+with no reason is a regression until shown otherwise.
+
 ## Tests
 
 For a quick check of a release by hand, with your own projects and a few small test models, see `docs/hand-checks.md`.
