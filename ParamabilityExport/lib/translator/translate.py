@@ -3,9 +3,9 @@ from ..capture_model import lineage, step_kinds
 from ..capture_model.capture import validate_capture
 from ..design_model.values import Sized, number
 from ..design_model import tried_ranges
+from ..design_model import step_links
 from ..design_model.reach import joint_reasons, probed_sizes
 from ..geometry import rigid
-from ..params import geometry_links
 from ..params.expressions.formula import tokenize_formula
 from ..params.expressions.simplify import collected_sum
 from ..params.expressions.text import MAX_FORMULA_LENGTH
@@ -200,8 +200,8 @@ def _translate(capture, handlers=None, size_table=None, motion=None, timer=None)
     them as numbers without fixing anything for them (the first translation of an export). Without it, no size that
     moves a sketch or construction geometry can be followed.
 
-    A size table without geometry links gets the capture's (`params.geometry_links.reach`): a ticked size that may
-    reach a sketch through another component counts as a size that sketch reads.
+    A size table without geometry links gets the capture's (`design_model.step_links.reach`): a ticked size that
+    may reach a sketch through another component counts as a size that sketch reads.
     """
     validate_capture(capture)
     unplaced = _placement_refusal(capture)
@@ -214,7 +214,7 @@ def _translate(capture, handlers=None, size_table=None, motion=None, timer=None)
     if size_table is None:
         return _walk(capture, table, None, cache=cache)[0]
     if not size_table.links:
-        size_table = size_table.with_links(geometry_links.reach(capture))
+        size_table = size_table.with_links(step_links.reach(capture))
     size_table = size_table.with_narrowed(tried_ranges.built_ranges(size_table, motion, capture))
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():

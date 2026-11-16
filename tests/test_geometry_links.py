@@ -18,7 +18,8 @@ from lib import orca_translate
 from lib.dialog_model.result_rows import NOT_USED, result_view, section, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.size_offers import offers, table_for_body
-from lib.params import geometry_links, size_table
+from lib.design_model import step_links
+from lib.params import size_table
 from lib.probe import plan
 from lib.sketch_values.motion import Motion, Stuck
 from lib.translator import notes, translate
@@ -52,29 +53,29 @@ def _pipe_acts_through(capture, dependent):
 
 class RuleTest(unittest.TestCase):
     def test_a_dimension_of_a_sketch_a_step_of_the_pipe_body_takes_reaches_the_hole(self):
-        self.assertEqual(geometry_links.reach(CAPTURE), [LINK])
+        self.assertEqual(step_links.reach(CAPTURE), [LINK])
 
     def test_the_part_itself_and_sketches_other_steps_use_give_no_link(self):
-        self.assertEqual(geometry_links.reach(CAPTURE, sketches={"BoxBase"}), [])
+        self.assertEqual(step_links.reach(CAPTURE, sketches={"BoxBase"}), [])
         own = copy.deepcopy(CAPTURE)
         own["sketch_links"][1]["links"][0].update(token="cmp_box", name="Box")
-        self.assertEqual(geometry_links.reach(own), [])
+        self.assertEqual(step_links.reach(own), [])
 
     def test_with_the_body_known_only_its_own_steps_count_else_the_component_does(self):
         elsewhere = _pipe_acts_through(CAPTURE, {"name": "d40", "kind": "feature", "component": "cmp_pipe",
                                                  "feature": "PipeLabel"})
-        self.assertEqual(geometry_links.reach(elsewhere), [])
+        self.assertEqual(step_links.reach(elsewhere), [])
         elsewhere["sketch_links"][1]["links"][0]["bodies"] = []
-        self.assertEqual([link["via"] for link in geometry_links.reach(elsewhere)], ["component"])
+        self.assertEqual([link["via"] for link in step_links.reach(elsewhere)], ["component"])
 
     def test_a_reference_to_a_sketch_the_parameter_sits_on_reaches_it(self):
         drawn = copy.deepcopy(CAPTURE)
         drawn["sketch_links"][1]["links"][0].update(bodies=[], sketches=[{"token": "sk_pipe", "name": "PipeProfile"}])
-        self.assertEqual([link["via"] for link in geometry_links.reach(drawn)], ["sketch"])
+        self.assertEqual([link["via"] for link in step_links.reach(drawn)], ["sketch"])
 
     def test_parameters_acting_on_a_tied_component_come_first_among_those_acting_outside(self):
-        self.assertEqual(geometry_links.outside(CAPTURE), ["pipe_d_mm", "lid_mm"])
-        self.assertEqual(geometry_links.outside(CAPTURE, sketches={"BoxBase"}), [])
+        self.assertEqual(step_links.outside(CAPTURE), ["pipe_d_mm", "lid_mm"])
+        self.assertEqual(step_links.outside(CAPTURE, sketches={"BoxBase"}), [])
 
 
 class DialogTest(unittest.TestCase):
@@ -346,7 +347,7 @@ def placed_by_the_assembly():
 class PlacedComponentTest(unittest.TestCase):
     def setUp(self):
         self.capture = placed_by_the_assembly()
-        self.links = geometry_links.reach(self.capture)
+        self.links = step_links.reach(self.capture)
         self.names = [p["name"] for p in self.capture["parameters"]["user"]]
 
     def test_a_size_that_places_an_occurrence_reaches_every_sketch_tied_to_another_component(self):

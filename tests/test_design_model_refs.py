@@ -14,7 +14,7 @@ from lib import orca_translate, translator
 from lib.design_model import refs
 from lib.design_model.reach import probed_sizes
 from lib.export_plan.size_offers import offers, table_for_body
-from lib.params import geometry_links
+from lib.design_model import step_links
 from lib.sketch_values.motion import Affine, Motion
 
 ROD = {"token": "cRod", "name": "Rod"}
@@ -153,7 +153,7 @@ class AssemblyReferenceLinkTest(unittest.TestCase):
         self.capture = mirror_placed_by_the_assembly()
 
     def links(self):
-        return {(link["param"], link["via"]) for link in geometry_links.reference_links(self.capture)}
+        return {(link["param"], link["via"]) for link in step_links.reference_links(self.capture)}
 
     def test_a_size_that_places_an_occurrence_links_to_a_place_of_another_component(self):
         self.assertEqual(self.links(), {("gap_mm", "reference"), ("move_x", "assembly")})

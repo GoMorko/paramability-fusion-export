@@ -1,5 +1,6 @@
 """What the reader reads at each probe state."""
 from ...capture_model.step_kinds import pattern_kind
+from ...design_model import design
 from ...params import defaults
 from ...params.size_table import DERIVED, FREE
 from .covered import FACE, scan
@@ -26,9 +27,9 @@ def symmetric_patterns(capture):
     out = {}
     for item in capture.get("items") or []:
         kind = pattern_kind(item.get("type"))
-        data = item.get("data") if isinstance(item.get("data"), dict) else {}
         if kind is None or item.get("suppressed") or not item.get("in_target_component", True):
             continue
+        data = design.as_read(item).data
         names = ("quantity_one", "quantity_two") if kind == "rectangular" else ("quantity",)
         sides = ("symmetric_one", "symmetric_two") if kind == "rectangular" else ("symmetric",)
         if not any(data.get(side) for side in sides):

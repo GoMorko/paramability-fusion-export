@@ -257,7 +257,7 @@ target through a link (`reach`), in this order:
    (`bodies_after`), one of those items is one it drives; when such items exist and it drives none of them, it has
    no link through that component;
 3. `via: "component"`: otherwise, when the link's component is one it acts on;
-4. `via: "assembly"`: otherwise, when it acts on an item that may place an occurrence (`places_occurrence`: a
+4. `via: "assembly"`: otherwise, when it acts on an item that may place an occurrence (`design_model.step_links.places_occurrence`: a
    dependent of kind `joint`, an assembly item of the timeline, or a Move whose `input_kind` is not `bodies` or
    `faces`). The capture does not say which occurrence the item places, so every link to another component counts.
 
@@ -1567,7 +1567,7 @@ tell which sizes may move it:
 - `slot`: where the step uses it: `start`, `side_one`, `side_two` (extrude), `plane` (mirror), `axis` (revolve and
   circular pattern), `direction_one`, `direction_two` (rectangular pattern), `positions.<n>` (hole), `tool<n>.<xy|xz|yz>` (an origin plane
   of the component a Combine's tool body lives in). The key of a
-  reference is `<item index>.<slot>` (`params.geometry_links.ref_key`, `item_refs`). The holes' `position_refs` take
+  reference is `<item index>.<slot>` (`params.geometry_links.ref_key`, `design_model.step_links.item_refs`). The holes' `position_refs` take
   `<n>` from their place in the list.
 - `type`: the Fusion type of the native entity (`BRepFace`, `ConstructionPlane`, `ConstructionAxis`, `SketchLine`,
   `SketchPoint`, `BRepEdge`). `token`: the `entityToken` of the native entity, which `Design.findEntityByToken` finds
@@ -2521,7 +2521,7 @@ calls Fusion no more. A capture without graphs has no `derived`.
   together. The solver checks its redundant rules and choices at these settings, and the formulas are fitted over them.
   Settings where a value has no number (a square root of a negative value) leave the key without a formula.
 - Constants (`sketch_solve/constants.constants_of`): a projected entity from another component that no parameter reaches through
-  `geometry_links.reach`, and an implicit line through the sketch origin (an origin axis). Other projected entities
+  `design_model.step_links.reach`, and an implicit line through the sketch origin (an origin axis). Other projected entities
   (from the body's own edges or sketches) are measured inputs: the solver leaves them where they are, the fit moves
   each one up and down by a quarter of its value (at most 40 inputs, `derived.MAX_INPUTS`), and a derived value that
   reads one is flagged `inputs`. Their values at other states are not read, so such a value is compared with the

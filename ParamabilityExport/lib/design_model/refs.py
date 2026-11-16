@@ -20,7 +20,7 @@ How far a reference moves as sizes change is measured by the probe; the recipe t
 `mark_all`.
 """
 from ..params import geometry_links
-from . import words
+from . import step_links, words
 
 PLANE, AXIS, POINT, DIRECTION = "plane", "axis", "point", "direction"
 PLANE_TYPES = ("BRepFace", "ConstructionPlane")
@@ -72,12 +72,12 @@ def _acting(ctx):
 
 def _assembly(ctx):
     """Fusion names of the user parameters that act on an item that may place an occurrence
-    (`geometry_links.places_occurrence`), in parameter order. Only read when the capture says where parameters act
+    (`step_links.places_occurrence`), in parameter order. Only read when the capture says where parameters act
     (`_acting`)."""
     cache = ctx.cache.setdefault("refs", {})
     if "assembly" not in cache:
         users = (ctx.capture.get("parameters") or {}).get("user") or []
-        cache["assembly"] = [p["name"] for p in users if geometry_links.places_occurrence(ctx.capture, p)]
+        cache["assembly"] = [p["name"] for p in users if step_links.places_occurrence(ctx.capture, p)]
     return cache["assembly"]
 
 
@@ -103,10 +103,10 @@ def acting_sizes(ctx, ref):
 
 
 def reaching(ctx, item):
-    """`(entry, names)` for each measured reference of the step (`geometry_links.item_refs`) whose owning component
+    """`(entry, names)` for each measured reference of the step (`step_links.item_refs`) whose owning component
     some ticked size acts on: `names` are those sizes."""
     out = []
-    for entry in geometry_links.item_refs(item):
+    for entry in step_links.item_refs(item):
         names, known = acting_sizes(ctx, entry["ref"])
         if known and names:
             out.append((entry, names))

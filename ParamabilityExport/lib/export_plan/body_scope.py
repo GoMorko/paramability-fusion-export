@@ -11,24 +11,20 @@ and are only compared with each other. Captures without component tokens match b
 """
 from ..capture_model import lineage
 from ..capture_model.capture import same_body
-from ..params import geometry_links
+from ..design_model import design, step_links
 from ..params.defaults import reads_of
 
 QUANTITY_PATHS = ("quantity", "quantity_one", "quantity_two")
 
 
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
-def _touches(item, wanted):
-    """The step lists a wanted body among its bodies, or its own data names one as the body it works on."""
+def _touches(step, wanted):
+    """The step (a `design.ResolvedStep`) lists a wanted body among its bodies, or its own data names one as the body
+    it works on."""
+    item, data = step.raw, step.data
     if item.get("bodies_after") is None:
         return True  # unknown bodies: counted, so nothing is dropped for lack of information
     if any(same_body(b, w) for b in item["bodies_after"] for w in wanted):
         return True
-    data = _data(item)
     if any(same_body(data.get("target"), w) for w in wanted):
         return True
     if data.get("operation") != "newBody":
@@ -42,20 +38,21 @@ def body_items(capture):
     wanted = [capture["target"]]
     # A body the picked one was split from counts only up to that split: later steps on it build the other piece.
     split_from = lineage.of(capture)
+    steps = [design.as_read(item) for item in capture["items"]]
     used = {}
     changed = True
     while changed:
         changed = False
-        for item in capture["items"]:
-            index = item.get("index")
-            if index in used or item.get("suppressed"):
+        for step in steps:
+            index = step.raw.get("index")
+            if index in used or step.raw.get("suppressed"):
                 continue
             parents = [parent for at, parent in split_from if index is not None and index <= at]
-            if not _touches(item, wanted + parents):
+            if not _touches(step, wanted + parents):
                 continue
-            used[index] = item
+            used[index] = step.raw
             changed = True
-            wanted.extend(b for b in _data(item).get("tools") or [] if isinstance(b, dict))
+            wanted.extend(b for b in step.data.get("tools") or [] if isinstance(b, dict))
     return [used[i] for i in sorted(used, key=lambda k: (k is None, k))]
 
 
@@ -74,7 +71,7 @@ def _sketch_names(node, found, component):
 def _sketches_of(items):
     found = set()
     for item in items:
-        _sketch_names(_data(item), found, item.get("component"))
+        _sketch_names(design.as_read(item).data, found, item.get("component"))
     return found
 
 
@@ -135,7 +132,7 @@ def quantity_refs(capture):
     """Model parameters that drive a pattern quantity in the steps of the picked body, as read in `data.params`."""
     found = {}
     for item in body_items(capture):
-        params = _data(item).get("params")
+        params = design.params_of(item)
         if not isinstance(params, dict):
             continue
         for path in QUANTITY_PATHS:
@@ -158,25 +155,25 @@ def _own_items(capture):
 
 
 def body_links(capture):
-    """The geometry links (`params.geometry_links`) of the picked body: those of the sketches its own steps use
+    """The geometry links (`design_model.step_links`, `params.geometry_links`) of the picked body: those of the sketches its own steps use
     (`reach`), then those of the references of other components its steps use (`reference_links`)."""
     if not isinstance(capture, dict):
         return []
     found = []
     if capture.get("sketch_links"):
-        found = geometry_links.reach(capture, _body_sketch_names(capture))
-    return found + geometry_links.reference_links(capture, _own_items(capture))
+        found = step_links.reach(capture, _body_sketch_names(capture))
+    return found + step_links.reference_links(capture, _own_items(capture))
 
 
 def body_outside(capture):
     """Fusion names of the user parameters worth a try to find links the reader cannot see
-    (`params.geometry_links.outside`), for the sketches and the references of other components the picked body's own
+    (`design_model.step_links.outside`), for the sketches and the references of other components the picked body's own
     steps use."""
     if not isinstance(capture, dict):
         return []
     items = _own_items(capture)
     names = None if items is None else {name for _, name in _sketches_of(items)}
-    return geometry_links.outside(capture, names, items)
+    return step_links.outside(capture, names, items)
 
 
 def scope_inputs(capture, fallback_model=()):

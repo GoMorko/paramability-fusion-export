@@ -1,6 +1,7 @@
 """The measured references (planes, axes, directions, points) of the steps that the probe reads again at every state."""
-from ...params import geometry_links
+from ...design_model import step_links
 from ...design_model.reach import moving_reaches
+from ...params import geometry_links
 
 SHAPE_PLANE, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_POINT = "plane", "axis", "direction", "point"
 NO_TOKEN = "it has no token to find it again"
@@ -41,11 +42,11 @@ def own_reaches(item):
 
 
 def refs(capture, items=None):
-    """The measured references of the capture's steps (`params.geometry_links.item_refs`, then `own_reaches`), each
+    """The measured references of the capture's steps (`design_model.step_links.item_refs`, then `own_reaches`), each
     with its `shape` and, when the probe cannot follow it, a `reason` (else empty)."""
     out, entries = [], []
     for item in (capture.get("items") or []) if items is None else items:
-        entries += geometry_links.item_refs(item) + own_reaches(item)
+        entries += step_links.item_refs(item) + own_reaches(item)
     for entry in entries:
         ref = entry["ref"]
         shape = _shape(ref)
