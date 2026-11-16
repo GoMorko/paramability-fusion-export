@@ -557,7 +557,10 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - A feature value (an extrude length, a hole size) follows when its model parameter's expression translates to a
   formula of the sizes (`SizeTable.translate`, the same as for a recipe) and Orca can write that formula
   (`formulas.to_orca`: `+ - * /`, brackets, `pi`, `sqrt abs sin cos tan min max`; `pow` of a whole power up to 4 is
-  written as a product; choices, comparisons, `round`, `mod` and the rest are not).
+  written as a product; choices, comparisons, `round`, `mod` and the rest are not). The reason says in plain words
+  what Orca cannot do ("Orca formulas cannot round a number up" for `ceil`, `formulas._CANNOT`).
+- The reasons of a parameter are listed once each: a reason that two notes of one outline give alike, or that two
+  steps give alike, is shown once (`sketch_sizes._drawn_reason`, `orca_result.parameter_line`).
 - A rectangle's `width` and `height` and a circle's `radius` follow when the capture holds the graph of the sketch
   (`capture.sketch_graphs`): `sketch_solve` works out each corner as a formula of the sketch's dimensions, each
   dimension is a formula of the sizes (`design_model.dimension_sizes.dimension_formulas`), and a side is the difference of
@@ -645,7 +648,17 @@ against Orca 2.5.1 (`CadDocument::apply_feature` Cut and Transform, `apply_boole
     the shorter line, in radians). A capture rounds each coordinate to a millionth of a mm, so a 120 degree angle
     between lines 3 mm long measures 59.9999986 degrees, which the default reading refuses. The slack is at most
     0.001 radians (`checks.MAX_SLACK`), so a very short line does not widen the test;
-  - each line gets its direction as an angle formula (`Solution.directions`).
+  - each line gets its direction as an angle formula (`Solution.directions`);
+  - a line whose two ends are not known yet takes its direction from the gap between its ends when that gap is known
+    on both axes (`_Solver._gap_of_ends`): the corners of a rectangle share their coordinates, so the gap of each
+    diagonal is known from the width and the height. A centre point that lies on both diagonals (two coincident
+    constraints, as some centre rectangles are drawn, without a midpoint constraint) then places the rectangle:
+    "Extrude1 sketch keeps its numbers: the copy cannot work out its corners from the dimensions and constraints of
+    the sketch" no longer comes for such a rectangle.
+- When the solver gives no formula for a corner, a radius or a hole centre, the reason on the parameter's line says
+  why in plain words, by the solver's code (`sketches.open_reason`): no rule reaches it, the sketch is not fully
+  constrained, it rests on a constraint or dimension the copy does not read yet, a dimension does not match the
+  drawing, the rules do not agree, or the sketch could not be read.
 - The formula check. The corner formulas must give the drawn corners now (within 0.00001 mm), each side must run along
   its direction formula, the half-plane formula must give the outline in every cell of the lines through its sides
   (`halfplanes.check`: a point between each two neighbouring rays at each crossing of the lines), and Orca must be able

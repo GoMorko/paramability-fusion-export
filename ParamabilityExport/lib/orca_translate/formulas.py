@@ -77,9 +77,21 @@ def _orca_tree(node, rename):
             for _ in range(int(args[1][1]) - 1):
                 out = ("bin", "*", out, base)
             return out
-        raise OrcaFormulaError("Orca formulas have no %s()." % name)
-    words = {"cond": "a choice (if)", "cmp": "a comparison", "logic": "and, or", "not": "not"}
-    raise OrcaFormulaError("Orca formulas have no %s." % words.get(kind, kind))
+        raise OrcaFormulaError("Orca formulas cannot %s." % _CANNOT.get(name, "do one of the steps of this formula"))
+    raise OrcaFormulaError("Orca formulas cannot %s." % _CANNOT.get(kind, "do one of the steps of this formula"))
+
+
+# What an Orca formula cannot do, by the app function or the kind of step, in plain words.
+_CANNOT = {
+    "ceil": "round a number up", "floor": "round a number down", "round": "round a number",
+    "mod": "take the rest of a division", "pow": "raise a number to a power other than 1, 2, 3 or 4",
+    "acos": "work out an angle from a ratio", "asin": "work out an angle from a ratio",
+    "atan": "work out an angle from a ratio", "atan2": "work out an angle from a ratio",
+    "exp": "use powers of e", "ln": "use logarithms", "log": "use logarithms",
+    "sign": "tell whether a number is above or below zero", "clamp": "keep a number between two limits",
+    "cond": "choose between two values (if)", "cmp": "compare two values", "logic": "join conditions (and, or)",
+    "not": "turn a condition around (not)",
+}
 
 
 def to_orca(formula, names):
