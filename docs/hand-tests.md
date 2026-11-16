@@ -1456,6 +1456,23 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       with the reason that the mirror "mirrors across a plane of Cover that may move with it". In Orca set `Depth` to
       8 and in Fusion the same: the volumes agree. Change `Gap` to 3 in Fusion only: the mirror image moves in Fusion,
       and the Orca copy keeps it where it was, as its reason says.
+- [ ] OR23, a Combine whose tool body is made in another component. User parameters `BoxH` = 10 mm, `ToolLen` = 20 mm
+      and `RodX` = 30 mm. In the root component, draw a 2 point rectangle from the origin to (60, 40) on the XY plane
+      and extrude it `BoxH` up as a new body (`Body1`). Make a new component `Rod`. In `Rod`, on its XY plane, draw a
+      circle of 8 mm diameter on its origin and a circle of 6 mm diameter at (0, 10), and extrude both `ToolLen` up
+      as one new body (`Body2`). Move the `Rod` occurrence: turn it 90 degrees about the Z axis of the assembly, then
+      move it by (`RodX`, 10, 0) (type `RodX` in the move distance). Activate the root again and make a Combine: target
+      `Body1`, tool `Body2` of `Rod`, operation Cut, keep tools off.
+      Export `Body1` for Orca with all three parameters ticked.
+      Expect: no step left out; the two extrudes of `Rod` show "Copied into the tool body Body2 of Rod". The Design
+      tab holds "Extrude1 of Rod" and a Transform "Body2 of Rod place" before the Boolean, and the two holes sit at
+      (30, 10) and (20, 10) of the box, as in Fusion. `BoxH` follows its variable; `ToolLen` follows partly and
+      `RodX` stays a number, both with the reason "Combine1 puts its tool at the place of Rod that may move with it,
+      and the copy cannot follow that". In Orca set `ToolLen` to 5 and in Fusion the same: the volumes agree
+      (Inspect > Properties). Change `RodX` to 40 in Fusion only: the holes move in Fusion, and the Orca copy keeps
+      them where they were, as the reason says. Then place the `Rod` occurrence another way: turned 90 degrees about
+      the X axis of the assembly (no turn about Z) and moved by (`RodX`, 30, 5), so the rod lies along -Y inside the
+      box. Export again: the hole in Orca runs from y 30 to y 10 as in Fusion, and the volumes agree.
 
 ## Thin extrudes
 
@@ -2203,6 +2220,11 @@ Written from the API reference and checked only with fakes (`lib/fusion_reader/b
 - A hole on sketch points records `sketch_frame` from `Sketch.transform` of the points' sketch
   (`read_solid._hole_sketch`). In OR9 the hole in Orca must sit where Fusion has it; a hole off its place means the
   frame and the points' `worldGeometry` are not in the same coordinates.
+- The steps of a tool body of another component (`helper_of`, read by `fusion_reader/helper_pass.py` with a
+  `ReadContext` whose target is the tool) must hold that component's own coordinates, and `place.frame` and
+  `place.target_frame` the frames at the Combine (`placement.tool_place`). The Orca copy writes the steps there and
+  moves the tool by those frames. In OR23 a hole off its place, or a rod that runs the other way, means the steps
+  were read in assembly coordinates or a frame is read at another marker position.
 
 - `BRepBody.meshManager.createMeshCalculator()`, `setQuality(TriangleMeshQualityOptions.HighQualityTriangleMesh)`,
   `calculate()`: `nodeCoordinatesAsDouble` (cm) and `nodeIndices`. For a body in a component the picked body is an

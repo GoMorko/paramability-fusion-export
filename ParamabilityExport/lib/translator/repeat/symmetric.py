@@ -14,7 +14,6 @@ is read from the measured copies when the count is even. When it is odd, the cop
 an even count tell it (`extra_side`); without such a try the side Fusion was seen to use is taken (rectangular
 patterns only), and when the copies at a try break the rule the sizes that can make the count even are marked.
 """
-from ...capture_model import tool_items
 from ...design_model.steps.repeat import read_in_component, reach
 from ...design_model.values import Quantity, wrapped
 from ...params.expressions.errors import ExpressionError
@@ -72,7 +71,7 @@ def _tried_side(ctx, item, count_q, places_at):
         read = (state.get("patterns") or {}).get(key)
         if read is None or state.get("built") is False:
             continue
-        read = read_in_component(read, tool_items.component_frame(ctx))
+        read = read_in_component(read, ctx.component_frame())
         env = _setting(ctx.table, state.get("values"))
         count = None if env is None else value_at(count_q, env)
         if count is None or abs(count - round(count)) > 1e-9 or count < 2:

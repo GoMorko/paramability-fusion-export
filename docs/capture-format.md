@@ -977,7 +977,7 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
   tool body is found by the token read before the item. Exports before 0.10.6 have no `inside`.
 
 The translator follows a body that a split made back to the body it was split from (`lib/capture_model/lineage.py`),
-for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
+for the exported body and for a Combine tool body of its own component (`design_model.tool_chains.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
 removal of the other side (`lib/translator/bodies/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
 the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
@@ -1102,11 +1102,13 @@ added to `parameters.model` (names already listed win).
 
 The translator walks the steps of a `helper_of` item when a Combine takes its tool (`tool_walk.build`), like those of
 another body of the target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
-(`combine.step.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
+(`combine.step.tool_move`, with the move of `design_model.tool_chains.place_of`), plus a move that follows sizes: the offsets of the three origin planes along their normals
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
 reference). A frame that is scaled or mirrored refuses the Combine, naming the component. Slabs of the moved steps are
 copied with that move, so picks on them follow sizes; other placers (`faces/moved_placer.py`) answer `material_at` for the
-moved points and cannot place a pick on their faces.
+moved points and cannot place a pick on their faces. The Orca output writes the same steps in the tool component's
+coordinates and carries the tool with an Orca Transform by that move; it reads no size move and marks the sizes
+that act on the tool component instead (`docs/orca-output.md`, "Other components").
 
 **CopyPasteBody** (`sourceBody` with the marker before the item, `bodies` after it):
 

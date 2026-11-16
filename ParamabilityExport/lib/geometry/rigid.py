@@ -81,3 +81,21 @@ def move_for(capture):
     if capture.get("up_axis") == "y":
         move = move.then(TURN_Z_UP)
     return move
+
+
+def axis_angle(rows):
+    """`(unit axis, degrees)` of the turn `rows` (0 to 180 degrees, about an axis through the origin), or None when it
+    turns nothing."""
+    trace = rows[0][0] + rows[1][1] + rows[2][2]
+    angle = math.acos(max(-1.0, min(1.0, (trace - 1.0) / 2.0)))
+    if angle < 1e-9:
+        return None
+    skew = [rows[2][1] - rows[1][2], rows[0][2] - rows[2][0], rows[1][0] - rows[0][1]]
+    size = math.sqrt(sum(c * c for c in skew))
+    if size > 1e-6:
+        return [c / size for c in skew], math.degrees(angle)
+    # A half turn: the axis is the longest column of (rows + I) / 2.
+    columns = [[(rows[i][j] + (1.0 if i == j else 0.0)) / 2.0 for i in range(3)] for j in range(3)]
+    longest = max(columns, key=lambda c: sum(v * v for v in c))
+    size = math.sqrt(sum(v * v for v in longest))
+    return [v / size for v in longest], 180.0

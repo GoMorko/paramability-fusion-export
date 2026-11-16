@@ -24,7 +24,6 @@ The copies the shape check works with (`solid.Moved`) are the ones Orca builds f
 """
 import math
 from itertools import product
-from types import SimpleNamespace
 
 from ..capture_model import gap_hints, tool_items
 from ..capture_model.capture import same_body
@@ -239,11 +238,6 @@ def write(ctx, item, groups, layouts, copies, what):
     return ctx.features[start:]
 
 
-def _frames(ctx):
-    """What `tool_items.component_frame` reads of a walk: the capture and no outer walk."""
-    return SimpleNamespace(outer=None, capture=ctx.capture, target=ctx.target)
-
-
 def _separate_copies(ctx, item, what):
     """A pattern or mirror of bodies that leaves its copies as separate bodies."""
     data = data_of(item)
@@ -382,7 +376,7 @@ def rectangular(ctx, item):
     groups = sources(ctx, item, "pattern")
     if isinstance(groups, Skip):
         return groups
-    item = in_component(item, tool_items.component_frame(_frames(ctx)), merge=True)
+    item = in_component(item, ctx.component_frame(), merge=True)
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:
@@ -476,7 +470,7 @@ def circular(ctx, item):
     if not full and not 0 < abs(raw) < FULL_TURN_DEG:
         return Skip("The angle of this pattern could not be read.")
     delta = FULL_TURN_DEG / n if full else abs(raw) / (n - 1)
-    item = in_component(item, tool_items.component_frame(_frames(ctx)))
+    item = in_component(item, ctx.component_frame())
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:

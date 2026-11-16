@@ -12,7 +12,6 @@ After the step, the walk's placers stand where the Move put them (`moved_placer.
 """
 import math
 
-from ...capture_model import tool_items
 from ...design_model.steps.move import FIT_TOL_MM, ROTATION_TOL, spread
 from ...design_model.steps.move import fit as fit_move
 from ...design_model.values import Quantity
@@ -82,7 +81,7 @@ def _space_rows(ctx, data):
     """The rows that turn the Move's distances into the frame the steps are written in, or None when that cannot be
     told. Distances in design space are turned by the place of the component."""
     space = data.get("is_design_space")
-    frame = tool_items.component_frame(ctx) if space is not False else None
+    frame = ctx.component_frame() if space is not False else None
     if frame is None:
         return IDENTITY_ROWS
     rows = rigid.move_from_frame(frame).inverse().rows

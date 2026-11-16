@@ -5,7 +5,6 @@ to both sides of the original is written as a part turning each way (`repeat/sym
 """
 import math
 
-from ...capture_model import tool_items
 from ...design_model.steps.repeat import FIT_TOL_MM, in_component, kept_elements, reach as reach_of
 from ...design_model.values import Quantity
 from ...geometry import vec
@@ -226,7 +225,7 @@ def _symmetric_circular(item, ctx, setup):
 
 def circular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, tool_items.component_frame(ctx))
+    item = in_component(item, ctx.component_frame())
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):

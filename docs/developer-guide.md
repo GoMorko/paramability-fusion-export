@@ -1875,6 +1875,40 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     `orca_translate/holes.py` and `threads.py`.
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
+- `tool_chains.py`: the tool bodies of a Combine. This came from `translator/combine/tool_walk.py` (`chain_of`,
+  `lineage_chain`, `unseen_change`, `name_of`), `translator/combine/step.py` (the frame part of `tool_move`) and
+  `capture_model/tool_items.py` (`component_frame`). The walk of the recipe and the Orca output both read it:
+  - `read(timeline, body, before, component, exported)` gives a `Chain`. `component` is the token of the component
+    that the walk is in, or None for the component of the exported body. The `Chain` has these facts:
+    - `items`: the items that made the tool before the index `before`, in timeline order (`made_by`). These are the
+      items of the component of the tool that list the tool after them. For a tool that a split made, the items of
+      the bodies that it was split from are also included, up to each split (`lineage_chain`, the links of
+      `capture_model.lineage`). Each item has the measures of the body that it built (`roles.seen_on`).
+    - `owner`: the token of the component whose steps made the tool. It is empty for the component of the exported
+      body.
+    - `links`: the splits that the tool comes through.
+    - `unseen`: an item that can change the tool, but that `items` does not hold (`unseen_change`), with the reason.
+      This is a step of another component that lists the tool (`CHANGED_ELSEWHERE`). It can also be a step that lists
+      the name of the tool with another token (`NOT_FOLLOWED`).
+  - `place_of(body)` gives a `Place` for a tool of another component. The reader read the steps of such a tool in the
+    coordinates of its own component (`helper_of` items). `move` is the rigid move that carries these coordinates
+    into the coordinates of the component of the exported body, at the Combine. It is the frame of the component of
+    the tool, then the inverse of the frame of the exported body at that time. When the place cannot be used,
+    `move` is None and `problem` is a `Problem` (see `problem.py` above): a code (`PLACE_UNREAD` or
+    `PLACE_UNUSABLE`), the plain reason and the cause `otherComponent`. `moves_with` is the reference for the sizes
+    that can move the component of the tool (`refs.mark_all`, type `Place`). It is None for a tool of the root component, because the
+    root has no place of its own. `planes` are the measured references of the origin planes of the component, which
+    the probe reads again at other sizes.
+  - `component_frame(capture, bodies)` gives the frame of the component that a walk builds in. `bodies` are the tool
+    bodies that the walk is inside, the outermost first. The innermost tool of another component gives the frame of
+    its component. Without such a tool, the frame of the component of the exported body applies. The copies of a
+    pattern are in assembly coordinates, so the walk carries them into this frame (`steps/repeat.py`, `in_component`).
+    Both contexts give this frame as `component_frame()`.
+  - `is_place_slot(slot)`: the slot of an origin plane that places a tool of another component (`tool<n>.<plane>`).
+    Such a reference is the place of the tool, not geometry that a step uses.
+  - `sketch_by_name_only(item)`: an outline of the item gives the name of its sketch but no token. In a tool of
+    another component, such a sketch can have the same name as a sketch of the part.
+  What each output does with these facts is in 3.5 (the recipe) and in `docs/orca-output.md` (the Orca output).
 - `dimension_sizes.py`: the dimensions of a sketch graph as formulas of the sizes (`dimension_formulas`), the size
   settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
   setting (`size_values`, `size_env`). This came from `probe/derived_sizes.py`, and `near_values` and `size_values`
@@ -1909,10 +1943,12 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 
 - `capture_model/step_kinds.py`: the step kind table, with `gap_cause` per type and `pattern_kind()`.
   `capture.py`: `validate_capture`, `CaptureError`, `same_body`. `lineage.py`: `of`, `at`, `bodies`.
-  `tool_items.py`: the items that build tool bodies (`component_frame`, `MAX_ITEMS`, `MAX_TOOLS`, `MAX_DEPTH`).
+  `tool_items.py`: the items that build tool bodies (`makers`, `built_by`, `plan`, `MAX_ITEMS`, `MAX_TOOLS`,
+  `MAX_DEPTH`). The frame of a walk is in `design_model/tool_chains.py`.
   `gap_hints.py`: causes and hints (`refusal_cause`). `gap_picks.py`: `pick_records`.
 - `geometry/vec.py`: one place for vector helpers. A module does not keep its own `_dot`. `geometry/rigid.py`: `Move`,
-  `IDENTITY_ROWS`, `TURN_Z_UP`, `move_from_frame`, `frame_problem`, `move_for`. `geometry/tolerances.py`: see 4.11. `geometry/plane2d.py`: small 2D helpers on `(x, y)` points: the distance to a segment
+  `IDENTITY_ROWS`, `TURN_Z_UP`, `move_from_frame`, `frame_problem`, `move_for`, `axis_angle` (the axis and the angle of
+  a turn). `geometry/tolerances.py`: see 4.11. `geometry/plane2d.py`: small 2D helpers on `(x, y)` points: the distance to a segment
   or to a ring, a point inside a ring, and an arc drawn as points the way the app draws it (`to_segment`, `to_ring`,
   `inside_ring`, `arc_points`). `footprint`, the outline checks and the coil fit use them. `geometry/footprint.py`
   also has `closed_chain`, which puts the curves of one loop in order, end to end. `geometry/spline_fit.py`: the
@@ -2391,6 +2427,35 @@ keeps every reference of another component where the capture puts it, and calls 
 that it copies (`orca_translate/other_components.py`). A size that acts on that component thus never shows as "not
 used" in the Orca result.
 
+The Orca output also copies a tool body of another component (`orca_translate/tools.py`). It uses the facts of
+`design_model/tool_chains.py`:
+
+1. It writes the steps of the tool in the coordinates of the component of the tool, because the reader read them in
+   these coordinates. Each step gets the name of its component ("Extrude1 of Rod"), because the names of steps can be
+   the same in two components.
+2. It writes an Orca Transform on the tool. The Transform carries the tool by the move of `tool_chains.place_of`. Orca
+   turns the tool about the origin of the component, then moves it. The shape that the copy keeps for its checks
+   moves in the same way.
+3. It marks the sizes that act on the component of the tool (`refs.mark_all`, "Combine1 puts its tool at the place of
+   Rod that may move with it"). Thus such a size shows as "partly" or "fixed", and never as "variable" only. A tool of
+   the root component gets no mark, because the root has no place of its own.
+
+The Orca output leaves the Combine out (cause `otherComponent`, `refused` or the cause of the step) when one of these
+is true:
+
+- The place of the component cannot be used (`Place.problem`), or the tool record does not name its component.
+- The Combine is inside a tool of another component. Then the place of the inner tool is not known relative to the
+  outer tool.
+- A step of the tool was not read in the coordinates of its component (no `helper_of`), or an outline of a step gives
+  the name of its sketch but no token (`sketch_by_name_only`).
+- A step of the tool is a Split Body. The split rules look for a later step that uses another piece of the split.
+  They look only in the component of the part, so they cannot see such a step in the component of the tool.
+- A step of a third component changes the tool (`Chain.unseen`, cause `changedFromOtherComponent`).
+- A step of the tool cannot be copied. The reason names that step.
+
+Inside a tool of another component, the copies of a pattern are carried into the frame of that component
+(`Context.component_frame`).
+
 An outline of another component's sketch follows the same rules (`design_model/borrowed.py`). When the motion file has
 values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
 is written as numbers, and every size that moves that sketch is marked. A borrowed outline keeps the name of its sketch.
@@ -2475,7 +2540,8 @@ A Combine joins, cuts or intersects tool bodies with the part. Each tool body is
 1. It checks the operation and that the Combine changes the exported body. A Combine where this body is only a kept
    tool writes nothing.
 2. For each tool, `tool_walk.build` walks the steps that made the tool, with the same item loop, in a child context
-   whose target is the tool. Handlers do not know they work on a tool.
+   whose target is the tool. Handlers do not know they work on a tool. The shared layer gives these steps
+   (`design_model.tool_chains.read`, see "design_model" in 2.2).
 3. It decides the form:
    - Flat: when every tool is made only of steps that add material (a new body, then joins), each tool step is written
      onto the part with the Combine's operation. Cutting A then B removes A and B together. This form opens in older
@@ -2491,8 +2557,9 @@ A Combine joins, cuts or intersects tool bodies with the part. Each tool body is
    `intersect_model`. When both give the same volume, the sizes of the tools are marked.
 
 A tool from another component is read in its own frame (the second pass, 1.6). The Combine moves its steps into the
-part's frame with the tool's place in the assembly (`tool_move`). A size that moves the tool's component follows when
-the probe measured it, else it is marked ("puts its tool at the place of Rod that turns with it").
+part's frame with the tool's place in the assembly (`tool_move`, with the move of `tool_chains.place_of`). A size that
+moves the tool's component follows when the probe measured it, else it is marked ("puts its tool at the place of Rod
+that turns with it").
 
 A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool: "The tool
 body Body3 cannot be copied: Thicken1 (thicken): ...".
@@ -2717,7 +2784,8 @@ decides it:
 Two more details:
 
 - The frames of the copies are in assembly space. For a part placed in the assembly, the translator first carries them
-  into the part's frame (`design_model/steps/repeat.py`, `in_component`, with `tool_items.component_frame`). The probe's reads of the
+  into the part's frame (`design_model/steps/repeat.py`, `in_component`, with the frame of `Context.component_frame`,
+  which reads `design_model.tool_chains.component_frame`). The probe's reads of the
   copies are carried the same way (`read_in_component`).
 - A direction with a distance of 0 makes copies on top of one another. Fusion keeps a count of 3 in an unused second
   direction, for example. The translator ignores that direction and merges such copies.

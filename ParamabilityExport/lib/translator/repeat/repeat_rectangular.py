@@ -8,7 +8,6 @@ kept by a `when` on the count.
 import math
 from itertools import product
 
-from ...capture_model import tool_items
 from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, in_component, is_identity,
                                           is_identity_rotation, kept_elements, reach as reach_of, solve_lattice)
 from ...design_model.values import Quantity, wrapped
@@ -205,7 +204,7 @@ def _tried_places(axes, axis):
 
 def rectangular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, tool_items.component_frame(ctx), merge=True)
+    item = in_component(item, ctx.component_frame(), merge=True)
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):

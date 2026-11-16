@@ -11,6 +11,7 @@ from ..capture_model import lineage as body_lineage, tool_items
 from ..capture_model.capture import same_body
 from .result import Doubt, StepResult
 from ..capture_model.step_kinds import recipe_kind
+from ..design_model import tool_chains
 from ..design_model.values import reads_in
 
 MAX_ID = 64
@@ -122,6 +123,14 @@ class Context:
             yield
         finally:
             self.current, self.placers, self.slabs, self.written_reads = saved
+
+    def component_frame(self):
+        """The place of the component this walk builds in (`tool_chains.component_frame`), or None."""
+        walk, bodies = self, []
+        while walk.outer is not None:
+            bodies.append(walk.target)
+            walk = walk.outer
+        return tool_chains.component_frame(walk.capture, bodies[::-1])
 
     def is_target(self, body):
         """`body` is the body this walk builds: the target, or at the current item the body of the lineage."""

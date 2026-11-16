@@ -6,7 +6,7 @@ its number, and the sizes are recorded with the reason (`doubt`), so the result 
 """
 import re
 
-from ..design_model import reach
+from ..design_model import reach, tool_chains
 from ..design_model.values import Quantity
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
@@ -243,6 +243,11 @@ class Context:
     def target(self):
         """The capture record of the body the handlers work on."""
         return self.scope.target
+
+    def component_frame(self):
+        """The place of the component the innermost body is built in (`tool_chains.component_frame`): a tool of
+        another component has its component's place, any other body the part's."""
+        return tool_chains.component_frame(self.capture, [b.target for b in self.scopes[1:]])
 
     def push(self, body):
         """Work on another body (a tool) until `pop`."""

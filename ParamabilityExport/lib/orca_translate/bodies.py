@@ -22,7 +22,7 @@ import math
 from ..capture_model import gap_hints, lineage
 from ..capture_model.capture import same_body
 from ..design_model import roles
-from ..geometry import vec
+from ..geometry import rigid, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..design_model.steps.move import fit
 from ..design_model.steps.split import resolve as inside_of
@@ -145,20 +145,6 @@ def _by_body(ctx, item, tool, piece, others):
 
 # ---- move ------------------------------------------------------------------------------------------------------
 
-def _axis_angle(rows):
-    """`(unit axis, degrees)` of a turn (0 to 180 degrees), or None when it turns nothing."""
-    trace = rows[0][0] + rows[1][1] + rows[2][2]
-    angle = math.acos(max(-1.0, min(1.0, (trace - 1.0) / 2.0)))
-    if angle < 1e-9:
-        return None
-    skew = [rows[2][1] - rows[1][2], rows[0][2] - rows[2][0], rows[1][0] - rows[0][1]]
-    if vec.length(skew) > 1e-6:
-        return vec.unit(skew), math.degrees(angle)
-    # A half turn: the axis is the longest column of (rows + I) / 2.
-    columns = [[(rows[i][j] + (1.0 if i == j else 0.0)) / 2.0 for i in range(3)] for j in range(3)]
-    return vec.unit(max(columns, key=vec.length)), 180.0
-
-
 def _turns_like(rows, offset, point, axis, degrees):
     """True when the turn about the line through `point` along `axis` is the measured move."""
     for p in ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]):
@@ -184,7 +170,7 @@ def move(ctx, item):
         return Skip("The points of the part before and after this Move do not show a turn and a shift.")
     rows = [list(row) for row in motion.rows]
     offset = list(motion.offset)
-    turn = _axis_angle(rows)
+    turn = rigid.axis_angle(rows)
     if turn is None and vec.length(offset) <= NO_MOVE_MM:
         return Pass("It leaves this part where it is.")
     name = label(item)

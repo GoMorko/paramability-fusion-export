@@ -8,12 +8,17 @@ tool to the part, cuts it away or keeps what both share, and Orca drops the tool
 Each tool is a `context.Body`: its features are written while it is the innermost body of the context, so every
 handler works on it as it does on the part, and its shape (`solid.Solid`) goes into the part's shape with the
 Boolean, so later cuts are still checked against what the copy builds.
+
+Which steps build a tool, and where a tool of another component sits, are facts of the shared layer
+(`design_model.tool_chains`). A tool of another component is written in that component's coordinates, as the reader
+read its steps, and an Orca Transform then carries it to its place at the Combine.
 """
 import copy
 
-from ..capture_model import gap_hints, lineage, step_kinds, tool_items
+from ..capture_model import gap_hints, lineage, tool_items
 from ..capture_model.capture import outside_component, same_body
-from ..design_model import roles
+from ..design_model import refs, roles, tool_chains
+from ..geometry import rigid
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..translator.words import type_words
@@ -58,9 +63,18 @@ def _handlers():
     return HANDLERS
 
 
-def _why(item):
-    """The reason a step that builds a tool cannot be copied, or None."""
-    if item.get("helper_of") or outside_component(item):
+def _why(item, owner):
+    """The reason a step that builds a tool cannot be copied, or None. `owner` is the token of the other component
+    whose tool body the step builds ("" for the part's component): such a step must have been read in that
+    component's coordinates (`helper_of`)."""
+    if owner and not item.get("helper_of"):
+        return "it could not be read from Fusion", gap_hints.REFUSED
+    if owner and tool_chains.sketch_by_name_only(item):
+        return "its sketch is named only by its name, which a sketch of the part may share", gap_hints.REFUSED
+    if owner and lineage.is_split(item):
+        # The split rules look for later steps that use its other pieces in the part's component only.
+        return "a split in a tool body of another component is not copied to Orca yet", gap_hints.OTHER_COMPONENT
+    if not owner and (item.get("helper_of") or outside_component(item)):
         return "it is in another component", gap_hints.OTHER_COMPONENT
     if item.get("health") == "error":
         return "it does not build in Fusion", gap_hints.REFUSED
@@ -72,31 +86,73 @@ def _why(item):
     return None
 
 
+def _foreign_scope(ctx):
+    """The record of the innermost tool body of another component that the walk is inside, else None."""
+    return next((b.target for b in reversed(ctx.scopes) if tool_items.is_foreign_tool(b.target)), None)
+
+
+def _unusable(ctx, record, name):
+    """A Skip when the tool `record` cannot be built where it is taken, else its `tool_chains.Place` (None for a
+    tool of the part's component)."""
+    if not tool_items.is_foreign_tool(record):
+        if record.get("foreign"):
+            return Skip("The tool body %s is in another component that the export could not name, which is not "
+                        "copied to Orca." % name, gap_hints.OTHER_COMPONENT)
+        return None
+    if _foreign_scope(ctx) is not None:
+        return Skip("The tool body %s is taken by a Combine inside a tool body of another component, which is not "
+                    "copied to Orca yet." % name, gap_hints.OTHER_COMPONENT)
+    place = tool_chains.place_of(record)
+    if place.problem:
+        return Skip(place.problem.words, place.problem.cause)
+    return place
+
+
+# Why a step that the chain of a tool cannot see stops its copy (`tool_chains.unseen_change`).
+_UNSEEN_CAUSES = {tool_chains.CHANGED_ELSEWHERE: gap_hints.CHANGED_FROM_OTHER_COMPONENT,
+                  tool_chains.NOT_FOLLOWED: causes.BODY_LOST}
+
+
 def build(ctx, record, anchor):
     """Write the steps that made the body `record` before the item `anchor` as a new Orca body. Returns the
-    `context.Body`, or a Skip that names the tool and the step that stops it. The steps are the items that list the
-    body after them (`tool_items.makers`); a Combine among them builds its own tools the same way."""
-    name = record.get("name") or "a tool body"
-    if record.get("foreign"):
-        return Skip("The tool body %s is in another component, which is not copied to Orca yet." % name,
-                    gap_hints.OTHER_COMPONENT)
+    `context.Body`, or a Skip that names the tool and the step that stops it. The steps are those of the tool's
+    chain (`tool_chains.read`); a Combine among them builds its own tools the same way.
+
+    A tool of another component is written in its component's coordinates, as its steps were read, then carried to
+    its place at the Combine by an Orca Transform (`tool_chains.place_of`). The sizes that may move that component
+    are marked: the copy keeps the tool where it is now."""
+    name = tool_chains.name_of(record)
+    place = _unusable(ctx, record, name)
+    if isinstance(place, Skip):
+        return place
     if len(ctx.scopes) > MAX_DEPTH:
         return Skip("The tool body %s is built from tool bodies nested too deep for the Orca copy." % name)
-    chain = [item for item in tool_items.makers(ctx.capture["items"], record, anchor)
-             if not item.get("suppressed") and not step_kinds.skipped(item.get("type"))]
-    if not chain:
-        return Skip("The steps that build the tool body %s were not found." % name)
     # The steps read what the reader measured on the tool itself, not on the exported part (`roles.seen_on`).
     exported = any(same_body(record, b) for b in roles.held(ctx.capture["target"], lineage.of(ctx.capture),
                                                                anchor.get("index", 0)))
+    holder = record if tool_items.is_foreign_tool(record) else _foreign_scope(ctx)
+    found = tool_chains.read(ctx.capture["items"], record, anchor["index"], tool_items.component_token(holder),
+                             exported)
+    if found.unseen is not None:
+        item, why = found.unseen
+        return Skip("The tool body %s cannot be copied: %s (%s)." % (name, label(item), _lower(why.rstrip("."))),
+                    _UNSEEN_CAUSES.get(why))
+    if found.links:
+        return Skip("The tool body %s is a piece of a split body, which is not copied to Orca yet." % name,
+                    gap_hints.UNSUPPORTED)
+    if not found.items:
+        return Skip("The steps that build the tool body %s were not found." % name)
     body = ctx.push(Body(record, name, anchor))
     try:
-        for item in chain:
-            why = _why(item)
+        for item in found.items:
+            why = _why(item, found.owner)
             made = None
             start = len(body.solid.pieces)
             if why is None:
-                brought = other_components.bring_in(ctx, roles.seen_on(item, record, exported))
+                # Steps of another component are named with it: their names may repeat the part's own.
+                seen = dict(item, name="%s of %s" % (label(item), tool_items.component_name(holder))) \
+                    if found.owner else item
+                brought = other_components.bring_in(ctx, seen)
                 made = _handlers()[item["type"]](ctx, brought)
                 if isinstance(made, Skip):
                     why = (made.reason.rstrip("."), made.cause)
@@ -108,16 +164,35 @@ def build(ctx, record, anchor):
             if not isinstance(made, Pass):
                 ctx.written[item["index"]] = list(made)
                 ctx.shapes[item["index"]] = body.solid.pieces[start:]
+        if place is not None and body.index is not None:
+            _carry(ctx, body, place.move, "%s place" % name)
     finally:
         ctx.pop()
     if body.index is None:
         return Skip("No step that builds the tool body %s could be copied." % name)
-    mark_copied(ctx, [item["index"] for item in chain], "Copied into the tool body %s." % name)
+    if place is not None and place.moves_with is not None:
+        refs.mark_all(ctx, anchor, place.moves_with, tool_chains.PLACE_VERB)
+    mark_copied(ctx, [item["index"] for item in found.items], "Copied into the tool body %s." % name)
     return body
 
 
+def _carry(ctx, body, move, name):
+    """An Orca Transform that carries the innermost body by the rigid `move` (component coordinates), and its shape
+    with it. Orca turns about the pivot, then shifts; the pivot is the component origin."""
+    if move.is_identity:
+        return
+    made = feature(FeatureType.TRANSFORM, name, target_body=body.index)
+    made.xf_pivot, made.xf_translate = ctx.place.point([0.0, 0.0, 0.0]), ctx.place.direction(list(move.offset))
+    turn = rigid.axis_angle(move.rows)
+    if turn is not None:
+        made.xf_axis, made.xf_angle_deg = ctx.place.direction(turn[0]), turn[1]
+    ctx.add(made)
+    body.solid.moved([list(row) for row in move.rows], list(move.offset))
+
+
 def _lower(text):
-    return text[:1].lower() + text[1:] if text[1:2].islower() else text
+    """A reason that goes on inside a sentence: its first word in lower case, unless it is a name (Orca)."""
+    return text[:1].lower() + text[1:] if text[1:2].islower() and not text.startswith("Orca") else text
 
 
 def mark_copied(ctx, indexes, note):
