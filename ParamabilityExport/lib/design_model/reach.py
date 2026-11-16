@@ -10,7 +10,8 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
 - the plane a sketch sits on (`placement_sizes`, `sketch_plane_sizes`, `hole_plane_sizes`, and for a sketch of another
   component `borrowed_plane_sizes`): the sizes behind its construction plane and, for a plane on a face or on
   geometry built on the part, every size an earlier step reads;
-- a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`);
+- a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`), and any
+  other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`);
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
 - the sizes a step reads (`step_sizes`, `item_reads`) and the sizes the probe has to try (`probed_sizes`,
@@ -500,6 +501,40 @@ def reach_sizes(table, timeline, item, record):
             if entry.get("token"):
                 names |= set(construction_sizes(table, "constructionPlane", entry["token"]))
             pending.extend(entry.get("built_on") or ())
+    return [name for name in table.ticked if name in names]
+
+
+def reference_sizes(table, timeline, item, record):
+    """Fusion names of the ticked sizes that may move a plane, axis or face of the body's component that the step
+    `item` uses as a place (a split plane, a mirror plane, a turning axis, the face a thread is cut on), in table order:
+    - the sizes behind the construction planes and axes of `record` and of what it is built on (a record without a
+      token stands for every one of its kind);
+    - for a face, an edge, a sketch curve or construction geometry built on the part (`on_part`), also every size an
+      item of the body's component reads before the step (for construction geometry, before it was made).
+    Empty for an origin plane or axis, for a record of another component (`assembly`, `foreign`: its sizes come from
+    its measured reference, `refs.mark_all`) and for a record that does not say what it is (an older capture)."""
+    if (table is None or not isinstance(record, dict) or record.get("origin") or record.get("assembly")
+            or record.get("foreign")):
+        return []
+    names = set()
+    pending = [record]
+    while pending:
+        entry = pending.pop()
+        if not isinstance(entry, dict) or entry.get("origin"):
+            continue
+        kind = _CONSTRUCTION.get(entry.get("entity_type"))
+        if kind is None and not entry.get("entity_type") and entry.get("token") and ("normal" in entry
+                                                                                     or "dir" in entry):
+            kind = "constructionAxis" if "dir" in entry else "constructionPlane"
+        if kind is not None:
+            names |= set(construction_sizes(table, kind, entry.get("token") or ""))
+            pending.extend(entry.get("built_on") or ())
+    entity = record.get("entity_type")
+    if entity and (entity not in _CONSTRUCTION or on_part(record)):
+        bound = item.get("index")
+        if entity in _CONSTRUCTION and isinstance(record.get("made_by"), int):
+            bound = record["made_by"] if bound is None else min(bound, record["made_by"])
+        names |= _reads_before(table, timeline, bound)
     return [name for name in table.ticked if name in names]
 
 

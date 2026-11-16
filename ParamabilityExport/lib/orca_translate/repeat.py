@@ -30,8 +30,8 @@ from ..capture_model.capture import same_body
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
-from . import causes
-from ..design_model import design
+from . import causes, kept_refs
+from ..design_model import design, reach
 from ..design_model.steps.repeat import (FIT_TOL_MM, data_in_component, is_identity, is_identity_rotation,
                                         mirror_plane, reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
@@ -287,6 +287,19 @@ def _directions(item, data):
     return out
 
 
+def _mark_direction_sketches(ctx, item, data, directions):
+    """Mark the sizes of the sketch a direction is taken from (a sketch line): they may turn the line, and Orca keeps
+    the direction it has now."""
+    if ctx.table is None:
+        return
+    for which, *_ in directions:
+        source = data.get("direction_%s_sketch" % which)
+        names = reach.sketch_sizes(ctx.table, source.get("sketch") or "") if isinstance(source, dict) else ()
+        if names:
+            ctx.doubt(names, shared.kept_in_place(shared.ref_phrase(item, {"type": "SketchLine", "own": True},
+                                                                    "spreads copies along")))
+
+
 def _gaps(n, symmetric):
     return max(n // 2, 1) if symmetric else n - 1
 
@@ -387,6 +400,7 @@ def rectangular(ctx, step):
     directions = _directions(item, data)
     if isinstance(directions, Skip):
         return directions
+    _mark_direction_sketches(ctx, item, data, directions)
     grid = _grid(data, elements, directions)
     if isinstance(grid, Skip):
         return grid
@@ -464,6 +478,7 @@ def circular(ctx, step):
     n = int(data.get("quantity") or 1)
     if n < 2:
         return Skip(shared.PATTERN_NO_COPIES)
+    kept_refs.mark(ctx, item, axis, "turns copies about")
     raw = float(data.get("total_angle_deg") or 0.0)
     full = abs(abs(raw) - FULL_TURN_DEG) <= ANGLE_TOL_DEG
     if not full and not 0 < abs(raw) < FULL_TURN_DEG:
@@ -532,6 +547,7 @@ def mirror(ctx, step):
     plane = mirror_plane(data)
     if plane is None:
         return Skip(shared.MIRROR_PLANE)
+    kept_refs.mark(ctx, item, found, "mirrors across")
     reflect = _reflection(plane["origin"], plane["normal"])
     entity = data.get("entity_type")
     if entity == "bodies":

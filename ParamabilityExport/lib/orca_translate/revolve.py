@@ -16,7 +16,7 @@ from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from ..orca_recipe.sketch import SketchEntity
-from . import causes
+from . import causes, kept_refs
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from .sketches import entities_of, outlines_of
@@ -166,6 +166,7 @@ def revolve(ctx, step):
                     gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
 
     name = label(item)
+    kept_refs.mark(ctx, item, axis, "turns about")
     on = _turned_frame(frame, point, turn_axis, start)
     local = vec.frame_to_local(frame, point)
     along = [vec.dot(turn_axis, frame["x"]), vec.dot(turn_axis, frame["y"])]

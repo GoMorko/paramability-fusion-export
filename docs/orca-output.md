@@ -55,6 +55,8 @@ The modules of `lib/orca_translate/`:
   reads it from the model parameters of the step (`design_model.design.params_of`), and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
   writes it into the field.
 - `other_components.py`: geometry of other components (see "Other components" below).
+- `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
+  parameters follow").
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer) and `threads.py`. `holes.py` and `threads.py` read the hole and the thread through the shared readers
@@ -591,6 +593,18 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   profile's `reference`); a sketch whose reference was not read (an older capture) counts as one on a face of the
   part, so every size read before the sketch is marked. For a hole placed on a face without a sketch, every size read
   before the step is marked. The centres' sketch coordinates still follow their sizes.
+- Orca writes some places of a step as the numbers the capture measured: the plane of a split, the plane of a
+  mirror, the axis of a circular pattern, of a revolve and of a Move that turns, the direction of a rectangular
+  pattern taken from a sketch line, and the cylinder face a ThreadFeature is cut on. A size that may move such a
+  place is marked with a reason ("Split1 cuts along a plane that may move with it, and the copy cannot follow
+  that"), so it never reads as "not used" or as following everywhere (`kept_refs.mark`, `kept_refs.mark_faces`).
+  Which sizes may move a place is a fact of the shared layer (`design_model.reach.reference_sizes`): the sizes behind
+  a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
+  construction geometry built on the part, every size read before the step. For a direction taken from a sketch
+  line, the sizes of that sketch (`reach.sketch_sizes`). For a thread, every size read before the step
+  (`reach.any_face_sizes`). An origin plane or axis gives no size. A record of an older capture that does not say
+  what it is gives no size either, as in the recipe output. A place of another component is marked by
+  `other_components.mark_refs`. A marked size counts as held for a later hole centre (`Context.held`).
 - Each ticked parameter ends as "follows the Orca variable" (everywhere it is used), "follows ... but not everywhere"
   (with the reasons), "stays a fixed number in Orca" (with the reasons) or "not used by the copy". Two kinds of size
   get a reason before any step is copied (`Context._doubt_unfollowed_readers`): a size that a joint reads, and a size
