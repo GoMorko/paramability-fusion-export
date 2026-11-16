@@ -129,9 +129,7 @@ def tool_move(ctx, item, tool):
 
 def _follow_place(ctx, item, found):
     """The sized move of a tool component along the normals of its origin planes, or None. Without usable
-    references on a component that is not the root, the sizes that act on the component are marked."""
-    if found.moves_with is None:
-        return None
+    references (always for a tool of the root component), the sizes that may move the component are marked."""
     normals = [ref.get("normal") for ref in found.planes]
     if len(found.planes) < 3 or not all(_vector(n) for n in normals):
         refs.mark_all(ctx, item, found.moves_with, WHAT)

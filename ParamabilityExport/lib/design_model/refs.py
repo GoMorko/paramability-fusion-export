@@ -8,14 +8,18 @@ docs/capture-format.md "Measured references"). This module states the facts ever
   `assembly: true` instead of `foreign`. A mirror plane and a pattern or revolve axis come from the reader that way.
   Anything that cannot be placed stays `foreign` (`is_foreign`), and `why_foreign` says why;
 - which ticked sizes may move a reference (`acting_sizes`, `reaching`): those whose user parameter acts on the
-  component that owns it (`params.geometry_links.acts`);
-- the doubt for a reference the copy keeps where it is (`mark_all`): those sizes, or a note when they cannot be found;
+  component that owns it (`params.geometry_links.acts`), and those that act on an assembly item that may place an
+  occurrence (a joint, another assembly item, a Move of occurrences). The capture does not say
+  which occurrence such an item places, so these count for every reference of another component;
+- the doubt for a reference the copy keeps where it is (`mark_all`): those sizes. When the capture cannot say which
+  sizes those are, the recorder is told (`movers_unknown`) and each destination decides what to do;
 - steps from add-ins before 0.10.6 that marked the part's own geometry as another component's (`from_old_export`).
 
 How far a reference moves as sizes change is measured by the probe; the recipe translator reads that in
 `translator/ref_motion.py`. A destination that has no measured motion keeps each reference where it is and calls
 `mark_all`.
 """
+from ..capture_model import step_kinds
 from ..params import geometry_links
 from . import words
 
@@ -67,14 +71,63 @@ def _acting(ctx):
     return cache["acting"]
 
 
+# The inputs of a Move that moves bodies or faces of its own component. A Move with other inputs moves occurrences.
+_BODY_MOVES = ("bodies", "faces")
+
+
+def _places_occurrences(item):
+    """True for a timeline item that may place an occurrence: an assembly item (a joint, a rigid group, a motion
+    link and the like), or a Move whose inputs are not known to be bodies or faces."""
+    kind = item.get("type")
+    if step_kinds.is_assembly(kind):
+        return True
+    spec = step_kinds.step_type(kind)
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    return spec is not None and spec.moves_bodies and data.get("input_kind") not in _BODY_MOVES
+
+
+def _moves_occurrences(capture, dependent):
+    """True when a model parameter that reads a user parameter (`dependent`, a record of `dependents`) belongs to an
+    item that may place an occurrence: a joint, or an item of the timeline that `_places_occurrences`, found by its
+    name in the dependent's component."""
+    if dependent.get("kind") == "joint":
+        return True
+    name, component = dependent.get("feature"), str(dependent.get("component") or "")
+    return bool(name) and any(
+        item.get("name") == name and (not component or str(item.get("component") or "") == component)
+        and _places_occurrences(item) for item in capture.get("items") or [])
+
+
+def _assembly(ctx):
+    """Fusion names of the user parameters that act on an item that may place an occurrence (`_moves_occurrences`),
+    in parameter order. Only read when the capture says where parameters act (`_acting`)."""
+    cache = ctx.cache.setdefault("refs", {})
+    if "assembly" not in cache:
+        users = (ctx.capture.get("parameters") or {}).get("user") or []
+        cache["assembly"] = [p["name"] for p in users
+                             if any(_moves_occurrences(ctx.capture, d) for d in p.get("dependents") or [])]
+    return cache["assembly"]
+
+
+def _target_component(ctx):
+    return (((ctx.capture.get("target") or {}).get("component")) or {}).get("token") or ""
+
+
 def acting_sizes(ctx, ref):
-    """`(names, known)`: the ticked sizes that act on the component that owns `ref`, and whether the capture can say
-    (it lists where parameters act, and `ref` names its owner)."""
+    """`(names, known)`: the ticked sizes that may move `ref`, and whether the capture can say (it lists where
+    parameters act, and `ref` names its owner). These are the sizes that act on the component that owns `ref`, then
+    those that act on an item that may place an occurrence (`_assembly`): they may move that component against the
+    exported body's. A reference of the exported
+    body's own component (`own`, or that component's token) gets no sizes of the assembly. A reference marked `root`
+    (the place of the root component, which has no place of its own) gets only those."""
     owner = ref.get("component") or {}
     found = _acting(ctx)
     if found is None or not owner.get("token"):
         return [], False
-    return [n for n in found.get(owner["token"], ()) if n in ctx.table.ticked], True
+    names = [] if ref.get("root") else list(found.get(owner["token"], ()))
+    if not ref.get("own") and owner["token"] != _target_component(ctx):
+        names += [n for n in _assembly(ctx) if n not in names]
+    return [n for n in names if n in ctx.table.ticked], True
 
 
 def reaching(ctx, item):
@@ -95,14 +148,14 @@ def phrase(item, ref, what):
 
 def mark_all(ctx, item, ref, what):
     """Marks every size that may move the reference: the copy keeps it where it is now. Without data on where sizes
-    act, or without the owning component, the step gets a note instead. An origin plane or axis of another component
-    moves with its occurrence, so it is marked like any other reference. `what` words what the step does with it
-    ("reaches to", "mirrors across")."""
+    act, or without the owning component, the recorder is told that the sizes are not known (`movers_unknown`), and
+    the destination decides. An origin plane or axis of another component moves with its occurrence, so it is marked
+    like any other reference. `what` words what the step does with it ("reaches to", "mirrors across")."""
     if ctx.table is None:
         return
     names, known = acting_sizes(ctx, ref)
     if not known:
-        ctx.note(words.movers_unknown(phrase(item, ref, what)))
+        ctx.movers_unknown(phrase(item, ref, what))
     elif names:
         ctx.doubt(names, words.kept_in_place(phrase(item, ref, what)))
 

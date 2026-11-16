@@ -7,8 +7,9 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
   dimensions of a sketch, behind a construction plane or axis, behind a joint (`joint_reasons`) and behind the height
   of a sketch text (`text_reasons`);
 - through the geometry of another component (`linked_sizes`, `table.links`);
-- the plane a sketch sits on (`placement_sizes`, `sketch_plane_sizes`, `hole_plane_sizes`): the sizes behind its
-  construction plane and, for a plane on a face or on geometry built on the part, every size an earlier step reads;
+- the plane a sketch sits on (`placement_sizes`, `sketch_plane_sizes`, `hole_plane_sizes`, and for a sketch of another
+  component `borrowed_plane_sizes`): the sizes behind its construction plane and, for a plane on a face or on
+  geometry built on the part, every size an earlier step reads;
 - a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`);
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
@@ -418,6 +419,17 @@ def _reads_before(table, timeline, bound):
                 and (item.get("in_target_component") is not False or item.get("helper_of"))):
             names |= item_reads(table, item)
     return names
+
+
+def borrowed_plane_sizes(table, timeline, item, reference, frame):
+    """Fusion names of the ticked sizes that may move the plane a sketch of another component sits on, in table order.
+    `reference` is what the sketch sits on (the profile's `reference`), `frame` the sketch frame in its own
+    component. A face, or a construction plane built on geometry, may belong to the part: every size an item of the
+    body's component reads before the step `item` counts. The sizes that act on the sketch's own component come from
+    where they act (`refs.acting_sizes`). Empty without a reference, as for a sketch of the part."""
+    if table is None or not isinstance(reference, dict) or not _plane_on_part(reference, frame):
+        return []
+    return any_face_sizes(table, timeline, item)
 
 
 def placement_driven(capture, table, profiles):

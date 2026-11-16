@@ -68,10 +68,11 @@ class PlaceTest(unittest.TestCase):
         place = tool_chains.place_of(foreign_tool({"frame": TURNED, "target_frame": dict(TURNED)}))
         self.assertTrue(place.stays)
 
-    def test_a_tool_of_the_root_has_no_place_that_sizes_move(self):
+    def test_a_tool_of_the_root_moves_only_with_the_place_of_the_part(self):
         frame = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
         place = tool_chains.place_of(foreign_tool({"frame": frame, "source": "root", "target_frame": TURNED}))
-        self.assertEqual((place.problem, place.moves_with, place.stays), (None, None, False))
+        self.assertEqual((place.problem, place.planes, place.stays), (None, (), False))
+        self.assertTrue(place.moves_with["root"])
 
     def test_a_place_that_cannot_be_used_is_a_problem(self):
         mirrored = dict(TURNED, z=[0, 0, -1])

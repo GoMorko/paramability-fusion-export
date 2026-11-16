@@ -15,7 +15,7 @@ copies it:
 - `facts`: what the shared reader of the step's kind (`step_kinds.StepType.facts`) reads from the brought in data
   alone (`FACT_READERS`), else None. A handler reads its step's facts from its own reader call, since a handler also
   runs on items that no walk resolved (the sources of a pattern, the steps of a tool body);
-- `events`: the doubts, notes and followed components that bringing in recorded. They are not on any translation
+- `events`: the doubts, notes, followed components and unknown movers that bringing in recorded. They are not on any translation
   yet: a walk that copies the step replays them (`replay`) where it brings the step in, so a step that is left out
   keeps none of them. `error` is the exception that bringing in raised, if any; `replay` raises it again.
 
@@ -33,7 +33,7 @@ UNREAD, FAILS, BODIES_UNREAD = "unread", "failsInFusion", "bodiesUnread"
 _PROBLEMS = {UNREAD: words.STEP_UNREAD, FAILS: words.STEP_FAILS, BODIES_UNREAD: words.BODIES_UNREAD}
 # The roles of the steps of the body's component: only these are brought in.
 _OWN = (roles.BUILDS, roles.HELPER)
-_DOUBT, _NOTE, _FOLLOW = "doubt", "note", "follow"
+_DOUBT, _NOTE, _FOLLOW, _UNKNOWN = "doubt", "note", "follow", "unknown"
 # The shared step readers that give facts from the data of a step alone, by `step_kinds.StepType.facts`.
 FACT_READERS = {step_kinds.ROUND_SETS: finish.round_sets, step_kinds.CHAMFER_SETS: finish.chamfer_sets}
 _NOT_YET = object()
@@ -55,6 +55,9 @@ class Tally:
 
     def follow_component(self, component):
         self.events.append((_FOLLOW, (component,)))
+
+    def movers_unknown(self, phrase):
+        self.events.append((_UNKNOWN, (phrase,)))
 
 
 class ResolvedStep:
@@ -154,8 +157,8 @@ def read(capture, table=None, motion=None, chain=None, cache=None):
 
 
 def replay(step, ctx):
-    """Record on `ctx` (a `recorder.Recorder`) the doubts, notes and followed components that bringing `step` in
-    recorded, in order. Raises the error that bringing in raised."""
+    """Record on `ctx` (a `recorder.Recorder`) the doubts, notes, followed components and unknown movers that bringing
+    `step` in recorded, in order. Raises the error that bringing in raised."""
     if step.error is not None:
         raise step.error
     for kind, args in step.events:
@@ -163,5 +166,7 @@ def replay(step, ctx):
             ctx.doubt(*args)
         elif kind == _NOTE:
             ctx.note(*args)
+        elif kind == _UNKNOWN:
+            ctx.movers_unknown(*args)
         else:
             ctx.follow_component(*args)

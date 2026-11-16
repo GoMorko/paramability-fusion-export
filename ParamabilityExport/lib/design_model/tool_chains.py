@@ -154,10 +154,12 @@ class Place:
 
     move: the `geometry.rigid.Move` that carries the tool's component coordinates into those of the exported body's
     component, or None with `problem`. problem: a `problem.Problem` (`PLACE_UNREAD`, `PLACE_UNUSABLE`, cause
-    `otherComponent`) when the place cannot be used, else None. moves_with:
-    the reference for the sizes that may move the tool's component (`refs.mark_all`: its `component`, type PLACE), or
-    None for a tool of the root component, which has no place of its own. planes: the measured references of the
-    component's origin planes (`xy`, `xz`, `yz`) that a size probe reads again, in that order where present.
+    `otherComponent`) when the place cannot be used, else None. moves_with: the reference for the sizes that may move
+    the tool's component against the exported body's (`refs.mark_all`: its `component`, type PLACE). For a tool of
+    the root component, which has no place of its own, it is marked `root`: only the sizes of the assembly items
+    that may place the exported body's occurrence count (`refs.acting_sizes`). planes: the measured references of the
+    component's origin planes (`xy`, `xz`, `yz`) that a size probe reads again, in that order where present; none
+    for a tool of the root component.
     """
 
     move: object
@@ -198,7 +200,9 @@ def place_of(body):
     root = found.get("source") == "root"
     planes = tuple(found[slot]["ref"] for slot in ("xy", "xz", "yz")
                    if isinstance(found.get(slot), dict) and isinstance(found[slot].get("ref"), dict))
-    moves_with = None if root else {"component": body.get("component"), "type": PLACE}
+    moves_with = {"component": body.get("component"), "type": PLACE}
+    if root:
+        moves_with["root"] = True
     return Place(move, None, moves_with, () if root else planes)
 
 

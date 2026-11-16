@@ -57,6 +57,12 @@ def movers_unknown(phrase):
     return "%s, and the sizes that may move it could not be found, so the copy keeps it where it is now." % phrase
 
 
+def movers_unknown_doubt(phrase):
+    """The doubt of every size when the sizes that may move a reference cannot be found."""
+    return "%s that may move with it, and the export cannot tell which sizes move it, so the copy keeps it where it " \
+        "is now" % phrase
+
+
 # Why a record of another component cannot be used, by what it is.
 CURVED_TARGET = "This step starts from or reaches to a curved face of another component, which is not copied."
 UNPLACED_TARGET = ("This step starts from or reaches to a face or plane of another component whose place could not "
@@ -68,6 +74,17 @@ HOLE_UNPLACED = "This hole is placed on a face of another component whose place 
 def sketch_fixed(sketch, component, step):
     """The doubt of sizes that change a sketch of another component whose outline is copied as numbers."""
     return "it changes the sketch %s of %s, which %s copies as fixed numbers" % (sketch, component, step)
+
+
+def sketch_may_move(sketch, component, step):
+    """The doubt of sizes that may move a sketch of another component whose outline is copied as numbers: through
+    that component, its place in the assembly, the plane the sketch is on or geometry projected into it."""
+    return "it may move the sketch %s of %s, which %s copies as fixed numbers" % (sketch, component, step)
+
+
+def sketch_outline(step, sketch, component):
+    """"<step> uses an outline of the sketch <sketch> of <component>", for the reasons about a borrowed outline."""
+    return "%s uses an outline of the sketch %s of %s" % (step, sketch, component)
 
 
 def sketch_copied(step, sketches, fixed):

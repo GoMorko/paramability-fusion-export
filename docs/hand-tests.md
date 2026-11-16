@@ -1473,6 +1473,10 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       them where they were, as the reason says. Then place the `Rod` occurrence another way: turned 90 degrees about
       the X axis of the assembly (no turn about Z) and moved by (`RodX`, 30, 5), so the rod lies along -Y inside the
       box. Export again: the hole in Orca runs from y 30 to y 10 as in Fusion, and the volumes agree.
+      The `RodX` result depends on where Fusion puts the move: a Move in the root (a dependent of `RodX` in the root
+      component, not in `Rod`) counts for the place of `Rod` only through the rule for joints and Moves of
+      occurrences (`refs.acting_sizes`). If `RodX` shows as not used, send `report.json`: its `dependents` tell which
+      item reads it.
 
 ## Thin extrudes
 

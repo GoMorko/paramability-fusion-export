@@ -16,6 +16,8 @@ class Recorder(Protocol):
     doubt(names, why): these Fusion names of sizes move something the copy keeps where it is, for `why`.
     note(text): a plain sentence about the step being copied.
     follow_component(component): a value follows the sizes of another component (`{ token, name }` or its name).
+    movers_unknown(phrase): the copy keeps where it is now what `phrase` names ("<step> mirrors across a plane of
+        <component>"), and the capture cannot say which sizes may move it. Each destination decides what to do.
     """
 
     table: object
@@ -28,3 +30,5 @@ class Recorder(Protocol):
     def note(self, text): ...
 
     def follow_component(self, component): ...
+
+    def movers_unknown(self, phrase): ...

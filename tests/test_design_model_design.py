@@ -31,8 +31,11 @@ def borrowing(index=1, **more):
 class Table:
     """A size table in which every size is ticked and depends on itself."""
 
+    model_params = {}
+    ticked = ("lid_w",)
+
     def depends(self, name):
-        return [name]
+        return {name}
 
 
 class Recorder:
@@ -48,6 +51,9 @@ class Recorder:
 
     def follow_component(self, component):
         self.events.append(("follow", component))
+
+    def movers_unknown(self, phrase):
+        self.events.append(("unknown", phrase))
 
 
 def capture_of(*items):
@@ -74,7 +80,8 @@ class ReadTest(unittest.TestCase):
         self.assertEqual(step.brought["data"]["profiles"][0]["borrowed"], "Lid")
         self.assertEqual(ctx.events, [])
         design.replay(step, ctx)
-        self.assertEqual([kind for kind, _ in ctx.events], ["doubt", "note"])
+        # The capture does not say where sizes act, so the destination is told that more sizes may move the sketch.
+        self.assertEqual([kind for kind, _ in ctx.events], ["doubt", "unknown", "note"])
         self.assertEqual(ctx.events[0][1], ("lid_w",))
 
     def test_a_step_of_another_component_is_not_brought_in(self):

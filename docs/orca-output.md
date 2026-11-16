@@ -801,13 +801,21 @@ as numbers in the part's coordinates (`orca_translate/other_components.py`, with
   its axis or edge or about its axis, a revolve about its axis, a split by its plane, an extrude to or from its flat
   face or plane, a hole on its face or sketch point, and an extrude, revolve, sweep or loft of its sketch, also in a
   tool body.
-- Once a step is copied, each measured reference it holds marks the ticked sizes whose parameter acts on the
-  component that owns it (`refs.mark_all`): "Mirror1 mirrors across a plane of Cover that may move with it, and the
+- Once a step is copied, each measured reference it holds marks the ticked sizes that may move it
+  (`refs.mark_all`, `refs.acting_sizes`): those whose parameter acts on the component that owns it, and those whose
+  parameter acts on a joint, another assembly item or a Move of occurrences, which may place any component (the
+  capture does not say which occurrence). "Mirror1 mirrors across a plane of Cover that may move with it, and the
   copy cannot follow that". Such a parameter is then fixed or partly followed, never "not used". When the capture does
-  not say where the parameters act, the result gets a note instead. A step that does not change the part (a mirror
-  whose copies stay apart) marks nothing.
-- An outline of another component's sketch is written as numbers, and the sizes that its dimensions read are marked
-  ("it changes the sketch Rim of Lid, which Sweep1 copies as fixed numbers"), with a note. Its sketch keeps its name,
+  not say where the parameters act, the shared layer tells the context (`Context.movers_unknown`) and every ticked
+  size is marked ("... that may move with it, and the export cannot tell which sizes move it, so the copy keeps it
+  where it is now"): any parameter may drive steps of several components. A step that does not change the part (a
+  mirror whose copies stay apart) marks nothing.
+- An outline of another component's sketch is written as numbers, with a note. Every size that may move its sketch
+  is marked (`design_model.borrowed.movers`): those its dimensions read ("it changes the sketch Rim of Lid, which
+  Sweep1 copies as fixed numbers"), and those that may move the sketch's component, the plane it sits on or geometry
+  projected into it, read from its sketch graph by token ("it may move the sketch Rim of Lid, which Sweep1 copies as
+  fixed numbers"). Without data on where the parameters act, or without a sketch graph, every ticked size is marked
+  as above. Its sketch keeps its name,
   which may be the name of a sketch of the part: such an outline gets no sketch graph (`sketches.graph_for`) and no
   sketch sizes by name (`sketch_sizes.profile_sizes`), and its sketch plane names no sizes of the part
   (`design_model.reach.placement_sizes`).
@@ -818,7 +826,9 @@ as numbers in the part's coordinates (`orca_translate/other_components.py`, with
   own frame at that time). Orca turns about the component origin, then shifts; the shape the copy keeps moves the
   same way. The ticked sizes that act on that component are marked ("Combine1 puts its tool at the place of Rod
   that may move with it, and the copy cannot follow that"), so a size that sets a step of the tool is "partly" and
-  one that only moves the component is "fixed". A tool of the root component needs no mark. The origin planes the
+  one that only moves the component is "fixed". So is a size of a joint or a Move in the root that places the
+  occurrence. For a tool of the root component only those sizes of the assembly count, since the root has no place
+  of its own. The origin planes the
   reader measured for the place (`tool<n>.xy` and so on) mark nothing more (`tool_chains.is_place_slot`). Inside such
   a tool, the copies of a pattern are read in the tool component's frame (`Context.component_frame`). Left out (cause
   `otherComponent`, `refused` or the cause of the step that stops it): a place that could not be read or is not a
