@@ -8,7 +8,7 @@ file. Paramability opens that file as a part. The part has sizes that come from 
 The guide is for a developer who knows Fusion as a user and knows Python. The developer did not write the add-in. The
 goal is that the developer can find and fix a problem alone.
 
-The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.7.
+The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.8.
 The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:

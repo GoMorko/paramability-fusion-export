@@ -84,7 +84,7 @@ or if an error occurs.
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
-- This is version 0.13.0-preview.7. Use a current Paramability build to open its files.
+- This is version 0.13.0-preview.8. Use a current Paramability build to open its files.
 
 ## More information
 
