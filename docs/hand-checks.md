@@ -357,8 +357,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
 36. NC1, extrude, revolve and loft with the operation "New Component". Units mm, Z up. Use a new design with Direct
     Modeling off (timeline on) and no user parameters. Build three cases, each on the top level, in one design.
     (a) On the XY plane draw a 30 x 20 mm rectangle (2 point rectangle, corner at the origin). Use Create > Extrude,
-    distance 10 mm, Operation "New Component". (b) On the XZ plane draw a 10 x 20 mm rectangle with its left side on
-    the Z axis, at X from 50 to 60. Use Create > Revolve around the Z axis, 360 deg, Operation "New Component". (c)
+    distance 10 mm, Operation "New Component". (b) On the XZ plane draw a 10 x 20 mm rectangle at X from 50 to 60
+    and Z from 0 to 20. Use Create > Revolve around the Z axis, 360 deg, Operation "New Component". (c)
     On the XY plane draw a 20 x 20 mm square centred at (100, 0); make a plane 15 mm above the XY plane (Construct >
     Offset Plane); draw a 10 x 10 mm square centred at (100, 0) on it. Use Create > Loft with both squares,
     Operation "New Component". Do not activate any component and do not move any occurrence.
