@@ -118,6 +118,8 @@ def _mark_layout(item, ctx, paths):
         found = data.get("direction_%s_place" % which)
         if isinstance(found, dict) and found.get("assembly"):
             ref_motion.check_direction(ctx, item, found, "spreads copies along")
+        else:
+            ref_motion.check_own_direction(ctx, item, which, "spreads copies along")
 
 
 def _in_walk(item, ctx, paths):

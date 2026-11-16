@@ -63,12 +63,16 @@ class ForeignDirectionTest(unittest.TestCase):
         data = self.pattern(directionOneEntity=self.axis())
         self.assertTrue(data["direction_one_place"]["foreign"])
 
-    def test_an_own_direction_stays_as_it_was(self):
+    def test_an_own_direction_says_what_it_is_and_is_no_measured_reference(self):
         own = Obj("fusion::ConstructionAxis", entityToken="own", parentComponent=self.tray.component,
                   geometry=line((0, 0, 0), (0, 1, 0)))
         data = self.pattern(directionOneEntity=own)
         self.assertEqual(data["direction_one"], [0.0, 1.0, 0.0])
-        self.assertFalse([k for k in data if k.endswith("_place")])
+        place = data["direction_one_place"]
+        self.assertEqual((place["own"], place["entity_type"], place["token"]), (True, "ConstructionAxis", "own"))
+        self.assertFalse(place.get("assembly") or place.get("foreign"))
+        self.assertEqual(geometry_links.item_refs({"index": 1, "data": data}), [])
+        self.assertNotIn("direction_two_place", data)
 
 
 if __name__ == "__main__":

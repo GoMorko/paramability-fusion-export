@@ -113,6 +113,8 @@ def lattice_axes(item, ctx):
         place = data.get(dir_key + "_place")
         if isinstance(place, dict) and place.get("assembly"):
             ref_motion.check_direction(ctx, item, place, "spreads copies along")
+        else:
+            ref_motion.check_own_direction(ctx, item, which, "spreads copies along")
         count_q = values.quantity(ctx, item, "quantity_" + which, quantity, dim="scalar", whole=True)
         step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):

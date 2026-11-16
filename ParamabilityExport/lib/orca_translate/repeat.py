@@ -287,16 +287,16 @@ def _directions(item, data):
     return out
 
 
-def _mark_direction_sketches(ctx, item, data, directions):
-    """Mark the sizes of the sketch a direction is taken from (a sketch line): they may turn the line, and Orca keeps
-    the direction it has now."""
+def _mark_directions(ctx, item, directions):
+    """Mark the sizes that may turn each direction taken from the part (an edge, an axis, a sketch line,
+    `reach.direction_sizes`): Orca keeps the direction it has now."""
     if ctx.table is None:
         return
     for which, *_ in directions:
-        source = data.get("direction_%s_sketch" % which)
-        names = reach.sketch_sizes(ctx.table, source.get("sketch") or "") if isinstance(source, dict) else ()
+        names = reach.direction_sizes(ctx.table, ctx.capture.get("items") or [], item, which)
         if names:
-            ctx.doubt(names, shared.kept_in_place(shared.ref_phrase(item, {"type": "SketchLine", "own": True},
+            noun = reach.direction_kind(item, which)
+            ctx.doubt(names, shared.kept_in_place(shared.ref_phrase(item, {"type": noun, "own": True},
                                                                     "spreads copies along")))
 
 
@@ -400,7 +400,7 @@ def rectangular(ctx, step):
     directions = _directions(item, data)
     if isinstance(directions, Skip):
         return directions
-    _mark_direction_sketches(ctx, item, data, directions)
+    _mark_directions(ctx, item, directions)
     grid = _grid(data, elements, directions)
     if isinstance(grid, Skip):
         return grid

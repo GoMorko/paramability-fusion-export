@@ -336,3 +336,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     extrude with an empty reason, and `probe.motion.values` has a `.../r/side_one/offset` key with a term of `Lift`.
     In Paramability the post grows as `Lift` grows; `Lift` is a loose size with "it moves a joint". Afterwards Cap
     sits 40 mm above Base as before, `Lift` is 40 mm, and no step or joint is in warning.
+35. OR26, a pattern along an edge of the part and a tapped hole through all. Add user parameters `Tilt` = 20 deg and
+    `Plate` = 10 mm. On the XY plane draw a triangle with corners (0, 0), (60, 0) and (0, 40): fix the bottom side
+    60 mm long on the X axis and the left side on the Y axis, and give the angle at (60, 0) between the bottom side
+    and the slanted side the dimension `14 deg + Tilt`. Extrude it `Plate` up. On the top face draw a 3 by 3 mm
+    square centred at (20, 5) and extrude it 3 mm up (join). Make a rectangular pattern of that boss along the
+    slanted top edge: 3 copies, 8 mm apart, towards the Y axis. Then sketch a point at (8, 20) on the top face and
+    add a tapped M5 hole there, through all, with "Modeled" on.
+    Export: Export for Orca with `Tilt` and `Plate` ticked. `Tilt` stays a number, with the reason "RectangularPattern1
+    spreads copies along an edge that may move with it, and the copy cannot follow that". `Plate` follows partly,
+    with the reason "Hole1: its thread runs through the part as thick as it is now, and Orca keeps that length". In
+    `report.json` the pattern's data has `direction_one_place` with `own: true` and `entity_type` `BRepEdge`. Export
+    the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same pattern reason. Afterwards
+    the design is as before.

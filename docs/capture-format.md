@@ -875,8 +875,9 @@ material takes it off there (a positive recipe angle on the side the normal poin
 sides of its plane, two different angles, an angle of 30 degrees or more, or no measured change of volume is left out.
 
 **RectangularPatternFeature** (`patternEntityType`, `inputEntities`, `directionOne`, `directionTwo`,
-`quantityOne`, `quantityTwo`, `distanceOne`, `distanceTwo`, `patternDistanceType`, `isSymmetricInDirectionOne`,
-`isSymmetricInDirectionTwo`, `patternElements`, `suppressedElementsIds`):
+`directionOneEntity`, `directionTwoEntity`, `quantityOne`, `quantityTwo`, `distanceOne`, `distanceTwo`,
+`patternDistanceType`, `isSymmetricInDirectionOne`, `isSymmetricInDirectionTwo`, `patternElements`,
+`suppressedElementsIds`):
 
 ```json
 {
@@ -926,6 +927,13 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   `direction_one` or `direction_two`, see "Measured references"). When the direction cannot be brought in, `direction_*`
   is null and the place is `{ "foreign": true, "ref": REF }`, so the pattern is refused. The sketch of a foreign sketch
   line is not named in `direction_*_sketch`.
+  A direction taken from an edge, a construction axis or another entity of the target's own component (not a sketch
+  line, which `direction_*_sketch` names) gets the place `{ "own": true, ...what it is }`: the description of
+  `read_reference.reference_of` (`origin`, or `entity_type` with `edge_points`, `face_point`, `token`, `made_by`,
+  `definition` and `built_on` as far as Fusion gives them). It holds no `ref`, so it is no measured reference. A
+  direction whose entity cannot be described has no place, as in older captures. The translators read it through
+  `design_model.reach.direction_sizes`: the sizes that may turn the direction are marked, since both write the
+  direction as a number.
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,
 `suppressedElementsIds`):

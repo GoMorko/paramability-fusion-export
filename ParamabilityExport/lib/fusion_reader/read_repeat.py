@@ -5,8 +5,9 @@ transform of every copy) exist only once the feature is computed, so they are re
 The elements are required: when the collection cannot be read the item gets a read_error, because an empty list
 would look like a pattern with every copy suppressed.
 
-The mirror plane and the circular pattern axis also say what they are (origin, face, edge, construction geometry and
-what it is built on; see read_reference.py), so the translator can tell whether sizes move them.
+The mirror plane, the circular pattern axis and a rectangular pattern direction taken from an edge or construction
+axis of the part also say what they are (origin, face, edge, construction geometry and what it is built on; see
+read_reference.py), so the translators can tell whether sizes move them.
 """
 from . import read_geometry as geo
 from . import read_solid
@@ -14,7 +15,7 @@ from .placement import from_assembly, ref_record
 from .param_refs import Params, with_params
 from .read_bodies import result_bodies, with_points
 from .read_finish import strict_items
-from .read_reference import add_reference, axis_with_reference
+from .read_reference import add_reference, axis_with_reference, reference_of
 
 _ENTITY_TYPES = [
     ("feature", "features"),
@@ -102,6 +103,17 @@ def _direction_member(feature, vector_name, entity_name, ctx):
     return None
 
 
+def _own_direction(feature, entity_name, ctx):
+    """`{ "own": true, ...what it is }` of a direction taken from an edge, construction axis or other entity of the
+    target's component (`read_reference.reference_of`), else None. A sketch line is named by `_direction_sketch`
+    instead, and an entity that cannot be described gives None."""
+    entity = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
+    if entity is None or geo.type_name(entity) in ("none", "SketchLine"):
+        return None
+    found = geo.safe(lambda: reference_of(entity, ctx), None)
+    return dict(found, own=True) if found else None
+
+
 def _direction_sketch(feature, entity_name, ctx):
     """{ sketch_token, sketch } of the sketch line a pattern direction is taken from, else None."""
     line = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
@@ -145,6 +157,9 @@ def rectangular_before(feature, ctx):
             found[which], places[which] = _foreign_direction(entity, ctx, "direction_" + which)
         else:
             found[which] = _direction_member(feature, vector_name, entity_name, ctx)
+            own = _own_direction(feature, entity_name, ctx) if found[which] is not None else None
+            if own is not None:
+                places[which] = own
     direction_two = found["two"]
     data.update({
         "direction_one": found["one"],

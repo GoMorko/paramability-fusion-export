@@ -1972,6 +1972,18 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     size here, because its sizes come from its measured reference (`refs.mark_all`). A record that does not say what
     it is (an older capture) gives no size. The Orca output marks the sizes of each such place that it writes as
     numbers (`orca_translate/kept_refs.py`).
+  - The direction of a rectangular pattern. `direction_sizes` gives the sizes that can turn it. For a direction
+    taken from an edge, an axis or a face of the part (the `own` place that the reader writes), these are the sizes
+    of `reference_sizes`. For a direction taken from a sketch line, these are the sizes of that sketch. A direction
+    of another component gives no size here. `direction_kind` gives the Fusion type of the entity, for the reason.
+    Both outputs write the direction as a number, so both mark these sizes: the recipe output in
+    `ref_motion.check_own_direction` (not in the first translation of an export), the Orca output in
+    `repeat._mark_directions`.
+  - The faces where a hole goes in and comes out. `hole_end_sizes` gives every size that an earlier step reads,
+    except the sizes that only the sketch of the hole reads. These sizes only place the hole centres. The function
+    leaves them out only when the sketch is the item just before the hole. If an item is between them, that item can
+    project the sketch into a face of the part, so the function leaves out no size. The Orca output marks these sizes
+    for the thread of a tapped hole through all, because the thread length is the thickness of the part now.
   - The sizes that a step reads. `step_sizes` gives the sizes behind the values of one step and behind the sketches it
     uses (the sketch graphs and the dimensions of an outline brought in from another component included).
     `profile_sizes` gives the sizes that move the sketch of one outline. An outline of another component gives none:

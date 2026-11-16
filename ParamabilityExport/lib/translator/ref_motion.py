@@ -16,7 +16,7 @@ The first translation of an export (`OPTIMISTIC`) writes the measured place and 
 
 `reach_motion` reads a face or plane of the part itself the same way (`own` records, with the sizes it names).
 """
-from ..design_model import refs, words
+from ..design_model import reach, refs, words
 from ..design_model.values import Quantity
 from ..design_model.refs import AXIS, DIRECTION, PLANE, PLANE_TYPES, POINT
 from ..geometry import vec
@@ -167,6 +167,18 @@ def check_direction(ctx, item, place, what):
     """Marks the sizes that turn a direction taken from another component (`direction_one_place` of a rectangular
     pattern). The direction itself stays a number."""
     moves(ctx, item, place.get("ref") or {}, DIRECTION, what)
+
+
+def check_own_direction(ctx, item, which, what):
+    """Marks the sizes that may turn the direction `which` ("one" or "two") of a rectangular pattern taken from the part
+    itself: an edge, an axis or a sketch line (`reach.direction_sizes`). The direction itself stays a number. The first
+    translation of an export marks nothing, as for a direction of another component."""
+    if ctx.table is None or getattr(ctx.motion, "optimistic", False):
+        return
+    names = reach.direction_sizes(ctx.table, ctx.capture.get("items") or [], item, which)
+    if names:
+        noun = reach.direction_kind(item, which)
+        ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": noun, "own": True}, what)))
 
 
 def hole_moves(ctx, item, data, what="is placed on"):
