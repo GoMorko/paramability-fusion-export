@@ -10,13 +10,13 @@ A centre follows only sizes that the copy so far follows everywhere: a size some
 rectangle that grows about its centre in Orca while Fusion also moves it, a left out step) would put the hole in
 another place on the part than Fusion does, so such a size keeps its current value in the hole's formula and gets the
 reason. Orca cannot move a plane with a variable: a sketch that a size moves as a whole (one on a face of the part, or
-on an offset plane) keeps its place, and the sizes that may move it get the reason (`plane_sizes`), as for the sketch
+on an offset plane) keeps its place, and the sizes that may move it get the reason (`reach.hole_plane_sizes`), as for the sketch
 of an extrude. A hole placed on a face without a sketch keeps its place the same way.
 """
+from ..design_model import reach
+from ..design_model.dimension_sizes import size_env
 from ..geometry import vec
-from ..probe.derived_sizes import size_env
 from ..sketch_values.expr import ExprDomainError
-from ..translator.sizes import placement_sizes, reach_sizes
 from .context import Value
 from .sketches import UNCONFIRMED, SketchFormulas, reads_input
 
@@ -63,34 +63,9 @@ def _graph(ctx, data):
 
 def _sketch_sizes(ctx, data):
     """Fusion names of the free sizes that move the hole's sketch: those its dimensions read."""
-    sketch = data.get("sketch")
-    if not sketch or ctx.table is None:
+    if not data.get("sketch") or ctx.table is None:
         return ()
-    record = _graph(ctx, data)
-    if record is not None:
-        dims = [d for d in record.get("dimensions") or [] if isinstance(d, dict)]
-        names = [d["param"] for d in dims if d.get("param")] + [n for d in dims for n in d.get("reads") or []]
-    else:
-        names = [m["name"] for m in ctx.table.model_params.values()
-                 if (m.get("created_by") or {}).get("kind") == "sketchDimension"
-                 and (m.get("created_by") or {}).get("sketch") == sketch]
-    return ctx.depends(names)
-
-
-def plane_sizes(ctx, item, data):
-    """Fusion names of the ticked sizes that may move the plane the holes of `item` sit on. For a sketch, those that
-    may move what it sits on (`reference`, as for an extrude's sketch); a sketch whose reference was not read
-    counts as one on a face of the part (every size read before the sketch). For a hole placed on a face without a
-    sketch, every size read before the step."""
-    if ctx.table is None:
-        return ()
-    items = ctx.capture.get("items") or []
-    if not data.get("sketch"):
-        return tuple(reach_sizes(ctx.table, items, item, {"entity_type": "BRepFace"}))
-    reference = data.get("reference")
-    sketch = {"sketch": data["sketch"], "frame": data.get("sketch_frame"),
-              "reference": reference if isinstance(reference, dict) else {"kind": "other"}}
-    return tuple(placement_sizes(ctx.table, items, sketch, item.get("index")))
+    return tuple(reach.profile_sizes(ctx.table, {"sketch": data["sketch"]}, _graph(ctx, data)))
 
 
 def _point_id(record, token, uv):
@@ -116,7 +91,7 @@ def _free_reads(table, size_names):
 
 def _coordinate(ctx, formulas, pair, k, number):
     """(`Value` of one sketch coordinate, the reason it keeps its number although sizes may move it, the Fusion names
-    of the sizes held at their value). Sizes an earlier step does not follow (`ctx.doubts`) are held."""
+    of the sizes held at their value). Sizes an earlier step does not follow (`ctx.held`) are held."""
     if pair is None or not pair[k].derived:
         return Value(number), (pair[k].reason if pair is not None and pair[k].reason else "it has no formula"), ()
     formulas.why = ""
@@ -124,7 +99,7 @@ def _coordinate(ctx, formulas, pair, k, number):
     if over is None:
         return Value(number), formulas.why or "it has no formula", ()
     env = size_env(ctx.table, {})
-    held = [n for n in over.names() if any(r in ctx.doubts for r in _free_reads(ctx.table, (n,)))]
+    held = [n for n in over.names() if any(ctx.held(r) for r in _free_reads(ctx.table, (n,)))]
     held_reads = _free_reads(ctx.table, held)
     over = over.substitute({n: env[n] for n in held if n in env})
     if over.is_constant:
@@ -167,7 +142,7 @@ def _followed(ctx, item, data, normal, positions):
         if pid is None:
             reasons.append("a hole point is not in the sketch record")
         if pair is not None and any(v.derived and reads_input(v.expr) for v in pair):
-            ctx.doubt(reach_sizes(ctx.table, ctx.capture.get("items") or [], item, {"entity_type": "BRepFace"}),
+            ctx.doubt(reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item),
                       "%s: the hole centres are placed by geometry projected into %s, and Orca keeps that "
                       "geometry where it is now" % (item.get("name") or "the hole",
                                                     data.get("sketch") or "their sketch"))
@@ -181,12 +156,13 @@ def _followed(ctx, item, data, normal, positions):
 
 def places(ctx, item, data, normal, positions):
     """The `Place` of each hole position, drilled along `normal`. Sizes that move the points but that the places do
-    not follow get the reason, and so do the sizes that may move the plane they sit on (`plane_sizes`)."""
+    not follow get the reason, and so do the sizes that may move the plane they sit on (`reach.hole_plane_sizes`)."""
     name = item.get("name") or "the hole"
     found = _followed(ctx, item, data, normal, positions) if data.get("sketch") else "they are not on a sketch"
     # Marked after `_followed`, which holds in the centres' formulas the sizes earlier steps do not follow: a size
     # that moves the plane still moves the centres on it.
-    ctx.doubt(plane_sizes(ctx, item, data), "%s: the holes sit on a face or plane that may move with it, and Orca "
+    ctx.doubt(reach.hole_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, data),
+              "%s: the holes sit on a face or plane that may move with it, and Orca "
               "keeps them where they are now" % name)
     if isinstance(found, tuple):
         out, reasons, held = found

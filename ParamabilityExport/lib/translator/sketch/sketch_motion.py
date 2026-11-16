@@ -21,7 +21,8 @@ from .curved import Curved, combine, from_terms, names_of, render
 from .loops import profile_loops
 from .rect_corners import rect_axes, rect_corners
 from ..result import Refusal
-from ..sizes import placement_sizes, unmeasured_sizes
+from ...design_model.reach import placement_sizes
+from ..sizes import unmeasured_sizes
 from .sketch_crossings import OUT_OF_TIME, Sources, checks_of, keeps_order, order_ranges, simple_ranges
 from ..values import Quantity, stays_positive
 

@@ -262,7 +262,7 @@ Tokens are compared, names only when a token is missing. The export works with t
 steps use (`body_scope.body_links`), and the translator, given a size table without links, takes them from the whole
 capture. A link is `{ "param", "sketch", "component", "via" }` (the component's name). Such a parameter is ticked to
 start with like one the body reads, the size probe tries it like a size behind a sketch dimension, and the translator
-counts it as a size the sketch reads (`sizes.sketch_sizes`, section 5). The link only makes it worth trying; the
+counts it as a size the sketch reads (`design_model.reach.sketch_sizes`, section 5). The link only makes it worth trying; the
 probe decides.
 
 A step can also use a plane, axis, direction or point of another component directly (measured references, "Measured
@@ -1635,7 +1635,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
   - a "to entity" reach to a moving end face writes its length as a formula. A construction plane follows what it is
     built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter
-    it made that reads a ticked size (`sizes.offset_param`; Fusion may give the plane a second parameter, a fixed
+    it made that reads a ticked size (`design_model.reach.offset_param`; Fusion may give the plane a second parameter, a fixed
     extra offset, and the distance is followed only where it matches the measured plane), a midplane its two bases,
     through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
@@ -1846,7 +1846,7 @@ ones at their value now, so the formula over those sizes is checked by a state t
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
 B; beyond that it could not be tried" when the rows that built cover less than its range. A size that reaches a sketch
-or a measured place (`translator.sizes.probed_sizes`) and whose rows all failed to build was not measured: it is
+or a measured place (`design_model.reach.probed_sizes`) and whose rows all failed to build was not measured: it is
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
 free size measured over less than its range is loose with "it was followed between A and B; beyond that it could not
@@ -1902,7 +1902,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   parameter in a sum is written through its own expression. Its number stays the captured one; a formula that misses
   it by more than 1e-3 mm fixes its sizes ("could not be read at other values"). A width, height or radius that would
   reach zero over the size ranges fixes its sizes ("would shrink to nothing").
-- A value of an unmeasured sketch is stuck with cause `untried` for every size the sketch reads (`sizes.sketch_sizes`:
+- A value of an unmeasured sketch is stuck with cause `untried` for every size the sketch reads (`design_model.reach.sketch_sizes`:
   the sizes behind that sketch's dimensions, and the sizes that may reach it through the geometry of another
   component, "Geometry links" in section 2). The size is loose, with "it changes <sketch> and could not be tried at
   other values". A size that moves the sketch only through the plane it sits on is marked by the placement rule
@@ -2013,7 +2013,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size
   an item of the body's component reads before the plane was made, and with the plane's own parameters
-  (`sizes.placement_sizes`; for a plane described only by its token, every such size unless the sketch frame lies on an
+  (`design_model.reach.placement_sizes`; for a plane described only by its token, every such size unless the sketch frame lies on an
   origin plane). The probe tries those sizes (`probe/plane_sizes.py`), so the plane's move is measured whatever the
   plane's kind; a plane that turns is stuck with cause `turns`. Such a size that was not measured for the sketch (no
   probe, the sketch not measured, the size not tried) is marked: "it may move the plane <sketch> sits on, and that could
@@ -2076,7 +2076,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   measured wall leans are compared with the side the cut goes, after it is turned toward the material.
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
-  or axis. An offset plane that the step places, whose distance `sizes.offset_param` names, follows that distance
+  or axis. An offset plane that the step places, whose distance `design_model.reach.offset_param` names, follows that distance
   instead: where an extrude starts or reaches to, the plane of a mirror or a draft, and the plane a split cuts along
   (`sizes._placed_planes`).
 - An angle the step needs above zero (a draft, a revolve) that reaches zero inside the size ranges cuts the ranges
@@ -2092,10 +2092,10 @@ sketch (`reference` links, section 2). The values are moves, zero at the sizes t
 
 A flat face or construction plane of the body's own component that an extrude starts from or reaches to is measured
 the same way when it may move with the part (a face, or a plane built on the part) and has a `token`
-(`sizes.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
+(`design_model.reach.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
 the part's coordinates like the capture. The sizes tried for it are every size an item of the body's component reads
 before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
-(`sizes.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
+(`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
 before cannot place the face without a doubt (`reach_motion.target_shift`); then those same sizes get the three
 answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
@@ -2422,7 +2422,7 @@ export, the recipe and the notes do not depend on it.
 
 ### Derived values (`derived`)
 
-Shadow mode of reading sketches directly (`lib/probe/derived.py`, `derived_keys.py`, `derived_sizes.py`). When the
+Shadow mode of reading sketches directly (`lib/probe/derived.py`, `derived_keys.py` and `lib/design_model/dimension_sizes.py`). When the
 capture has `sketch_graphs`, the export solves each graph with `sketch_solve`, works out the values the probe keys
 (section 5, "Sketch values that follow sizes") from the solution, and compares them with what the probe read. The
 result is written as `derived` in `report.json` and used for nothing else: the recipe, the size lists, the notes and
@@ -2476,7 +2476,7 @@ calls Fusion no more. A capture without graphs has no `derived`.
   size settings below, then each dimension leaf is replaced by its expression over the sizes
   (`translate` of the dimension parameter's expression). A hole point or axis start is the solver's point put
   through the frame of its sketch at the first read.
-- Size settings (`derived_sizes.override_sets`): the sizes the sketch's dimensions read, at most 12, each at 25 percent
+- Size settings (`dimension_sizes.override_sets`): the sizes the sketch's dimensions read, at most 12, each at 25 percent
   below and above its value (as the first tries), then all low and all high. Two dimensions that read one size move
   together. The solver checks its redundant rules and choices at these settings, and the formulas are fitted over them.
   Settings where a value has no number (a square root of a negative value) leave the key without a formula.

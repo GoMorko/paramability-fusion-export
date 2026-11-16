@@ -56,6 +56,10 @@ The modules of `lib/orca_translate/`:
   variable may go), `formulas.py` (formulas Orca can write) and `place.py` (where the part sits on the plate).
 - `solid.py`: the part the copy has built so far, as simple shapes, for the checks of cuts and the copy's own box.
 
+Which sizes may move a sketch, a plane or a face is not decided in `orca_translate`: it is in the shared layer
+(`design_model/reach.py`). The Orca output reads those sizes and decides what to do: it keeps the number and marks the
+sizes. `sketch_sizes.profile_sizes` and `translate._item_sizes` call `reach.profile_sizes` and `reach.step_sizes`.
+
 `sketch_sizes.py` gives the helpers that the handlers of outlines share: `sketch_formulas` (each sketch solved once
 per translation) and `sketch_doubts` (the sizes an outline sketch follows or keeps), and `projection_doubts` (the
 sizes that may move geometry projected into a sketch). `steps.py` also gives `misses_reason` (the reason for a cut
@@ -163,21 +167,21 @@ not judged to meet material where Orca removes nothing.
   face. For a two sided extrude, that face is checked against the side on its own side of the sketch only
   (`steps._measured_side`), never against the other side.
 - The distance follows the sizes that move the plane, where the copy can tell how: an origin plane stays; an offset
-  plane moves with its own distance when one size sets it (`translator.sizes.offset_param`, its sign from the
+  plane moves with its own distance when one size sets it (`design_model.reach.offset_param`, its sign from the
   measured place) and with what it is built on; a face follows the end of a copied extrude it lies on
   (`solid.Prism.ends`: the end's length Value), when no later shape of that body touches the measured point. The
   length is then the measured length plus the plane's move, so the end stays where Fusion puts it. A plane or face
   that sizes may move in any other way keeps its length, and every size that may move it is marked
-  (`translator.sizes.reach_sizes`: the sizes read before the step, and those behind the planes of the chain).
+  (`design_model.reach.reach_sizes`: the sizes read before the step, and those behind the planes of the chain).
 - "From" a face or plane: the sketch plane is moved to that plane. Orca cannot move a sketch plane with a variable, so
   the shift is a number and the sizes that move the face are marked. A start at a distance from the face (a
   `start.offset` that is not zero) is left out.
 - A flat face of the body as the outline: its loops and plane as they are now, as sketch entities. Every size read
   before the step is marked, since the face may move or change with it.
 - The plane a sketch sits on: Orca cannot move it with a variable, so the sizes that may move it
-  (`translator.sizes.placement_sizes`: those behind its construction plane, and for a plane on the part every size
+  (`design_model.reach.placement_sizes`: those behind its construction plane, and for a plane on the part every size
   read before the sketch) are marked for every extrude, and for the outlines of revolves, sweeps and lofts
-  (`extents.sketch_plane_sizes`).
+  (`design_model.reach.sketch_plane_sizes`).
 - Taper. Orca tapers a Blind extrude only (and its "up to face"); symmetric and two sided extrudes ignore
   `taper_deg`. It moves the outline in its plane by the signed length times the tangent of `taper_deg` (a positive
   angle grows the outline along the extrude; with Flip the same angle shrinks it) and lofts the two outlines. A
@@ -478,7 +482,7 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   written as a product; choices, comparisons, `round`, `mod` and the rest are not).
 - A rectangle's `width` and `height` and a circle's `radius` follow when the capture holds the graph of the sketch
   (`capture.sketch_graphs`): `sketch_solve` works out each corner as a formula of the sketch's dimensions, each
-  dimension is a formula of the sizes (`probe.derived_sizes.dimension_formulas`), and a side is the difference of
+  dimension is a formula of the sizes (`design_model.dimension_sizes.dimension_formulas`), and a side is the difference of
   two corners. The side must give the drawn length now and keep its direction at the solver's other settings.
   Without a graph, or without a formula, the outline keeps its numbers.
 - The corners of an outline of straight lines follow when the copy builds it from plane cuts (see "Outlines built
@@ -504,13 +508,18 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   step does not follow everywhere (a rectangle that grows about its centre in Orca, a left out step) is held at its
   value in that formula, since the hole would else move against the part around it; the result says so. A tapped
   hole's thread sits at the same place. Without the frame, a hole centre keeps its place.
-- The plane of the holes keeps its place in Orca, so the sizes that may move it are marked (`hole_place.plane_sizes`):
+- The plane of the holes keeps its place in Orca, so the sizes that may move it are marked (`design_model.reach.hole_plane_sizes`):
   for a sketch, as for an extrude's sketch, from what it sits on (`reference`, read from Fusion as a
   profile's `reference`); a sketch whose reference was not read (an older capture) counts as one on a face of the
   part, so every size read before the sketch is marked. For a hole placed on a face without a sketch, every size read
   before the step is marked. The centres' sketch coordinates still follow their sizes.
 - Each ticked parameter ends as "follows the Orca variable" (everywhere it is used), "follows ... but not everywhere"
-  (with the reasons), "stays a fixed number in Orca" (with the reasons) or "not used by the copy".
+  (with the reasons), "stays a fixed number in Orca" (with the reasons) or "not used by the copy". Two kinds of size
+  get a reason before any step is copied (`Context._doubt_unfollowed_readers`): a size that a joint reads, and a size
+  that sets the height of a sketch text. The copy has no joints and no text, so such a size is never "not used". These
+  reasons do not stop a hole centre from following the size, since they say nothing about the part that a step builds
+  (`Context.held`). A step that is left out names every size of the sketches it uses, also a size that reaches one of
+  these sketches through the geometry of another component (`reach.step_sizes`).
 - Variable names are the recipe size names, except a name Orca keeps for itself (`pi`, `sqrt`, `abs`, `sin`, `cos`,
   `tan`, `min`, `max`, `deg`, `rad`), which gets `_v`. Orca names are a letter or `_` followed by letters, digits and
   `_`, as the size names already are. Numbers are written without an exponent.
@@ -723,7 +732,7 @@ as numbers in the part's coordinates (`orca_translate/other_components.py`, with
   ("it changes the sketch Rim of Lid, which Sweep1 copies as fixed numbers"), with a note. Its sketch keeps its name,
   which may be the name of a sketch of the part: such an outline gets no sketch graph (`sketches.graph_for`) and no
   sketch sizes by name (`sketch_sizes.profile_sizes`), and its sketch plane names no sizes of the part
-  (`translator.sizes.placement_sizes`).
+  (`design_model.reach.placement_sizes`).
 - Still left out (cause `otherComponent`): a record that stays `foreign` (a curved face, an edge, a direction, axis or
   plane whose place could not be brought in), a tool body of another component, edges of another component that a
   round or chamfer picks, a thread on a face of another component and a sweep path in another component.

@@ -1,6 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 from ..capture_model import lineage, step_kinds
 from ..capture_model.capture import validate_capture
+from ..design_model.reach import joint_reasons, probed_sizes
 from ..geometry import rigid
 from ..params import geometry_links
 from ..params.expressions.formula import tokenize_formula
@@ -23,7 +24,7 @@ from .notes import (
 from .ranges import kept_ranges, range_check
 from .result import TranslateResult
 from .sketch.sketch_crossings import OutlineChecks
-from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
+from .sizes import text_reasons, untried_reasons, used_sizes
 from .step_walk import all_steps, nesting
 from .values import Sized, number
 from .walk import walk_items

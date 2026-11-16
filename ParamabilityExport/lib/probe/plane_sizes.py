@@ -9,7 +9,7 @@ at every state as well (`translator.sizes.moving_reaches`, `plan.refs`). A size 
 earlier step gets no row of its own (`plan.probe_rows`), so without this list the plane or face would stay where the
 capture has it. A face used as an outline may change with every size read before its step (`plan.outline_face`).
 """
-from ..translator.sizes import placement_driven, reach_driven, reach_sizes
+from ..design_model.reach import placement_driven, reach_driven, reach_sizes
 from .plan.covered import FACE, scan
 
 

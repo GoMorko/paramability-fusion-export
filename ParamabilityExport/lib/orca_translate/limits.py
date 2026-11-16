@@ -21,9 +21,9 @@ fitting, as far as these tests show, and assumes the step fits everywhere betwee
 import math
 import re
 
+from ..design_model.dimension_sizes import size_env
 from ..params.expressions.errors import ExpressionError
 from ..params.size_table import FREE
-from ..probe.derived_sizes import size_env
 from .formulas import orca_value, variable_values
 
 # Steps out from the current value: the first is this share of it (or of 1 when it is 0), each next one twice as
@@ -213,7 +213,7 @@ def tell(ctx, fields, ok, floor=False):
 def tell_sizes(ctx, fields, names, ok):
     """`tell` with `floor`, for a check that also reads sizes the bound `fields` do not: each free size that the
     fields read or that `names` (Fusion names) holds is walked (the others kept), and `ok(numbers of the fields, size
-    values)` gets the size values as `derived_sizes.size_env` gives them. Returns `({Orca variable: Limit},
+    values)` gets the size values as `dimension_sizes.size_env` gives them. Returns `({Orca variable: Limit},
     [Orca variables whose limits cannot be told: the check does not hold at the current values, or the variable
     has no parameter line])`."""
     if ctx.table is None:

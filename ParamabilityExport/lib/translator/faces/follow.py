@@ -24,7 +24,7 @@ two steps cross is placed on both walls (faces/crossings.py).
 """
 from ...geometry import vec
 from .. import notes, ref_motion, values
-from ..sizes import offset_param, on_part
+from ...design_model.reach import offset_param, on_part
 from ..sketch import sketch_motion
 from ..values import Quantity
 from . import crossings, picks, shells

@@ -19,8 +19,9 @@ can keep a size that only such a step reads and say why it changes nothing yet.
 from ..sketch_values.coverage import MOVED, STILL, ref_answer
 from ..sketch_values.motion import Motion
 from ..design_model import refs
+from ..design_model.reach import construction_fixes, linked_sizes, sketch_params, sketch_sizes
 from .notes import step_label, untried_link_reason
-from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
+from .sizes import sketch_answer, used_sizes
 from .step_walk import all_steps
 from .values import reads_in
 

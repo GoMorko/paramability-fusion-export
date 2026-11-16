@@ -4,7 +4,7 @@ Bringing such an outline in (dropping `foreign`, naming the component in `borrow
 A step that keeps the outline must also keep meeting the part over the size range (`faces/meets_part.py`, run when
 the step is added); a sweep or a loft cannot check that, so `mark_unchecked` marks the sizes of the sketch.
 """
-from ..sizes import sketch_sizes
+from ...design_model.reach import sketch_sizes
 
 
 def mark_unchecked(ctx, item, profile):

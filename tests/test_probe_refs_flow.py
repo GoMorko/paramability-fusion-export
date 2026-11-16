@@ -14,7 +14,7 @@ from lib.design_edit.runner import RowExport
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
 from lib.probe import plan
 from lib.sketch_values.motion import Motion
-from lib.translator.sizes import probed_sizes
+from lib.design_model.reach import probed_sizes
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm", "gap": "mm"}
 LINK = {"param": "gap", "sketch": "", "component": "Cover", "via": "reference", "step": "Mirror1", "ref": "8.plane"}

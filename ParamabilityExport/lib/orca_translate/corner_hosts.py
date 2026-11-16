@@ -23,11 +23,11 @@ at other sizes, for the limits of a later round of a face group of the part (`fi
 """
 import math
 
+from ..design_model.dimension_sizes import expr_of, size_env
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature, shift_refs
 from ..params.expressions.errors import ExpressionError
-from ..probe.derived_sizes import expr_of, size_env
 from ..sketch_values.expr import num
 from . import causes, corner_tools, halfplanes, limits, outline_cuts
 from .context import Body, Value

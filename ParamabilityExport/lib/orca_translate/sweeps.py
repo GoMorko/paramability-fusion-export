@@ -27,6 +27,7 @@ of an extrude or a sweep follows its sizes as an extrude outline does.
 import math
 
 from ..capture_model import gap_hints
+from ..design_model import reach
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..geometry.footprint import polyline
@@ -35,7 +36,6 @@ from ..translator.paths.path_checks import bend_refusal, overlap_refusal
 from ..translator.paths.path_curves import tangents
 from ..translator.paths.path_model import PathOptions
 from ..translator.result import Refusal
-from ..translator.sizes import placement_sizes, reach_sizes
 from ..translator.sweep.sweep_ends import end_check
 from ..translator.sweep.sweep_outline import profile_points
 from ..translator.sweep.sweep_settings import settings_refusal
@@ -305,8 +305,9 @@ def _as_sweep(ctx, item, data, profiles, found):
         written = kept
     sketch_sizes.sketch_doubts(ctx, item, [(p, o) for p, o, _, _ in written], [(m, o, p) for p, o, m, _ in written])
     for profile, _, _, _ in written:
-        ctx.doubt(extents.sketch_plane_sizes(ctx, item, profile), "%s: an outline sits on a plane or face that moves "
-                  "with it, and Orca cannot move a sketch plane with a variable" % label(item))
+        moving = reach.sketch_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, profile)
+        ctx.doubt(moving, "%s: an outline sits on a plane or face that moves with it, and Orca cannot move a sketch "
+                  "plane with a variable" % label(item))
 
     name = label(item)
     path_sketch = feature(FeatureType.SKETCH, "%s path" % name, entities=entities,
@@ -370,16 +371,10 @@ def _mark_path(ctx, item, path):
         return
     items = ctx.capture.get("items") or []
     if path.get("kind") == "edges":
-        names = reach_sizes(ctx.table, items, item, {"entity_type": "BRepFace"})
+        names = reach.any_face_sizes(ctx.table, items, item)
     else:
-        record = graph_for(ctx.capture, path)
-        if record is not None:
-            dims = [d.get("param") for d in record.get("dimensions") or [] if isinstance(d, dict) and d.get("param")]
-        else:
-            dims = [m["name"] for m in ctx.table.model_params.values()
-                    if (m.get("created_by") or {}).get("kind") == "sketchDimension"
-                    and (m.get("created_by") or {}).get("sketch") == path.get("sketch")]
-        names = list(ctx.depends(dims)) + list(placement_sizes(ctx.table, items, path, item.get("index")))
+        names = (reach.profile_sizes(ctx.table, path, graph_for(ctx.capture, path))
+                 + reach.placement_sizes(ctx.table, items, path, item.get("index")))
     ctx.doubt(list(dict.fromkeys(names)), _PATH_FIXED % label(item))
 
 

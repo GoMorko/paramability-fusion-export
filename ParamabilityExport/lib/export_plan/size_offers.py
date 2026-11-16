@@ -8,7 +8,7 @@ from ..params import defaults, geometry_links, size_table
 from ..params.expressions.text import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE, MAX_SIZES
 from ..translator.notes import loose_reason
-from ..translator.sizes import joint_reasons
+from ..design_model.reach import joint_reasons
 from .body_scope import body_links, body_outside, scope_inputs
 
 # The most sizes one recipe holds.

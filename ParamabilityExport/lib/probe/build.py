@@ -28,6 +28,7 @@ records the limits (`kept`) and the values that changed an outline (`changed`), 
 (`translator.ranges.kept_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
 stays stuck, and `kept` is the value now at both ends.
 """
+from ..design_model.dimension_sizes import size_values
 from . import columns as cols
 from . import match, plan, ref_fit
 from .series import fit_series, moved as _moved
@@ -381,7 +382,7 @@ def build(capture, table, states, after=None):
         return out
     overrides = [s.values for s in run.states]
     reads = [s.read for s in run.states]
-    envs = [cols.size_env(table, o) for o in overrides]
+    envs = [size_values(table, o) for o in overrides]
     dropped = []
     shared = cols.user_columns(table, overrides, envs, reads, dropped)
     models = cols.model_columns(table, envs, reads, dropped)

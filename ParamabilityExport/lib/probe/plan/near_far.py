@@ -1,31 +1,10 @@
 """The first tries: near rows, near pair rows, far rows and far pair rows."""
+from ...design_model.dimension_sizes import near_values
 from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
 from ..state import as_states
 from .history import fails_by, farthest_built
 from .rows import MAX_PROBE_ROWS, probe_row, tried_sizes
-
-# How far from its value a size is first tried, as a share of the value, below and above.
-NEAR_SHARE = 0.25
-
-
-def near_values(size):
-    """`(low, high)`: the value `NEAR_SHARE` of itself below and above, inside the range. A value of zero moves by that
-    share of the way to the range ends. A count is a whole number and at least one step from the value. A side that
-    cannot move off the value is None."""
-    value, lo, hi = size["value"], size["min"], size["max"]
-    step = NEAR_SHARE * abs(value)
-    sides = [value - step, value + step] if step > SAME_SIZE else [value + NEAR_SHARE * (lo - value),
-                                                                 value + NEAR_SHARE * (hi - value)]
-    out = []
-    for number, sign in zip(sides, (-1, 1)):
-        if size.get("kind") == "count":
-            number = float(round(number))
-            if abs(number - value) <= SAME_SIZE:
-                number = value + sign
-        number = min(max(number, lo), hi)
-        out.append(number if abs(number - value) > SAME_SIZE else None)
-    return tuple(out)
 
 
 def _far_ends(size, near):

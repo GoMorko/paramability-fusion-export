@@ -8,9 +8,10 @@ from tests import context  # noqa: F401
 from tests.derived_fixtures import (
     ANGLE_MODEL, ANGLE_PARAMS, corner_capture, corner_states, dimension, plate_capture, plate_graph, plate_profile,
     plate_states, plate_table, row_of_rectangles, triangle_capture, triangle_states)
-from tests.probe_helpers import line, profile, table
+from tests.probe_helpers import line, profile, table, user
 
-from lib.probe import build, derived, derived_sizes
+from lib.design_model import dimension_sizes
+from lib.probe import build, derived
 from lib.sketch_solve.solve import solve_sketch
 
 
@@ -288,23 +289,31 @@ class ProjectionTest(unittest.TestCase):
 class SizeSettingsTest(unittest.TestCase):
     def test_settings_move_each_size_a_quarter_either_way_then_all_together(self):
         table = plate_table()
-        formulas = derived_sizes.dimension_formulas(table, plate_graph()[0])
-        moving = derived_sizes.moving_sizes(table, formulas)
+        formulas = dimension_sizes.dimension_formulas(table, plate_graph()[0])
+        moving = dimension_sizes.moving_sizes(table, formulas)
         self.assertEqual([s["param"] for s in moving], ["width", "height", "margin"])
-        sets = derived_sizes.override_sets(moving)
+        sets = dimension_sizes.override_sets(moving)
         self.assertEqual(sets[:2], [{"width": 30.0}, {"width": 50.0}])
         self.assertEqual(sets[-2:], [{"width": 30.0, "height": 15.0, "margin": 3.75},
                                      {"width": 50.0, "height": 25.0, "margin": 6.25}])
-        env = derived_sizes.size_env(table, sets[0])
-        values = derived_sizes.leaf_values(formulas, env)
+        env = dimension_sizes.size_env(table, sets[0])
+        values = dimension_sizes.leaf_values(formulas, env)
         self.assertEqual((values["d1"], values["d2"], values["d3"], values["d6"]), (30.0, 20.0, 20.0, 10.0))
+
+    def test_derived_sizes_follow_the_free_ones_through_a_chain(self):
+        params = [user("w", "10 mm", 10), user("twice", "w * 2", 20), user("quad", "twice * 2", 40)]
+        found = table(params, ["w", "twice", "quad"])
+        env, derived = dimension_sizes.size_values(found, {"w": 15.0})
+        self.assertEqual((derived["twice"], derived["quad"]), (30.0, 60.0))
+        self.assertEqual(dimension_sizes.size_env(found, {"w": 15.0}), env)
+        self.assertEqual(env[found.size_name("quad")], 60.0)
 
     def test_a_dimension_that_cannot_be_written_is_left_out_with_the_reason(self):
         record = plate_graph()[0]
         dimension(_Wrapper(record), "linear", [], 1.0, "d9", "mystery_parameter")
-        formulas = derived_sizes.dimension_formulas(plate_table(), record)
+        formulas = dimension_sizes.dimension_formulas(plate_table(), record)
         self.assertFalse(formulas["d9"].usable)
-        self.assertNotIn("d9", derived_sizes.leaf_values(formulas, derived_sizes.size_env(plate_table(), {})))
+        self.assertNotIn("d9", dimension_sizes.leaf_values(formulas, dimension_sizes.size_env(plate_table(), {})))
 
 
 class _Wrapper:

@@ -8,7 +8,7 @@ from tests.translator_helpers import load_capture
 from lib.export_plan import size_offers
 from lib.export_plan.body_scope import body_links, body_outside
 from lib.params import geometry_links
-from lib.translator.sizes import probed_sizes
+from lib.design_model.reach import probed_sizes
 
 LINK = {"param": "gap_mm", "sketch": "", "component": "Cover", "via": "reference", "step": "Mirror1",
         "ref": "4.plane"}

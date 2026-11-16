@@ -22,6 +22,7 @@ import math
 
 from ..capture_model import gap_hints
 from ..capture_model.capture import same_body
+from ..design_model import reach
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
@@ -450,7 +451,7 @@ def extrude(ctx, item):
     for profile, outline in parts:
         formulas = sketch_formulas(ctx, profile)
         frame = _frame_at(profile["frame"], shift)
-        on_moving = extents.sketch_plane_sizes(ctx, item, profile)
+        on_moving = tuple(reach.sketch_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, profile))
         ctx.doubt(on_moving, ("%s: its outline is a face of the body that may change with it, and Orca draws that "
                               "face as it is now" if profile.get("face") else
                               "%s: its sketch sits on a plane or face that moves with it, and Orca cannot move a "

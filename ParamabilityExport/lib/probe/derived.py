@@ -21,6 +21,7 @@ as not derived with `skipped` or `error`.
 """
 from collections import Counter
 
+from ..design_model import dimension_sizes as sizes
 from ..geometry import tolerances
 from ..package.numbers import round9
 from ..params import geometry_links
@@ -29,7 +30,6 @@ from ..sketch_solve.outcome import DERIVED as SOLVED, NOT_DERIVED, PARTLY
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.motion import Affine, Stuck, Terms
 from . import derived_keys as dk
-from . import derived_sizes as sizes
 from . import match
 from .build import StateRun
 

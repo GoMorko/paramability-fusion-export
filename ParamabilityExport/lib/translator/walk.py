@@ -11,12 +11,12 @@ that reaches into another component, and a step that picks faces a gap made. Wha
 from ..capture_model import gap_hints, gap_picks, step_kinds
 from ..capture_model.capture import outside_component, renamed_target, same_body
 from ..design_model import borrowed, refs
+from ..design_model.reach import construction_fixes
 from . import notes as wording
 from .bodies import body_states, split_rules
 from .faces import floating
 from .gaps import stops
 from .result import Refusal, StepResult, make_verdict
-from .sizes import construction_fixes
 from .words import type_words
 
 

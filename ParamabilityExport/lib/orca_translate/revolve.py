@@ -11,11 +11,12 @@ left out with the reason. A cut that removes nothing stops Orca's rebuild, so a 
 left out (`solid.Turned` is the shape the check uses).
 """
 from ..capture_model import gap_hints
+from ..design_model import reach
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from ..orca_recipe.sketch import SketchEntity
-from . import causes, extents
+from . import causes
 from .context import Value
 from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
@@ -184,8 +185,9 @@ def revolve(ctx, item):
     if loose:
         ctx.doubt(loose, "%s: the outline from %s keeps its drawn numbers: Orca can tie only the size of a plain "
                   "rectangle or circle to a variable" % (name, profile.get("sketch") or "the sketch"))
-    ctx.doubt(extents.sketch_plane_sizes(ctx, item, profile), "%s: its sketch sits on a plane or face that moves with "
-              "it, and Orca cannot move a sketch plane with a variable" % name)
+    moving = reach.sketch_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, profile)
+    ctx.doubt(moving, "%s: its sketch sits on a plane or face that moves with it, and Orca cannot move a sketch plane "
+              "with a variable" % name)
     return [sketch, made]
 
 

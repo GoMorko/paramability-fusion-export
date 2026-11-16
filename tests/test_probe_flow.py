@@ -14,7 +14,8 @@ from lib.probe import plan
 from lib.sketch_values import coverage
 from lib.sketch_values.motion import Motion
 from lib.translator.notes import TIMED_OUT_WHY
-from lib.translator.sizes import sketch_answer, sketch_sizes
+from lib.design_model.reach import sketch_sizes
+from lib.translator.sizes import sketch_answer
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm"}
 START = {"count": "3", "cube": "10 mm", "off": "5 mm", "height": "20 mm"}

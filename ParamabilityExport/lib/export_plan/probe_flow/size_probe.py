@@ -8,7 +8,8 @@ from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, 
 from ...probe.state import ProbeState
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
-from ...translator.sizes import construction_only, probed_sizes
+from ...design_model.reach import probed_sizes
+from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
 from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
                       UNREADABLE, UNTRIED, not_built_try, watched_why)

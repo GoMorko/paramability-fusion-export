@@ -36,7 +36,7 @@ from ..translator.extrude.checks import check_taper
 from ..translator.extrude.common import COMBINE, parallel
 from ..translator.extrude.side import SidePlan
 from ..translator.extrude.taper import FUSION_TAPER_SIGN
-from ..translator.sizes import construction_sizes, offset_param, on_part, placement_sizes, reach_sizes
+from ..design_model.reach import construction_sizes, offset_param, on_part, reach_sizes
 from . import causes, limits
 from .context import Value
 from .skip import Skip
@@ -349,17 +349,6 @@ def measured_gap(data, shift, length, sign, operation, holds=None):
         if not holds(*((near, length) if sign > 0 else (-length, -near))):
             return None
     return Skip("The measured end of this extrude does not match its length, so it is not copied.")
-
-
-def sketch_plane_sizes(ctx, item, profile):
-    """Fusion names of the ticked sizes that may move the plane the sketch of `profile` sits on, or, for a face of
-    the body as the outline, that may move or change that face: every size read before the step."""
-    if ctx.table is None:
-        return ()
-    items = ctx.capture.get("items") or []
-    if profile.get("face"):
-        return tuple(reach_sizes(ctx.table, items, item, {"entity_type": "BRepFace"}))
-    return tuple(placement_sizes(ctx.table, items, profile, item.get("index")))
 
 
 # ---- limits -------------------------------------------------------------------------------------------------------

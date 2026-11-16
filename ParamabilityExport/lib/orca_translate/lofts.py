@@ -25,11 +25,11 @@ outlines' joined points moved in a straight line.
 import math
 
 from ..capture_model import gap_hints
+from ..design_model.reach import placement_sizes
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..translator.loft.loft_volume import matches, ruled_volumes
-from ..translator.sizes import placement_sizes
 from ..translator.sweep.sweep_outline import loop_polygon
 from ..translator.sweep.sweep_volume import made_volume
 from . import causes, sketch_sizes, steps

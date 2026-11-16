@@ -28,10 +28,10 @@ Pure numbers and formulas: no features are written here.
 """
 import math
 
+from ..design_model.dimension_sizes import size_env
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.evaluation import evaluate
 from ..params.size_table import FREE
-from ..probe.derived_sizes import size_env
 from ..sketch_values.expr import ExprDomainError, cos, name, num, sin, tan
 from . import halfplanes, limits
 from .context import Value

@@ -1,5 +1,5 @@
 """Which sizes the probe tries: the one place that decides it."""
-from ...translator.sizes import probed_sizes
+from ...design_model.reach import probed_sizes
 from ..size_offers import probe_sizes
 
 # Ticked sizes that nothing ties to a sketch, tried after all the others while rows are left.

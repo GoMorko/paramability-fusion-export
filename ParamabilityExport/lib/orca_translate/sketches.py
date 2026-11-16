@@ -14,11 +14,11 @@ no formula, keeps its numbers, and the sizes that move it are reported.
 """
 import math
 
+from ..design_model.dimension_sizes import dimension_formulas, leaf_values, moving_sizes, override_sets, size_env
 from ..orca_recipe.enums import EntityType, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..orca_recipe.sketch import SketchEntity
 from ..probe.derived import constants_of
-from ..probe.derived_sizes import dimension_formulas, leaf_values, moving_sizes, override_sets, size_env
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.expr import ExprDomainError
 from . import splines

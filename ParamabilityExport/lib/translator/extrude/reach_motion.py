@@ -17,7 +17,7 @@ from ...params.geometry_links import ref_key
 from ...design_model import refs
 from .. import ref_motion
 from ..faces import follow
-from ..sizes import reach_sizes
+from ...design_model.reach import reach_sizes
 from ..values import Quantity
 
 

@@ -1,6 +1,6 @@
 """The measured references (planes, axes, directions, points) of the steps that the probe reads again at every state."""
 from ...params import geometry_links
-from ...translator.sizes import moving_reaches
+from ...design_model.reach import moving_reaches
 
 SHAPE_PLANE, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_POINT = "plane", "axis", "direction", "point"
 NO_TOKEN = "it has no token to find it again"

@@ -33,11 +33,11 @@ bodies nested too deep, keeps its drawn numbers.
 """
 import math
 
+from ..design_model.dimension_sizes import leaf_values, size_env
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..params.size_table import FREE
-from ..probe.derived_sizes import leaf_values, size_env
 from ..sketch_values.expr import ExprDomainError, cos, num, sin
 from . import halfplanes, limits
 from .context import Body, Value

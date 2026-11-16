@@ -3,8 +3,8 @@ an outline that can outgrow a bend."""
 import math
 
 from ...geometry import vec
+from ...design_model.reach import construction_sizes, placement_sizes, sketch_sizes
 from ..result import Refusal
-from ..sizes import construction_sizes, placement_sizes, sketch_sizes
 from ..sketch import loops, sketch_motion
 from . import sweep_reach
 

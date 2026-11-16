@@ -12,6 +12,7 @@ copied step ("unused").
 """
 from ..capture_model import gap_hints, lineage, step_kinds
 from ..capture_model.capture import CaptureError, outside_component, same_body, validate_capture
+from ..design_model import reach
 from ..orca_recipe.recipe import Recipe
 from ..params.size_table import FREE
 from ..translator.words import type_words
@@ -99,29 +100,7 @@ def _unsupported(item):
 
 def _item_sizes(ctx, item):
     """Fusion names of the free sizes a step reads: its own values and the dimensions of the sketches it uses."""
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
-    names = [p.get("name") for p in (data.get("params") or {}).values() if isinstance(p, dict)]
-    profiles = [p for p in data.get("profiles") or [] if isinstance(p, dict)]
-    # An outline of another component's sketch names that sketch, which may share its name with one of the part's
-    # own: its sizes are the ones its dimensions read.
-    sketches = {p.get("sketch") for p in profiles if not _other_sketch(p)} | {data.get("sketch")}
-    for p in profiles:
-        if _other_sketch(p):
-            for param in p.get("sketch_params") or []:
-                if isinstance(param, dict):
-                    names += [param.get("name")] + list(param.get("reads") or [])
-    for m in (ctx.table.model_params.values() if ctx.table is not None else ()):
-        made = m.get("created_by") or {}
-        if made.get("kind") == "sketchDimension" and made.get("sketch") in sketches:
-            names.append(m["name"])
-    for record in ctx.capture.get("sketch_graphs") or []:
-        if isinstance(record, dict) and record.get("sketch") in sketches:
-            names += [d.get("param") for d in record.get("dimensions") or [] if isinstance(d, dict)]
-    return ctx.depends([n for n in names if n])
-
-
-def _other_sketch(profile):
-    return profile.get("foreign") is True or bool(profile.get("borrowed"))
+    return reach.step_sizes(ctx.table, ctx.capture, item)
 
 
 def _walk(ctx):

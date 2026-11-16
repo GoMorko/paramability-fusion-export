@@ -37,29 +37,6 @@ class ModelColumn(Column):
         return out
 
 
-def size_env(table, overrides):
-    """`(env, derived)`: size values by recipe name (free sizes with `overrides`, then the named derived ones) and the
-    value of every derived user parameter by Fusion name (None where its formula fails)."""
-    env = {e.size_name: overrides.get(e.name, e.value) for e in table.entries if e.state == FREE}
-    derived = {}
-    pending = [e for e in table.entries if e.state == DERIVED]
-    while pending:
-        later = []
-        for e in pending:
-            try:
-                derived[e.name] = evaluate(e.formula, env)
-            except ExpressionError:
-                later.append(e)
-                continue
-            if e.size_name:
-                env[e.size_name] = derived[e.name]
-        if len(later) == len(pending):
-            derived.update({e.name: None for e in later})
-            break
-        pending = later
-    return env, derived
-
-
 def _check(values, reads, name, factor):
     """False when a state's read of the parameter disagrees with the formula; the count of states it was read in."""
     seen = 0

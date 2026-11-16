@@ -21,7 +21,7 @@ from lib.orca_translate.context import Context
 from lib.orca_translate.sketch_sizes import profile_sizes
 from lib.orca_translate.sketches import graph_for
 from lib.params import size_table
-from lib.translator.sizes import placement_sizes
+from lib.design_model.reach import placement_sizes
 
 COVER = {"token": "cmp_cover", "name": "Cover"}
 

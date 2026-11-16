@@ -5,7 +5,7 @@ marks the sizes that move a written outline but that no bound field of that outl
 on its own), and `projection_doubts` the sizes that may move geometry projected into a sketch. Shared by the
 handlers that write outlines: extrudes (`steps`), sweeps and lofts.
 """
-from ..translator.sizes import reach_sizes
+from ..design_model import reach
 from .sketches import UNCONFIRMED, SketchFormulas, graph_for
 
 
@@ -111,26 +111,13 @@ def projection_doubts(ctx, item, profile, outline):
     # The sketch takes its projections where it sits in the timeline, so the steps before it may move them.
     sketch = [i for i in items if i.get("type") == "Sketch" and i.get("name") == profile.get("sketch")
               and isinstance(i.get("index"), int) and i["index"] < item.get("index", 0)]
-    ctx.doubt(reach_sizes(ctx.table, items, sketch[-1] if sketch else item, {"entity_type": "BRepFace"}),
+    ctx.doubt(reach.any_face_sizes(ctx.table, items, sketch[-1] if sketch else item),
               "%s: its outline is placed by geometry projected into %s, and Orca keeps that geometry where it is now"
               % (_label(item), profile.get("sketch") or "its sketch"))
 
 
 def profile_sizes(ctx, profile):
-    """Fusion names of the free sizes that move a profile's sketch: its dimensions, from the graph when there is one,
-    else from the model parameters made by that sketch. An outline of another component's sketch gives none: its
-    sizes were marked when it was brought in (`design_model.borrowed`), and its sketch may share its name with one
-    of the part's own."""
-    if ctx.table is None or profile.get("borrowed") or profile.get("foreign"):
-        return ()
-    record = graph_for(ctx.capture, profile)
-    names = []
-    if record is not None:
-        names = [d.get("param") for d in record.get("dimensions") or [] if isinstance(d, dict) and d.get("param")]
-    else:
-        sketch = profile.get("sketch")
-        for m in ctx.table.model_params.values():
-            made = m.get("created_by") or {}
-            if made.get("kind") == "sketchDimension" and made.get("sketch") == sketch:
-                names.append(m["name"])
-    return ctx.depends(names)
+    """Fusion names of the free sizes that move a profile's sketch (`reach.profile_sizes`, with the sketch graph of
+    the profile when there is one)."""
+    record = graph_for(ctx.capture, profile) if ctx.table is not None else None
+    return tuple(reach.profile_sizes(ctx.table, profile, record))

@@ -6,6 +6,7 @@ its number, and the sizes are recorded with the reason (`doubt`), so the result 
 """
 import re
 
+from ..design_model import reach
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
 from ..params.size_table import DERIVED, FREE
@@ -51,6 +52,9 @@ class Context:
         self.bound = []  # {feature, field, formula, reads}
         self.follows = {}  # Fusion name -> [where]
         self.doubts = {}  # Fusion name -> [reason]
+        # The reasons marked before any step (`_doubt_unfollowed_readers`): Fusion name -> [reason]. They are in
+        # `doubts` too, but they say nothing about the part a step builds (`held`).
+        self.unfollowed = {}
         # The bodies: the exported part, and tool bodies while a step builds them (`push`). The handlers work on the
         # innermost one (`solid`, `has_body`, `target`). `bodies` is Orca's list of bodies at this point of the recipe.
         self.part = Body(capture.get("target"), "part")
@@ -79,6 +83,27 @@ class Context:
         sizes = list(table.sizes) if table is not None else []
         self.names = variable_names(sizes)
         self._orca_sizes = self._writable_sizes()
+        self._doubt_unfollowed_readers()
+
+    def _doubt_unfollowed_readers(self):
+        """Mark the sizes that move something no step of the copy holds: a joint (Orca copies the part alone) and the
+        height of a sketch text (Orca does not copy text). A size that only they read is then "fixed" with this
+        reason instead of "unused"."""
+        if self.table is None:
+            return
+        marks = {name: "%s, and the Orca copy does not hold joints" % why
+                 for name, why in reach.joint_reasons(self.table).items()}
+        for name, sketch in reach.text_sizes(self.table, self.capture).items():
+            marks.setdefault(name, "it changes the size of the text in %s, and the Orca copy does not follow it"
+                             % sketch)
+        for name, why in marks.items():
+            self.doubt([name], why)
+            self.unfollowed[name] = [why]
+
+    def held(self, name):
+        """True when a step marked the size for something the copy keeps where it is (`doubt`), apart from the
+        reasons marked before any step (`unfollowed`)."""
+        return any(why not in self.unfollowed.get(name, ()) for why in self.doubts.get(name) or ())
 
     # ---- the sizes Orca can hold ------------------------------------------------------------------------------
 

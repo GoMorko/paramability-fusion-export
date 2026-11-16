@@ -576,7 +576,7 @@ One module decides which sizes get rows: `lib/export_plan/probe_flow/sizes.py`. 
 and the Fusion names of the guessed sizes. A size gets rows when it can move something the probe follows:
 
 - a sketch dimension of a followed sketch, a construction plane or a sketch tied through another component
-  (`translator.sizes.probed_sizes`);
+  (`design_model.reach.probed_sizes`);
 - a plane that a followed sketch sits on (`plane_sizes.plane_driven`);
 - a measured reference of another component (a mirror plane, a pattern axis, a face an extrude reaches to);
 - a flat face that a step uses as its outline;
@@ -1649,8 +1649,9 @@ one folder per family of steps.
   `Refusal`, `Doubt`, `TranslateResult`, the verdicts), `step_walk.py` (`all_steps`: every step at every depth),
   `words.py` (type names in words), `notes.py` (every reason sentence), `audit.py`, `turn_budget.py` (the turns of the
   threads and coils written so far: the 100 turn cap that both share).
-- Values and sizes: `values.py` (`quantity`, `pin`, `handled`), `sizes.py` (which sizes a step reads, upfront doubts,
-  `probed_sizes`, the sizes the probe tries).
+- Values and sizes: `values.py` (`quantity`, `pin`, `handled`), `sizes.py` (the sizes the recipe cannot follow:
+  `untried_reasons`, `construction_only`, `text_reasons`, `sketch_answer`, and `used_sizes`). Which sizes can move a
+  sketch, a plane or a face is not here: it is in `design_model/reach.py`.
 - Places: `place.py` (`place`, `POSITIONS`, `DIRECTIONS`, `NOT_WRITTEN`: moves a finished recipe by the rigid map from
   `geometry.rigid`), `placement.py` (sketch frames to recipe placements), `ref_motion.py` (how places of other
   components move, from the motion file; what is known without it is in `design_model/refs.py`).
@@ -1714,6 +1715,32 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   borrowed_view.py`).
 - `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
   the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
+- `reach.py`: which ticked sizes can move something that a step uses. This came from `translator/sizes.py`. Each
+  function reads the size table and the capture only. No function says what a copy does about a size. The recipe
+  output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
+  - The sizes behind the model parameters of the design. `sketch_params` and `sketch_sizes` give the sizes behind the
+    dimensions of a sketch. `linked_sizes` gives the sizes that reach the sketch through the geometry of another
+    component (`table.links`). `construction_sizes` gives the sizes behind construction planes or axes.
+    `joint_reasons` gives the sizes that a joint reads. `text_sizes` gives the sizes that set the height of a sketch
+    text, with the name of the sketch. `reasons` is the helper that finds the sizes behind the parameters of one maker.
+  - The plane of a sketch. `placement_sizes` gives the sizes that can move the plane a sketch sits on: the sizes behind
+    its construction plane and, for a plane on the part, every size that an earlier step reads. `sketch_plane_sizes`
+    does this for an outline, also when the outline is a face of the body. `hole_plane_sizes` does this for the holes
+    of one step. `on_part` and `offset_param` say if a plane sits on the part and which parameter is the own
+    distance of an offset plane.
+  - A face or plane that a step starts from or reaches to. `moving_reaches` lists the flat faces and planes of the part
+    that can move, and that the probe can find again. `reach_sizes` gives the sizes that can move one of them.
+    `any_face_sizes` gives the sizes that can change any face of the body: every size an earlier step reads.
+  - The sizes that a step reads. `step_sizes` gives the sizes behind the values of one step and behind the sketches it
+    uses (the sketch graphs and the dimensions of an outline brought in from another component included).
+    `profile_sizes` gives the sizes that move the sketch of one outline. An outline of another component gives none:
+    its sizes are marked when it is brought in. `item_reads` is the same for one timeline item.
+    `construction_fixes` gives, for a step, the sizes behind the construction planes and axes that it uses itself.
+  - The sizes that the probe has to try. `probed_sizes`, `placement_driven` and `reach_driven`.
+- `dimension_sizes.py`: the dimensions of a sketch graph as formulas of the sizes (`dimension_formulas`), the size
+  settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
+  setting (`size_values`, `size_env`). This came from `probe/derived_sizes.py`, and `near_values` and `size_values`
+  came from the probe plan and the probe columns. The shadow check of the probe and the Orca output both read it.
 
 #### capture_model and geometry
 
@@ -2152,13 +2179,13 @@ it. The reader records what the plane is (`read_reference.describe_plane`): an o
 Example. `Lift = 12 mm`. A plane is offset from the XY plane by `Lift`. A sketch on it draws a boss.
 
 - An origin plane stays. Nothing moves.
-- An offset plane: the translator finds the parameter of its distance (`sizes.offset_param`). The plane moves along its
+- An offset plane: the translator finds the parameter of its distance (`reach.offset_param`). The plane moves along its
   normal by that distance. So the sketch origin of the boss gets `z = { "expr": "Lift" }`.
 - Fusion sometimes gives an offset plane a second parameter, a fixed extra offset. The distance is followed only where
   it matches the measured plane.
 - A midplane follows its two bases. Chains of planes are followed too.
 - Any other plane built on the part (at an angle, through an edge, tangent, along a path) cannot be followed from its
-  definition. The probe then reads the plane at every row (`sizes.moving_reaches`, `extrude/reach_motion.py`, `target_shift`) and the
+  definition. The probe then reads the plane at every row (`reach.moving_reaches`, `extrude/reach_motion.py`, `target_shift`) and the
   translator writes its measured move as a formula. Only a size the probe could not follow is marked.
 
 #### A face used as an outline
@@ -2202,7 +2229,7 @@ An outline of another component's sketch follows the same rules (`design_model/b
 values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
 is written as numbers, and every size that moves that sketch is marked. A borrowed outline keeps the name of its sketch.
 That name can be the same as the name of a sketch of the part. Thus no code may find the sketch of a borrowed outline by
-its name. `sizes.placement_sizes` gives no sizes for the plane of such a sketch, and the Orca output finds no sketch
+its name. `reach.placement_sizes` gives no sizes for the plane of such a sketch, and the Orca output finds no sketch
 graph for it.
 
 ### 3.4 How a Split Body is translated

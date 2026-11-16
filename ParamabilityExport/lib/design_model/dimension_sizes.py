@@ -1,22 +1,25 @@
-"""Sketch dimensions over the sizes of an export, for the derived values (`derived`). Pure numbers and formulas.
+"""Sketch dimensions over the sizes of an export, and the size settings a sketch is tried at. Pure numbers and formulas.
 
 A dimension's model parameter (`d16`) has an expression over user parameters. `dimension_formulas` turns each into a
-formula over recipe size names, the way the translator writes formulas, so two dimensions that read one size move
+formula over recipe size names, the way the translators write formulas, so two dimensions that read one size move
 together. `override_sets` makes the size settings a sketch is solved and fitted at: each size it reads a quarter below
-and above its value, then all of them low and all of them high.
+and above its value (`near_values`), then all of them low and all of them high. `size_values` gives every size value
+at one setting, the derived sizes included. The probe's shadow check (`probe/derived.py`) and the Orca output
+(`orca_translate/sketches.py`) both read these.
 """
+from ..geometry.tolerances import SAME_SIZE
 from ..params import defaults
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.evaluation import evaluate
 from ..params.expressions.formula import parse_formula
 from ..params.expressions.units import ANGLE, LENGTH, SCALAR
-from ..params.size_table import FREE
+from ..params.size_table import DERIVED, FREE
 from ..sketch_values import expr as ex
-from . import columns as cols
-from . import plan
 
 # Sizes a sketch is moved by at most: each costs two settings in the solver.
 MAX_SIZES = 12
+# How far from its value a size is first tried, as a share of the value, below and above.
+NEAR_SHARE = 0.25
 _DIM_NAMES = {LENGTH: "length", ANGLE: "angle", SCALAR: "scalar"}
 _FUNCTIONS = {"sqrt": ex.sqrt, "sin": ex.sin, "cos": ex.cos, "tan": ex.tan}
 
@@ -87,7 +90,7 @@ def dimension_formulas(table, record):
 
 
 def moving_sizes(table, formulas):
-    """The free sizes the formulas read, as `plan.near_values` takes them, in table order, at most `MAX_SIZES`."""
+    """The free sizes the formulas read, as `near_values` takes them, in table order, at most `MAX_SIZES`."""
     reads = {name for f in formulas.values() for name in f.reads}
     out = []
     for e in table.entries:
@@ -101,7 +104,7 @@ def moving_sizes(table, formulas):
 def override_sets(sizes):
     """Size settings as `{ Fusion name: manifest number }`: each size a quarter below and above its value (one at a
     time), then every size low and every size high when there are two or more."""
-    out, near = [], {s["param"]: plan.near_values(s) for s in sizes}
+    out, near = [], {s["param"]: near_values(s) for s in sizes}
     for size in sizes:
         out.extend({size["param"]: v} for v in near[size["param"]] if v is not None)
     if len(sizes) >= 2:
@@ -112,9 +115,51 @@ def override_sets(sizes):
     return out
 
 
+def near_values(size):
+    """`(low, high)`: the value `NEAR_SHARE` of itself below and above, inside the range. A value of zero moves by that
+    share of the way to the range ends. A count is a whole number and at least one step from the value. A side that
+    cannot move off the value is None."""
+    value, lo, hi = size["value"], size["min"], size["max"]
+    step = NEAR_SHARE * abs(value)
+    sides = [value - step, value + step] if step > SAME_SIZE else [value + NEAR_SHARE * (lo - value),
+                                                                 value + NEAR_SHARE * (hi - value)]
+    out = []
+    for number, sign in zip(sides, (-1, 1)):
+        if size.get("kind") == "count":
+            number = float(round(number))
+            if abs(number - value) <= SAME_SIZE:
+                number = value + sign
+        number = min(max(number, lo), hi)
+        out.append(number if abs(number - value) > SAME_SIZE else None)
+    return tuple(out)
+
+
+def size_values(table, overrides):
+    """`(env, derived)`: size values by recipe name (free sizes with `overrides`, then the named derived ones) and the
+    value of every derived user parameter by Fusion name (None where its formula fails)."""
+    env = {e.size_name: overrides.get(e.name, e.value) for e in table.entries if e.state == FREE}
+    derived = {}
+    pending = [e for e in table.entries if e.state == DERIVED]
+    while pending:
+        later = []
+        for e in pending:
+            try:
+                derived[e.name] = evaluate(e.formula, env)
+            except ExpressionError:
+                later.append(e)
+                continue
+            if e.size_name:
+                env[e.size_name] = derived[e.name]
+        if len(later) == len(pending):
+            derived.update({e.name: None for e in later})
+            break
+        pending = later
+    return env, derived
+
+
 def size_env(table, overrides):
     """Size values by recipe name at `overrides` (Fusion name to number), the derived sizes included."""
-    return cols.size_env(table, overrides)[0]
+    return size_values(table, overrides)[0]
 
 
 def leaf_values(formulas, env):

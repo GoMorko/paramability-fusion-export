@@ -6,7 +6,7 @@ from tests.test_probe_plan import MODEL, PARAMS
 
 from lib.export_plan.probe_flow import sizes_to_try
 from lib.export_plan.probe_flow.sizes import MAX_EXTRA_SIZES, extra_sizes, kept_sizes
-from lib.translator.sizes import probed_sizes
+from lib.design_model.reach import probed_sizes
 
 
 class WhichSizesGetTriesTest(unittest.TestCase):
