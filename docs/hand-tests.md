@@ -2043,7 +2043,7 @@ read the capture in `report.json`.
 - `OffsetFacesFeature.inputFaces` with the marker just before the item: a Python list of `BRepFace` in newer Fusion
   versions (a collection in older ones). When it gives no faces, `OffsetFacesFeature.faces` with the marker after the
   item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
-  is moved back by `distance` and copied.
+  is moved back by `distance` and copied, and any curved face listed there leaves the step out.
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.

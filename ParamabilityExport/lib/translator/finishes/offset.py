@@ -7,6 +7,7 @@ need no special case. Curved faces and moves that were not measured are refused.
 """
 import math
 
+from ...capture_model import gap_hints
 from ..faces import follow
 from ...design_model.values import Quantity, number
 from ...geometry import vec
@@ -37,7 +38,7 @@ def _moved_as_read(face, distance, after):
 
 def _face_refusal(face, distance, after):
     if face.get("kind") == "other" or "loops" not in face:
-        return Refusal("Offsets of curved faces are not copied yet.")
+        return Refusal("Offsets of curved faces are not copied yet.", cause=gap_hints.OFFSET_CURVED)
     if not _moved_as_read(face, distance, after):
         return Refusal("The offset of this step could not be measured, so it is not copied.")
     return None

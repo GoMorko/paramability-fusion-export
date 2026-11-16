@@ -5,7 +5,8 @@ the outward normal as z) and whether its side walls stand square to it. After th
 left, so the translator can check which way and how far the faces moved.
 
 The moved faces come from `inputFaces` (a list in newer Fusion versions, a collection in older ones). When Fusion
-gives none before the item, they are read after it from the faces the feature made, moved back by the distance.
+gives none before the item, they are read after it from the faces the feature made: a flat face moved back by the
+distance, any other face as { kind: other, type }, so the step is not copied without it.
 """
 import math
 
@@ -93,17 +94,22 @@ def _made_faces(feature):
     return geo.collection_items(geo.safe(lambda: feature.faces, None))
 
 
+def _surface(face):
+    return geo.safe(lambda: geo.type_name(face.geometry), None)
+
+
 def offset_faces_after(feature, ctx, data):
     """faces_after: { point, normal } of each flat face the feature lists once it is computed. When the faces could not
-    be read before the item, `faces` holds the flat faces it made, moved back by the distance."""
+    be read before the item, `faces` holds the faces it made: the flat ones moved back by the distance, any other as
+    { kind: other, type }."""
     out = {}
     if data.pop("faces_from_after", False):
-        made = [f for f in _made_faces(feature)
-                if geo.safe(lambda: geo.type_name(f.geometry), None) == "Plane"]
+        made = _made_faces(feature)
         if not made:
             raise ValueError(UNREADABLE)
         inputs = [geo.native_input(f, ctx) for f in made]
-        out["faces"] = [_moved_back(_face_record(f, inputs, ctx), data["distance"]) for f in made]
+        out["faces"] = [_moved_back(_face_record(f, inputs, ctx), data["distance"]) if _surface(f) == "Plane"
+                        else {"kind": "other", "type": _surface(f) or "none"} for f in made]
     found = []
     for face in _made_faces(feature):
         face = geo.native_input(face, ctx)

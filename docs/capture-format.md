@@ -1334,8 +1334,9 @@ in all and 8 threads, and leaves other profiles, tapered threads and a thread in
 (`threadProfile` and `threadLimits` hints).
 
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
-`distance`; `faces` after it. When no face is readable before the item, `faces` holds the flat faces of
-`feature.faces` read after it, moved back by `distance`):
+`distance`; `faces` after it. When no face is readable before the item, `faces` holds the faces of `feature.faces`
+read after it: a flat face moved back by `distance`, any other face as `{ "kind": "other", "type": ... }`, so the
+translator leaves the step out instead of moving only its flat faces):
 
 ```json
 {

@@ -5,6 +5,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_sized import TRAY, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
+from lib.capture_model import gap_hints
 from lib.geometry.footprint import Footprint
 from lib.translator import translate
 from lib.translator.finishes import offset
@@ -128,6 +129,11 @@ class OffsetFacesTest(unittest.TestCase):
         result, _ = run(capture)
         assert_schema_ok(self, result.recipe)
         self.assertEqual(steps_of(result.recipe, "offsetFaces")[0]["faces"], {"featureFace": "extrude_1", "which": "end"})
+
+    def test_a_curved_face_beside_a_flat_one_leaves_the_step_out_with_its_hint(self):
+        result = translate(plate_with_offset(2.0, [top_face(), {"kind": "other", "type": "Cylinder"}]))
+        self.assertEqual(steps_of(result.recipe, "offsetFaces"), [])
+        self.assertEqual(result.gaps[0]["hint"], gap_hints.HINTS[gap_hints.OFFSET_CURVED])
 
     def test_the_faces_the_recipe_cannot_move_refuse(self):
         cases = {
