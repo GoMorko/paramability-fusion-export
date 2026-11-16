@@ -6,6 +6,7 @@ import json
 import math
 
 from ...capture_model import gap_hints
+from ...design_model import design
 from ...results import left_out as left_out_record
 from .finishing import is_finishing
 from .gap_measures import moved_measure
@@ -25,9 +26,8 @@ MAX_LOOPS = 8
 def _values(item, table):
     """`{ path, fusion, expr? }` per model parameter value of the item: the Fusion expression, and the recipe formula
     when the size table can write it."""
-    params = (item.get("data") or {}).get("params")
     out = []
-    for path, ref in (params.items() if isinstance(params, dict) else ()):
+    for path, ref in design.params_of(item).items():
         expression = ref.get("expression") if isinstance(ref, dict) else None
         if (not isinstance(expression, str) or not expression or len(expression) > MAX_EXPRESSION
                 or not str(path).strip()):
@@ -118,7 +118,8 @@ def record(gap, table, move):
     the sizes of the recipe. `hint`, what to change in Fusion so the step copies, is there only when its cause has
     one (`gap_hints`). `finishing` says the step only finishes surfaces (`finishing.is_finishing`)."""
     after, before, owner = gap.place
-    data, trimmed = trimmed_data(gap.item.get("data"))
+    read = design.as_read(gap.item).brought_data
+    data, trimmed = trimmed_data(read)
     left_out = left_out_record.left_out(gap.item, gap.reason, gap_hints.hint(gap.cause), type_limit=MAX_WORDS)
     out = {
         "id": gap.id,
@@ -142,5 +143,5 @@ def record(gap, table, move):
             out[key] = moved
     out["data"] = data
     out["trimmed"] = trimmed
-    out["finishing"] = is_finishing(gap.item.get("type"), gap.item.get("data"))
+    out["finishing"] = is_finishing(gap.item.get("type"), read)
     return out

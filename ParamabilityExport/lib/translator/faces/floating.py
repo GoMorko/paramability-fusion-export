@@ -18,6 +18,7 @@ import math
 from . import follow
 from .end_caps import EndCaps
 from ...capture_model import step_kinds
+from ...design_model import design
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from .moved_placer import MovedPlacer
@@ -496,7 +497,7 @@ def _sweep_bound(ctx, step):
     within the path's box grown by the farthest profile point from where the path starts (both ends when the profile
     plane holds neither), plus what a taper adds over the path's length."""
     item = ctx.item_of_step(step.get("id"))
-    data = (item or {}).get("data") or {}
+    data = design.as_read(item).brought_data if item is not None else {}
     points = _path_points(data.get("path"))
     if points is None or data.get("rail") or not data.get("profiles"):
         return _UNKNOWN
