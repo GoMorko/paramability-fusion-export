@@ -81,8 +81,9 @@ point or flat face a hole sits on move with the parameter, and the parameter sta
 on that component but does not move the place is not marked. A place that turns with a parameter, or moves in a way the
 tries cannot follow, marks that parameter "may give unexpected results" with the step and the other component named;
 so does a place the tries could not measure. The result is kept in `report.json` (`probe.motion.refs`). A parameter of
-a joint, or of a move that places a component, can move every other component. If the tries did not measure it, it is
-marked "may give unexpected results" for each such place.
+a joint, or of a move that places a component, can move every other component. The export tries such a parameter
+after the others, while tries are left. If the tries did not measure it, it is marked "may give unexpected results"
+for each such place, and never "nothing in this part moved with it".
 
 When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12
 unticked parameters that act on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the

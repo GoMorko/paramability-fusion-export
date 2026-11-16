@@ -12,6 +12,7 @@ from tests.probe_helpers import user
 
 from lib import orca_translate, translator
 from lib.design_model import refs
+from lib.sketch_values.motion import Affine, Motion
 
 ROD = {"token": "cRod", "name": "Rod"}
 COVER = {"token": "cCover", "name": "Cover"}
@@ -94,8 +95,8 @@ def rod_jointed_in_the_root(capture):
     return capture
 
 
-def recipe_marks(capture):
-    result = translator.translate(capture, size_table=table_of(capture))
+def recipe_marks(capture, motion=None):
+    result = translator.translate(capture, size_table=table_of(capture), motion=motion)
     found = {d["name"] for d in result.dropped if d.get("used")}
     return found | {d["name"] for d in result.loose + result.fixed}, result
 
@@ -116,6 +117,20 @@ class OutputsTest(unittest.TestCase):
         self.assertIn("rod_x", recipe_marks(capture)[0])
         result = orca_translate.translate(capture, table_of(capture))
         self.assertEqual({p["name"]: p["outcome"] for p in result.parameters}["rod_x"], "fixed")
+
+    def test_a_size_that_moves_an_occurrence_and_had_no_try_is_marked_not_measured_still(self):
+        # The tries set gap_mm only; move_x moves the occurrences of the root (so Cover too) and was never set.
+        capture = fixture("component_foreign_mirror")
+        capture["parameters"]["user"].append(acting("move_x", kind="feature", component="cRoot", feature="Move1"))
+        capture["items"].append(dict(move("Move1", "cRoot", "other"), index=5, in_target_component=False,
+                                     target_changed=False, bodies_before=[], bodies_after=[]))
+        motion = Motion(values={"4/r/plane/offset": Affine(-10.0, {"gap_mm": 1.0})}, refs={"4.plane": ""},
+                        states=[{"values": {"gap_mm": 12.0}, "built": True}],
+                        spans={"gap_mm": {"low": 10.0, "high": 12.0, "failed": []}})
+        marks, result = recipe_marks(capture, motion)
+        self.assertIn("move_x", marks)
+        self.assertNotIn("gap_mm", marks)
+        self.assertFalse(any(d.get("tried") for d in result.dropped if d["name"] == "move_x"))
 
 
 if __name__ == "__main__":

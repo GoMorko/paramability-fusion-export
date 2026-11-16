@@ -11,7 +11,8 @@ from lib.params import size_table
 from lib.probe import build
 from lib.translator import translate
 from lib.geometry import spline_fit
-from lib.translator.sketch import loops
+from lib.design_model import loops, words
+from lib.translator.sketch.loops import TEXT_OVERLAP
 
 EMBOSS = "emboss_text"
 EXTRUDE = "extrude_text"
@@ -92,13 +93,13 @@ class TextRefusalTest(unittest.TestCase):
             {"kind": "line", "start": [26.0, 0.0], "end": [26.0, 20.0]},
             {"kind": "line", "start": [26.0, 20.0], "end": [20.0, 20.0]},
             {"kind": "line", "start": [20.0, 20.0], "end": [20.0, 0.0]}]
-        self.assertEqual(reason_of(capture), loops.TEXT_TOO_BIG)
+        self.assertEqual(reason_of(capture), words.TEXT_TOO_BIG)
 
     def test_a_text_with_more_holes_than_the_cap_is_refused_as_text(self):
         capture = load_capture(EMBOSS)
         profile = step_of(capture)["data"]["profiles"][1]
         profile["loops"] += [{"outer": False, "curves": square(0.1 * n, 1.0, 0.05)} for n in range(loops.MAX_INNER_LOOPS + 1)]
-        self.assertEqual(reason_of(capture), loops.TEXT_TOO_BIG)
+        self.assertEqual(reason_of(capture), words.TEXT_TOO_BIG)
 
     def test_a_text_that_is_moved_on_its_face_is_still_refused(self):
         capture = load_capture(EMBOSS)
@@ -182,7 +183,7 @@ class TextSortTest(unittest.TestCase):
         capture = load_capture(EXTRUDE)
         step_of(capture, "ExtrudeFeature")["data"]["profiles"] = [
             {"text": True, "sketch": "Sketch2", "problem": text_outlines.OVERLAP}]
-        self.assertEqual(reason_of(capture, "ExtrudeFeature", stopped), loops.TEXT_PROBLEMS["overlap"])
+        self.assertEqual(reason_of(capture, "ExtrudeFeature", stopped), TEXT_OVERLAP)
 
     def test_two_hundred_outlines_are_sorted_fast(self):
         curves = []

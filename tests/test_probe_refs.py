@@ -218,7 +218,8 @@ class MotionFileTest(unittest.TestCase):
         self.motion = run([MIRROR, PATTERN], with_e0(
             {**plane_at(20), "9.axis": {"point": [10, 0, 0], "dir": [0, 0, 1]}},
             at({**plane_at(30), "9.axis": {"point": [10, 0, 0], "dir": [0, 0, 1]}}, height=30),
-            at({**plane_at(50), "9.axis": {"point": [10, 0, 0], "dir": [0, 0, 1]}}, height=50)))
+            at({**plane_at(50), "9.axis": {"point": [10, 0, 0], "dir": [0, 0, 1]}}, height=50),
+            at({**plane_at(20), "9.axis": {"point": [10, 0, 0], "dir": [0, 0, 1]}}, off=7)))
 
     def test_references_are_saved_and_loaded_with_their_values(self):
         again = Motion.from_json(self.motion.json())
@@ -229,13 +230,22 @@ class MotionFileTest(unittest.TestCase):
         answer = lambda key, size: coverage.ref_answer(self.table, self.motion, key, size)  # noqa: E731
         self.assertEqual((answer("8.plane", "height").kind, answer("8.plane", "height").keys),
                          (coverage.MOVED, ("8/r/plane/offset",)))
-        self.assertEqual(answer("8.plane", "cube").kind, coverage.STILL)
+        self.assertEqual(answer("8.plane", "off").kind, coverage.STILL)
         self.assertEqual(answer("9.axis", "height").kind, coverage.STILL)
         self.assertEqual(answer("7.plane", "height").reason, coverage.NOT_LOOKED)
         self.motion.refs["9.axis"] = "its first read did not match the capture"
         self.assertEqual(answer("9.axis", "height").kind, coverage.NOT_MEASURED)
-        self.motion.untried = ["cube"]
-        self.assertEqual(answer("8.plane", "cube").reason, coverage.NOT_TRIED)
+        self.motion.untried = ["off"]
+        self.assertEqual(answer("8.plane", "off").reason, coverage.NOT_TRIED)
+
+    def test_a_size_no_try_set_is_not_measured_rather_than_still(self):
+        # No state set "cube", so nothing is known about what it does to the plane.
+        answer = coverage.ref_answer(self.table, self.motion, "8.plane", "cube")
+        self.assertEqual((answer.kind, answer.reason), (coverage.NOT_MEASURED, coverage.NOT_TRIED))
+
+    def test_a_motion_without_states_keeps_its_values_as_the_answer(self):
+        self.motion.states = []
+        self.assertEqual(coverage.ref_answer(self.table, self.motion, "8.plane", "cube").kind, coverage.STILL)
 
 
 if __name__ == "__main__":

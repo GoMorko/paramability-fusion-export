@@ -13,7 +13,7 @@ written steps read (`used_sizes`).
 """
 from ..design_model.reach import STATIC_KINDS, placed_offsets, reasons, sketch_sizes, text_sizes
 from ..params.expressions.formula import tokenize_formula
-from ..sketch_values.coverage import MOVED, NOT_MEASURED, NOT_TRIED, STILL, Answer
+from ..sketch_values.coverage import MOVED, NOT_MEASURED, NOT_TRIED, STILL, Answer, tried
 from ..sketch_values.motion import Affine, Stuck, Terms
 
 
@@ -73,7 +73,7 @@ def sketch_answer(table, motion, sketch, size):
     reason = getattr(motion, "unmeasured", {}).get(sketch)
     if reason:
         return Answer(NOT_MEASURED, reason=reason)
-    if size in getattr(motion, "untried", ()):
+    if size in getattr(motion, "untried", ()) or not tried(motion, size):
         return Answer(NOT_MEASURED, reason=NOT_TRIED)
     moved = [key for key, value in motion.values.items()
              if getattr(value, "sketch", "") == sketch and size in _driven(table, value)]

@@ -12,6 +12,10 @@ measured, or is not used by a step the probe looks at.
 
 A measured reference (a plane, axis or point of another component that a step uses) has the same three answers
 (`ref_answer`): `Motion.refs` lists every reference the probe looked at, with the reason when it could not measure it.
+
+A size the probe never set to another value tells nothing about what it moves, so its answer is `NOT_MEASURED`
+(`tried`), never `STILL`. This holds for a size the probe tries only on a guess, such as one of a joint or of a move
+that places a component, when no row was left for it.
 """
 from . import keys
 from .motion import Affine, Stuck, Terms
@@ -96,6 +100,16 @@ def _driven(table, value):
     return out
 
 
+def tried(motion, size):
+    """False when the motion records the probe's tries (`states`, each with the sizes it set to other values) and none
+    of them set the size `size` (a Fusion name): nothing about the size was measured. True for a motion without states
+    (written by hand, or by an add-in that kept no states), which cannot tell."""
+    states = getattr(motion, "states", None)
+    if not states:
+        return True
+    return any(size in (state.get("values") or {}) for state in states)
+
+
 def ref_answer(table, motion, ref_key, size):
     """What the motion file says about size `size` (a Fusion name of a size that acts on the component owning the
     reference) and the measured reference `ref_key` (`<item>.<slot>`): an `Answer` of `STILL`, `MOVED` (with the keys
@@ -105,7 +119,7 @@ def ref_answer(table, motion, ref_key, size):
         return Answer(NOT_MEASURED, reason=NOT_LOOKED)
     if refs[ref_key]:
         return Answer(NOT_MEASURED, reason=refs[ref_key])
-    if size in getattr(motion, "untried", ()):
+    if size in getattr(motion, "untried", ()) or not tried(motion, size):
         return Answer(NOT_MEASURED, reason=NOT_TRIED)
     item, _, slot = ref_key.partition(".")
     prefix = keys.reference(item, slot) + "/"

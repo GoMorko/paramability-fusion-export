@@ -10,8 +10,8 @@ parameters the steps use as a pattern quantity; the user parameters behind them 
 `ranges` (min and max per size from the dialog, instead of the default range; a range equal to the default is not
 typed, `typed_ends`) and `links` (the parameters that may reach a sketch through the geometry of another component,
 `params.geometry_links`; a ticked one counts as a size that sketch reads). `with_narrowed` gives a table whose
-ranges stop where the design was seen not to rebuild (`kept_ranges.built_ranges`, a `Cut` each); such a range still
-counts as not typed.
+ranges stop where the design was seen not to rebuild (`design_model.tried_ranges.built_ranges`, a `Cut` each); such a
+range still counts as not typed.
 
 The table holds, per parameter, one entry whose `state` is:
 

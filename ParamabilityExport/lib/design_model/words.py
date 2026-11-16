@@ -131,6 +131,33 @@ VOLUME_UNMEASURED = "The change this extrude makes to the part could not be meas
 VOLUME_DIFFERS = "The result of this extrude does not match the outlines it was drawn with, so it is not copied."
 END_DIFFERS = "The measured end of this extrude does not match its length, so it is not copied."
 
+# Outlines that cannot be written as loops (`loops.py`). `%s` is `outline_in(sketch)`.
+OUTLINE_NO_CURVES = "%s has no curves."
+OUTLINE_UNREAD_CURVE = "%s has a curve that could not be read closely enough to copy."
+OUTLINE_OPEN = "%s is not closed."
+OUTLINE_FLAT = "%s has no area."
+OUTLINE_COMPLEX_CURVE = "%s has a curve that is too complex to copy closely enough."
+OUTLINE_TOO_MANY_POINTS = "%s has too many points."
+OUTLINE_UNPLACED = "%s could not be placed on its plane with certainty, so it is not copied."
+OUTLINE_NOT_ONE_OUTER = "%s does not have exactly one outer loop."
+OUTLINE_TOO_MANY_HOLES = "%s has too many holes."
+OUTLINE_UNREAD = "An outline of this step could not be read from Fusion, so it is not copied."
+OUTLINE_FACE = "A flat face used as a sketch outline is not copied."
+TEXT_TOO_BIG = "This text has too many outline points to copy."
+# Why a sketch text record without outlines (its `problem`) is not copied.
+TEXT_PROBLEMS = {
+    "too_many": TEXT_TOO_BIG,
+    "open": "The outlines of this text could not be closed, so it is not copied.",
+    "overlap": "This text has overlapping outlines, so it is not copied.",
+    "space": "The place of this text on its sketch could not be told with certainty, so it is not copied.",
+    "unread": "The outlines of this text could not be read from Fusion, so it is not copied.",
+}
+
+
+def outline_in(sketch):
+    return "An outline in %s" % sketch if sketch else "An outline"
+
+
 # Holes and threads.
 HOLE_UNREAD = "This hole has no readable position or size."
 HOLE_KIND = "This kind of hole is not copied."

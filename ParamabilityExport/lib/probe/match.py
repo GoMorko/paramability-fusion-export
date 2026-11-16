@@ -1,23 +1,23 @@
 """Turn a sketch state read in Fusion into the numbers the translator writes, keyed as in the motion file.
 
 A state profile is matched to the capture profile by the sketch entity tokens of its curves, mapped into the sketch
-frame of the capture, and run through the translator's own `profile_loops`, so a value here is the value the
-translator writes. Pieces of one sketch curve are paired by their place along the loop, so a loop that moved further
-than its pieces are apart still pairs each piece with its own. A state that cannot be turned into the same outline is
-a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
+frame of the capture, and run through the loop writer the translator writes with (`design_model.loops.profile_loops`),
+so a value here is the value the translator writes. Pieces of one sketch curve are paired by their place along the
+loop, so a loop that moved further than its pieces are apart still pairs each piece with its own. A state that cannot
+be turned into the same outline is a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
 
 A flat face used as an outline is read the same way, from its edges (`read["faces"]`): edges carry no sketch token,
 so its curves pair by kind and by their place along the loop.
 """
 import math
 
+from ..design_model.loops import profile_loops
 from ..design_model.paths.curves import swept_degrees
+from ..design_model.problem import is_problem
 from ..geometry import vec
 from ..geometry.tolerances import POINT_TOLERANCE_MM
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
-from ..translator.result import Refusal
-from ..translator.sketch.loops import profile_loops
 
 TURN_TOLERANCE = 1e-6
 ANGLE_TOLERANCE = 1e-6
@@ -348,7 +348,7 @@ def _state_face_values(target, read):
         return None, SHAPE
     mapped = _profile_loops({"loops": arranged[0]}, target["sketch"])
     base = _profile_loops(target["profile"], target["sketch"])
-    if isinstance(mapped, Refusal) or isinstance(base, Refusal):
+    if is_problem(mapped) or is_problem(base):
         return None, SHAPE
     got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
     if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
@@ -440,7 +440,7 @@ def _state_profile_values(target, read, e0=None):
         return None, SHAPE
     mapped = _profile_loops({"loops": best[0]}, target["sketch"])
     base = _profile_loops(profile, target["sketch"])
-    if isinstance(mapped, Refusal) or isinstance(base, Refusal):
+    if is_problem(mapped) or is_problem(base):
         return None, SHAPE
     got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
     if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):

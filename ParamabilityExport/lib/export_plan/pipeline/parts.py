@@ -22,7 +22,7 @@ from ...params import size_table as size_tables
 from ...params.listing import list_parameters
 from ...sketch_values.motion import OPTIMISTIC
 from ...timing.export_timing import ExportTiming
-from ...translator.ranges.kept_ranges import built_ranges
+from ...design_model.tried_ranges import built_ranges
 from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
 from ..part_names import tagged, unique_names

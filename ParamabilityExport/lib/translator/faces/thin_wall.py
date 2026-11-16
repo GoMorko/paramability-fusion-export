@@ -16,10 +16,9 @@ has rounded corners and says so in a note.
 import math
 
 from ...capture_model import gap_hints
-from ...geometry.footprint import arc_span, curve_length, is_full, polyline
+from ...geometry.footprint import arc_span, closed_chain, curve_length, is_full, polyline
 from ...package.numbers import is_number
 from ..result import Refusal
-from ..sketch import loops
 from .placer import ADD, CUT, Placer
 from .slabs import Slab
 
@@ -112,7 +111,7 @@ def shape_of(curves):
         return curve_length(curves[0]), 2.0 * math.pi, []
     if any(c["kind"] not in ("line", "arc") for c in curves):
         return None
-    chain = loops.closed_chain(curves)
+    chain = closed_chain(curves)
     if chain is None:
         return None
     orient = 1.0 if _signed_area(chain) > 0 else -1.0
