@@ -117,9 +117,9 @@ class TrayTest(unittest.TestCase):
         self.assertNotIn("turn_deg", result.recipe.get("sizes", {}))
         self.assertTrue(any("turn_deg" in note for note in result.notes))
 
-    def test_without_a_table_values_stay_numbers(self):
+    def test_without_a_table_values_stay_numbers_and_the_marker_stays(self):
         recipe = translate(on_tray()).recipe
-        self.assertEqual((recipe["version"], "sizes" in recipe, "sizesAsWritten" in recipe), (12, False, False))
+        self.assertEqual((recipe["version"], "sizes" in recipe, "sizesAsWritten" in recipe), (12, False, True))
         self.assertEqual(steps_of(recipe, "extrude")[0]["distance"], 32)
 
     def test_a_size_that_moves_a_sketch_stays_free_with_a_warning_and_the_sketch_value_is_its_number(self):

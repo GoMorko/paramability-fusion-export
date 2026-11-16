@@ -1885,9 +1885,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). It always carries `sizesAsWritten: true`; with a size table it also carries `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
-  Without a table the recipe has no `sizes`, and no marker.
+  Without a table the recipe has no `sizes`.
 
 ### Sketch values that follow sizes (`lib/translator/sketch/sketch_motion.py`)
 

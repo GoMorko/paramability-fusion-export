@@ -1352,7 +1352,14 @@ comments "Box width" and "Inner width".
 
 `sizes` holds the free sizes that a written formula reads, the derived sizes those formulas read, and the sizes only
 gaps read. `sizesAsWritten: true` tells the app to keep the sizes as written and not to look for more sizes in the
-numbers. The recipe format is published by the Paramability app as JSON schemas (copies are in `tests/schema/`).
+numbers. The marker is in every recipe, also in one that has no `sizes` (`translate()` writes it for a recipe with a
+size table and for one without). Version 12 of the format brought the marker, so it does not raise the version. The
+app also reads the marker as "an add-in wrote this recipe": it then builds the lofts as the recipe says and does not
+change them to make them build. So a recipe with no `sizes` needs the marker too. In an export from the add-in the
+size table always exists, so the file was already marked; the translation for the stop warning has no table and is
+not written to a file.
+
+The recipe format is published by the Paramability app as JSON schemas (copies are in `tests/schema/`).
 
 #### gaps.json
 
