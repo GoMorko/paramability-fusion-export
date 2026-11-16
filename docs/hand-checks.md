@@ -392,7 +392,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     of bodies, pick body 1). Make this a copy of the design. In a second copy do the same but start from a sketch
     on a plane at Z 5 mm (Offset Plane) with the same square, so the sketch starts inside body 1.
     Export: Export for Paramability of body 1 in each copy, with no parameters ticked. In `report.json` read the
-    item of the extrude: the extent of the extrude in `data` (it reads as through all or all), `data.end_offset` (the distance from the
+    item of the extrude: `data.side_one.kind` (it reads `throughAll` or `all`), `data.end_offset` (the distance from the
     sketch plane to the measured end face), `data.end_area`, `data.end_normal` and `data.target_box_before`. Send
     back those fields. In Fusion measure (Inspect > Measure) the top of body 1 after the step and write down its
     Z height: 10 mm means the extrude ends at the far side of the target body; 30 mm means it ends at the far
