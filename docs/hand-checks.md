@@ -451,6 +451,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). The second is copied as a
     turn of 120 degrees (Fusion's angle is the turn to each side) with `Sweep` a fixed number; the volume equals
     Fusion's (7853.98 mm3). The third is a closed ring (23561.94 mm3).
+    Then measure how loose Fusion's boxes are: in the text commands window run a script that prints
+    `boundingBox` of the body and of each face of the first revolve, and compare it with the shape (the body is 0 to
+    40, -8 to 20, 0 to 10; the quarter round face is x 10 to 15, y -8 to 0, z 2 to 10). Expect each side to be within
+    0.5 mm plus 2 percent of the largest side of the box (`BOX_LOOSE_MM`, `BOX_LOOSE_SHARE` in
+    `design_model/steps/revolve.py`). If a box is looser, raise those numbers.
 
 43. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
     high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular

@@ -118,7 +118,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   distance from a face or plane when Fusion gives no start face that shows which way and the end of the extrude does
   not show it either, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
-  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join
+  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join with one side whose stored direction points
+  away from where the part grew, a join
   up to a curved face when Fusion gives no end face and the part after it does not lie wholly on one side of where
   the extrude starts, a quarter turn revolve joined to the part when its ends do not show the way and the material it
   added lies inside the box of the part before it, a cut whose measured end lies short of its side when

@@ -45,6 +45,16 @@ class JoinTurnTest(unittest.TestCase):
         self.assertIsNone(sense(join(made)))
         self.assertEqual(sense(join(made), (BEFORE, after)), -1.0)
 
+    def test_a_box_a_little_looser_than_the_shape_rules_out_no_turn(self):
+        # Fusion's boxes of curved faces and bodies may stand out of the shape. Boxes 0.3 mm loose still give the
+        # turn to -y; the turn to +y stays ruled out, as its box misses the 8 mm the part grew toward -y.
+        made = box((-0.3, -8.3, 1.7), (40.3, 20.3, 10.3))
+        after = box((-0.3, -8.3, -0.3), (40.3, 20.3, 10.3))
+        self.assertEqual(sense(join(made), (BEFORE, after)), -1.0)
+        # A part that grew by less than a loose box may stand out shows no turn.
+        small = box((0, -0.4, 0), (40, 20, 10))
+        self.assertIsNone(sense(join(small), (BEFORE, small)))
+
     def test_a_join_inside_the_part_does_not_tell_the_turn(self):
         inside = box((0, 0, 0), (40, 20, 10))
         self.assertIsNone(sense(join(inside), (box((0, -10, 0), (40, 30, 10)), box((0, -10, 0), (40, 30, 10)))))

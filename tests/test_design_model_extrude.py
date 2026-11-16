@@ -278,6 +278,9 @@ class OneSideTest(unittest.TestCase):
             # The face lies above the sketch but the body only below it.
             (one(curved_at([0.0, 0.0, 6.0]), operation="join"), below, dm.WAY_UNSURE),
             (one(distance(5.0), end_offset=-3.0, operation="join", **wall), (None, None), dm.WAY_UNSURE),
+            # A join whose end cap merged: the stored direction must agree with the body it grew.
+            (one(distance(-5.0), operation="join"), below, (dm.DISTANCE, -1)),
+            (one(distance(5.0), operation="join"), below, dm.WAY_UNSURE),
         ]
         for data, bodies, expected in cases:
             with self.subTest(data=data, bodies=bodies):

@@ -580,7 +580,8 @@ def read_sides(data, frame, shift=0.0, faces=False, bodies=(None, None)):
 
     `bodies` holds the measures of the body before and after the step (`bodies_of`, `joined_side`). Where the
     measured end face does not show the direction of one side (a join merges its end cap into the part, or Fusion
-    measured a face that is no end cap), the body the extrude joined may show it."""
+    measured a face that is no end cap), the body the extrude joined may show it. When it shows a direction, the
+    direction of one side must agree with it, else the direction is a Problem (WAY_UNSURE)."""
     extent = data.get("extent_type", "one")
     if extent not in ("one", "two", "symmetric"):
         return problem(EXTENT_KIND)
@@ -666,5 +667,9 @@ def read_sides(data, frame, shift=0.0, faces=False, bodies=(None, None)):
     sign = _one_way(plan)
     if sign is None:
         return problem(UNREADABLE, "side_one")
+    if joined is not None and joined != sign:
+        # The stored direction, a face or the measured end says one way and the body the join grew the other: one
+        # of them is not what Fusion made.
+        return problem(WAY_UNSURE, "side_one")
     plan.sign = sign
     return [plan]
