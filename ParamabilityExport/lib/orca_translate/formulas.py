@@ -12,6 +12,7 @@ import re
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.evaluation import evaluate
 from ..params.expressions.formula import parse_formula
+from ..params.expressions.text import format_number
 from ..params.expressions.writing import render
 
 # Names Orca reads as a constant or a function, so a variable may not take them.
@@ -25,6 +26,18 @@ _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 class OrcaFormulaError(ValueError):
     """An app formula that has no Orca form; the message is one plain sentence."""
+
+
+def orca_number(value):
+    """The text of a number as Orca reads it in a formula or a variable: digits with at most one point and 9
+    decimals, a minus in front when below zero, never an exponent. Orca's reader (`eval_expr` in CadDocument.cpp)
+    takes a number as a run of digits and points only, so "1e-05" would read as 1 followed by a name `e`. Every
+    number the Orca copy writes as text, or tests as a variable value, goes through here. Raises OrcaFormulaError
+    for a number that is not finite."""
+    value = float(value)
+    if not math.isfinite(value):
+        raise OrcaFormulaError("It holds a number that is not finite.")
+    return format_number(value)
 
 
 def variable_names(size_names):
@@ -105,7 +118,7 @@ def to_orca(formula, names):
         tree = parse_formula(formula)
     except ExpressionError as exc:
         raise OrcaFormulaError(str(exc))
-    return render(_orca_tree(tree, rename))
+    return render(_orca_tree(tree, rename), orca_number)
 
 
 def orca_value(text, env):

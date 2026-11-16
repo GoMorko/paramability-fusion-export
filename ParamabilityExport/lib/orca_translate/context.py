@@ -9,9 +9,8 @@ import re
 from ..design_model import design, reach, tool_chains, words
 from ..design_model.values import Quantity
 from ..orca_recipe.enums import BooleanMode, FeatureType
-from ..params.expressions.text import format_number
 from ..params.size_table import DERIVED, FREE
-from .formulas import OrcaFormulaError, to_orca, variable_names
+from .formulas import OrcaFormulaError, orca_number, to_orca, variable_names
 from .solid import Solid
 
 
@@ -100,7 +99,10 @@ class Context:
             done = []
             for size, e in pending.items():
                 if e.state == FREE:
-                    out[size] = format_number(e.value)
+                    try:
+                        out[size] = orca_number(e.value)
+                    except OrcaFormulaError:
+                        out[size] = None
                 elif e.state != DERIVED:
                     out[size] = None
                 else:

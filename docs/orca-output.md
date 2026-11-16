@@ -656,7 +656,11 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   these sketches through the geometry of another component (`reach.step_sizes`).
 - Variable names are the recipe size names, except a name Orca keeps for itself (`pi`, `sqrt`, `abs`, `sin`, `cos`,
   `tan`, `min`, `max`, `deg`, `rad`), which gets `_v`. Orca names are a letter or `_` followed by letters, digits and
-  `_`, as the size names already are. Numbers are written without an exponent.
+  `_`, as the size names already are. Numbers are written without an exponent (`formulas.orca_number`: digits,
+  one point, at most 9 decimals, a minus in front): Orca's reader (`eval_expr` in `CadDocument.cpp`) takes a
+  number as a run of digits and points only, so `1e-05` would read as 1 and a name `e`. The same helper writes
+  the value of a free variable, every number of a bound formula, and each value the limit search tests, so the
+  search walks a shape size down to where it really reaches zero.
 
 ### Outlines built from plane cuts
 
