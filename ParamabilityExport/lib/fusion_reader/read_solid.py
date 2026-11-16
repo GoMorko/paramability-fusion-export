@@ -13,7 +13,7 @@ from . import read_intersect
 from .param_refs import Params, with_params
 from .placement import foreign_target_ref, from_assembly, ref_record
 from .read_bodies import tool_ref
-from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
+from .read_sketch import first_profile, profile_area, read_outlines, read_profiles, sketch_reference
 from .read_thread import thread_info
 
 _OPERATIONS = [
@@ -407,9 +407,11 @@ def _sketch_points(feature, ctx):
     return [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
 
 
-def _hole_sketch(points):
-    """`sketch_token`, `sketch` and `point_tokens` (one per position) of the sketch points of a hole. Points on several
-    sketches give only the first sketch's token: the hole then cannot be followed and keeps that sketch fixed."""
+def _hole_sketch(points, ctx):
+    """`sketch_token`, `sketch` and `point_tokens` (one per position) of the sketch points of a hole, the frame of
+    that sketch (`sketch_frame`, as a profile's `frame`) and what it sits on (`reference`, as a profile's
+    `reference`). Points on several sketches give only the first sketch's token: the hole then cannot be followed and
+    keeps that sketch fixed."""
     if not points:
         return {}
     sketches = [geo.safe(lambda: p.parentSketch, None) for p in points]
@@ -420,9 +422,15 @@ def _hole_sketch(points):
         name = geo.safe(lambda: sketches[0].name, "")
         if name:
             found["sketch"] = name
+        reference = geo.safe(lambda: sketch_reference(sketches[0], ctx), None)
+        if reference is not None:
+            found["reference"] = reference
     point_tokens = [geo.safe(lambda: p.entityToken, "") or "" for p in points]
     if found and all(point_tokens) and len(set(tokens)) == 1:
         found["point_tokens"] = point_tokens
+        frame = geo.safe(lambda: geo.frame_of(sketches[0].transform), None)
+        if frame is not None:
+            found["sketch_frame"] = frame
     return found
 
 
@@ -476,7 +484,8 @@ def hole_place(feature, ctx):
         return dict({"positions": [geo.point(feature.position)]}, **geo.safe(lambda: _foreign_place(feature, ctx), {}))
     if any(geo.foreign(p, ctx) for p in points):
         return _foreign_sketch_points(points, ctx)
-    return dict({"positions": [geo.point(p.worldGeometry) for p in points]}, **geo.safe(lambda: _hole_sketch(points), {}))
+    return dict({"positions": [geo.point(p.worldGeometry) for p in points]},
+                **geo.safe(lambda: _hole_sketch(points, ctx), {}))
 
 
 def _hole_extent(feature, ctx):

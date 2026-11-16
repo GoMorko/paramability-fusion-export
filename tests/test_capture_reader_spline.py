@@ -4,6 +4,7 @@ import time
 import unittest
 
 from tests import context  # noqa: F401
+from tests.orca_sweeps import nurbs_point
 from tests.test_capture_reader import CM, Coll, Obj, P, line, matrix, profile_of, rect_profile
 
 from lib.fusion_reader import read_sketch
@@ -39,6 +40,18 @@ def read_curves(geometries, sketch=None):
 def chord_error(samples, radius=10.0):
     """Largest gap between the middle of a sample span and the circle the samples lie on."""
     return max(abs(math.hypot((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0) - radius) for a, b in zip(samples, samples[1:]))
+
+
+# A cubic spline of two pieces with uneven knots, as Fusion fits one through three points.
+WAVE = {"degree": 3, "knots": [0, 0, 0, 0, 0.4, 1, 1, 1, 1],
+        "poles": [(0.0, 0.0), (5.0, 8.0), (15.0, 9.0), (25.0, -4.0), (30.0, 0.0)]}
+
+
+def nurbs_curve(spec=WAVE, rational=False, weights=(), periodic=False, ok=True):
+    knots, poles = spec["knots"], spec["poles"]
+    trace = lambda t: nurbs_point(spec["degree"], knots, poles, t)  # noqa: E731
+    return curve_on(trace, extents=(knots[0], knots[-1]), getData=lambda: (
+        ok, [P(*p) for p in poles], spec["degree"], list(knots), rational, list(weights), periodic))
 
 
 class FreeCurveTest(unittest.TestCase):
@@ -232,3 +245,27 @@ class TextOutlinesTest(unittest.TestCase):
         self.assertEqual(len(profiles), 3)
         self.assertEqual(areas, [None, 100.0, 25.0])
         self.assertEqual(len(read_sketch.read_profiles(raw)), 3)
+
+
+class NurbsTest(unittest.TestCase):
+    def test_a_spline_keeps_its_exact_definition_in_sketch_millimetres(self):
+        got = read_curves([nurbs_curve()])[0]["nurbs"]
+        self.assertEqual((got["degree"], got["knots"], got["rational"], got["weights"], got["periodic"]),
+                         (3, [0, 0, 0, 0, 0.4, 1, 1, 1, 1], False, None, False))
+        for pole, want in zip(got["poles"], WAVE["poles"]):
+            self.assertAlmostEqual(pole[0], want[0], places=6)
+            self.assertAlmostEqual(pole[1], want[1], places=6)
+
+    def test_weights_are_kept_only_for_a_rational_spline(self):
+        got = read_curves([nurbs_curve(rational=True, weights=(1, 2, 1, 1, 1))])[0]["nurbs"]
+        self.assertEqual((got["rational"], got["weights"]), (True, [1.0, 2.0, 1.0, 1.0, 1.0]))
+
+    def test_a_definition_fusion_does_not_give_leaves_the_samples_only(self):
+        for curve in (nurbs_curve(ok=False), curve_on(half_circle), curve_on(half_circle, kind="EllipticalArc3D")):
+            got = read_curves([curve])[0]
+            self.assertNotIn("nurbs", got)
+            self.assertTrue(got["samples"])
+
+
+if __name__ == "__main__":
+    unittest.main()

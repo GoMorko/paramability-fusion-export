@@ -595,6 +595,13 @@ spline segment has no tangent field, so they are for checks only. A curve that c
 The translator fits the app's spline through points chosen from the samples (`lib/translator/sketch/spline_fit.py`, tolerance
 0.005 mm between the points, also where the curve runs between two samples, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
 
+A `NurbsCurve3D` also carries its exact definition from `NurbsCurve3D.getData` (`read_sketch._nurbs`), when Fusion
+gives it and the curve has at most 1000 poles: `"nurbs": { "degree", "knots": [..], "poles": [[x, y], ...],
+"rational", "weights", "periodic" }`, the poles in sketch 2D mm like the other points, `knots` the full knot vector
+(poles plus degree plus one) and `weights` null unless `rational`. The recipe translator does not read it; the Orca
+copy (`lib/orca_translate/splines.py`) draws the curve from it exactly, piece by piece, after checking the pieces
+against `samples`.
+
 ## 5. Feature data
 
 **ExtrudeFeature** (`operation`, `profile`, `extentType`, `hasTwoExtents`, `extentOne`, `extentTwo`,
@@ -748,7 +755,11 @@ The translator fits the app's spline through points chosen from the samples (`li
   members of the position definition) is marked `foreign` and carries `position_refs` too.
 - `sketch_token`, `sketch` (optional): token and name of the sketch of the first sketch point.
   `point_tokens` (optional): `entityToken` of each sketch point, same order as `positions`; absent when a token is
-  missing or the points sit on more than one sketch.
+  missing or the points sit on more than one sketch. `sketch_frame` (optional, with `point_tokens` only): the frame of
+  that sketch (`Sketch.transform`, the keys of a profile's `frame`), so a point's sketch coordinates can be told from
+  its position; absent when it cannot be read. The Orca output uses it to let hole centres follow sizes.
+  `reference` (optional): what that sketch sits on, the same record as a profile's `reference`
+  (`Sketch.referencePlane`); absent when Fusion does not give it. The Orca output marks the sizes that may move it.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity", ... }` with the record of the face or body the hole goes up to (`entity_type`, `plane`, `face_point`,
   `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an

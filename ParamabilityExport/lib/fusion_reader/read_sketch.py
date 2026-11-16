@@ -296,7 +296,34 @@ def _read_free_curve(geometry, name, space):
                 record[key] = direction
     if truncated:
         record["truncated"] = True
+    nurbs = _nurbs(geometry, space)
+    if nurbs is not None:
+        record["nurbs"] = nurbs
     return record
+
+
+MAX_NURBS_POLES = 1000
+
+
+def _nurbs(geometry, space):
+    """The exact definition of a NURBS curve (`NurbsCurve3D.getData`): `degree`, the full knot vector `knots`, the
+    `poles` in sketch 2D mm, `rational`, `weights` (null when not rational) and `periodic`. None for another kind of
+    curve, when Fusion does not give it, or past `MAX_NURBS_POLES` poles."""
+    if geo.type_name(geometry) != "NurbsCurve3D":
+        return None
+    found = geo.safe(lambda: geometry.getData(), None)
+    if not isinstance(found, (list, tuple)) or len(found) != 7 or not found[0]:
+        return None
+    _, poles, degree, knots, rational, weights, periodic = found
+    try:
+        poles = list(poles)
+        if not poles or len(poles) > MAX_NURBS_POLES:
+            return None
+        return {"degree": int(degree), "knots": [float(k) for k in knots], "poles": [space.xy(p) for p in poles],
+                "rational": bool(rational), "weights": [float(w) for w in weights] if rational else None,
+                "periodic": bool(periodic)}
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 MAX_DEPENDENCY_NAMES = 256
