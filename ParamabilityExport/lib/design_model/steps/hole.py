@@ -154,28 +154,35 @@ def _exit_depth(cylinders, position, unit):
     return far
 
 
-def through_ends(data, unit):
-    """The points where the bores of a tapped hole through all leave the part, one per position, or a Problem.
-
-    Each is the farthest end, along the hole's direction `unit`, of the measured side cylinders on that hole's axis
-    line (`side_cylinders` with their `span`). Fusion's end faces do not say it: a hole through all has no bottom, and
-    Fusion lists the faces of a modeled thread among them. The faces of the modeled thread (`made_span`, depths below
-    the first position) must be measured and must reach as deep as the deepest bore when the thread runs the whole
-    hole, within a pitch and half a millimetre."""
-    positions = data["positions"]
+def bore_exits(data, unit):
+    """The points where the bores of a hole leave the part, one per position, or None when a position has no measured
+    cylinder with a span on its axis line. Each is the farthest end, along the hole's direction `unit`, of the
+    measured side cylinders on that hole's axis line (`side_cylinders` with their `span`). Fusion's end faces do not
+    say it: a hole through all has no bottom, and Fusion lists the faces of a modeled thread among them."""
     cylinders = [c for c in data.get("side_cylinders") or [] if isinstance(c, dict)]
-    depths = [_exit_depth(cylinders, p, unit) for p in positions]
+    depths = [_exit_depth(cylinders, p, unit) for p in data["positions"]]
     if any(d is None or d <= DEPTH_TOL for d in depths):
+        return None
+    return [vec.add(list(p), vec.scale(unit, d)) for p, d in zip(data["positions"], depths)]
+
+
+def through_ends(data, unit):
+    """The points where the bores of a tapped hole through all leave the part, one per position (`bore_exits`), or a
+    Problem. The faces of the modeled thread (`made_span`, depths below the first position) must be measured and must
+    reach as deep as the deepest bore when the thread runs the whole hole, within a pitch and half a millimetre."""
+    positions = data["positions"]
+    ends = bore_exits(data, unit)
+    if ends is None:
         return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD, gap_hints.THREAD_HOLE)
     info = data.get("thread") or {}
     made = info.get("made_span")
     if data.get("thread_modeled"):
         if not (isinstance(made, (list, tuple)) and len(made) == 2):
             return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD, gap_hints.THREAD_HOLE)
-        deepest = max(vec.dot(vec.sub(list(p), list(positions[0])), unit) + d for p, d in zip(positions, depths))
+        deepest = max(vec.dot(vec.sub(e, list(positions[0])), unit) for e in ends)
         if info.get("full_length") is True and abs(made[1] - deepest) > float(info.get("pitch") or 0.0) + 0.5:
             return Problem("threadSpan", words.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE)
-    return [vec.add(list(p), vec.scale(unit, d)) for p, d in zip(positions, depths)]
+    return ends
 
 
 def size_differs(data, count, diameter):

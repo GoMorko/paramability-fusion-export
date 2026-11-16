@@ -288,7 +288,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
   that point from the wall of the hole, so an export made with an earlier version leaves such a hole out: export
   again. The thread is left out, with the tip to make it cosmetic, when the thread Fusion made does not reach that
-  point (for example a hole through two walls with a thread in one wall only). The Orca copy starts the thread of a
+  point (for example a hole through two walls with a thread in one wall only). The thread length follows the sizes
+  only in a plain part that is equally thick wherever the hole can go; in any other part (a boss or a step near the
+  hole) it keeps its length, and the sizes that could move the hole or the part around it are marked "may give
+  unexpected results". The Orca copy starts the thread of a
   counterbore hole at the counterbore floor and keeps that start as a number, so a size that changes the counterbore
   depth is followed only in part there; it leaves a tapped hole with a countersink and a modeled thread out.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or

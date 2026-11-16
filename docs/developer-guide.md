@@ -3620,8 +3620,27 @@ the bore comes out of the part. Then it does these checks:
   mm. Else the hole is left out (cause `threadHole`). Thus a hole through two walls with a thread in one wall only
   gives a gap, not a thread through both walls.
 
-The recipe output and the Orca output both use `through_ends`. The recipe output then makes the exit points follow the
-sizes that move the face where the hole comes out.
+The recipe output and the Orca output both use `through_ends`.
+
+The exit is right only at the sizes of the export. When a size moves the hole, or changes the part around the hole, the
+bore can come out at a different face. Example: a plate 5 mm thick has a boss 10 mm high next to the hole. A size moves
+the hole under the boss. Then the bore goes through 15 mm of material, and Fusion makes a thread 15 mm long. A thread
+length that follows only the plate thickness stays 5 mm. This is a wrong copy.
+
+Thus the thread length follows the sizes only in a plain part that is equally thick wherever the holes can go
+(`edges.even_sizes`, see the module text of `design_model/edges.py`). In such a part, every extrude spans the same two
+planes, and each hole goes in at one plane and comes out at the other. `even_sizes` finds where each hole comes out
+from the measured bore (`hole.bore_exits`). Then:
+
+- In a plain part, the recipe output makes the exit points follow the sizes that move the face where the hole comes
+  out (`hole/thread.py`, `_through_lengths`). The Orca output writes the length as a number and marks only the sizes
+  of the extrude lengths and sketch planes.
+- In every other part, both outputs write the length as a number. They mark every size that a step before the hole
+  reads (`reach.hole_end_sizes`), also the sizes of the hole's own sketch, with a reason. The recipe output marks the
+  sizes only for a thread over the full length; a thread over part of the hole has its own length.
+
+The probe does not measure the thread at the sizes it tries. A later change can let the probe read the bore exit at
+each try and keep the formula where the readings agree.
 
 The measured bore must also be at the minor diameter of the thread (`hole_spec`). Fusion can keep the "Modeled" flag on
 and still make no thread, so that the bore stays at the full size. Such a hole is left out.
