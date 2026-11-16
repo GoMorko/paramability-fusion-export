@@ -359,7 +359,7 @@ class ForeignTest(unittest.TestCase):
         seen = {"frame": {"origin": list(corner), "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0],
                           "z": [0.0, 0.0, 1.0]}, "loops": loops}
         extent = Obj("fusion::ToEntityExtentDefinition", entity=proxy, offset=param_value(0.0), isChained=True)
-        with mock.patch("lib.fusion_reader.read_solid.face_loops", lambda face, ctx: seen):
+        with mock.patch("lib.fusion_reader.read_extent.face_loops", lambda face, ctx: seen):
             data = self.read_data(self.tray.extrude(extentType="OneSideFeatureExtentType", extentOne=extent))
         side = data["side_one"]
         self.assertNotIn("face_outline", side)

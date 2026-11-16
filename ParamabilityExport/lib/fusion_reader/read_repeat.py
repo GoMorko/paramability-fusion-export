@@ -13,7 +13,7 @@ The path of a path pattern is read as a sweep path is (`read_sweep.path_record`)
 what it is (`path_place`). Each setting of a path pattern that cannot be read is null, and the translators refuse it.
 """
 from . import read_geometry as geo
-from . import read_solid
+from . import read_extent, read_solid
 from .placement import from_assembly, ref_record
 from .param_refs import Params, with_params
 from .read_bodies import result_bodies, with_points
@@ -281,7 +281,7 @@ def plane_record(entity, ctx):
     entity = geo.native_input(entity, ctx)
     record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx, slot="plane")
     if isinstance(record, dict):
-        record.update(read_solid.construction_token(entity))
+        record.update(read_extent.construction_token(entity))
         add_reference(record, entity, ctx)
     return record
 

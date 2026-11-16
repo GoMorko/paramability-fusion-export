@@ -129,7 +129,7 @@ class RecipeKind:
 STEP_TYPES = (
     StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE)),
     StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
-    StepType("HoleFeature", "hole", reader="read_solid", sketches=(HOLE_POINTS,)),
+    StepType("HoleFeature", "hole", reader="read_hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_thread", finishing=FINISHING_UNMODELED),
     StepType("CombineFeature", "combine", reader="read_solid", reaches_bodies=True),
     StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS, facts=ROUND_SETS),

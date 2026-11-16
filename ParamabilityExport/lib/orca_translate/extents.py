@@ -38,6 +38,7 @@ from ..design_model import refs
 from ..design_model.reach import construction_sizes, offset_param, on_part, reach_sizes
 from ..design_model.problem import is_problem
 from ..design_model.steps import extrude as dm
+from ..design_model.steps import extrude_checks as dmc
 from . import causes, limits
 from ..design_model.values import Quantity
 from ..design_model import words as shared
@@ -348,12 +349,12 @@ def taper(ctx, item, path, deg, flip, outline, length):
 def taper_measured(data, sides, outlines):
     """A Skip when the tapers of an extrude's sides (`steps._Side`: `taper` in Fusion's degrees, `flip`) disagree
     with the walls Fusion measured (`side_leans`, else the end face area of one outline), or cannot be checked; else
-    None. The same check as for a recipe (`design_model.steps.extrude.taper_problem`)."""
+    None. The same check as for a recipe (`design_model.steps.extrude_checks.taper_problem`)."""
     if not any(side.taper for side in sides):
         return None
     plan = [dm.SidePlan(dm.DISTANCE, "", -1 if side.flip else 1, Quantity(side.distance.n), side.taper)
             for side in sides]
-    found = dm.taper_problem(plan, data, data.get("operation"), outlines)
+    found = dmc.taper_problem(plan, data, data.get("operation"), outlines)
     return Skip.of(found) if found is not None else None
 
 

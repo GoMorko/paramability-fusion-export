@@ -18,7 +18,8 @@ An entity of another component stands in `built_on` as `{ "foreign": true }`. Co
 from . import read_geometry as geo
 from .placement import ORIGIN_MEMBERS
 from .read_sketch import sketch_place
-from .read_solid import axis_of, axis_record, construction_token
+from .read_extent import construction_token
+from .read_solid import axis_of, axis_record
 
 # How deep built_on goes (a plane built on a plane built on a face).
 _DEPTH = 3

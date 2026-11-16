@@ -1,6 +1,6 @@
 """The side of the part that a cut through all goes to, found from where the outlines meet material."""
 from ..faces import follow
-from ...design_model.steps.extrude import walls_confirm
+from ...design_model.steps.extrude_checks import walls_confirm
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
 from .checks import facts_of

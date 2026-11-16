@@ -26,6 +26,7 @@ from ..capture_model import gap_hints
 from ..design_model import reach, roles
 from ..design_model.problem import is_problem
 from ..design_model.steps import extrude as dm
+from ..design_model.steps import extrude_checks as dmc
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
@@ -103,7 +104,7 @@ def _holds(ctx, data, frame, shift, sign, taper):
     box = data.get("target_box_before")
 
     def holds(low, high):
-        if dm.passes_box(box, origin, vec.unit(frame["z"]), sign, high if sign > 0 else -low):
+        if dmc.passes_box(box, origin, vec.unit(frame["z"]), sign, high if sign > 0 else -low):
             return False
         if tools is None or ctx.left_out:
             return True
@@ -120,15 +121,15 @@ def _length(ctx, item, side, z):
 
 
 def _end_gap(ctx, data, frame, shift, read, operation):
-    """A Skip when the measured end face is not where the sides put it (`dm.end_check`), else None.
+    """A Skip when the measured end face is not where the sides put it (`dmc.end_check`), else None.
 
     A side of a cut that leaves the part before its end makes no end face of its own: the face Fusion measures on that
     side is then a wall the cut went through, nearer than the side's end. Such a face is accepted only when the side it
     lies on leaves the part before its end: `holds(low, high)` (`_holds`) finds no material inside the cut's outlines
-    past the face on that side, because the side ends past the whole Fusion part (`dm.passes_box`) or the part the
+    past the face on that side, because the side ends past the whole Fusion part (`dmc.passes_box`) or the part the
     copy built has none there. The other side of a two sided cut does not excuse the face. A face at no side's end, or
     past it, is not accepted."""
-    found = dm.end_check(read)
+    found = dmc.end_check(read)
     if found is None or found.fact == dm.AT_END:
         return None
     if found.fact == dm.SHORT and operation == "cut":
@@ -358,7 +359,7 @@ def extrude(ctx, step):
     refused = extents.taper_measured(data, sides, len(profiles))
     if refused is not None:
         return refused
-    found = dm.volume_problem(data, dm.read_sides(data, frame, shift), operation, profiles, False)
+    found = dmc.volume_problem(data, dm.read_sides(data, frame, shift), operation, profiles, False)
     if found is not None:
         return Skip.of(found)
     start = data.get("start") or {}

@@ -448,9 +448,13 @@ export (see checklist 4.10.5).
 #### What the reader reads per step
 
 Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
-`lib/fusion_reader/` (`read_solid.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
+`lib/fusion_reader/` (`read_solid.py`, `read_hole.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
 `read_move.py`, `read_paste.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`). The step kind table
 (`lib/capture_model/step_kinds.py`) says which module reads which type.
+
+`read_solid.py` reads the extrude, the revolve and the combine. `read_hole.py` reads the hole. Both need the same facts
+of an extent: where it starts, how a side ends, and the face or plane it goes to. `lib/fusion_reader/read_extent.py`
+gives these facts, so the extrude and the hole read an extent in one way. `read_extent.py` has no `READERS` dict.
 
 - `before(feature, ctx)` runs with the marker just before the step. It returns the step's `data`: the profiles, the
   extent, the operation, the edges and faces it picks, the bodies it takes, the parameters behind its values.
@@ -2223,7 +2227,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - The taper of a side that goes to a face is in its parameter only (`<which>.taper_deg`). Without the parameter,
     the measured side walls must show no taper. Without walls, the end face must have the area of the outline. Else
     the taper cannot be read.
-  - `end_check(sides)` gives an `EndCheck`: the measured end face is at the end of a side (`AT_END`), on the way of
+  - The next checks are in `steps/extrude_checks.py`, a second module of the reader. It reads the sides that
+    `read_sides` gives and does not read them again. `end_check(sides)` gives an `EndCheck`: the measured end face is at the end of a side (`AT_END`), on the way of
     a side but nearer than its end (`SHORT`), or at another place (`ELSEWHERE`). For two sides, the reader compares
     the face with the side on the same side of the sketch as the face. For a symmetric extrude, it compares the face
     with half the length. Each output decides what a `SHORT` face of a cut means. A side of a cut that goes out of
@@ -2257,7 +2262,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
     and the measured face usually decides. A face that is not an end cap cannot decide, so the extrude is a problem
     (`WAY_UNSURE`).
-  - `taper_problem`, `leans_problem` and `walls_confirm` compare the taper of the sides with the measured side walls
+  - `taper_problem`, `leans_problem` and `walls_confirm` (also in `steps/extrude_checks.py`) compare the taper of the sides with the measured side walls
     (`side_leans`) or, for one outline, with the area of the end face. `volume_problem` compares the volume of an
     extrude of text or spline outlines with the outline area times the length. Both outputs use these checks.
 - `tool_chains.py`: the tool bodies of a Combine: the items that make a tool, the place of a tool of another
@@ -3428,7 +3433,7 @@ A tapered tapped hole is refused ("Tapered threads are not copied.", cause `thre
 still a plain hole at the drill diameter, with a note. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
 has no repeat rule, so the pattern refuses with "A step of this pattern cannot be repeated."
 
-Fusion (September 2025 and later) keeps the numbers of a tapped hole in two places (`_hole_thread` in `read_solid.py`):
+Fusion (September 2025 and later) keeps the numbers of a tapped hole in two places (`_hole_thread` in `read_hole.py`):
 
 - `HoleFeature.tappedHoleInfo` is a `ThreadInfo`. It holds the profile name, the designation, the class, the pitch and the
   diameters.
@@ -4369,10 +4374,10 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Design.findEntityByToken` | everywhere in the probe and reach reads | A token may change after a rebuild. A probe sketch that does not match E0 is not followed. |
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
 | `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
-| `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
+| `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_hole.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
-| `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
+| `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 

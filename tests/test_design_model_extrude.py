@@ -6,6 +6,7 @@ from tests import context  # noqa: F401
 
 from lib.design_model.problem import is_problem
 from lib.design_model.steps import extrude as dm
+from lib.design_model.steps import extrude_checks as dmc
 
 FRAME = {"origin": [0.0, 0.0, 0.0], "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0], "z": [0.0, 0.0, 1.0]}
 
@@ -129,7 +130,7 @@ class OneSideTest(unittest.TestCase):
         self.assertEqual(ways(found), [(dm.REACH, -1, 9.0)])
         self.assertEqual((found[0].reach.distance, found[0].offset), (-8.0, 1.0))
         # The end face on the other side does not turn it; the end check then finds it elsewhere.
-        self.assertEqual(dm.end_check(found).fact, dm.ELSEWHERE)
+        self.assertEqual(dmc.end_check(found).fact, dm.ELSEWHERE)
 
     def test_a_side_to_a_plane_measures_from_the_start(self):
         self.assertEqual(ways(sides(one(plane_at(8.0)), shift=3.0)), [(dm.REACH, 1, 5.0)])
@@ -330,7 +331,7 @@ class EndCapTest(unittest.TestCase):
         # Two sides: the stored direction and lengths stand, and nothing is checked against the face.
         found = sides(two(distance(30.0), distance(10.0), end_offset=-4.0, **wall))
         self.assertEqual((ways(found), found[0].measured), ([(dm.DISTANCE, 1, 30.0), (dm.DISTANCE, -1, 10.0)], None))
-        self.assertIsNone(dm.end_check(found))
+        self.assertIsNone(dmc.end_check(found))
         # One side: a face that would turn the stored direction cannot, so the direction is not known.
         self.assertEqual(sides(one(distance(5.0), end_offset=-3.0, **wall)).code, dm.WAY_UNSURE)
         self.assertEqual(ways(sides(one(distance(5.0), end_offset=3.0, **wall))), [(dm.DISTANCE, 1, 5.0)])
@@ -338,24 +339,24 @@ class EndCapTest(unittest.TestCase):
 
 class EndCheckTest(unittest.TestCase):
     def test_one_side(self):
-        self.assertEqual(dm.end_check(sides(one(distance(5.0), end_offset=5.0))).fact, dm.AT_END)
-        short = dm.end_check(sides(one(distance(5.0), end_offset=3.0)))
+        self.assertEqual(dmc.end_check(sides(one(distance(5.0), end_offset=5.0))).fact, dm.AT_END)
+        short = dmc.end_check(sides(one(distance(5.0), end_offset=3.0)))
         self.assertEqual((short.fact, short.way, short.at, short.length), (dm.SHORT, 1, 3.0, 5.0))
-        self.assertEqual(dm.end_check(sides(one(distance(5.0), end_offset=6.0))).fact, dm.ELSEWHERE)
-        self.assertIsNone(dm.end_check(sides(one(distance(5.0)))))
-        self.assertIsNone(dm.end_check(sides(one(through(), end_offset=4.0))))
+        self.assertEqual(dmc.end_check(sides(one(distance(5.0), end_offset=6.0))).fact, dm.ELSEWHERE)
+        self.assertIsNone(dmc.end_check(sides(one(distance(5.0)))))
+        self.assertIsNone(dmc.end_check(sides(one(through(), end_offset=4.0))))
 
     def test_two_sides_check_the_side_the_face_lies_on(self):
-        found = dm.end_check(sides(two(distance(30.0), distance(10.0), end_offset=-10.0)))
+        found = dmc.end_check(sides(two(distance(30.0), distance(10.0), end_offset=-10.0)))
         self.assertEqual((found.fact, found.side.which, found.way), (dm.AT_END, "side_two", -1))
-        found = dm.end_check(sides(two(distance(30.0), distance(10.0), end_offset=-4.0)))
+        found = dmc.end_check(sides(two(distance(30.0), distance(10.0), end_offset=-4.0)))
         self.assertEqual((found.fact, found.side.which), (dm.SHORT, "side_two"))
-        self.assertEqual(dm.end_check(sides(two(distance(3.0), distance(1.0), end_offset=0.0))).fact, dm.ELSEWHERE)
+        self.assertEqual(dmc.end_check(sides(two(distance(3.0), distance(1.0), end_offset=0.0))).fact, dm.ELSEWHERE)
 
     def test_symmetric_checks_half_the_length(self):
         data = {"extent_type": "symmetric", "end_offset": -5.0,
                 "symmetric": {"distance": 5.0, "full_length": False, "taper_deg": 0.0}}
-        found = dm.end_check(sides(data))
+        found = dmc.end_check(sides(data))
         self.assertEqual((found.fact, found.way, found.length), (dm.AT_END, -1, 5.0))
 
 
@@ -367,41 +368,41 @@ class MeasuredTest(unittest.TestCase):
     def test_walls_show_the_taper(self):
         # A positive Fusion taper widens the outline: the outward normal of a wall leans against the travel.
         lean = -0.05233595624294383  # sin(3 degrees), against the travel
-        self.assertIsNone(dm.taper_problem([plan(taper=3.0)], {"side_leans": [lean]}, "join", 1))
-        self.assertEqual(dm.taper_problem([plan(taper=-3.0)], {"side_leans": [lean]}, "join", 1).code, dm.TAPER_WAY)
+        self.assertIsNone(dmc.taper_problem([plan(taper=3.0)], {"side_leans": [lean]}, "join", 1))
+        self.assertEqual(dmc.taper_problem([plan(taper=-3.0)], {"side_leans": [lean]}, "join", 1).code, dm.TAPER_WAY)
         # A cut shows the part's walls, which face the other way.
-        self.assertIsNone(dm.taper_problem([plan(taper=-3.0)], {"side_leans": [lean]}, "cut", 1))
-        self.assertEqual(dm.taper_problem([plan(taper=3.0)], {"side_leans": [0.0]}, "join", 1).code,
+        self.assertIsNone(dmc.taper_problem([plan(taper=-3.0)], {"side_leans": [lean]}, "cut", 1))
+        self.assertEqual(dmc.taper_problem([plan(taper=3.0)], {"side_leans": [0.0]}, "join", 1).code,
                          dm.TAPER_WAY)
-        self.assertIsNone(dm.taper_problem([plan()], {}, "join", 1))
+        self.assertIsNone(dmc.taper_problem([plan()], {}, "join", 1))
 
     def test_the_end_face_area_shows_the_taper_of_one_outline(self):
         narrows = {"profile_area": 4.0, "end_area": 3.0}
-        self.assertIsNone(dm.taper_problem([plan(taper=-3.0)], narrows, "join", 1))
-        self.assertEqual(dm.taper_problem([plan(taper=3.0)], narrows, "join", 1).code, dm.TAPER_WAY)
-        self.assertEqual(dm.taper_problem([plan(taper=3.0)], {"profile_area": 4.0, "end_area": 4.0}, "join", 1).code,
+        self.assertIsNone(dmc.taper_problem([plan(taper=-3.0)], narrows, "join", 1))
+        self.assertEqual(dmc.taper_problem([plan(taper=3.0)], narrows, "join", 1).code, dm.TAPER_WAY)
+        self.assertEqual(dmc.taper_problem([plan(taper=3.0)], {"profile_area": 4.0, "end_area": 4.0}, "join", 1).code,
                          dm.TAPER_NO_CHANGE)
-        self.assertEqual(dm.taper_problem([plan(taper=3.0)], narrows, "join", 2).code, dm.TAPER_UNMEASURED)
+        self.assertEqual(dmc.taper_problem([plan(taper=3.0)], narrows, "join", 2).code, dm.TAPER_UNMEASURED)
 
     def test_walls_confirm_the_direction_of_a_tapered_side(self):
         lean = -0.05233595624294383
-        self.assertTrue(dm.walls_confirm(plan(taper=-3.0), [lean], "cut"))
-        self.assertFalse(dm.walls_confirm(plan(sign=-1, taper=-3.0), [lean], "cut"))
-        self.assertFalse(dm.walls_confirm(plan(), [0.0], "cut"))
+        self.assertTrue(dmc.walls_confirm(plan(taper=-3.0), [lean], "cut"))
+        self.assertFalse(dmc.walls_confirm(plan(sign=-1, taper=-3.0), [lean], "cut"))
+        self.assertFalse(dmc.walls_confirm(plan(), [0.0], "cut"))
 
     def test_the_volume_of_spline_outlines(self):
         spline = [{"loops": [{"curves": [{"kind": "other"}]}]}]
         data = {"areas": [10.0], "volume_before": 0.0, "volume_after": 50.0}
-        self.assertIsNone(dm.volume_problem(data, [plan()], "newBody", spline, False))
-        self.assertEqual(dm.volume_problem(dict(data, volume_after=40.0), [plan()], "newBody", spline, False).code,
+        self.assertIsNone(dmc.volume_problem(data, [plan()], "newBody", spline, False))
+        self.assertEqual(dmc.volume_problem(dict(data, volume_after=40.0), [plan()], "newBody", spline, False).code,
                          dm.VOLUME_DIFFERS)
         # A join may lose volume to material it overlaps, but must not shrink the part.
-        self.assertIsNone(dm.volume_problem(dict(data, volume_after=30.0), [plan()], "join", spline, False))
-        self.assertEqual(dm.volume_problem(dict(data, volume_after=-1.0), [plan()], "join", spline, False).code,
+        self.assertIsNone(dmc.volume_problem(dict(data, volume_after=30.0), [plan()], "join", spline, False))
+        self.assertEqual(dmc.volume_problem(dict(data, volume_after=-1.0), [plan()], "join", spline, False).code,
                          dm.VOLUME_DIFFERS)
-        self.assertEqual(dm.volume_problem(dict(data, volume_after=None), [plan()], "newBody", spline, False).code,
+        self.assertEqual(dmc.volume_problem(dict(data, volume_after=None), [plan()], "newBody", spline, False).code,
                          dm.VOLUME_UNMEASURED)
-        self.assertIsNone(dm.volume_problem(data, [plan()], "newBody", [{"loops": []}], False))
+        self.assertIsNone(dmc.volume_problem(data, [plan()], "newBody", [{"loops": []}], False))
 
 
 if __name__ == "__main__":
