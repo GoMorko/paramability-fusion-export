@@ -3,6 +3,7 @@ The facts come from the shared reader (`design_model/steps/extrude.py`); this mo
 from dataclasses import replace
 
 from ...design_model.steps import extrude as dm
+from ...design_model.steps import extrude_checks as dmc
 from ...design_model import words as shared
 from ..result import Refusal
 
@@ -13,14 +14,14 @@ def check_measured_length(plan, data, start, z, combine):
 
     A side of a cut that ends past the part makes no end face of its own; the face Fusion lists on that side is then a
     wall the cut went through, nearer than the side's end. Such a face is accepted only when the side it lies on ends
-    past the whole part (`dm.passes_box`): a side that passes says nothing about a face on the other side of the
+    past the whole part (`dmc.passes_box`): a side that passes says nothing about a face on the other side of the
     sketch, where the cut may end inside material.
     """
     reads = [entry.read for entry in plan if entry.read is not None]
-    found = dm.end_check(reads)
+    found = dmc.end_check(reads)
     if found is None or found.fact == dm.AT_END:
         return None
-    if found.fact == dm.SHORT and combine == "cut" and dm.passes_box(
+    if found.fact == dm.SHORT and combine == "cut" and dmc.passes_box(
             data.get("target_box_before"), start, z, found.way, found.length):
         return None
     return Refusal(shared.END_DIFFERS)
@@ -38,11 +39,11 @@ def _refusal(found):
 
 def check_taper(plan, data, operation, outlines):
     """Refuse a taper whose sign disagrees with the measured side walls (or, for one outline, the end face area),
-    or that cannot be measured (`design_model.steps.extrude.taper_problem`). `operation` is Fusion's."""
-    return _refusal(dm.taper_problem(facts_of(plan), data, operation, outlines))
+    or that cannot be measured (`design_model.steps.extrude_checks.taper_problem`). `operation` is Fusion's."""
+    return _refusal(dmc.taper_problem(facts_of(plan), data, operation, outlines))
 
 
 def volume_refusal(data, plan, operation, profiles, thin):
     """Refuse when the part Fusion made from text or spline outlines is not the outline area times the length
-    (`design_model.steps.extrude.volume_problem`)."""
-    return _refusal(dm.volume_problem(data, facts_of(plan), operation, profiles, thin))
+    (`design_model.steps.extrude_checks.volume_problem`)."""
+    return _refusal(dmc.volume_problem(data, facts_of(plan), operation, profiles, thin))

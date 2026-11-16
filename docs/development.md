@@ -48,7 +48,7 @@ package may import only packages above it in this list (not every one of them). 
   sweep path planner (`planner.plan`: the chain, its kind, the recipe path forms and the app's limits as problems; the
   caps and the spline fit come from the output in `PathOptions`); `steps/` holds one reader per kind of step:
   `steps/extrude.py` (where an extrude starts, how each side ends, its direction
-  and length, and the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
+  and length) with `steps/extrude_checks.py` (the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
   `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
   ThreadFeature), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
   a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/path_pattern.py` (the

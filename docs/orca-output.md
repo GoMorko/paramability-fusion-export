@@ -203,21 +203,21 @@ not judged to meet material where Orca removes nothing.
   Fusion's offset from it (that offset may follow a size). The face or plane must be flat and square to the extrude;
   a tilted or curved one, a curved one of another component or one whose place is not known, and a two sided extrude whose sides both end on one side of the
   sketch are left out.
-- The measured end face (`steps._end_gap`, from `design_model.steps.extrude.end_check`) must lie at the end of the
+- The measured end face (`steps._end_gap`, from `design_model.steps.extrude_checks.end_check`) must lie at the end of the
   side whose way it lies on, for every kind of side: one side, symmetric (at half the length either way) and two
   sides. Else the step is left out. For a two sided extrude the face is checked against the side on its own side of
   the sketch, never against the other side. A cut may end before that distance only where it leaves the part: a cut
   that goes out of the part makes no end face of its own, and Fusion then measures a wall that the cut went through.
   The copy accepts this nearer face only when no material can lie inside the cut's outlines between the measured
   face and the end of the side that the face lies on. No material lies there when that side ends past the whole
-  Fusion part (`target_box_before`, `design_model.steps.extrude.passes_box`), or when the part that the copy built
+  Fusion part (`target_box_before`, `design_model.steps.extrude_checks.passes_box`), or when the part that the copy built
   has no material there (rounds and chamfers count as material) and no earlier step of the body was left out. The
   other side of a two sided cut does not make the face acceptable. A cut that ends inside material must end at the
   measured face. A face behind the start, or past the end, is not accepted. A measured face that is not an end cap
   (`design_model.steps.extrude.end_is_cap`: its normal, or else its area) is no measure at all: the stored direction
   and lengths stand, as for the recipe.
 - An extrude of spline outlines must make the volume of its outlines times its length
-  (`design_model.steps.extrude.volume_problem`, as for a recipe).
+  (`design_model.steps.extrude_checks.volume_problem`, as for a recipe).
 - The distance follows the sizes that move the plane, where the copy can tell how: an origin plane stays; an offset
   plane moves with its own distance when one size sets it (`design_model.reach.offset_param`, its sign from the
   measured place) and with what it is built on; a face follows the end of a copied extrude it lies on
@@ -242,7 +242,7 @@ not judged to meet material where Orca removes nothing.
   tapered symmetric or two sided extrude is therefore two Blind extrudes of the same sketch, one flipped, each with
   its side's angle; Fusion's positive taper grows the outline going away from the sketch, so `taper_deg` is Fusion's
   angle, negated on a flipped side. The taper's sign is checked against the measured walls as for a recipe
-  (`design_model.steps.extrude.taper_problem`). A side that ends on a face keeps its taper in its parameter only;
+  (`design_model.steps.extrude_checks.taper_problem`). A side that ends on a face keeps its taper in its parameter only;
   without one, its measured walls (or, without walls, its end face area) must show no taper.
 - Orca's outline move rounds every corner it pushes outward, and its loft between two arcs that meet at a sharp
   corner twists the wall (the corner slides along the arcs). So a taper is copied only for a full circle, or an

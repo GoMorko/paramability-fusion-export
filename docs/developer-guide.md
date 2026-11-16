@@ -2223,7 +2223,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - The taper of a side that goes to a face is in its parameter only (`<which>.taper_deg`). Without the parameter,
     the measured side walls must show no taper. Without walls, the end face must have the area of the outline. Else
     the taper cannot be read.
-  - `end_check(sides)` gives an `EndCheck`: the measured end face is at the end of a side (`AT_END`), on the way of
+  - The next checks are in `steps/extrude_checks.py`, a second module of the reader. It reads the sides that
+    `read_sides` gives and does not read them again. `end_check(sides)` gives an `EndCheck`: the measured end face is at the end of a side (`AT_END`), on the way of
     a side but nearer than its end (`SHORT`), or at another place (`ELSEWHERE`). For two sides, the reader compares
     the face with the side on the same side of the sketch as the face. For a symmetric extrude, it compares the face
     with half the length. Each output decides what a `SHORT` face of a cut means. A side of a cut that goes out of
@@ -2257,7 +2258,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
     and the measured face usually decides. A face that is not an end cap cannot decide, so the extrude is a problem
     (`WAY_UNSURE`).
-  - `taper_problem`, `leans_problem` and `walls_confirm` compare the taper of the sides with the measured side walls
+  - `taper_problem`, `leans_problem` and `walls_confirm` (also in `steps/extrude_checks.py`) compare the taper of the sides with the measured side walls
     (`side_leans`) or, for one outline, with the area of the end face. `volume_problem` compares the volume of an
     extrude of text or spline outlines with the outline area times the length. Both outputs use these checks.
 - `tool_chains.py`: the tool bodies of a Combine: the items that make a tool, the place of a tool of another
