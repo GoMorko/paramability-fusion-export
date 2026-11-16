@@ -21,6 +21,7 @@ from ...capture_model.capture import outside_component, same_body
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
+from ...design_model import refs
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
 from ..combine import tool_walk
@@ -186,7 +187,7 @@ def _whole(ctx, combine_item, pattern, tools, combine):
     """The `Group` of a pattern whose every body the Combine takes, or None."""
     data = pattern.get("data") or {}
     copies = match(data)
-    if copies is None or outside_component(pattern) or walk.is_foreign(data):
+    if copies is None or outside_component(pattern) or refs.is_foreign(data):
         return None
     for source in data["source_bodies"]:
         if ctx.is_target(source):

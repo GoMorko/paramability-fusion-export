@@ -73,7 +73,7 @@ the two against each other.
 - Wrap each Fusion call in `geo.safe` (`read_geometry.py`). A member that cannot be read becomes null or `"other"`,
   never a guess; the handler refuses it.
 - Mark inputs that belong to another component with `mark_foreign`, so the walk refuses the step. A flat face or plane
-  of another component that the translator can follow carries a measured `ref` (`ref_motion.bring_in` turns it into
+  of another component that the translator can follow carries a measured `ref` (`design_model/refs.py`, `bring_in`, turns it into
   an `assembly` record, `ref_motion.plane_shift` and `axis_moves` give its move as a formula); see
   `docs/capture-format.md`, "Measured references".
 - Read the parameters behind each value into `data.params` (see "Parameters behind values" in
@@ -238,7 +238,7 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
   `gap_picks.pick_records` skips (the `_NOT_PICKS` list in `lib/capture_model/gap_picks.py`); add a new name there so it is not
   taken for a pick.
 - Marked `foreign` records for inputs of another component, as for a copied step. A step with such an input is left
-  out as a gap, with the reason of `ref_motion.why_foreign` when there is one.
+  out as a gap, with the reason of `refs.why_foreign` (`design_model/refs.py`) when there is one.
 - Plain data in millimetres and degrees, in the component's coordinates (the gap file gives `toRecipe` to turn them).
   The file keeps at most 48 KiB of `data` per gap: free curve `samples` and extra loops are cut first, so avoid
   writing more than the step needs.

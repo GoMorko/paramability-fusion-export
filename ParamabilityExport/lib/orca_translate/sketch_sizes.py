@@ -61,7 +61,7 @@ def sketch_doubts(ctx, item, parts, written):
         if sketch in seen:
             continue
         seen.add(sketch)
-        rest = [n for n in _sketch_sizes(ctx, profile) if n not in reached]
+        rest = [n for n in profile_sizes(ctx, profile) if n not in reached]
         if rest:
             ctx.doubt(rest, "%s: it moves other lines of %s, which may change this outline in Fusion, and the Orca "
                       "copy does not follow that" % (_label(item), sketch))
@@ -79,7 +79,7 @@ def _piece_sizes(ctx, profile, piece):
     size of its sketch when one of them has no formula."""
     formulas = sketch_formulas(ctx, profile) if piece is not None else None
     found = formulas.outline_sizes(piece) if formulas is not None else None
-    return found if found is not None else _sketch_sizes(ctx, profile)
+    return found if found is not None else profile_sizes(ctx, profile)
 
 
 def _drawn_reason(ctx, item, made, piece, profile):
@@ -116,10 +116,12 @@ def projection_doubts(ctx, item, profile, outline):
               % (_label(item), profile.get("sketch") or "its sketch"))
 
 
-def _sketch_sizes(ctx, profile):
+def profile_sizes(ctx, profile):
     """Fusion names of the free sizes that move a profile's sketch: its dimensions, from the graph when there is one,
-    else from the model parameters made by that sketch."""
-    if ctx.table is None:
+    else from the model parameters made by that sketch. An outline of another component's sketch gives none: its
+    sizes were marked when it was brought in (`design_model.borrowed`), and its sketch may share its name with one
+    of the part's own."""
+    if ctx.table is None or profile.get("borrowed") or profile.get("foreign"):
         return ()
     record = graph_for(ctx.capture, profile)
     names = []

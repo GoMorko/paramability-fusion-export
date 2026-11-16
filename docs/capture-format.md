@@ -561,7 +561,8 @@ A profile of another component's sketch (Fusion hands it over through that compo
   (`dependencyParameters`).
 
 The translator copies such a profile like its own when `frame`, `native_frame` and `placement.frame` are present
-(`lib/translator/sketch/borrowed.py`). The size probe reads the sketch at every state (section 5, "Probe states"), so the
+(`lib/design_model/borrowed.py`: the profile loses `foreign` and the place keys and gets `borrowed`, the name of its
+component; it keeps `sketch` and `sketch_token`, so it must never be matched to a sketch of the part by name). The size probe reads the sketch at every state (section 5, "Probe states"), so the
 outline follows the sizes through the motion file under the usual keys (`<item>/p<profile>/...`). Where the motion
 holds no value for the profile, the outline is written as numbers and every size that `sketch_params` read becomes a
 fixed number; the first translation of an export (no sizes fixed for sketches) skips that. The step gets a note that
@@ -1507,7 +1508,7 @@ lines); the sketch is named in its `ref`.
 A step whose only foreign records are sketch outlines, planes or axes with none of that place data (`component`,
 `placement`, `ref`, `assembly`) comes from an add-in before 0.10.6, which marked the part's own sketches and planes seen
 through an occurrence as foreign. The translator leaves such a step out with the cause `oldExport` and the tip to export
-again (`ref_motion.from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
+again (`design_model/refs.py`, `from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
 old.
 
 The translator also records which other components' sizes the copy follows (`TranslateResult.follows_components`,
@@ -1549,9 +1550,11 @@ the identity. An extrude `start` or `side_one` / `side_two` of kind `fromEntity`
 another component is read as `foreign` and carries `ref` with the geometry in the target's coordinates; its own `plane`
 and `face_point` stay as Fusion gave them (the translator replaces them from `ref` when the face is flat).
 
-The translator (`lib/translator/ref_motion.py`) reads these records as follows.
+The shared layer (`lib/design_model/refs.py`) and the translator (`lib/translator/ref_motion.py`, the moves from the
+motion file) read these records as follows. The Orca output reads no motion file: it keeps every such record where the
+capture places it and marks the sizes that act on its component (`orca_translate/other_components.py`).
 
-- `bring_in` makes a flat face or plane of another component that an extrude starts from or reaches to usable: the
+- `refs.bring_in` makes a flat face or plane of another component that an extrude starts from or reaches to usable: the
   record loses `foreign`, gets `assembly: true`, and its `plane` and `face_point` are taken from `ref` (the target's
   coordinates). The same for a hole whose `position_refs` are all flat faces or planes. A record without a flat `ref`
   (a curved face, an edge, a place that could not be brought in) stays `foreign` and the step is refused, with a reason

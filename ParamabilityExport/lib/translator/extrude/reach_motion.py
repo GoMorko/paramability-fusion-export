@@ -14,6 +14,7 @@ Without a measurement (no probe, an older export, a face the probe could not rea
 """
 from ...geometry import vec
 from ...params.geometry_links import ref_key
+from ...design_model import refs
 from .. import ref_motion
 from ..faces import follow
 from ..sizes import reach_sizes
@@ -43,7 +44,7 @@ def _measured_shift(ctx, item, slot, record, direction, what):
     """The probe's move of the face or plane along `direction`, as a Quantity whose number is zero."""
     ref = {"slot": slot, "type": record.get("entity_type"), "own": True}
     names = reach_sizes(ctx.table, ctx.timeline, item, record)
-    offset = ref_motion.moves(ctx, item, ref, ref_motion.PLANE, what, names)[0]
+    offset = ref_motion.moves(ctx, item, ref, refs.PLANE, what, names)[0]
     if not offset.sized:
         return Quantity(0.0)
     cosine = vec.dot(vec.unit(record["plane"]["normal"]), direction)

@@ -10,13 +10,13 @@ that reaches into another component, and a step that picks faces a gap made. Wha
 """
 from ..capture_model import gap_hints, gap_picks, step_kinds
 from ..capture_model.capture import outside_component, renamed_target, same_body
-from . import notes as wording, ref_motion
+from ..design_model import borrowed, refs
+from . import notes as wording
 from .bodies import body_states, split_rules
 from .faces import floating
 from .gaps import stops
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
-from .sketch import borrowed
 from .words import type_words
 
 
@@ -34,18 +34,6 @@ def _refusal(item, reason, note=None, cause=None):
 
 def _label(item):
     return wording.step_label(item.get("name"), item.get("type")) or "A step"
-
-
-def is_foreign(node):
-    """A record of the step's data marked `foreign` by the reader: it belongs to another component. The bodies a step
-    lists are left to their own rules."""
-    if isinstance(node, dict):
-        if node.get("foreign") is True:
-            return True
-        return any(is_foreign(v) for k, v in node.items() if k not in ref_motion.BODY_LISTS)
-    if isinstance(node, list):
-        return any(is_foreign(v) for v in node)
-    return False
 
 
 def _data(item):
@@ -299,15 +287,15 @@ def walk_items(ctx, result):
             return None
         picked, sure = gap_picks.picked_gaps(ctx, item)
         with ctx.recording() as brought:
-            item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
-        if is_foreign(_data(item)):
-            if ref_motion.from_old_export(item):
+            item = ctx.current = refs.bring_in(borrowed.bring_in(item, ctx))
+        if refs.is_foreign(_data(item)):
+            if refs.from_old_export(item):
                 reason, note, cause = (
                     "This step reaches into another component, or was read by an older version of the add-in "
                     "that could not tell its own geometry apart. Export again with this version.",
                     wording.old_export_note(_label(item)), gap_hints.OLD_EXPORT)
             else:
-                reason = (ref_motion.why_foreign(item)
+                reason = (refs.why_foreign(item)
                           or "This step reaches into another component, which is not copied yet.")
                 note, cause = wording.reaches_component_note(_label(item)), gap_hints.OTHER_COMPONENT
             if not leave_out(item, reason, [gap.id for gap in picked], note, cause=cause):

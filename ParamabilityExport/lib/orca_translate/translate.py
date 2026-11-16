@@ -18,7 +18,7 @@ from ..translator.words import type_words
 from .context import Context
 from .place import BED_CENTRE, Placement
 from .steps import HANDLERS, Skip
-from . import causes, finishes
+from . import causes, finishes, other_components
 from .finishes import HANDLERS as FINISH_HANDLERS
 from .threads import HANDLERS as THREAD_HANDLERS
 from .bodies import HANDLERS as BODY_HANDLERS
@@ -101,7 +101,15 @@ def _item_sizes(ctx, item):
     """Fusion names of the free sizes a step reads: its own values and the dimensions of the sketches it uses."""
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     names = [p.get("name") for p in (data.get("params") or {}).values() if isinstance(p, dict)]
-    sketches = {p.get("sketch") for p in data.get("profiles") or [] if isinstance(p, dict)} | {data.get("sketch")}
+    profiles = [p for p in data.get("profiles") or [] if isinstance(p, dict)]
+    # An outline of another component's sketch names that sketch, which may share its name with one of the part's
+    # own: its sizes are the ones its dimensions read.
+    sketches = {p.get("sketch") for p in profiles if not _other_sketch(p)} | {data.get("sketch")}
+    for p in profiles:
+        if _other_sketch(p):
+            for param in p.get("sketch_params") or []:
+                if isinstance(param, dict):
+                    names += [param.get("name")] + list(param.get("reads") or [])
     for m in (ctx.table.model_params.values() if ctx.table is not None else ()):
         made = m.get("created_by") or {}
         if made.get("kind") == "sketchDimension" and made.get("sketch") in sketches:
@@ -110,6 +118,10 @@ def _item_sizes(ctx, item):
         if isinstance(record, dict) and record.get("sketch") in sketches:
             names += [d.get("param") for d in record.get("dimensions") or [] if isinstance(d, dict)]
     return ctx.depends([n for n in names if n])
+
+
+def _other_sketch(profile):
+    return profile.get("foreign") is True or bool(profile.get("borrowed"))
 
 
 def _walk(ctx):
@@ -165,11 +177,15 @@ def _walk(ctx):
             continue
         start = len(ctx.solid.pieces)
         # A handler may write features, notes, bound fields and doubts before it finds that its step cannot be
-        # copied: a step left out keeps none of them.
+        # copied: a step left out, or one that does not change the part, keeps none of them. Bringing in the
+        # geometry of other components records doubts and notes too, so it runs inside the checkpoint.
         mark = ctx.checkpoint()
         earlier = {id(f) for f in ctx.features}
         try:
-            made = handler(ctx, item)
+            brought = other_components.bring_in(ctx, item)
+            made = handler(ctx, brought)
+            if made and not isinstance(made, (Skip, Pass)):
+                other_components.mark_refs(ctx, brought)
         except Exception as error:  # an error in one step's copy leaves that step out, never the whole output
             ctx.rollback(mark)
             leave_out(item, _INTERNAL, causes.INTERNAL_ERROR, error)
@@ -179,6 +195,7 @@ def _walk(ctx):
             leave_out(item, made.reason, made.cause)
             continue
         if isinstance(made, Pass):
+            ctx.rollback(mark)
             ctx.items.append(_verdict(item, "skipped", made.note))
             continue
         note = _copied_note(ctx, made, earlier)

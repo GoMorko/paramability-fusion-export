@@ -7,7 +7,7 @@ where the result sits. In one component that is the same place; any other place 
 `move` in plain numbers, and the sizes that could change it are marked.
 """
 from ...capture_model import tool_items
-from .. import ref_motion
+from ...design_model import refs
 from ..combine import tool_walk
 from ..faces import follow
 from ..faces.moved_placer import MoveMaker
@@ -68,7 +68,7 @@ def _candidates(result, sources):
 def _mark_place(ctx, item, source, tool):
     """The result sits away from its source. Its place is a number, so the sizes that could move it are marked."""
     if tool_items.is_foreign_tool(source):
-        ref_motion.mark_all(ctx, item, {"component": source.get("component"), "type": PLACE}, WHAT)
+        refs.mark_all(ctx, item, {"component": source.get("component"), "type": PLACE}, WHAT)
     else:
         ctx.doubt(follow.reads_with_outer(tool.ctx, item), "%s puts its body at a place that may move with it"
                   % (item.get("name") or "A paste"))

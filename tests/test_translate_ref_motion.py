@@ -1,4 +1,4 @@
-"""Planes, faces, axes, directions and points of other components that move with sizes (lib/translator/ref_motion.py).
+"""Planes, faces, axes, directions and points of other components that move with sizes (lib/design_model/refs.py and lib/translator/ref_motion.py).
 
 The probe's motion file says how far each reference moves from the captured place. The fixtures: `component_ref_reach`
 (a boss that reaches to a face of Cover), `component_ref_hole` (a hole on a sketch point of Cover) and
@@ -15,6 +15,7 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import left_out
 from tests.translator_helpers import FIXTURES, load_capture, steps_of
 
+from lib.design_model import refs
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import OPTIMISTIC, Motion
@@ -369,7 +370,7 @@ class PlaneShiftTest(unittest.TestCase):
         sized = Quantity(5.0, "gap_mm - 10", ["gap_mm"])
         record = {"ref": {"slot": "plane"}, "normal": [0, 0, 1]}
         with mock.patch.object(ref_motion, "moves", return_value=[sized]), \
-                mock.patch.object(ref_motion, "mark_all", side_effect=lambda *a: marks.append(a)):
+                mock.patch.object(refs, "mark_all", side_effect=lambda *a: marks.append(a)):
             return ref_motion.plane_shift(None, {}, record, direction, "a step"), marks
 
     def test_a_line_along_the_normal_gets_the_move_and_a_slanted_one_marks_the_sizes(self):

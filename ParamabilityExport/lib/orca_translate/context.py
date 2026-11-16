@@ -38,6 +38,12 @@ class Context:
 
     def __init__(self, capture, table, place):
         self.capture, self.table, self.place = capture, table, place
+        # What the shared design layer asks of a translation (`design_model.recorder.Recorder`): a cache for values
+        # worked out once, and the probe's motion file, which the Orca copy does not read.
+        self.cache = {}
+        self.motion = None
+        # Other components whose sizes a value follows (`follow_component`); with no motion file nothing follows.
+        self.followed_components = []
         self.features = []
         self.items = []
         self.left_out = []
@@ -169,12 +175,22 @@ class Context:
         held = {n: self.names[n] for n, text in self._orca_sizes.items() if text is not None}
         return to_orca(formula, held)
 
-    def doubt(self, names, reason):
-        """These Fusion sizes move something that keeps its number in Orca, for `reason`."""
+    def doubt(self, names, why):
+        """These Fusion sizes move something that keeps its number in Orca, for `why`."""
         for name in names:
             found = self.doubts.setdefault(name, [])
-            if reason not in found:
-                found.append(reason)
+            if why not in found:
+                found.append(why)
+
+    def note(self, text):
+        """A plain sentence about the copy, once."""
+        if text not in self.notes:
+            self.notes.append(text)
+
+    def follow_component(self, component):
+        """A value follows the sizes of another component (`{ token, name }` or its name)."""
+        if component and component not in self.followed_components:
+            self.followed_components.append(component)
 
     def depends(self, param_names):
         """Fusion names of the free sizes behind parameters (user or model)."""

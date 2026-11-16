@@ -1,7 +1,8 @@
-"""The parameter store, the export port and the probe are declared once (`design_edit.store.ParameterStore`,
-`pipeline.ExportPort`, `pipeline.PartsPort`, `probe_flow.Probe`). The Fusion classes, the shared fakes and both probes
-must have every declared member with the declared parameters, and the code that is handed a store, port or probe may
-ask it only for a declared member."""
+"""The parameter store, the export port, the probe and the recorder are declared once
+(`design_edit.store.ParameterStore`, `pipeline.ExportPort`, `pipeline.PartsPort`, `probe_flow.Probe`,
+`design_model.recorder.Recorder`). The Fusion classes, the shared fakes, both probes and both translation contexts
+must have every declared member with the declared parameters, and the code that is handed a store, port, probe or
+recorder may ask it only for a declared member."""
 import ast
 import inspect
 import os
@@ -12,6 +13,7 @@ from tests import context
 from tests.fakes import FakePartsPort, FakePort, FakeStore, RollingStore, TrimStore
 
 from lib.design_edit.store import TIMELINE_CONTROLS, ParameterStore
+from lib.design_model.recorder import Recorder
 from lib.export_plan.pipeline import ExportPort, PartsPort
 from lib.export_plan.probe_flow import Probe, ProbeGroup, SizeProbe
 
@@ -22,6 +24,8 @@ FUSION_PORTS = os.path.join(COMMANDS, "ExportForParamability", "export_flow.py")
 PROBE_FLOW = os.path.join(LIB, "export_plan", "probe_flow")
 PIPELINE = os.path.join(LIB, "export_plan", "pipeline")
 PROBE_RUNNER = os.path.join(PIPELINE, "probe_run.py")
+DESIGN_MODEL = os.path.join(LIB, "design_model")
+CONTEXTS = (os.path.join(LIB, "translator", "context.py"), os.path.join(LIB, "orca_translate", "context.py"))
 
 # A name, or an attribute of any object, with one of these names is a store or a port; so is a name or a `self.`
 # attribute assigned from one (`x = self.port`, `self.owner = port`).
@@ -32,6 +36,7 @@ STORE_MEMBERS = set(typing.get_protocol_members(ParameterStore)) | set(TIMELINE_
 PORT_MEMBERS = set(typing.get_protocol_members(ExportPort))
 PARTS_PORT_MEMBERS = set(typing.get_protocol_members(PartsPort))
 PROBE_MEMBERS = set(typing.get_protocol_members(Probe))
+RECORDER_MEMBERS = set(typing.get_protocol_members(Recorder))
 DECLARED = {"store": STORE_MEMBERS, "port": PORT_MEMBERS | PARTS_PORT_MEMBERS, "probe": PROBE_MEMBERS}
 
 
@@ -358,6 +363,24 @@ class DeclaredInterfaceTest(unittest.TestCase):
         single = _asked_of(os.path.join(PIPELINE, "run.py"), {"probe"})
         parts = _asked_of(os.path.join(PIPELINE, "parts.py"), {"group"})
         self.assertEqual(PROBE_MEMBERS - runner - (single & parts), set())
+
+
+class RecorderTest(unittest.TestCase):
+    def test_both_translation_contexts_have_every_declared_member(self):
+        for path in CONTEXTS:
+            self.assertEqual(RECORDER_MEMBERS - _class_members(path, "Context"), set(), path)
+
+    def test_both_translation_contexts_take_the_declared_parameters(self):
+        for path in CONTEXTS:
+            self.assertEqual(_differing(_declared_methods(Recorder), _ast_methods(path, "Context"),
+                                        more_with_defaults=True), {}, path)
+
+    def test_the_design_model_asks_a_recorder_only_for_declared_members(self):
+        found = {}
+        for path in _python_files(DESIGN_MODEL):
+            _asked_in(path, {"ctx": "recorder"}, found)
+        self.assertIn(("recorder", "doubt"), found)
+        self.assertEqual({member for _, member in found} - RECORDER_MEMBERS, set())
 
 
 if __name__ == "__main__":

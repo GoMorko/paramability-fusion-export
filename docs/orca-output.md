@@ -38,7 +38,9 @@ The modules of `lib/orca_translate/`:
 - `translate.py`: the walk over the timeline. It passes by the steps that do not build the body, gives every other
   step to the handler of its kind (`HANDLERS`, gathered from the handler modules) and keeps the verdict of each step.
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
-  keep their numbers and why, and the part built so far.
+  keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
+  (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it.
+- `other_components.py`: geometry of other components (see "Other components" below).
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer) and `threads.py`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
@@ -102,7 +104,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
-ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component, ellipses and splines Fusion does not give exactly, cuts that split
+ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component whose place is not known, ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face. A left out step changes the shape Orca builds; later steps are still
 copied. A cut or intersect while no body is in the copy yet is left out too. A step that is left out keeps nothing
@@ -150,7 +152,7 @@ not judged to meet material where Orca removes nothing.
 - Orca's "up to face" end names a face by Orca's own numbering of the body it rebuilt, which the copy cannot know. So
   a side "To" a face or plane is a distance: the measured distance from where the extrude starts to the plane, plus
   Fusion's offset from it (that offset may follow a size). The face or plane must be flat and square to the extrude;
-  a tilted or curved one, one of another component, and a two sided extrude whose sides both end on one side of the
+  a tilted or curved one, a curved one of another component or one whose place is not known, and a two sided extrude whose sides both end on one side of the
   sketch are left out. The measured end face must lie at that distance; else the step is left out. A cut may end
   before that distance only where it leaves the part (`extents.measured_gap`): a cut that goes out of the part makes
   no end face of its own, and Fusion then measures a wall that the cut went through. The copy accepts this nearer
@@ -394,7 +396,8 @@ not judged to meet material where Orca removes nothing.
   turn evenly, the same as Fusion, so the count and the angle both follow, also across 360. A part turn to both sides
   is two tool bodies with their numbers fixed.
 - Orca's pattern cannot leave copies out, so a pattern with suppressed copies is left out; so is one whose copies are
-  turned, do not sit on an even grid, or whose direction or axis is of another component. Fusion's path pattern is
+  turned, do not sit on an even grid, or whose direction or axis is of another component and could not be brought into
+  the part's place. Fusion's path pattern is
   not read, so it is left out by its step type.
 - Mirror of features: the tool body and an Orca Mirror of it (Add), then the Boolean. Mirror of the body joined to it
   (`combine` true): an Orca Mirror of the part. A pattern or mirror of bodies that leaves its copies apart does not
@@ -435,7 +438,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - Left out: a twist or a taper (cause `sweepShape`), an outline kept in one direction along a bend (`sweepShape`), a
   path out of one plane or with a free curve (`sweepPath`), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
   where Fusion's mitred wire has 384, and 202 for a closed square path against 439), holes along a bent path
-  (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component and the outlines of
+  (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
+  known, a path in another component and the outlines of
   different planes.
 - The path keeps its numbers (Orca cannot tie a path sketch to a variable): the sizes behind the path's sketch and
   its plane, or for a path of body edges every size read before the sweep, are marked. A plain rectangle or circle
@@ -695,6 +699,41 @@ Transform, Hole and Boolean) and live.
   to 0.1. A box with corners rounded by `fr` and a 2 mm round of its top edges built at `fr` 4, 3.2, 2.5 and 1.5,
   with the volumes Pappus gives; the told lower limit of `fr` (3.12) follows the copy's room rule, which is safer
   than Orca needs here.
+
+### Other components
+
+A step can use geometry of another component: a plane, face, axis or direction, a point a hole sits on, or an outline
+of another component's sketch. The Orca copy reads no motion file, so it writes each one where the capture places it,
+as numbers in the part's coordinates (`orca_translate/other_components.py`, with the shared layer `design_model`):
+
+- Before each handler, inside the step's checkpoint, the walk and `tools.build` bring the step in (`bring_in`): an
+  outline of another component's sketch whose place is known (`design_model.borrowed`), and a flat face or plane that
+  an extrude starts from or reaches to or that a hole sits on (`design_model.refs`), lose `foreign`. The reader already
+  gives mirror planes, split planes, revolve and pattern axes and pattern directions of other components in the part's
+  coordinates (`assembly: true`). So these are copied: a mirror across a plane of another component, a pattern along
+  its axis or edge or about its axis, a revolve about its axis, a split by its plane, an extrude to or from its flat
+  face or plane, a hole on its face or sketch point, and an extrude, revolve, sweep or loft of its sketch, also in a
+  tool body.
+- Once a step is copied, each measured reference it holds marks the ticked sizes whose parameter acts on the
+  component that owns it (`refs.mark_all`): "Mirror1 mirrors across a plane of Cover that may move with it, and the
+  copy cannot follow that". Such a parameter is then fixed or partly followed, never "not used". When the capture does
+  not say where the parameters act, the result gets a note instead. A step that does not change the part (a mirror
+  whose copies stay apart) marks nothing.
+- An outline of another component's sketch is written as numbers, and the sizes that its dimensions read are marked
+  ("it changes the sketch Rim of Lid, which Sweep1 copies as fixed numbers"), with a note. Its sketch keeps its name,
+  which may be the name of a sketch of the part: such an outline gets no sketch graph (`sketches.graph_for`) and no
+  sketch sizes by name (`sketch_sizes.profile_sizes`), and its sketch plane names no sizes of the part
+  (`translator.sizes.placement_sizes`).
+- Still left out (cause `otherComponent`): a record that stays `foreign` (a curved face, an edge, a direction, axis or
+  plane whose place could not be brought in), a tool body of another component, edges of another component that a
+  round or chamfer picks, a thread on a face of another component and a sweep path in another component.
+
+Checked live with OrcaSlicer 2.5.1 on 2026-11-16 (`scripts/orca_live_check.py`): the fixtures `component_foreign_mirror`
+(8282.7 mm3 as worked out, and 8452.4 after `depth_mm = 8`), `component_ref_reach` (8424.1, the boss up to z 25 in the
+part's coordinates), `component_ref_hole` (7803.7) and `sweep_borrowed` (1857.8), and a pattern along an axis of
+another component, a circular pattern about one, a revolve about one, a split by a plane of one and a tool body from an
+outline of another component's sketch (the captures of `tests/test_orca_other_components.py`) built as worked out,
+without an Orca error.
 
 ### Where the part sits
 

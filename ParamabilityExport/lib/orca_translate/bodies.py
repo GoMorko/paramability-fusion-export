@@ -77,9 +77,9 @@ def split(ctx, item):
 
 def _by_plane(ctx, item, tool, piece, others):
     plane = tool.get("plane") or {}
-    if plane.get("foreign") or plane.get("assembly"):
-        return Skip("The plane of this split belongs to another component, which is not copied to Orca yet.",
-                    gap_hints.OTHER_COMPONENT)
+    if plane.get("foreign"):
+        return Skip("The plane of this split belongs to another component and could not be brought into the part's "
+                    "place, which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     point, normal = plane.get("point"), plane.get("normal")
     if not (isinstance(point, (list, tuple)) and isinstance(normal, (list, tuple)) and vec.length(normal) > 1e-9):
         return Skip("The plane of this split could not be read.")

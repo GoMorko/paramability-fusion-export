@@ -28,6 +28,7 @@ import copy
 from ...capture_model import step_kinds, tool_items
 from ...geometry import rigid
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
+from ...design_model import refs
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
@@ -35,7 +36,7 @@ from ..repeat import body_copies
 from ..result import Refusal, StepResult
 from ..step_walk import tool_refusal
 from ..values import Quantity, reads_in
-from ..walk import copies_bodies, is_foreign
+from ..walk import copies_bodies
 from . import tool_walk
 
 
@@ -92,7 +93,7 @@ def _writes_flat(tool):
         # A step that names the bodies it made or changed (`made`, a coil) is judged by those, not by every body of
         # its component.
         listed = data["made"] if isinstance(data.get("made"), list) else item.get("bodies_after")
-        if (data.get("tools") or len(listed or []) != 1 or is_foreign(data) or copies_bodies(item)
+        if (data.get("tools") or len(listed or []) != 1 or refs.is_foreign(data) or copies_bodies(item)
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True
@@ -149,15 +150,15 @@ def _follow_place(ctx, item, tool, found):
     references on a component that is not the root, the sizes that act on the component are marked."""
     if found.get("source") == "root":
         return None
-    refs = [found[slot]["ref"] for slot in ("xy", "xz", "yz")
-            if isinstance(found.get(slot), dict) and isinstance(found[slot].get("ref"), dict)]
-    normals = [ref.get("normal") for ref in refs]
-    if len(refs) < 3 or not all(_vector(n) for n in normals):
-        ref_motion.mark_all(ctx, item, {"component": tool.get("component"), "type": PLACE}, WHAT)
+    planes = [found[slot]["ref"] for slot in ("xy", "xz", "yz")
+              if isinstance(found.get(slot), dict) and isinstance(found[slot].get("ref"), dict)]
+    normals = [ref.get("normal") for ref in planes]
+    if len(planes) < 3 or not all(_vector(n) for n in normals):
+        refs.mark_all(ctx, item, {"component": tool.get("component"), "type": PLACE}, WHAT)
         return None
     shift = [Quantity(0.0)] * 3
-    for ref in refs:
-        offset = ref_motion.moves(ctx, item, dict(ref, type=PLACE), ref_motion.PLANE, WHAT)[0]
+    for ref in planes:
+        offset = ref_motion.moves(ctx, item, dict(ref, type=PLACE), refs.PLANE, WHAT)[0]
         if offset.sized:
             shift = [shift[i].plus(offset.scaled(ref["normal"][i])) if abs(ref["normal"][i]) > 1e-9 else shift[i]
                      for i in range(3)]

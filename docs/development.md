@@ -20,6 +20,11 @@ package may import only packages above it in this list (not every one of them). 
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion. Export for Orca uses its extended reading (`extended=True`), which the recipe output does not use.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).
+- `design_model`: the shared layer both translators read: facts about the design that every output needs and doubts
+  about sizes, never a refusal. `recorder.py` declares what it asks of a translation; `refs.py` holds the planes,
+  faces, axes and points of other components (which records a step can use, which sizes may move them, the doubt when
+  the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `words.py` the texts
+  of these facts.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. The modules are listed in `docs/orca-output.md`.
@@ -68,8 +73,9 @@ reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fu
 that no module imports an underscore name from another module. `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in
 `design_edit/store.py` and `export_plan/pipeline/port.py`) with the declared parameters, that both probes have every
-member declared for a probe (in `export_plan/probe_flow/interface.py`), and that the code asks a store, a port or a probe
-only for a declared member, also through another name for it or `getattr`.
+member declared for a probe (in `export_plan/probe_flow/interface.py`), that both translation contexts have every member
+of the recorder (`design_model/recorder.py`), and that the code asks a store, a port, a probe or a recorder only for a
+declared member, also through another name for it or `getattr`.
 
 The shared fakes live in `tests/fakes/`, by domain: one parameter store with options for the answers a test needs
 (`store.py`, with the stores that also hold the timeline marker), one port for one body and one for several bodies

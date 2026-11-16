@@ -16,7 +16,7 @@ from ..capture_model.capture import outside_component
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..translator.words import type_words
-from . import causes, corner_hosts, outline_cuts
+from . import causes, corner_hosts, other_components, outline_cuts
 from .context import Body
 from .solid import ADD, CUT, INTERSECT
 from .steps import Skip
@@ -92,9 +92,12 @@ def build(ctx, record, anchor):
             made = None
             start = len(body.solid.pieces)
             if why is None:
-                made = _handlers()[item["type"]](ctx, item)
+                brought = other_components.bring_in(ctx, item)
+                made = _handlers()[item["type"]](ctx, brought)
                 if isinstance(made, Skip):
                     why = (made.reason.rstrip("."), made.cause)
+                elif made and not isinstance(made, Pass):
+                    other_components.mark_refs(ctx, brought)
             if why is not None:
                 return Skip("The tool body %s cannot be copied: %s (%s)." % (name, label(item), _lower(why[0])),
                             why[1])

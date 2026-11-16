@@ -111,7 +111,11 @@ def plane_move(ctx, item, record, z, what):
 def _move(ctx, item, record, z):
     if record.get("origin"):
         return Value(0.0)
-    if record.get("foreign") or record.get("assembly"):
+    if record.get("assembly"):
+        # A face or plane of another component stays where the capture places it; the walk marks the sizes that act
+        # on its component (`other_components.mark_refs`).
+        return Value(0.0)
+    if record.get("foreign"):
         return None
     kind = record.get("entity_type")
     if kind == "ConstructionPlane":
@@ -234,8 +238,8 @@ def _touches(shape, point):
 def _flat_target(record, z, what):
     """The plane of a face or plane an extrude starts from or reaches to, or a Skip."""
     if record.get("foreign"):
-        return Skip("This extrude %s a face or plane of another component, which the Orca copy does not follow yet."
-                    % what, gap_hints.OTHER_COMPONENT)
+        return Skip("This extrude %s a curved face of another component, or one whose place could not be read, "
+                    "which is not copied to Orca." % what, gap_hints.OTHER_COMPONENT)
     plane = record.get("plane")
     if not isinstance(plane, dict) or not plane.get("point") or not plane.get("normal"):
         return Skip("This extrude %s a surface that is not flat, which is not copied to Orca." % what,

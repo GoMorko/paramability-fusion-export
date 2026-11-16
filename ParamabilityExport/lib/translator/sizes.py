@@ -390,9 +390,11 @@ def placement_sizes(table, timeline, profile, before):
     sizes behind the construction plane itself and, for a plane on a face or on construction geometry built on the
     part (a chain of planes included), every size an item of the body's component reads before the plane was made.
     `before` is the timeline index of the step that uses the sketch. Empty for an origin plane, a sketch of another
-    component (its links say what moves it) or a profile that does not say what its sketch sits on."""
+    component, still `foreign` or brought in (`borrowed`: its links and its own sizes say what moves it), or a profile
+    that does not say what its sketch sits on."""
     reference = profile.get("reference") if isinstance(profile, dict) else None
-    if table is None or not isinstance(reference, dict) or profile.get("foreign") or profile.get("face"):
+    if (table is None or not isinstance(reference, dict) or profile.get("foreign") or profile.get("borrowed")
+            or profile.get("face")):
         return []
     names = set()
     if reference.get("kind") == "constructionPlane" and reference.get("token"):

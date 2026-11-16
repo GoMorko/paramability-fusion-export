@@ -17,9 +17,9 @@ from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from ..orca_recipe.sketch import SketchEntity
 from . import causes, extents
 from .context import Value
-from .sketches import entities_of, graph_for, outlines_of
+from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
-from .sketch_sizes import projection_doubts
+from .sketch_sizes import profile_sizes, projection_doubts
 from .steps import Skip
 from .tools import OPERATIONS, data_of, feature, label
 
@@ -98,20 +98,6 @@ def _turned_frame(frame, point, direction, degrees):
             "z": vec.rotate(frame["z"], direction, degrees)}
 
 
-def _sketch_sizes(ctx, profile):
-    """Fusion names of the free sizes that move a profile's sketch."""
-    if ctx.table is None:
-        return ()
-    record = graph_for(ctx.capture, profile)
-    if record is not None:
-        names = [d.get("param") for d in record.get("dimensions") or [] if isinstance(d, dict) and d.get("param")]
-    else:
-        names = [m["name"] for m in ctx.table.model_params.values()
-                 if (m.get("created_by") or {}).get("kind") == "sketchDimension"
-                 and (m.get("created_by") or {}).get("sketch") == profile.get("sketch")]
-    return ctx.depends(names)
-
-
 def revolve(ctx, item):
     data = data_of(item)
     operation = data.get("operation")
@@ -132,9 +118,9 @@ def revolve(ctx, item):
     if problem:
         return Skip(problem)
     axis = data.get("axis") or {}
-    if axis.get("assembly") or axis.get("foreign"):
-        return Skip("The revolve axis belongs to another component, which is not copied to Orca yet.",
-                    gap_hints.OTHER_COMPONENT)
+    if axis.get("foreign"):
+        return Skip("The revolve axis belongs to another component and could not be brought into the part's place, "
+                    "which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     if not isinstance(axis.get("point"), (list, tuple)) or not isinstance(axis.get("dir"), (list, tuple)):
         return Skip("The revolve axis could not be read as a line.")
     found = _angle(ctx, item, data.get("extent"))
@@ -194,7 +180,7 @@ def revolve(ctx, item):
     ctx.has_body = True
     ctx.solid.add(_SOLID_MODES[operation], tool)
     projection_doubts(ctx, item, profile, outlines_of(profile))
-    loose = _sketch_sizes(ctx, profile)
+    loose = profile_sizes(ctx, profile)
     if loose:
         ctx.doubt(loose, "%s: the outline from %s keeps its drawn numbers: Orca can tie only the size of a plain "
                   "rectangle or circle to a variable" % (name, profile.get("sketch") or "the sketch"))

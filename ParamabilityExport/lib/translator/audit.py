@@ -18,7 +18,7 @@ can keep a size that only such a step reads and say why it changes nothing yet.
 """
 from ..sketch_values.coverage import MOVED, STILL, ref_answer
 from ..sketch_values.motion import Motion
-from . import ref_motion
+from ..design_model import refs
 from .notes import step_label, untried_link_reason
 from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
 from .step_walk import all_steps
@@ -96,7 +96,7 @@ def _references(ctx, table, item, label, named, own, measured, motion, out):
     if getattr(motion, "optimistic", False):
         return
     free = set(table.ticked)
-    for entry, names in ref_motion.reaching(ctx, item):
+    for entry, names in refs.reaching(ctx, item):
         component = (entry["ref"].get("component") or {}).get("name") or "another component"
         for name in names:
             if name not in free or name in named or name in out.forgotten:
@@ -121,7 +121,7 @@ def _gap_reads(ctx, table, item, measured, motion):
                 found.add(name)
     for names, _ in construction_fixes(table, item):
         found |= set(names)
-    for _, names in ref_motion.reaching(ctx, item):
+    for _, names in refs.reaching(ctx, item):
         found |= set(names)
     return found & free
 

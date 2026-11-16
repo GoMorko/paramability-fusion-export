@@ -277,13 +277,13 @@ def _directions(item, data):
         raw = float(data.get("distance_" + which) or 0.0)
         if n <= 1 or abs(raw) < 1e-9:
             continue
+        place = data.get("direction_%s_place" % which)
+        if isinstance(place, dict) and place.get("foreign"):
+            return Skip("The direction of this pattern comes from another component and could not be brought into "
+                        "the part's place, which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
         direction = data.get("direction_" + which)
         if not isinstance(direction, (list, tuple)) or vec.length(direction) < 1e-9:
             return Skip("The direction of this pattern could not be read.")
-        place = data.get("direction_%s_place" % which)
-        if isinstance(place, dict) and (place.get("assembly") or place.get("foreign")):
-            return Skip("The direction of this pattern comes from another component, which is not copied to Orca "
-                        "yet.", gap_hints.OTHER_COMPONENT)
         out.append((which, vec.scale(vec.unit(direction), 1.0 if raw > 0 else -1.0), n, abs(raw),
                     bool(data.get("symmetric_" + which))))
     if not out:
@@ -465,9 +465,9 @@ def circular(ctx, item):
     if isinstance(groups, Skip):
         return groups
     axis = data.get("axis") or {}
-    if axis.get("assembly") or axis.get("foreign"):
-        return Skip("The axis of this pattern belongs to another component, which is not copied to Orca yet.",
-                    gap_hints.OTHER_COMPONENT)
+    if axis.get("foreign"):
+        return Skip("The axis of this pattern belongs to another component and could not be brought into the "
+                    "part's place, which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     if not isinstance(axis.get("point"), (list, tuple)) or not isinstance(axis.get("dir"), (list, tuple)):
         return Skip("The turning axis of this pattern could not be read as a line.")
     n = int(data.get("quantity") or 1)
@@ -537,9 +537,9 @@ def _mirror_feature(ctx, name, plane, body):
 def mirror(ctx, item):
     data = data_of(item)
     found = data.get("plane") or {}
-    if found.get("foreign") or found.get("assembly"):
-        return Skip("The mirror plane belongs to another component, which is not copied to Orca yet.",
-                    gap_hints.OTHER_COMPONENT)
+    if found.get("foreign"):
+        return Skip("The mirror plane belongs to another component and could not be brought into the part's place, "
+                    "which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     plane = mirror_plane(data)
     if plane is None:
         return Skip("The mirror plane could not be read as a flat plane.")

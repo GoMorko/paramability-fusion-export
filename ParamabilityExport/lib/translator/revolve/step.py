@@ -15,6 +15,7 @@ from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import round9
 
+from ...design_model import refs
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
 from ..result import Refusal, StepResult
@@ -160,7 +161,7 @@ def _turned(on, dir3, point3, degrees):
 def _foreign_axis(ctx, item, axis):
     """The raw 3D point of an axis of another component as it moves with sizes (`ref_motion`), or None when sketch
     values do not follow sizes in this walk. The sizes that move it are marked here when the move cannot be followed."""
-    moved = ref_motion.raw_moves(ctx, item, axis.get("ref") or {}, ref_motion.AXIS, "turns about")
+    moved = ref_motion.raw_moves(ctx, item, axis.get("ref") or {}, refs.AXIS, "turns about")
     if not sketch_motion.active(ctx):
         return None
     return [sketch_motion.Affine(float(p)).plus(m) for p, m in zip(axis["point"], moved)]

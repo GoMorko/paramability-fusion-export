@@ -1441,6 +1441,21 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       of the block have rounded corners; set `Box` to 50 and `Round` to 4 in both: the volumes agree. Expect for e):
       `Round` has a lower limit above 2.2 mm on its line; set `Round` to 4 in both: the volumes agree; set `Round`
       below its lower limit in Orca: Orca stops the rebuild, as the limit says.
+- [ ] OR22, a pattern direction and a mirror plane from another component. User parameters `Gap` = 5 mm and
+      `Depth` = 5 mm. Make two components, `Cover` and `Tray`. In `Cover`, make an offset plane from its YZ plane at
+      `Gap`, and a construction axis on its X axis. Turn the `Cover` occurrence 90 degrees about Z (its X axis now
+      runs along the Y axis of the assembly). In `Tray`, on the XY plane, draw a center rectangle 80 by 40 mm on the
+      origin and extrude it 10 mm as a new body. On its top face draw a circle of 6 mm diameter centred at (-30, -15)
+      and extrude it `Depth` up (join), and a circle of 6 mm diameter centred at (20, -5) extruded 5 mm up (join).
+      Make a rectangular pattern of the first boss along the axis of `Cover` (pick it in the `Cover` occurrence):
+      3 copies, 12 mm apart. Mirror the second boss across the offset plane of `Cover` (a mirror of features). Last,
+      move the `Tray` occurrence by (0, 0, 20).
+      Export `Tray`'s body for Orca with `Gap` and `Depth` ticked.
+      Expect: no step left out. The Design tab has three bosses in a row along Y at x = -30 and the second boss with
+      its mirror image at (20, 15), as Fusion shows them. `Depth` follows the Orca variable; `Gap` stays a number,
+      with the reason that the mirror "mirrors across a plane of Cover that may move with it". In Orca set `Depth` to
+      8 and in Fusion the same: the volumes agree. Change `Gap` to 3 in Fusion only: the mirror image moves in Fusion,
+      and the Orca copy keeps it where it was, as its reason says.
 
 ## Thin extrudes
 

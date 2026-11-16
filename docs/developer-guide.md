@@ -880,6 +880,18 @@ timeline order. For each item it makes one of these decisions. The first rule th
 | a step that picks faces of a gap | gap (`cause: picks`) |
 | otherwise | the handler runs |
 
+Before the check for `foreign` records, the walk brings in the geometry of other components that the step can use as
+its own. The shared layer does this (`lib/design_model/`, see 2.2):
+
+- `borrowed.bring_in` takes each outline of another component's sketch whose place is known. It removes `foreign` and
+  writes the name of the component in `borrowed`. It also records the sizes that move that sketch, or the component
+  that the outline follows (see "A place of another component" in 3.3).
+- `refs.bring_in` takes the flat face or plane of another component that an extrude starts from or reaches to, and the
+  flat face or plane that a hole sits on. It removes `foreign`, writes `assembly: true`, and takes the plane from the
+  measured reference (`ref`), in the coordinates of the part.
+
+A record that these two cannot bring in stays `foreign`, and the step becomes a gap.
+
 The handler answers with a `StepResult` (the recipe steps) or a `Refusal` (a reason):
 
 - A `Refusal` normally makes the item a gap. A `Refusal(stops=True)` stops the copy.
@@ -1547,9 +1559,10 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived`. `slots.slot_text(slot)` names a solver slot in words. |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
-| `translator` | `capture_model`, `geometry`, `package`, `params`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
-| `probe` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. |
-| `export_plan` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `probe`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
+| `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
+| `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
+| `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. |
+| `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `package`, `params`, `probe`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
 | `dialog_model` | `export_plan`, `package`, `params`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
 | `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
@@ -1639,7 +1652,8 @@ one folder per family of steps.
 - Values and sizes: `values.py` (`quantity`, `pin`, `handled`), `sizes.py` (which sizes a step reads, upfront doubts,
   `probed_sizes`, the sizes the probe tries).
 - Places: `place.py` (`place`, `POSITIONS`, `DIRECTIONS`, `NOT_WRITTEN`: moves a finished recipe by the rigid map from
-  `geometry.rigid`), `placement.py` (sketch frames to recipe placements), `ref_motion.py` (places of other components).
+  `geometry.rigid`), `placement.py` (sketch frames to recipe placements), `ref_motion.py` (how places of other
+  components move, from the motion file; what is known without it is in `design_model/refs.py`).
 - Handler folders:
   - `extrude/`: `step.py` holds `handle`. Also `plan.py`, `side.py` (`SidePlan`: the plan of one side), `reach.py`,
     `reach_motion.py` (a face or plane placed by the probe's measure), `taper.py`, `through.py`, `through_taper.py`,
@@ -1671,8 +1685,9 @@ one folder per family of steps.
   `curved.py` (formulas with sines and products), `spline_fit.py`, `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
-  centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (outlines from another
-  component's sketch).
+  centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (`mark_unchecked`: the sizes of
+  an outline from another component's sketch in a sweep or a loft. The outline itself is brought in by
+  `design_model/borrowed.py`).
 - Checks over the size ranges, `ranges/`: `range_check.py` (`size_env` gives the value of every size at a setting) and
   `kept_ranges.py` (range cuts, `part_step`, `built_ranges`).
 - Gaps, `gaps/`: `stops.py` (the gap record, the gap names, `stop_reason`, `MAX_GAPS`), `gap_place.py`,
@@ -1680,6 +1695,25 @@ one folder per family of steps.
   `gap_picks.py`).
 - The step kind table, the chain of splits (`lineage`) and the tool items are not in the translator. They are in
   `capture_model`, since the Fusion reader uses them too.
+
+#### design_model
+
+The shared layer between the capture and the outputs. Both translators read it, and the probe plan can read it. It
+does not use the words of one output, and it does not refuse a step. It gives facts (what a step uses, where it is,
+which sizes can move it) and doubts (sizes that can move something whose motion is not known).
+
+- `recorder.py`: `Recorder`, the declared interface of what the layer asks of a translation: `table`, `capture`,
+  `cache`, `motion` (None for the Orca output), `doubt(names, why)`, `note(text)` and `follow_component(component)`.
+  The context of the translator and the context of the Orca output have every member. `tests/test_interfaces.py`
+  checks this. It also checks that the layer asks a recorder only for these members.
+- `refs.py`: planes, faces, axes, directions and points of other components. The shape names (`PLANE`, `AXIS`,
+  `POINT`, `DIRECTION`), `BODY_LISTS`, `is_foreign`, `bring_in`, `acting_sizes`, `reaching`, `mark_all`,
+  `from_old_export` and `why_foreign`. These came from `translator/ref_motion.py` and `translator/walk.py`.
+- `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `BORROWED_KEYS`). This came from
+  `translator/sketch/borrowed.py`. The probe flow reads `usable` and `BORROWED_KEYS` (`export_plan/probe_flow/
+  borrowed_view.py`).
+- `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
+  the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
 
 #### capture_model and geometry
 
@@ -2149,6 +2183,28 @@ reads it again at every row (`probe_refs.py`) and fits how far it moves (`ref_fi
 (`ref_motion.py`) writes the move as a formula, or marks the sizes that act on that component when the place turns or
 was not measured.
 
+The facts that do not need the probe are in the shared layer, `lib/design_model/refs.py`. Both translators use them:
+
+- `acting_sizes` gives the ticked sizes whose user parameter acts on the component that owns the reference
+  (`params.geometry_links.acts`). It also tells if the capture can say this. An old capture has no data on where the
+  parameters act.
+- `mark_all` marks those sizes with a doubt: the copy keeps the reference where it is now. When the capture cannot say
+  which sizes act on the component, the step gets a note instead.
+- `is_foreign`, `bring_in`, `why_foreign` and `from_old_export` read the `foreign` and `assembly` records (see 1.9.1
+  and 3.10).
+
+The translator calls `mark_all` when it has no measure of the reference. The Orca output has no motion file. Thus it
+keeps every reference of another component where the capture puts it, and calls `mark_all` for each reference of a step
+that it copies (`orca_translate/other_components.py`). A size that acts on that component thus never shows as "not
+used" in the Orca result.
+
+An outline of another component's sketch follows the same rules (`design_model/borrowed.py`). When the motion file has
+values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
+is written as numbers, and every size that moves that sketch is marked. A borrowed outline keeps the name of its sketch.
+That name can be the same as the name of a sketch of the part. Thus no code may find the sketch of a borrowed outline by
+its name. `sizes.placement_sizes` gives no sizes for the plane of such a sketch, and the Orca output finds no sketch
+graph for it.
+
 ### 3.4 How a Split Body is translated
 
 A split makes new bodies. Later steps may belong to the other piece. So a split normally stops the copy. The add-in
@@ -2395,7 +2451,7 @@ A step becomes a gap (left out, recipe still written):
 - it reaches into another component in a way the copy cannot follow (`foreign` records). An export from before 0.10.6
   marked the part's own sketches and planes, when seen through an occurrence, as records of another component. A step
   whose only such records are sketch outlines, planes or axes with none of the place data of the current reader is left
-  out with the cause `oldExport` and the tip to export again (`ref_motion.from_old_export`). An edge or a face record
+  out with the cause `oldExport` and the tip to export again (`design_model/refs.py`, `from_old_export`). An edge or a face record
   carries no place data in any version, so it is never taken for old;
 - it picks faces of a gap, or may pick them (`cause: picks`);
 - it is a pattern or mirror of a gap;
