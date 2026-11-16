@@ -2329,7 +2329,7 @@ Written from the API reference and checked only with fakes (`lib/fusion_reader/b
   trimmed spline as the definition of the trimmed piece. The Orca copy checks the pieces against the measured points,
   so a different meaning leaves the outline out rather than drawing it wrong (OR16 f).
 - A hole on sketch points records `sketch_frame` from `Sketch.transform` of the points' sketch
-  (`read_solid._hole_sketch`). In OR9 the hole in Orca must sit where Fusion has it; a hole off its place means the
+  (`read_hole._hole_sketch`). In OR9 the hole in Orca must sit where Fusion has it; a hole off its place means the
   frame and the points' `worldGeometry` are not in the same coordinates.
 - The steps of a tool body of another component (`helper_of`, read by `fusion_reader/helper_pass.py` with a
   `ReadContext` whose target is the tool) must hold that component's own coordinates, and `place.frame` and

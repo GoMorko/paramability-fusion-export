@@ -64,7 +64,7 @@ package may import only packages above it in this list (not every one of them). 
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. Each handler takes the resolved step of `design_model.design` (`handler(ctx, step)`) and reads no step data from an item itself. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).
-- `fusion_reader`: reads the design with `adsk` into a capture.
+- `fusion_reader`: reads the design with `adsk` into a capture. `read_solid.py` reads extrude, revolve and combine, `read_hole.py` reads holes, and `read_extent.py` reads the start, the sides and the target face of an extrude (a hole reads its extent target there too).
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
 - `commands/`: the three buttons, their flows and the panel; also uses `adsk`.
 
