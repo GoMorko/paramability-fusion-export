@@ -2,13 +2,15 @@ import os
 import tempfile
 import unittest
 import zipfile
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
 from lib.design_edit.apply import RowBuildError
 from lib.export_plan.assemble import build_package
 from lib.params.expressions import format_expression, is_plain_number
-from lib.package.naming import addin_version, body_file_title, design_title, package_file_name, with_extension
+from lib.package.naming import (addin_version, body_file_title, component_names, design_title, package_file_name,
+                                with_extension)
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.restore import restore_order, restore_parameters
 from lib.design_edit.runner import ExportCancelled, RowExport
@@ -186,6 +188,16 @@ class NamingTest(unittest.TestCase):
         self.assertEqual(body_file_title("Desk set v4", ["Pen cup v2", "Pen cup v2"]), "Pen cup")
         self.assertEqual(body_file_title("Desk set v4", ["Lid", "Pipe"]), "Desk set")
         self.assertEqual(body_file_title("Desk set v4", [None]), "Desk set")
+        self.assertEqual(body_file_title("Desk set v4", [None, "Lid"]), "Desk set")
+
+    def test_a_body_of_the_root_names_no_component(self):
+        design = SimpleNamespace()
+        root = SimpleNamespace(name="(Unsaved)", parentDesign=design)
+        lid = SimpleNamespace(name="Lid", parentDesign=design)
+        design.rootComponent = root
+        names = component_names([SimpleNamespace(parentComponent=c) for c in (root, lid)] + [object()])
+        self.assertEqual(names, [None, "Lid", None])
+        self.assertEqual(body_file_title("Untitled", names[:1]), "Untitled")
 
     def test_file_name_is_safe(self):
         self.assertEqual(package_file_name('a/b:c?'), "a_b_c_.paramability")

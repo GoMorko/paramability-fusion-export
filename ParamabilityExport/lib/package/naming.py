@@ -18,17 +18,21 @@ def design_title(document_name):
 
 def body_file_title(document_name, component_names):
     """Title for the default file name: the component that holds the exported bodies, or the design when the
-    bodies sit in several components (or none is known)."""
-    names = {design_title(n) for n in component_names if n}
-    return names.pop() if len(names) == 1 else design_title(document_name)
+    bodies sit in several components, or one of them sits in the root or in a component that is not known (None)."""
+    names = {design_title(n) if n else None for n in component_names}
+    return names.pop() if len(names) == 1 and None not in names else design_title(document_name)
 
 
 def component_names(bodies):
-    """Names of the components that hold `bodies`; a body whose component cannot be read gives None."""
+    """Names of the components that hold `bodies`. A body of the root component gives None: the root takes the name
+    of the document, or a placeholder such as "(Unsaved)" before the first save. A body whose component cannot be
+    read gives None too."""
     names = []
     for body in bodies:
         try:
-            names.append(body.parentComponent.name)
+            component = body.parentComponent
+            root = component.parentDesign.rootComponent
+            names.append(None if component == root else component.name)
         except Exception:
             names.append(None)
     return names

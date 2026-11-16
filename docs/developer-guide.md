@@ -154,7 +154,9 @@ When the person clicks "Export for Paramability", Fusion calls `_on_created` in
    the capture once, without sizes. When a step stops the copy, the warning says "Copy stops at Extrude9 (extrude)."
    and "The part will be saved as a fixed shape". When the copy goes on, it lists up to three steps that are "Likely
    left out of the copy". A button "Show in timeline" selects the stopping step in Fusion.
-7. On OK, `export_flow.run_export` runs. It asks for the file name, reads the marker again, builds an
+7. On OK, `export_flow.run_export` runs. It asks for the file name (`package/naming.py`: the name of the component
+   that holds the bodies, else the name of the design; the root component gives the name of the design, because
+   Fusion names the root "(Unsaved)" before the first save), reads the marker again, builds an
    `ExportRequest` (title, writer text, up axis, parameters, ticked names, typed ranges, marker, "Faster tries", the
    time limit of the tries) and
    runs the pipeline inside `export_common.run_guarded`.
