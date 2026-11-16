@@ -57,7 +57,7 @@ def plan_sides(item, data, frame, shift_q, ctx, plane_q):
     sketch plane. A distance side that carries `quantity` (a `Quantity`, from a step written again as an extrude)
     writes that for its distance instead of a parameter's.
     """
-    read = dm.read_sides(data, frame, shift_q.n, faces=True)
+    read = dm.read_sides(data, frame, shift_q.n, faces=True, bodies=dm.bodies_of(item))
     if is_problem(read):
         return _from_problem(read)
     first = read[0]

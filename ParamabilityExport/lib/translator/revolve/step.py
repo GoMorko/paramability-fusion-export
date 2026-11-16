@@ -114,13 +114,14 @@ def _travel_from_normal(data, combine):
     return vec.scale(vec.unit(normal), 1.0 if combine == "cut" else -1.0)
 
 
-def _sense(data, combine, frame, outer, point2, dir2, dir3, point3, angle):
-    """+1 when the captured axis direction turns the way Fusion did, -1 when it must be negated, or a Refusal."""
+def _sense(data, combine, frame, outer, point2, dir2, dir3, point3, angle, bodies):
+    """+1 when the captured axis direction turns the way Fusion did, -1 when it must be negated, or a Refusal.
+    `bodies` holds the boxes of the body before and after the step (`revolve_facts.body_boxes`)."""
     turn = _turn_direction(frame, outer, point2, dir2, dir3)
     if isinstance(turn, Refusal):
         return turn
-    points = [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _loop_points(outer)]
-    found = revolve_facts.sense(data, turn, dir3, angle, combine == "cut", points, point3)
+    found = revolve_facts.sense(data, turn, dir3, angle, combine == "cut", revolve_facts.outline_points(data), point3,
+                                bodies)
     return Refusal(shared.REVOLVE_TURN_UNREAD) if found is None else int(found)
 
 
@@ -358,7 +359,8 @@ def handle(ctx, step):
     extent = data.get("extent") or {}
     sign, back, turn_back = 1, 0.0, None
     if mode == "part":
-        sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3, point3, angle)
+        sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3, point3, angle,
+                      revolve_facts.body_boxes(item))
         if isinstance(sign, Refusal):
             return sign
     elif mode == "symmetric":

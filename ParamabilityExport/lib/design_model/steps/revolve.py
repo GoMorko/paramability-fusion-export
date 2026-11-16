@@ -7,8 +7,10 @@ outward normals of its caps tell it: the start cap (`start_face_normal`) lies in
 along it; after a cut both face the other way. A cap that a join merged into a face of the part, or that a cut
 removed, is not given; the other cap can still tell (`sense`). A quarter turn ends with the same cap normal either
 way, so when the caps do not tell, the box of the faces the revolve made (`made_box`) must fit inside the box the
-outline sweeps one way and not the other. For a symmetric revolve the caps must sit the angle before and after the
-sketch (`symmetric_ok`): that also proves how Fusion counts the angle.
+outline sweeps one way and not the other. A join merges its faces with faces of the part, so those faces can reach
+past the swept box: for a join, the made faces and the whole body after the step must fit inside the box of the body
+before the step together with the swept box (`body_boxes`). For a symmetric revolve the caps must sit the angle
+before and after the sketch (`symmetric_ok`): that also proves how Fusion counts the angle.
 
 A revolve to two sides turns by `angle one` to one side of the sketch and by `angle two` to the other, and Fusion does
 not say which side is which. The result covers one turn of `angle one + angle two` that starts a number of degrees back
@@ -18,7 +20,7 @@ two apart (`back_sides`). How the travel is measured, and how the result is writ
 """
 import math
 
-from ...geometry import vec
+from ...geometry import footprint, vec
 
 FULL_TURN_DEG = 360.0
 # How far apart two unit normals may be and still count as the same direction.
@@ -57,6 +59,39 @@ def _normal(data, key):
     return None
 
 
+def _curve_points(curve):
+    """2D points whose polygon holds the capture curve `curve`. An arc or circle is a polyline whose points are moved
+    out from the centre so that every chord lies outside the curve; the box it sweeps is then never smaller than the
+    box the curve sweeps."""
+    points = footprint.polyline(curve)
+    if curve.get("kind") not in ("arc", "circle"):
+        return points
+    if footprint.is_full(curve):
+        sweep = 2.0 * math.pi
+    else:
+        sweep = abs(footprint.arc_span(curve)[1])
+    out = 1.0 / math.cos(sweep / (2.0 * footprint.ARC_SEGMENTS))
+    c = curve["center"]
+    return [[c[0] + (p[0] - c[0]) * out, c[1] + (p[1] - c[1]) * out] for p in points]
+
+
+def outline_points(data):
+    """3D points of the outer loops of every outline of the revolve in `data`, for `turned_box`; None when an outline
+    does not read. A line is its two ends, an arc or circle a polyline outside it (`_curve_points`), a free curve its
+    samples."""
+    found = []
+    try:
+        for profile in data.get("profiles") or []:
+            frame = profile["frame"]
+            for loop in profile["loops"]:
+                if loop.get("outer"):
+                    for curve in loop["curves"]:
+                        found += [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _curve_points(curve)]
+    except (KeyError, TypeError, IndexError, ValueError, ZeroDivisionError):
+        return None
+    return found or None
+
+
 def turned_box(points, axis_point, axis, total_deg):
     """(min, max) corners of the box that `points` sweep turning by the right hand rule about the line through
     `axis_point` along `axis`, from 0 to `total_deg` degrees."""
@@ -74,8 +109,8 @@ def _box_holds(outer, inner):
     return all(outer[0][i] - BOX_TOL <= inner[0][i] and inner[1][i] <= outer[1][i] + BOX_TOL for i in range(3))
 
 
-def _made_box(data):
-    box = data.get("made_box")
+def _box(box):
+    """(min, max) of a { min, max } box record, or None when it does not read."""
     if not isinstance(box, dict):
         return None
     low, high = box.get("min"), box.get("max")
@@ -84,21 +119,46 @@ def _made_box(data):
     return [float(c) for c in low], [float(c) for c in high]
 
 
-def sense(data, turn, axis, total_deg, cut, points=None, axis_point=None):
+def body_boxes(item):
+    """(box before, box after) of the body a walk builds around the timeline item `item`, each a { min, max } record
+    or None: the item's `target_before` and `target_after`, else the `target_box_before` of its data (`roles.seen_on`
+    gives the measures of another body there)."""
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    before = (item.get("target_before") or {}).get("box") or data.get("target_box_before")
+    return before, (item.get("target_after") or {}).get("box")
+
+
+def _union(a, b):
+    return [min(x, y) for x, y in zip(a[0], b[0])], [max(x, y) for x, y in zip(a[1], b[1])]
+
+
+def sense(data, turn, axis, total_deg, cut, points=None, axis_point=None, bodies=(None, None)):
     """+1 when Fusion turned a one sided revolve by the right hand rule about `axis`, -1 when the other way, or None
     when the measurements of `data` do not tell. `turn` is the unit way the outline moves at the sketch plane on a
-    right hand turn; `points` (3D points of the outline) and `axis_point` let the made faces tell."""
+    right hand turn; `points` (3D points of the outline, `outline_points`) and `axis_point` let the made faces tell.
+
+    `bodies` holds the boxes of the body before and after the step (`body_boxes`). A join adds material only where the
+    outline sweeps, so the made faces and the body after it lie inside the box before together with the swept box of
+    the turn Fusion made. A box before that is looser than the body only lets more turns fit; when both turns fit, the
+    answer is None."""
     measured = [_normal(data, "start_face_normal"), _normal(data, "end_face_normal")]
     fits = []
     for sign in (1.0, -1.0):
         caps = _caps(vec.scale(turn, sign), vec.scale(axis, sign), 0.0, total_deg, cut)
         if all(n is None or _same(n, cap) for n, cap in zip(measured, caps)):
             fits.append(sign)
-    made = _made_box(data)
-    if len(fits) > 1 and made is not None and points and axis_point is not None:
-        fits = [sign for sign in fits
-                if _box_holds(turned_box(points, axis_point, vec.scale(axis, sign), total_deg), made)]
-    if len(fits) == 1 and (any(measured) or made is not None):
+    made = _box(data.get("made_box"))
+    before, after = (_box(box) for box in bodies)
+    join = data.get("operation") == "join" and before is not None
+    inner = [box for box in (made, after if join else None) if box is not None]
+    if len(fits) > 1 and inner and points and axis_point is not None:
+        def holds(sign):
+            outer = turned_box(points, axis_point, vec.scale(axis, sign), total_deg)
+            outer = _union(outer, before) if join else outer
+            return all(_box_holds(outer, box) for box in inner)
+
+        fits = [sign for sign in fits if holds(sign)]
+    if len(fits) == 1 and (any(measured) or inner):
         return fits[0]
     return None
 

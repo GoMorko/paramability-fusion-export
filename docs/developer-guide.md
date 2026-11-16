@@ -1138,6 +1138,9 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `taperSteep` | an extrude or a sweep with a taper that is too steep | Use a taper under 45 degrees, or draw the sloped wall in the sketch. |
 | `taperCutBothWays` | a tapered cut through all, both ways | Make two tapered cuts through all, one for each way, or give the cut a distance. |
 | `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
+| `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
+| `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
+| `throughAllAdds` | a join or a new body extruded through all (`extrude/through.py`; the Orca output gives the same cause) | Give the extrude a distance, or end it on a face or plane. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
@@ -2212,7 +2215,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     tell in which direction Fusion measures that distance. With `offsets`, the measured start face (`start_offset`)
     tells it. The face plus the distance, or the face minus the distance, must put the start on the measured face.
     When exactly one of the two does this, `Start.offset` is the distance with that sign, and `Start.way` is the
-    sign. Else the result is a `Problem`. The recipe output sets `offsets`. The Orca output does not set it.
+    sign. When there is no measured start face, the measured end cap can tell the sign (`_way_from_end`, see the
+    section "A start at a distance from a face" in part 3). Else the result is a `Problem`. The recipe output sets
+    `offsets`. The Orca output does not set it.
   - `read_sides(data, frame, shift, faces)` gives one `SidePlan` for each side, or a `Problem`. A `SidePlan` has
     the kind (`DISTANCE`, `REACH`, `UP_TO`, `THROUGH`, `THROUGH_BOTH`, `SYMMETRIC`), the capture field of the side
     (`which`, which is also the start of its parameter paths), the direction (`sign`), the length as a `Quantity` of
@@ -2222,8 +2227,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - `UP_TO` is a side that ends on a tilted or curved face of the part. Only a caller that sets `faces` gets it, and
     only for an extrude with one side. For all other callers, such a face gives a `Problem`. The face
     must be a `BRepFace` with a `face_point`. The side goes toward that point. A curved face can lie on the two sides
-    of the sketch, so the measured end face (`end_offset`) must lie on the same side as the point. Else the result
-    is a `Problem` (`WAY_UNSURE`). A flat face that is tilted meets the line of the sketch normal on one side only,
+    of the sketch, so the measured end face (`end_offset`) must lie on the same side as the point. A join merges its
+    end cap into the curved face, so Fusion gives no end face. Then the body that the join made must lie wholly on
+    the same side as the point (`joined_side`, see below). In all other cases the result is a `Problem`
+    (`WAY_UNSURE`). A flat face that is tilted meets the line of the sketch normal on one side only,
     so its point gives the direction. The `Target` of the side has the plane of a tilted face, and no plane for a
     curved face. A face without a plane must be curved (`surface`), else the result is a `Problem` (`FACE_UNREAD`).
     Where Fusion can end the side on other faces than the app, the outline must land on the face alone, else the
@@ -2275,8 +2282,16 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     stored lengths stand, and `end_check` gives None. The other checks stay, for example the check of Orca that a cut
     through all goes to the side with material. One case is different. A face that is not an end cap can show a
     direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
-    and the measured face usually decides. A face that is not an end cap cannot decide, so the extrude is a problem
-    (`WAY_UNSURE`).
+    and the measured face usually decides. A face that is not an end cap cannot decide. When the body that a join made
+    shows the direction (`joined_side`), that direction is used. Else the extrude is a problem (`WAY_UNSURE`).
+  - `joined_side(data, bodies, origin, z)` gives the side of the start plane that a join with one side went to, or
+    None. `bodies` is the body before and after the step (`target_before` and `target_after` of the timeline item,
+    with `box` and `volume_mm3`). The callers give it to `read_sides` (`bodies`). A join merges all its material
+    into the body. Thus, when the volume of the body increased, the material of the extrude is in the box of the body
+    after the step. When that box lies wholly on one side of the start plane, the extrude went to that side. Example.
+    Posts start on a plane above a round roof and go down to the roof. The body after the step lies wholly below
+    that plane, so the posts go down. A box that is larger than the body can only hide the side. It cannot give the
+    wrong side. For a cut, a new body, or a body that did not grow, the answer is None.
   - `taper_problem`, `leans_problem` and `walls_confirm` (also in `steps/extrude_checks.py`) compare the taper of the sides with the measured side walls
     (`side_leans`) or, for one outline, with the area of the end face. `volume_problem` compares the volume of an
     extrude of text or spline outlines with the outline area times the length. Both outputs use these checks.
@@ -3607,6 +3622,26 @@ calculates the box that the outline sweeps in each direction (`turned_box`). The
 in the box of one direction and not in the box of the other direction. When the measurements do not give one
 direction, the revolve is left out with the reason "The turning direction of this revolve could not be read."
 
+The points that `turned_box` turns come from the outlines of the capture (`outline_points`). A line gives its two
+ends. An arc or a circle gives a chain of points around the curve. The code moves these points out from the centre of
+the curve, so that each straight piece between two points lies outside the curve. Thus the box that the points sweep
+is never smaller than the box that the curve sweeps. A free curve gives its samples.
+
+A join can also merge other faces of the revolve with faces of the part. Example. A lip turns a quarter turn about the
+top front edge of a box. Its start cap lies on the front face of the box, so Fusion merges it with the front face.
+The faces that the revolve made then include the whole front face of the box. These faces do not fit in the box that
+the outline sweeps in either direction. Thus, for a join, `sense` also uses the body before and after the step
+(`body_boxes`: the `target_before` and `target_after` of the timeline item). A join adds material only where the
+outline sweeps. Thus, for the correct direction, these two boxes fit in the box of the body before the step together
+with the box that the outline sweeps:
+
+- the box of the faces that the revolve made (`made_box`);
+- the box of the body after the step.
+
+When the two directions fit, the material that the revolve added is inside the box of the part before the step, and
+the boxes do not show the direction. The revolve is then left out. A box that is larger than the body before the
+step lets more directions fit. Thus it cannot give the wrong direction: it can only cause the revolve to be left out.
+
 A symmetric revolve looks the same in the two directions. `symmetric_ok` checks only that each measured cap sits at the
 angle before or after the sketch plane. This check also shows that Fusion counts the angle on each side. When a cap is
 at another place, the revolve is left out ("The turn of this symmetric revolve does not match its measured ends.").
@@ -3784,11 +3819,25 @@ measures the start face at 2 mm from the sketch plane. The face plus 2 mm gives 
 -2 mm. Only the first fits, so the start is at 2 mm and `way` is +1. The written sketch origin then follows the
 parameter of the distance: `4 + start_mm`.
 
+A join that starts inside the material of the part has no start face: Fusion merges the start cap into the part.
+Then the measured end cap can tell the sign (`_way_from_end`). The end cap of an extrude with one side and a distance
+lies at the start plus or minus the length. The code tries the two signs of the start distance and the two directions
+of the side (only the stored direction when the side has a set `direction`). Exactly one of the four pairs must put
+the end on the measured end cap (`end_offset`). The face must be an end cap (`end_is_cap` is true).
+
+Example. A box is 10 mm high. A post starts 2 mm below its top face and goes 5 mm. Fusion measures the end cap at
+13 mm. The starts are 8 mm and 12 mm, and the ends are 3, 7, 13 and 17 mm. Only the start at 8 mm going up gives
+13 mm. Thus the start is at 8 mm, and the post goes up.
+
 The add-in leaves the step out in these conditions:
 
-- There is no measured start face. For example, a join starts inside material, so Fusion makes no start face.
+- There is no measured start face, and the end cap does not tell the sign. For example, the side goes up to a face,
+  the extrude has two sides, the measured end face is not an end cap, or two pairs give the same end. Two pairs give
+  the same end when the start distance is as long as the side.
 - No sign puts the start on the measured face.
 - The two signs put the start on the measured face. This occurs when the distance is almost zero.
+
+The tip of this gap is "Start the extrude on the face itself, or on a plane at that distance from the face."
 
 #### An intersect to two sides
 

@@ -15,6 +15,9 @@ DRAFT_STEEP = "draftSteep"
 TAPER_STEEP = "taperSteep"
 TAPER_CUT_BOTH = "taperCutBothWays"
 EXTRUDE_END_FACE = "extrudeEndFace"
+EXTRUDE_START_OFFSET = "extrudeStartOffset"
+EXTRUDE_WAY = "extrudeWay"
+THROUGH_ADDS = "throughAllAdds"
 THIN_OUTLINE = "thinOutline"
 ROUND_KIND = "roundKind"
 ROUND_CHANGING = "roundChanging"
@@ -61,6 +64,9 @@ HINTS = {
     TAPER_STEEP: "Use a taper under 45 degrees, or draw the sloped wall in the sketch.",
     TAPER_CUT_BOTH: "Make two tapered cuts through all, one for each way, or give the cut a distance.",
     EXTRUDE_END_FACE: "Start and end on flat faces or planes, or give a distance.",
+    EXTRUDE_START_OFFSET: "Start the extrude on the face itself, or on a plane at that distance from the face.",
+    EXTRUDE_WAY: "End the extrude on a flat face or plane, or give it a distance.",
+    THROUGH_ADDS: "Give the extrude a distance, or end it on a face or plane.",
     THIN_OUTLINE: "Draw one closed outline for the wall, or shell a solid body.",
     ROUND_KIND: "Use a fillet with one radius.",
     ROUND_CHANGING: "Give the changing radius a fillet of its own with one edge and no radii between the ends.",
