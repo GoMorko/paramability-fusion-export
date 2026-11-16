@@ -32,6 +32,8 @@ from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
 from . import causes, kept_refs
 from ..design_model import design, edges, reach
+from ..design_model.problem import is_problem
+from ..design_model.steps import pattern_places
 from ..design_model.steps.repeat import (FIT_TOL_MM, data_in_component, is_identity, is_identity_rotation,
                                         mirror_plane, reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
@@ -389,6 +391,7 @@ def rectangular(ctx, step):
     groups = sources(ctx, data, "pattern")
     if isinstance(groups, Skip):
         return groups
+    raw = data
     data = data_in_component(data, ctx.component_frame(), merge=True)
     elements = data.get("elements") or []
     if not elements:
@@ -404,15 +407,21 @@ def rectangular(ctx, step):
     grid = _grid(data, elements, directions)
     if isinstance(grid, Skip):
         return grid
-    kind, steps, places = grid
+    kind, steps, steps_of_copies = grid
     full = 1
     for _, _, n, _, _ in directions:
         full *= n
-    if len(set(places)) != full:
-        return Skip(LEAVES_COPIES_OUT % "pattern", causes.COPIES_SUPPRESSED)
+    listed = data if any(int(raw.get("quantity_" + w) or 1) > 1 and abs(float(raw.get("distance_" + w) or 0.0)) < 1e-9
+                         for w in ("one", "two")) else data_in_component(raw, ctx.component_frame())
+    found = pattern_places.grid_places(listed["elements"], [(d[1], s) for d, s in zip(directions, steps)], full, data)
+    if found is not None:
+        return Skip(found.words, causes.COPIES_UNEVEN)
+    source = pattern_places.source_faces(data)
+    if any(pattern_places.agrees(source, e, e["frame"]) is False for e in elements):
+        return Skip(shared.PATTERN_FACES_DISAGREE, causes.COPIES_UNEVEN)
     runs = []
     for k, direction in enumerate(directions):
-        found = _parts(ctx, item, direction, kind, steps[k], [p[k] for p in places])
+        found = _parts(ctx, item, direction, kind, steps[k], [p[k] for p in steps_of_copies])
         if isinstance(found, Skip):
             return found
         runs.append(found)
@@ -496,25 +505,34 @@ def circular(ctx, step):
         return Skip(shared.PATTERN_OFF_AXIS, causes.COPIES_UNEVEN)
     symmetric = bool(data.get("symmetric")) and not full
     name = label(item)
-    for sign in (1.0, -1.0):
-        numbers = _copy_numbers(turns, delta, n, sign, symmetric)
-        if numbers is not None:
-            break
+    if not symmetric:
+        # Copy `id` sits `id` steps from the original; the element transforms are not always right.
+        ids = pattern_places.id_places(data, n)
+        if is_problem(ids):
+            return Skip(ids.words, causes.COPIES_UNEVEN)
+        sign = pattern_places.circular_sign(data, elements, point, direction, delta)
+        if is_problem(sign):
+            return Skip(sign.words, causes.COPIES_UNEVEN)
     else:
-        return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
+        for sign in (1.0, -1.0):
+            numbers = _copy_numbers(turns, delta, n, sign, symmetric)
+            if numbers is not None:
+                break
+        else:
+            return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
     axis_dir = vec.scale(direction, sign)
     count_value = ctx.quantity(item, "quantity", n, "scalar")
     angle_value = ctx.quantity(item, "total_angle_deg", abs(raw), "angle").magnitude()
     if not symmetric:
-        # No copy is marked suppressed (checked above), so places that do not fill the count mean the copies
-        # Fusion gives are not where its count and angle put them.
-        if sorted(set(numbers)) != list(range(n)):
-            return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
         layouts = [(axis_dir, n, count_value, abs(raw) if not full else FULL_TURN_DEG, angle_value)]
     else:
         found = symmetric_reach(numbers, n)
         if found is None or len(set(numbers)) != n:
             return Skip(shared.PATTERN_RULE, causes.COPIES_UNEVEN)
+        source = pattern_places.source_faces(data)
+        if any(pattern_places.agrees(source, e, pattern_places.turn_frame(point, axis_dir, k * delta)) is False
+               for e, k in zip(elements, numbers)):
+            return Skip(shared.PATTERN_FACES_DISAGREE, causes.COPIES_UNEVEN)
         back, ahead = found
         ctx.doubt(count_value.reads + angle_value.reads, "%s turns copies to both sides of the first one, which "
                   "Orca writes with fixed numbers" % name)

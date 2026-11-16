@@ -36,12 +36,14 @@ class RectangularPatternTest(unittest.TestCase):
                 result = edited(name, lambda capture: pattern_data(capture).update(distance_type="other"))
                 self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["step"], step)
 
-    def test_suppressed_and_missing_copies_are_skipped_by_number(self):
-        for name in ("rpattern_skip", "rpattern_missing_element"):
-            with self.subTest(name):
-                result = translate_fixture(name)
-                self.assertEqual(steps_of(result.recipe, "pattern")[0]["skip"], [5])
-                assert_schema_ok(self, result.recipe)
+    def test_suppressed_copies_are_skipped_by_number(self):
+        result = translate_fixture("rpattern_skip")
+        self.assertEqual(steps_of(result.recipe, "pattern")[0]["skip"], [5])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_missing_copy_that_is_not_suppressed_leaves_the_step_out(self):
+        # A place no element sits on, with no copy suppressed, means the places Fusion gave are not the copies.
+        self.assertEqual(left_out(translate_fixture("rpattern_missing_element"))["index"], 4)
 
     def test_missing_original_refuses(self):
         def edit(capture):
@@ -200,8 +202,8 @@ class CircularPatternTest(unittest.TestCase):
             capture["items"][3] = fillet
             data = pattern_data(capture)
             data.update(quantity=2, elements=data["elements"][:0] + [
-                {"id": 1, "suppressed": False, "frame": {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}},
-                {"id": 2, "suppressed": False, "frame": {"origin": [40, 20, 0], "x": [-1, 0, 0], "y": [0, -1, 0], "z": [0, 0, 1]}}])
+                {"id": 0, "suppressed": False, "frame": {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}},
+                {"id": 1, "suppressed": False, "frame": {"origin": [40, 20, 0], "x": [-1, 0, 0], "y": [0, -1, 0], "z": [0, 0, 1]}}])
             data["total_angle_deg"] = 360.0
         result = edited("cpattern_full", edit)
         source, copy_step = steps_of(result.recipe, "round")
@@ -316,14 +318,14 @@ class CopyCapTest(unittest.TestCase):
         def edit(capture):
             first = pattern_data(capture)
             first.update(quantity_one=8, quantity_two=8, direction_two=[0, 1, 0], distance_one=5.0, distance_two=5.0,
-                         elements=[{"id": n + 1, "suppressed": False,
+                         elements=[{"id": n, "suppressed": False,
                                     "frame": {"origin": [5.0 * (n % 8), 5.0 * (n // 8), 0], "x": [1, 0, 0],
                                               "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(64)])
             outer = copy.deepcopy(capture["items"][-1])
             outer.update({"index": 5, "name": "RectangularPattern2"})
             outer["data"].update(sources=[4], quantity_one=outer_count, quantity_two=1, direction_two=None,
                                  distance_one=50.0, elements=[
-                                     {"id": n + 1, "suppressed": False,
+                                     {"id": n, "suppressed": False,
                                       "frame": {"origin": [0, 0, 50.0 * n], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
                                      for n in range(outer_count)])
             outer["data"]["direction_one"] = [0, 0, 1]
@@ -344,7 +346,7 @@ class CopyCapTest(unittest.TestCase):
 def _grid(capture, columns, rows):
     pattern_data(capture).update(
         quantity_one=columns, quantity_two=rows, direction_two=[0, 1, 0], distance_one=5.0, distance_two=5.0,
-        elements=[{"id": n + 1, "suppressed": False,
+        elements=[{"id": n, "suppressed": False,
                    "frame": {"origin": [5.0 * (n % columns), 5.0 * (n // columns), 0], "x": [1, 0, 0],
                              "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(columns * rows)])
 

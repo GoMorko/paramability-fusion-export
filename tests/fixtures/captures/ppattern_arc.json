@@ -385,7 +385,7 @@
         "along_path": true,
         "elements": [
           {
-            "id": 1,
+            "id": 0,
             "suppressed": false,
             "frame": {
               "origin": [
@@ -411,7 +411,7 @@
             }
           },
           {
-            "id": 2,
+            "id": 1,
             "suppressed": false,
             "frame": {
               "origin": [
@@ -437,7 +437,7 @@
             }
           },
           {
-            "id": 3,
+            "id": 2,
             "suppressed": false,
             "frame": {
               "origin": [

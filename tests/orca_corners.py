@@ -196,7 +196,7 @@ FOUR = [("Fillet1", False, [0, 1, 2, 3], 2.0, None)]
 def pattern_item(index, sources, copies, spacing):
     """A rectangular pattern of the features at the timeline indexes `sources`, `copies` of them `spacing` apart
     along x, on Body1."""
-    elements = [{"id": k + 1, "suppressed": False,
+    elements = [{"id": k, "suppressed": False,
                  "frame": {"origin": [k * spacing, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
                 for k in range(copies)]
     data = {"entity_type": "features", "sources": list(sources), "direction_one": [1, 0, 0], "quantity_one": copies,

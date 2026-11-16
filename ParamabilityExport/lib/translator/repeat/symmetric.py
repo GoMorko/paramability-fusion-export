@@ -78,7 +78,8 @@ def _tried_side(ctx, item, count_q, places_at):
             continue
         count = int(round(count))
         found = places_at(env, read, count)
-        reach_ = None if found is None else reach(found, count)
+        # Two copies on one place mean the transforms the probe read are not where the copies are.
+        reach_ = None if found is None or len(set(found)) != len(found) else reach(found, count)
         if reach_ is None:
             return 0, True
         if count % 2 == 0:

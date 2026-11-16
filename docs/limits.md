@@ -88,8 +88,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   them past an end of the path, its range stops there. The path itself is copied as it is now, so a size that moves
   or turns the path may give unexpected results. For a straight line, only a size that turns the line or changes its
   length is marked; a size that only moves the line is not. These are left out: a path of another curve or of more than one
-  curve, copies on both sides of the start point, copies that keep their direction on a round path, and copies past
-  the end of the path. A path pattern is not copied to Orca.
+  curve, copies on both sides of the start point, copies that keep their direction on a round path, copies on a round
+  path that start part way along it or run against it (Fusion can put them off the path), and copies past the end of
+  the path. A path pattern is not copied to Orca.
+- Fusion does not always say correctly where the copies of a pattern are: in Fusion 2706 it gives the copies of a
+  circular pattern one step too far round. The add-in places the copies of a circular pattern by their order and
+  checks every copy against its faces. A pattern is left out when a copy's faces are not where Fusion says the copy
+  is, when two copies have one place, or when a place has no copy and no copy is suppressed. A circular pattern over
+  part of a circle in an export from an older add-in version has no faces to tell which way it turns, so it is left
+  out: export the design again.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move

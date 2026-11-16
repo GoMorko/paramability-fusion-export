@@ -192,7 +192,7 @@ class TrayTest(unittest.TestCase):
     def test_left_out_copies_fix_the_count_and_keep_the_spacing_free(self):
         def edit(capture):
             data = capture["items"][6]["data"]
-            data["elements"] = [data["elements"][0], data["elements"][2]]
+            data["elements"][1]["suppressed"] = True
         result, _ = run(on_tray(edit))
         self.assertEqual([f["name"] for f in result.dropped if "leaves copies out" in f["reason"]], ["holes_count"])
         pattern = steps_of(result.recipe, "pattern")[0]
@@ -318,7 +318,7 @@ class ValueKindsTest(unittest.TestCase):
         def edit(data):
             data["total_angle_deg"] = 360.0
             data["quantity"] = 4
-            data["elements"] = [{"id": n + 1, "suppressed": False, "frame": _turn(n * 90.0)} for n in range(4)]
+            data["elements"] = [{"id": n, "suppressed": False, "frame": _turn(n * 90.0)} for n in range(4)]
             data["params"] = {"total_angle_deg": param("d5", "turn_deg * 4", 360.0)}
         capture, ticked = on_fixture("cpattern_part", edit, TICKED + ["turn_deg"])
         result, _ = run(capture, ticked)

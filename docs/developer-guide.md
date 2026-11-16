@@ -1863,7 +1863,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   frames in the frame of the part (`data_in_component` for the data of a pattern, `read_in_component` for a probe
   read), the grid index of a copy (`solve_lattice`), the steps a symmetric direction runs each way (`reach`,
   `FUSION_EXTRA_SIDE`), the plane of a mirror (`mirror_plane`) and the timeline items that a pattern or a mirror
-  repeats (`repeated_items`). `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
+  repeats (`repeated_items`). `steps/pattern_places.py`: where the copies of a pattern sit (see 3.18): the places of
+  circular copies from their ids (`circular_sign`, `id_frames`), the check of a place against the faces of a copy
+  (`agrees`), and the check that the places do not repeat and fill the count (`listed_places`, `grid_places`).
+  `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
   circle equals (`layout`), how far its copies can run before they pass an end of the path (`room`), and which way a
   measured copy runs along the path (`run_of`, `turn_deg`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
@@ -3483,6 +3486,11 @@ original. So an odd count is taken as centred, but only when every copy is liste
 out by number), the original is among them, and every copy turns by a whole number of steps. Else the pattern is
 refused. An even count of a symmetric circular pattern stays marked.
 
+The places of the copies of a symmetric pattern come from the element transforms. The checks of 3.18 apply to them:
+two copies on one place, or places that do not fill the count when no copy is suppressed, leave the step out. Each
+copy whose faces were read must sit where its place puts the faces of the original. A probe try that reads two copies
+on one place counts as a try that breaks the rule.
+
 ### 3.12 How a thread and a tapped hole are translated
 
 A recipe `thread` step is a helical thread of a set form on a cylinder. It holds an axis (origin and direction), a length,
@@ -4143,8 +4151,11 @@ The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
 
 1. It refuses the problems of `layout` with their words.
 2. It checks the way the copies run. Fusion counts the distance toward the end of the path, or toward its start when
-   the flip is set. On a line, a measured copy that runs the other way leaves the step out. On an arc, the handler
-   tries the measured turns both ways (`_measured_turn`).
+   the flip is set. On a line, a measured copy that runs the other way leaves the step out. On an arc or a circle,
+   a start point other than 0, or the flip, leaves the step out (`PATH_PATTERN_OFF_ROUND`). Hand check PP1 found
+   that Fusion 2706 can then put the copies off the arc, and that their element transforms do not agree with their
+   faces. On an arc that starts at 0 without the flip, the handler tries the measured turns both ways
+   (`_measured_turn`).
 3. It finds how far the last copy goes along the path (the travel). For an `extent` distance, the travel is the
    distance. For a `spacing` distance, it is the distance x (count - 1). A travel that is longer than the room leaves
    the step out. When the count or the distance follows sizes, the travel can grow. Then the handler cuts the ranges
@@ -4182,9 +4193,9 @@ measured copies. The measured turn must agree with the turn from the distance an
 distance). Thus the angle follows the sizes. A path pattern that goes round a whole circle is written as a full turn.
 Its distance then stays a number, and its sizes are marked.
 
-The rectangular and the circular handler check the measured copies against the pattern that they write. Thus a copy
-that Fusion put in another place leaves the step out. A refusal that has no cause of its own gets the cause
-`pathPattern`, unless it comes from an earlier gap.
+The rectangular and the circular handler check the measured copies against the pattern that they write, and they
+check the place of each copy against its faces (3.18). Thus a copy that Fusion put in another place leaves the step
+out. A refusal that has no cause of its own gets the cause `pathPattern`, unless it comes from an earlier gap.
 
 The step kind table gives the path pattern `sketches=(PATH,)`. Thus the size probe follows the path sketch as it
 follows a sweep path. The probe does not read the copies again (no `pattern` value): a pattern with copies on both
@@ -4194,6 +4205,63 @@ The Orca output has no handler for a path pattern, so it leaves the step out.
 Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and a spacing of 15 mm. The recipe gets a
 `pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
 Thus the ranges of the count and the spacing stop at their values now.
+
+### 3.18 Where the copies of a pattern sit
+
+Each pattern element has a transform (`PatternElement.transform`). The transform is the move from the original to
+the copy. The reader writes it as the `frame` of the element. But Fusion does not always give the right transform.
+Hand check CP1 measured this in Fusion 2706 on circular patterns:
+
+- The element ids follow the real order of the copies. Copy `id` sits `id` steps from the original. The step is
+  360 / count for a full circle, and the total angle / (count - 1) for a part turn.
+- The transform of each copy after the original is one step ahead. The last copy of a full circle reads as the
+  original (no turn).
+
+Example, from CP1: a full circle of 6 holes. The faces of the holes are at 0, 60, 120, 180, 240 and 300 degrees. The
+transforms turn 0, 120, 180, 240, 300 and 0 degrees. A copy made from the transforms has two copies at 0 degrees and
+no copy at 60 degrees. That is a wrong copy that looks right.
+
+Thus the add-in does not take the place of a copy from the transform alone. The shared module
+`design_model/steps/pattern_places.py` does these jobs:
+
+1. The reader reads the faces. With the marker before the pattern, it reads the faces of the original
+   (`source_faces`): the faces that each source feature made (`Feature.faces`), the source faces themselves for a
+   pattern of faces, or the faces of the source bodies. With the marker after the pattern, it reads the faces that
+   each element made (`PatternElement.faces`, the `faces` of the element). For each face, it writes the centroid
+   (`BRepFace.centroid`, in mm) and the area (`BRepFace.area`, in mm2). It reads up to 32 faces of the original and
+   up to 8 faces of each element. A list that cannot be read is null. `data_in_component` carries the centroids into
+   the frame of the part, together with the frames.
+2. `agrees` checks one place. It moves the faces of the original to the place. At least one face of the copy, and
+   at least half of the faces that the place moves, must land on a face of the original with the same area (to
+   0.01 mm and 1 part in 1000). A face that the place does not move (a face on the axis of a turn) tells nothing. A
+   copy without faces, or a pattern without the faces of the original, cannot be checked. Then `agrees` gives no
+   answer, and the other checks still apply.
+3. A circular pattern that turns to one side gets its places from the ids (`id_places`). The ids must be copy
+   numbers (0 to count - 1), all different, and they must fill the count when no copy is suppressed.
+   `circular_sign` finds the way the copies turn: right hand about the axis, or the other way. The faces decide when
+   they were read. Else the transforms decide, but only when they agree with the ids (older Fusion versions and
+   path patterns on an arc). Else the way is taken only when it does not change where the kept copies land: a full
+   circle with no copy suppressed. Else the step is left out ("Which way this pattern turns its copies could not be
+   read."). The transforms must still be turns about the axis that was read. That checks the axis.
+4. A rectangular pattern, a symmetric circular pattern and a path pattern keep the places of their transforms. Each
+   copy whose faces were read must agree with its place. Else the step is left out.
+5. In every pattern, `listed_places` and `grid_places` refuse two elements on one place, and places that do not fill
+   the count when no copy is suppressed (`suppressed_ids` empty and no element marked suppressed). A missing place
+   is then not a copy that the user left out, so the step is left out. A rectangular pattern with a direction whose
+   distance is 0 makes copies on top of one another by design. There the check uses the merged copies.
+6. A pattern of bodies pairs each copy with a result body by its points (`body_copies.match`). A circular pattern of
+   bodies that turns to one side tries the places from the ids, one way and then the other (`id_frames`). The way
+   whose copies land on the result bodies is taken.
+
+The Orca output uses the same module. Its circular pattern takes the places from the ids, its rectangular pattern
+checks the places, and both check the faces.
+
+A capture from before this change has no faces. A full circle with no copy suppressed still copies. A part turn
+whose transforms are wrong, as in Fusion 2706, is left out, because the way of the turn cannot be read. Export the
+design again to get the faces.
+
+Nobody has measured the transforms of rectangular, path and body patterns against their faces in Fusion yet. Hand
+checks PE1, PE2 and PE3 in `docs/hand-checks.md` do that. Until then, the checks above guard these patterns.
 
 ## 4. Debugging
 
@@ -4607,6 +4675,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
+| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check every place against the faces (3.18). Rectangular, path and body patterns are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 

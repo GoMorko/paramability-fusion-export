@@ -498,12 +498,17 @@ not judged to meet material where Orca removes nothing.
   `(n + 1) / 2`, the other `n / 2`; Orca rounds a count half up (`lround`), so these are `n // 2 + 1` and
   `(n - 1) // 2 + 1` for any n. An extent to both sides keeps its count fixed (the spacing then depends on whether the
   count is odd).
-- Circular: a circular Pattern on a plane at the axis point whose normal is the axis, turned the way the measured
-  copies turn. With `pattern_inclusive` Orca spreads the copies over the angle with both ends kept, and over a full
+- Circular: a circular Pattern on a plane at the axis point whose normal is the axis, turned the way the copies
+  turn. With `pattern_inclusive` Orca spreads the copies over the angle with both ends kept, and over a full
   turn evenly, the same as Fusion, so the count and the angle both follow, also across 360. A part turn to both sides
-  is two tool bodies with their numbers fixed. When no copy is marked suppressed and the measured copies do not fill
-  the count and angle, the pattern is left out as one whose copies are not spread evenly (cause `copiesUneven`):
-  Fusion 2706 gave such copy places for plain circular patterns of a hole (hand check CP1).
+  is two tool bodies with their numbers fixed. Fusion 2706 gives element transforms one step ahead for circular
+  patterns (hand check CP1), so a one-sided pattern takes the places of its copies from their ids and the way they
+  turn from their faces (`design_model/steps/pattern_places.py`, developer guide 3.18). Ids that repeat or do not
+  fill the count, faces that do not sit at the places, or a way of turning that nothing shows leave the pattern out
+  (cause `copiesUneven`).
+- Rectangular and two-sided circular patterns keep the places of their transforms. Two copies on one place, places
+  that do not fill the count, or a copy whose faces are not at its place leave the pattern out (cause
+  `copiesUneven`).
 - Orca's pattern cannot leave copies out, so a pattern with suppressed copies is left out; so is one whose copies are
   turned, do not sit on an even grid, or whose direction or axis is of another component and could not be brought into
   the part's place. Fusion's path pattern

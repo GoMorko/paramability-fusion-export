@@ -266,6 +266,12 @@ PATTERN_ORIGINAL_LOST = "The original copy was not found among the copies of thi
 PATTERN_TURNED = "The copies of this pattern are turned, which is not copied."
 PATTERN_UNEVEN_GRID = "The copies of this pattern do not sit on an even grid."
 PATTERN_COUNT = "The copies of this pattern do not match its count."
+PATTERN_FACES_DISAGREE = ("Fusion gives a place for a copy of this pattern that is not where the faces of that "
+                          "copy are.")
+PATTERN_PLACES_SHARED = "Fusion gives two copies of this pattern the same place."
+PATTERN_PLACES_UNFILLED = ("The places Fusion gives for the copies of this pattern do not match its count, and no "
+                           "copy is suppressed.")
+PATTERN_TURN_UNREAD = "Which way this pattern turns its copies could not be read."
 MIRROR_PLANE = "The mirror plane could not be read as a flat plane."
 PATH_PATTERN_UNREAD = "The path or the settings of this path pattern could not be read."
 PATH_PATTERN_CURVE = "This path pattern follows a path that is not one straight line, arc or circle, which is not copied."
@@ -273,6 +279,8 @@ PATH_PATTERN_BOTH_SIDES = "This path pattern spreads copies to both sides of its
 PATH_PATTERN_SLIDES = "The copies of this path pattern keep their direction along a round path, which is not copied."
 PATH_PATTERN_RUNS_OFF = "The copies of this path pattern run past the end of its path, which is not copied."
 PATH_PATTERN_WRONG_WAY = "The copies of this path pattern do not run along the path the way it was read."
+PATH_PATTERN_OFF_ROUND = ("This path pattern starts part way along a round path or runs against it, where Fusion "
+                          "can put the copies off the path, which is not copied.")
 MIRROR_FACES = "Mirrors of faces are not copied."
 REPEAT_TOOL_KEEPS = "%s keeps only what its tool shares with the part, so this %s cannot repeat it."
 

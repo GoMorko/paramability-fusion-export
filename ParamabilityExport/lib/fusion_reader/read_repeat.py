@@ -1,7 +1,9 @@
 """Rectangular, circular and path pattern and mirror features as plain dicts (docs/capture-format.md).
 
-The inputs and numbers are read with the timeline marker just before the item. The pattern elements (the measured
-transform of every copy) exist only once the feature is computed, so they are read with the marker just after it.
+The inputs and numbers are read with the timeline marker just before the item, and with them the faces of the original
+(`source_faces`). The pattern elements (the transform of every copy and the faces it made) exist only once the feature
+is computed, so they are read with the marker just after it. The faces let the translators check where each copy
+really sits (`design_model/steps/pattern_places.py`).
 The elements are required: when the collection cannot be read the item gets a read_error, because an empty list
 would look like a pattern with every copy suppressed.
 
@@ -58,13 +60,52 @@ def _sources(inputs, entity_type):
     return [entity.timelineObject.index for entity in inputs]
 
 
-def _common(feature, ctx):
+# Faces read for each pattern element and for the original, to check where each copy sits
+# (`design_model/steps/pattern_places.py`).
+ELEMENT_FACES = 8
+SOURCE_FACES = 32
+
+
+def face_records(faces, limit):
+    """`[{ "center", "area" }]` of the first `limit` faces of a list or collection (`BRepFace.centroid` in mm,
+    `BRepFace.area` in mm2), or None when a face cannot be read."""
+    def read():
+        if faces is None:
+            return None
+        out = []
+        for face in geo.iter_items(faces):
+            if len(out) >= limit:
+                break
+            out.append({"center": geo.point(face.centroid), "area": round(float(face.area) * 100.0, 6)})
+        return out
+    return geo.safe(read, None)
+
+
+def _source_faces(inputs, entity_type):
+    """The faces of the original, read with the marker before the pattern: the faces each input feature made
+    (`Feature.faces`), the input faces themselves, or the faces of the input bodies. None when they cannot be read."""
+    if entity_type == "faces":
+        return face_records(inputs, SOURCE_FACES)
+    if entity_type not in ("features", "bodies"):
+        return None
+    found = []
+    for entity in inputs:
+        faces = face_records(geo.safe(lambda: entity.faces, None), SOURCE_FACES - len(found))
+        if faces is None:
+            return None
+        found.extend(faces)
+    return found
+
+
+def _common(feature, ctx, faces=False):
     inputs = _inputs(feature)
     entity_type = _entity_type(feature, inputs)
     data = {"entity_type": entity_type, "sources": _sources(inputs, entity_type)}
     if entity_type == "bodies":
         data["source_bodies"] = [with_points(entity, ctx) for entity in inputs]
         data["result_bodies"] = None
+    if faces:
+        data["source_faces"] = _source_faces(inputs, entity_type)
     return data
 
 
@@ -144,15 +185,20 @@ def _number(parameter, default):
     return geo.safe(lambda: int(round(geo.value_of(parameter))), default)
 
 
-def pattern_elements(feature):
-    return [
-        {
+def pattern_elements(feature, faces=True):
+    """Every `PatternElement` as `{ id, suppressed, frame }`, with `faces` (`face_records`, null when unreadable) when
+    `faces` is set. The transform (`frame`) is not always right (`design_model/steps/pattern_places.py`)."""
+    out = []
+    for element in strict_items(feature.patternElements):
+        record = {
             "id": int(element.id),
             "suppressed": bool(geo.safe(lambda: element.isSuppressed, False)),
             "frame": geo.frame_of(element.transform),
         }
-        for element in strict_items(feature.patternElements)
-    ]
+        if faces:
+            record["faces"] = face_records(geo.safe(lambda: element.faces, None), ELEMENT_FACES)
+        out.append(record)
+    return out
 
 
 def _suppressed_ids(feature):
@@ -160,7 +206,7 @@ def _suppressed_ids(feature):
 
 
 def rectangular_before(feature, ctx):
-    data = _common(feature, ctx)
+    data = _common(feature, ctx, faces=True)
     quantity_two = geo.safe(lambda: _number(feature.quantityTwo, 1), 1)
     places, found = {}, {}
     for which, vector_name, entity_name in (("one", "directionOne", "directionOneEntity"),
@@ -206,7 +252,7 @@ def rectangular_before(feature, ctx):
 
 
 def circular_before(feature, ctx):
-    data = _common(feature, ctx)
+    data = _common(feature, ctx, faces=True)
     data.update({
         "axis": geo.safe(lambda: axis_with_reference(feature.axis, ctx), {"kind": "other"}),
         "quantity": _number(feature.quantity, 1),
@@ -238,7 +284,7 @@ def _flag(read):
 
 
 def path_before(feature, ctx):
-    data = _common(feature, ctx)
+    data = _common(feature, ctx, faces=True)
     path = geo.safe(lambda: feature.path, None)
     start = geo.safe(lambda: float(feature.startPoint), None)
     data.update({
