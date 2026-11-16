@@ -36,7 +36,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   is now (an edge, a face, a construction axis or plane, a line of a sketch) is not moved by the sizes. Each size
   that may move it is marked "may give unexpected results" with the step named. When the export cannot tell what such
   a place is, or what a construction plane or axis is built on (for example in a file from an older add-in), every
-  size that the steps before it use is marked.
+  size that the steps before it use is marked. A revolve axis on a line of another sketch than the outline's follows
+  the sizes the size probe tried; each other size that may move or turn that line (a size of its sketch, of the plane
+  or face that sketch sits on, or of part edges projected into it) is marked the same way, and with no tries every
+  such size is.
 - A revolve whose axis is not in the plane of its sketch (or is not square to that plane) is left out too, unless Fusion
   itself projects the axis onto the sketch plane.
 - A round with two different radii (Fusion's "asymmetric" rounds) is left out by both exports.
@@ -119,7 +122,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once that intersect the part or taper, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path that bends in 3D or that tapers or keeps the outline in one direction,
   a twist along a closed path that is not whole turns, a sharp corner in a path that twists, tapers or keeps the
-  outline's direction, or next to a curve, or in a 3D path, corners too close together for the outline, a path that
+  outline's direction, or next to a curve, or inside a spline curve (a spline drawn as a polyline that turns, or one
+  with a corner point), or in a 3D path, corners too close together for the outline, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
   sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the

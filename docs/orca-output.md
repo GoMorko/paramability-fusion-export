@@ -555,7 +555,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   `BRepFill_Pipe::MakeShape` while it built a closed track of two lines and two splines), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
   where Fusion's mitred wire has 384, and 202 for a closed square path against 439), also a corner inside a spline
   (`sharpCorner`: a joint of its Bezier pieces where the curve turns by more than 0.01 degrees, as at an inner knot
-  that a cubic has three times or at a corner of a degree one spline; `splines.joint_turns`), holes along a bent path
+  that a cubic has three times or at a corner of a degree one spline; `splines.joint_turns`; a turn over 2 degrees
+  is found first by the shared path planner, `geometry/spline_joints.joint_turns`), holes along a bent path
   (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
   known, a path in another component and the outlines of
   different planes.

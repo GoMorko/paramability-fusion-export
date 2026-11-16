@@ -7,10 +7,12 @@ probe reads the sketch frame at every state, so the plane's move is measured and
 size that may move it is tried. A face or plane of the part that an extrude starts from or reaches to is read again
 at every state as well (`translator.sizes.moving_reaches`, `plan.refs`). A size that only feeds the length of an
 earlier step gets no row of its own (`plan.probe_rows`), so without this list the plane or face would stay where the
-capture has it. A face used as an outline may change with every size read before its step (`plan.outline_face`).
+capture has it. A face used as an outline may change with every size read before its step (`plan.outline_face`). A
+revolve axis on a sketch line is read at every state too, so the sizes that may move or turn that line are tried
+(`axis_sizes`).
 """
-from ..design_model.reach import placement_driven, reach_driven, reach_sizes
-from .plan.covered import FACE, scan
+from ..design_model.reach import placement_driven, reach_driven, reach_sizes, reference_sizes
+from .plan.covered import AXIS, FACE, scan
 
 
 def plane_driven(capture, table):
@@ -22,7 +24,20 @@ def plane_driven(capture, table):
     found = set(placement_driven(capture, table, records)) | set(reach_driven(capture, table))
     for names in face_sizes(capture, table).values():
         found |= names
+    found |= axis_sizes(capture, table)
     return [name for name in table.ticked if name in found]
+
+
+def axis_sizes(capture, table):
+    """Fusion names of the ticked sizes that may move or turn a revolve axis on a line of a sketch of the part
+    (`design_model.reach.reference_sizes`): the line's sketch, the plane it sits on and geometry projected into it.
+    The probe reads the line at every try, so a size tried here is followed."""
+    timeline = capture.get("items") or []
+    found = set()
+    for target in scan(capture).targets:
+        if target["kind"] == AXIS:
+            found |= set(reference_sizes(table, timeline, {"index": target["item"]}, target["axis"]))
+    return found
 
 
 def face_sizes(capture, table):

@@ -5,11 +5,12 @@ the measured outward normals of the caps decide whether the axis direction is ke
 (`design_model.steps.revolve.sense`). Fusion's angle of a symmetric revolve is the turn to each side: the copy turns
 twice the angle from the angle back, a turn of 180 degrees or more to each side closes the ring, and the measured caps
 must sit where that puts them. Two sided revolves are refused: their start face is the end of one side, which does
-not name the side. With the probe's motion file the outline, its plane
-and an axis from a sketch line follow sizes (sketch/sketch_motion.py). An axis of another component follows the sizes the
-probe measured it move with (ref_motion.py). Any other axis of the part is written as measured, and the sizes that may
-move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw values (`axis.raw`) or
-the angle (`extent.quantity`) gives them as they are.
+not name the side. With the probe's motion file the outline, its plane and an axis from a sketch line follow sizes
+(sketch/sketch_motion.py); for a line of another sketch than the outline's, the sizes that may move it and were not
+tried are marked (`ref_motion.check_own_axis`). An axis of another component follows the sizes the probe measured it
+move with (ref_motion.py). Any other axis of the part is written as measured, and the sizes that may move it are
+marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw values (`axis.raw`) or the
+angle (`extent.quantity`) gives them as they are.
 """
 import math
 
@@ -303,5 +304,5 @@ def handle(ctx, step):
         if mode != "full":
             recipe_step["angleDeg"] = angle_value.json()
         steps.append(recipe_step)
-    ref_motion.check_own_axis(ctx, item, axis, "turns about")
+    ref_motion.check_own_axis(ctx, item, axis, "turns about", {p.get("sketch") for p, _, _, _ in built})
     return StepResult.of(steps)
