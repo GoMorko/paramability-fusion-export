@@ -35,7 +35,7 @@ from ..capture_model import gap_hints
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
-from . import causes, finish_body, limits
+from . import causes, finish_body, kept_refs, limits
 from ..design_model.problem import Problem
 from ..design_model.steps import hole as hole_facts, thread as facts
 from ..design_model.values import Quantity
@@ -302,6 +302,7 @@ def thread(ctx, step):
             return Skip(shared.THREAD_LONGER_THAN_FACE)
     if not ctx.has_body:
         return Skip("The part this thread is on is not in the copy.", gap_hints.AFTER_GAP)
+    kept_refs.mark_faces(ctx, item, kept_refs.on_face(item, "is cut on"))
     rise = axis if start == 0 else vec.scale(axis, -1.0)
     first = vec.add(origin, vec.scale(axis, span[0] if start == 0 else span[1]))
     ends = _ends(ctx, first, rise, height.n, spec, internal, radius, what)

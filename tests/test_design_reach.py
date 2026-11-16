@@ -207,6 +207,37 @@ class SketchPlaneTest(unittest.TestCase):
         self.assertEqual(reach.hole_plane_sizes(self.table, self.timeline, cut, origin), [])
 
 
+class ReferenceSizesTest(unittest.TestCase):
+    """The sizes that may move a plane, axis or face a step uses as a place (`reach.reference_sizes`)."""
+
+    def setUp(self):
+        self.table = sized_table([model("d1", "w_mm", 10, kind="constructionPlane", token="p1"),
+                                  model("d2", "h_mm", 20, kind="constructionAxis", token="a1")])
+        self.timeline = [step(0, "Base", reads=["gap_mm"]), step(1, "Rib", reads=["t_mm"]), step(2, "Split1")]
+
+    def sizes(self, record):
+        return reach.reference_sizes(self.table, self.timeline, self.timeline[2], record)
+
+    def test_construction_geometry_made_from_parameters_names_its_own_sizes_through_a_chain(self):
+        self.assertEqual(self.sizes(plane("p1", [ORIGIN_PLANE])), ["w_mm"])
+        axis = {"entity_type": "ConstructionAxis", "token": "a1", "built_on": [plane("p1", [ORIGIN_PLANE])]}
+        self.assertEqual(self.sizes(axis), ["w_mm", "h_mm"])
+        # A record of an older capture: its token alone tells it is construction geometry.
+        self.assertEqual(self.sizes({"point": [0, 0, 0], "dir": [0, 0, 1], "token": "a1"}), ["h_mm"])
+
+    def test_part_geometry_may_move_with_every_size_read_before(self):
+        self.assertEqual(self.sizes(FACE), ["gap_mm", "t_mm"])
+        self.assertEqual(self.sizes({"entity_type": "SketchLine"}), ["gap_mm", "t_mm"])
+        # Construction geometry built on the part: the sizes read before it was made, and its own.
+        self.assertEqual(self.sizes(plane("p1", [FACE], made_by=1)), ["w_mm", "gap_mm"])
+
+    def test_an_origin_another_component_or_an_undescribed_record_names_no_size(self):
+        for record in (ORIGIN_PLANE, {"origin": True}, dict(FACE, assembly=True), dict(FACE, foreign=True),
+                       {"point": [0, 0, 0], "normal": [1, 0, 0]}, None):
+            self.assertEqual(self.sizes(record), [], record)
+        self.assertEqual(reach.reference_sizes(None, self.timeline, self.timeline[2], FACE), [])
+
+
 class FaceReachTest(unittest.TestCase):
     def reach_record(self, **more):
         return dict({"kind": "toEntity", "token": "f1", "entity_type": "BRepFace",

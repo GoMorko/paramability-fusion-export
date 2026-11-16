@@ -1477,6 +1477,20 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       component, not in `Rod`) counts for the place of `Rod` only through the rule for joints and Moves of
       occurrences (`refs.acting_sizes`). If `RodX` shows as not used, send `report.json`: its `dependents` tell which
       item reads it.
+- [ ] OR24, places of the part that the Orca copy writes as numbers. User parameters `cut_at` = 25 mm, `mirror_at`
+      = 5 mm and `turn_at` = 10 mm. Draw a 2 point rectangle from the origin to (40, 20) on the XY plane and extrude
+      it 10 mm. Make a construction plane offset from the YZ plane by `cut_at` and Split Body the plate with it. Make
+      a construction plane offset from the XZ plane by `mirror_at`; on the top face draw a 5 by 5 mm square at
+      (5, 2) and extrude it 5 mm up (join), then mirror that boss across the plane (a mirror of features). Make a
+      construction plane offset from the YZ plane by `turn_at`, a construction axis where it meets the XY plane, and
+      a circular pattern of the boss about that axis, 2 copies over 180 degrees.
+      Export the piece from x 0 to 25 for Orca with all three parameters ticked.
+      Expect: the split, the mirror and the pattern are copied. `cut_at`, `mirror_at` and `turn_at` each stay a
+      number, with the reasons "Split1 cuts along a plane that may move with it", "Mirror1 mirrors across a plane
+      that may move with it" and "CircularPattern1 turns copies about an axis that may move with it"; none shows as
+      not used. At the values of the export, the Orca volume agrees with Fusion's (Inspect > Properties). Change
+      `cut_at` to 20 in Fusion only: the cut moves in Fusion, and the Orca copy keeps it where it was, as the reason
+      says.
 
 ## Thin extrudes
 

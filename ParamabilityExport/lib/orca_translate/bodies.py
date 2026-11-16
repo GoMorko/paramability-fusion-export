@@ -27,7 +27,7 @@ from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..design_model.steps.move import fit
 from ..design_model.steps.split import resolve as inside_of
 from ..design_model import words as shared
-from . import causes
+from . import causes, kept_refs
 from .solid import INTERSECT, HalfSpace
 from .steps import Skip
 from .tools import Pass, boolean, build, feature, label
@@ -117,6 +117,7 @@ def _by_plane(ctx, item, tool, piece, others):
     sides = [vec.box_side(p["box"], point, normal, SIDE_TOL_MM) for p in others]
     if not side or any(s != -side for s in sides):
         return Skip(shared.SPLIT_BOTH_SIDES, causes.SPLIT_SIDES)
+    kept_refs.mark(ctx, item, plane, "cuts along")
     x_axis = vec.unit(vec.cross(normal, [1.0, 0.0, 0.0] if abs(normal[0]) < 0.9 else [0.0, 1.0, 0.0]))
     made = feature(FeatureType.CUT, label(item), plane=ctx.place.plane(point, x_axis, vec.cross(normal, x_axis),
                                                                        normal),
@@ -187,6 +188,7 @@ def move(ctx, step):
         # Orca turns by a positive angle: a negative one turns about the reversed axis, and its formula is negated
         # so that it gives the same turn at every value.
         flip = math.copysign(1.0, float(angle))
+        kept_refs.mark(ctx, item, axis, "turns about")
         made.xf_pivot, made.xf_axis = ctx.place.point(point), ctx.place.direction(vec.scale(direction, sign * flip))
         ctx.bind(made, "xf_angle_deg", ctx.quantity(item, "angle_deg", float(angle), "angle").scaled(flip),
                  "%s angle" % name)

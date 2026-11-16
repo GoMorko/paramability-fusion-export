@@ -1958,6 +1958,15 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - A face or plane that a step starts from or reaches to. `moving_reaches` lists the flat faces and planes of the part
     that can move, and that the probe can find again. `reach_sizes` gives the sizes that can move one of them.
     `any_face_sizes` gives the sizes that can change any face of the body: every size an earlier step reads.
+  - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
+    plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
+    construction plane or axis and behind the construction geometry that it is built on. A record without a token
+    stands for all construction geometry of its kind. For a face, an edge, a sketch curve, or construction geometry
+    built on the part, the sizes also include every size that an earlier step reads (for construction geometry: a
+    step before the geometry was made). An origin plane or axis gives no size. A record of another component gives no
+    size here, because its sizes come from its measured reference (`refs.mark_all`). A record that does not say what
+    it is (an older capture) gives no size. The Orca output marks the sizes of each such place that it writes as
+    numbers (`orca_translate/kept_refs.py`).
   - The sizes that a step reads. `step_sizes` gives the sizes behind the values of one step and behind the sketches it
     uses (the sketch graphs and the dimensions of an outline brought in from another component included).
     `profile_sizes` gives the sizes that move the sketch of one outline. An outline of another component gives none:

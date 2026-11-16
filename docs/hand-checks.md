@@ -303,7 +303,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     solid with an extrude, sweep, loft or shell) but no tip for the Coil step (the coil tip is about Paramability).
     Pick no body: the list goes. Export: the result window lists the same two steps with the same words. Then remove
     both steps and pick the body again: no list shows.
-31. EX2, a two sided cut through ribs: which end face Fusion lists. Model a 40 x 40 x 20 mm box with its base on the
+31. OR24, places that Export for Orca writes as numbers. Model a 40 x 20 x 10 mm plate with its corner at the origin.
+    Add a construction plane offset from the YZ plane by a user parameter `cut_at` (25 mm), and Split Body the plate
+    with it. Add a user parameter `mirror_at` (5 mm), a construction plane offset from the XZ plane by it, and a
+    small boss (5 x 5 x 5 mm) on the top face that you mirror across that plane.
+    Export: Export for Orca with the piece from x 0 to 25, `cut_at` and `mirror_at` ticked (OR24 in
+    `docs/hand-tests.md` adds a circular pattern). The result window shows
+    both as kept as fixed numbers, with the reasons "Split1 cuts along a plane that may move with it" and "Mirror1
+    mirrors across a plane that may move with it", never as not used. The copy matches the Fusion part at the values
+    of the export.
+32. EX2, a two sided cut through ribs: which end face Fusion lists. Model a 40 x 40 x 20 mm box with its base on the
     XY plane, shell it 2 mm with the top face removed, and extrude four ribs 0.6 x 2 mm up the full height on the
     inside of each wall. Sketch a 3 mm tall slot on the YZ plane across the whole width at the bottom, and cut it
     with two sides: side one 30 mm (out through the +X wall), side two 18.5 mm (ending inside the -X wall).
