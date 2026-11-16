@@ -53,7 +53,8 @@ def tool_of(result, n=0):
 
 
 def reach(z, body=None, x=20):
-    side = {"kind": "toEntity", "plane": {"point": [x, 10, z], "normal": [0, 0, 1]}, "offset": 0.0, "taper_deg": 0.0,
+    side = {"kind": "toEntity", "chained": False,
+            "plane": {"point": [x, 10, z], "normal": [0, 0, 1]}, "offset": 0.0, "taper_deg": 0.0,
             "entity_type": "BRepFace", "face_point": [x, 10, z]}
     return dict(side, body=body) if body else side
 
@@ -357,7 +358,8 @@ class AfterTheToolTest(unittest.TestCase):
         step = copy.deepcopy(capture["items"][1])
         step.update(index=capture["items"][-1]["index"] + 1, name="Later")
         step["data"].update(operation="join", end_offset=float(z), params={}, side_one={
-            "kind": "toEntity", "plane": {"point": point, "normal": [0, 0, 1]}, "offset": 0.0, "taper_deg": 0.0,
+            "kind": "toEntity", "chained": False,
+"plane": {"point": point, "normal": [0, 0, 1]}, "offset": 0.0, "taper_deg": 0.0,
             "entity_type": "BRepFace", "face_point": point})
         return plate_then(capture, step)
 

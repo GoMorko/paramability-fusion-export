@@ -122,6 +122,8 @@ EXTRUDE_NOT_FLAT = "This extrude %s a surface that is not flat, which is not cop
 EXTRUDE_TILTED = "This extrude %s a tilted surface, which is not copied."
 EXTRUDE_ON_START = "This extrude ends on the surface it starts from."
 EXTRUDE_SAME_SIDE = "Both sides of this extrude end on the same side of its sketch, which is not copied."
+EXTRUDE_CHAINED = ("This extrude %s a face and the faces next to it, and its outline may reach past that face, so it "
+                   "is not copied.")
 EXTRUDE_WAY_UNSURE = "The face Fusion measured does not show which way this extrude goes, so it is not copied."
 EXTRUDE_START_OFFSET = "This extrude starts at a distance from a face or plane, which is not copied."
 TAPER_WAY = "The taper direction does not match what was measured, so it is not copied."

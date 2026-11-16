@@ -51,14 +51,14 @@ can be.
 | --- | --- | --- | --- | --- | --- |
 | Extrude: one side, distance | Copied | - | Copied | - | |
 | Extrude: symmetric | Copied | - | Copied | - | |
-| Extrude: two sides | Partly | Yes, add-in only | Copied | - | Paramability: an intersect to two sides is left out. Both: two sides that end on the same side of the sketch are left out. |
-| Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. |
-| Extrude: To object, tilted or curved | Left out | Yes, add-in only | Left out | Needs Orca | The app can extrude up to a face. Orca names a face by its own numbering. |
+| Extrude: two sides | Partly | - | Copied | - | Paramability: an intersect to two sides is one tool body of both sides. Both: two sides that end on the same side of the sketch are left out. |
+| Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. Both: with Chain Faces on, only when the outline lands on the face alone, and the sizes that may move the face or the outline are marked. |
+| Extrude: To object, tilted or curved | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one side, no taper, no offset, a face of the same body; with Chain Faces on, a tilted flat face only when the outline lands on it alone. A face that a size may move is followed only when a copied extrude made it, else the step is left out. Orca names a face by its own numbering. |
 | Extrude: All, cut or intersect | Copied | - | Copied | - | Orca: a one way cut with material behind its sketch is a 1000 mm cut. |
 | Extrude: All, join or new body | Left out | Yes, needs an app change | Left out | Needs Orca | Fusion ends it where the part ends. |
 | Extrude: start offset | Copied | - | Partly | Needs Orca | Orca: the offset keeps its number. |
 | Extrude: start From object | Copied | - | Partly | Needs Orca | Orca: the sketch plane moves to the face, but does not follow it. |
-| Extrude: start From object with an offset | Left out | Yes, add-in only | Left out | Yes, add-in only | The add-in does not read which way Fusion measures the offset. |
+| Extrude: start From object with an offset | Copied | - | Left out | Yes, add-in only | Paramability: the start face that Fusion measured shows which way the offset goes; without it the step is left out. |
 | Extrude: taper | Copied | - | Partly | Needs Orca | Paramability: under 45 degrees. A tapered cut through all both ways is left out. Orca: not with holes in the outline, not through all. |
 | Extrude: new body, join, cut | Copied | - | Copied | - | Both: a new body from several outlines that makes several bodies is left out. Orca: a cut that splits the part is left out. |
 | Extrude: intersect | Partly | Yes, add-in only | Partly | Yes, add-in only | Both: one outline only. |
@@ -193,15 +193,15 @@ Sorted by how many printing projects it helps:
 3. Box, Cylinder, Sphere, Torus and Pipe (add-in only), and extrudes that make a new component (add-in only).
 4. Join or new body extrudes through all (app change).
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
-6. Extrudes to a tilted or curved face, and extrudes that start from a face with an offset (add-in only).
-7. Two sided intersect extrudes (add-in only).
-8. Coils with a taper or a spiral (app change), and half turns (add-in only).
-9. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
-10. Emboss on a curved face (app change).
-11. Path pattern, and patterns and mirrors of faces (app change).
-12. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
-13. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
-14. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
+6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
+   change).
+7. Coils with a taper or a spiral (app change), and half turns (add-in only).
+8. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
+9. Emboss on a curved face (app change).
+10. Path pattern, and patterns and mirrors of faces (app change).
+11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
+12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
+13. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
     Boundary Fill and sheet metal (app change).
 
 ## Orca does not support

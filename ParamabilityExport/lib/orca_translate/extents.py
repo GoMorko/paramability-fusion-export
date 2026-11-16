@@ -257,7 +257,13 @@ def start(ctx, item, data, frame):
 def reach(ctx, item, side, z):
     """The length of a side that reaches to a face or plane (a `dm.SidePlan` of kind REACH) as a `Reach` that follows
     the plane where the copy can: the measured distance from where the extrude starts to the plane along the unit
-    sketch normal `z`, plus Fusion's offset."""
+    sketch normal `z`, plus Fusion's offset. A face that Fusion may chain to the faces next to it holds the outline
+    at the measured sizes only (`dm.outline_on_face`): the sizes that may carry the outline past it are marked."""
+    if ctx.table is not None and dm.joins_next_faces(side.reach.record):
+        names = reach_sizes(ctx.table, ctx.capture.get("items") or [], item, side.reach.record)
+        if names:
+            ctx.doubt(names, "%s ends on a face that Fusion joins with the faces next to it, and at other values its "
+                      "outline may reach past that face" % _label(item))
     offset = ctx.quantity(item, side.offset_path, side.offset)
     move = plane_move(ctx, item, side.reach.record, z, "reaches to")
     length = Quantity(abs(side.reach.distance)).plus(offset)

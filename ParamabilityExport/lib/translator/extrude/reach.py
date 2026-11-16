@@ -21,19 +21,23 @@ def start_shift(data, frame, ctx, item, plane_q):
     (`design_model.steps.extrude.start_of`) gives where it starts.
 
     An offset starts from the sketch plane and moves with it. A start on a face is measured from the plane too, so the
-    plane's own move (`plane_q`, along the sketch normal) comes off the face's move: the written origin adds it back."""
-    found = dm.start_of(data, frame)
+    plane's own move (`plane_q`, along the sketch normal) comes off the face's move: the written origin adds it back.
+    A start at a distance from a face adds that distance (`start.offset`, with the sign the reader found)."""
+    found = dm.start_of(data, frame, offsets=True)
     if is_problem(found):
         return Refusal(found.words, cause=found.cause)
     if found.kind == dm.SKETCH_PLANE:
         return Quantity(0.0)
     if found.kind == dm.OFFSET:
         return values.quantity(ctx, item, found.path, found.shift)
-    values.pin(ctx, item, found.path, "it sets how far %s starts from its face" % item.get("name", "a step"))
+    if not found.offset:
+        values.pin(ctx, item, found.path, "it sets how far %s starts from its face" % item.get("name", "a step"))
     z = vec.unit(frame["z"])
-    shift = found.shift
+    shift = found.target.distance
     moved = reach_motion.target_shift(ctx, item, "start", found.target.record, z, "starts from")
     face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
+    if found.offset:
+        face = face.plus(values.quantity(ctx, item, found.path, found.offset, sign=found.way))
     if not plane_q.sized:
         return face
     if face.sized and (face.text == plane_q.text or face.core == plane_q.core):

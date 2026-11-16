@@ -4,7 +4,12 @@ An extrude starts on its sketch plane, at an offset from it, or on a flat face o
 (`start_of`). From there each side goes along the sketch normal or against it (`read_sides`, one `SidePlan` per side):
 
 - DISTANCE: a set length. Fusion stores it signed: a negative distance goes against the sketch normal.
-- REACH: up to a flat face or plane square to the sketch normal (`Target`), plus Fusion's offset past it.
+- REACH: up to a flat face or plane square to the sketch normal (`Target`), plus Fusion's offset past it. Fusion can
+  also stop at the faces next to a face (`chained`); such a side is read only when every outline lands on the face
+  itself (`outline_on_face`), else it is a Problem (CHAINED).
+- UP_TO: up to a tilted or curved face of the part (`Target` with its `face_point`, its plane None when curved). Only a
+  caller that asks (`read_sides(..., faces=True)`) gets it, for one side; for any other caller such a face stays a
+  Problem.
 - THROUGH: through all to one side.
 - THROUGH_BOTH: through all both ways (a symmetric extrude through all, or two sides through all). There is one plan
   per Fusion side, for the taper of each.
@@ -33,11 +38,13 @@ from typing import Optional
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ...geometry.combine_volume import profile_area
+from ...geometry.footprint import Footprint, polyline
 from ..problem import Problem
 from ..values import Quantity
 from .. import words
 
 DISTANCE, REACH, THROUGH, THROUGH_BOTH, SYMMETRIC = "distance", "reach", "through", "throughBoth", "symmetric"
+UP_TO = "upTo"
 SKETCH_PLANE, OFFSET, FACE = "sketchPlane", "offset", "face"
 AT_END, SHORT, ELSEWHERE = "atEnd", "short", "elsewhere"
 
@@ -80,6 +87,7 @@ TAPER_NO_CHANGE = "taperNoChange"
 VOLUME_UNMEASURED = "volumeUnmeasured"
 VOLUME_DIFFERS = "volumeDiffers"
 WAY_UNSURE = "wayUnsure"
+CHAINED = "chained"
 
 _THROUGH_KINDS = ("throughAll", "all")
 # What a face or plane is to the extrude, by the capture field that holds it.
@@ -106,6 +114,7 @@ _WORDS = {
     VOLUME_UNMEASURED: (words.VOLUME_UNMEASURED, None),
     VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
     WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, None),
+    CHAINED: (words.EXTRUDE_CHAINED, gap_hints.EXTRUDE_END_FACE),
 }
 
 
@@ -128,9 +137,10 @@ def parallel(a, b):
 
 @dataclass(frozen=True)
 class Target:
-    """A flat face or plane an extrude starts from or reaches to: its capture record (the `start`, `side_one` or
-    `side_two` field), its plane (`point`, `normal`) and its signed distance (mm) along the unit sketch normal from
-    where the extrude starts (from the sketch plane, for the start itself)."""
+    """A face or plane an extrude starts from or reaches to: its capture record (the `start`, `side_one` or
+    `side_two` field), its plane (`point`, `normal`; None for the curved face of an UP_TO side) and its signed
+    distance (mm) along the unit sketch normal from where the extrude starts (from the sketch plane, for the start
+    itself). For an UP_TO side the distance is the one of its `face_point`."""
     record: dict
     plane: dict
     distance: float
@@ -140,27 +150,30 @@ class Target:
 class Start:
     """Where an extrude starts: `kind` (SKETCH_PLANE, OFFSET or FACE) and `shift`, the signed distance (mm) along the
     unit sketch normal from the sketch plane. An OFFSET reads its parameter at `start.offset`; a FACE has its
-    `target`."""
+    `target`, and `offset` is how far (mm, along the sketch normal) it starts from that face: Fusion's `start.offset`
+    times `way`, the sign that puts the start where Fusion measured it (0 without an offset)."""
     kind: str
     shift: float
     target: Optional[Target] = None
     path: str = "start.offset"
+    offset: float = 0.0
+    way: int = 1
 
 
 @dataclass
 class SidePlan:
     """One side of an extrude as Fusion made it.
 
-    kind: DISTANCE, REACH, THROUGH, THROUGH_BOTH or SYMMETRIC. which: the capture field of the side (`side_one`,
-    `side_two`, or `symmetric`), also the start of its parameter paths. sign: the travel along the sketch normal (+1
-    along it, -1 against it; 1 for SYMMETRIC and THROUGH_BOTH). length: the length (mm) as a `Quantity` of the number
-    (the full length for SYMMETRIC; None for through all). taper: Fusion's taper in degrees (positive widens the
-    outline going away from the sketch). reach: the face or plane a REACH side ends on, and offset Fusion's offset past
-    it. measured: the measured end face (mm along the sketch normal from the start), or None. stored: the direction
-    Fusion stored, None when it stores none. fixed: the direction is given and no measure turns it (a face or plane
-    gives it, or the step that wrote the side set it). value: the number Fusion stores at `path` for the length
-    (signed for DISTANCE), and scale what it is multiplied by (2 for a symmetric extrude whose distance is half its
-    length).
+    kind: DISTANCE, REACH, UP_TO, THROUGH, THROUGH_BOTH or SYMMETRIC. which: the capture field of the side
+    (`side_one`, `side_two`, or `symmetric`), also the start of its parameter paths. sign: the travel along the sketch
+    normal (+1 along it, -1 against it; 1 for SYMMETRIC and THROUGH_BOTH). length: the length (mm) as a `Quantity` of
+    the number (the full length for SYMMETRIC; None for through all and UP_TO). taper: Fusion's taper in degrees
+    (positive widens the outline going away from the sketch). reach: the face or plane a REACH or UP_TO side ends on,
+    and offset Fusion's offset past it. measured: the measured end face (mm along the sketch normal from the start),
+    or None. stored: the direction Fusion stored, None when it stores none. fixed: the direction is given and no
+    measure turns it (a face or plane gives it, or the step that wrote the side set it). value: the number Fusion
+    stores at `path` for the length (signed for DISTANCE), and scale what it is multiplied by (2 for a symmetric
+    extrude whose distance is half its length).
     """
     kind: str
     which: str
@@ -213,10 +226,23 @@ def _param_value(data, path):
     return float(held.get("value") or 0.0) if isinstance(held, dict) else None
 
 
-def start_of(data, frame):
+def _offset_start(data, record, plane, shift, offset):
+    """The `Start` at `offset` (mm, Fusion's `start.offset`) from the face or plane `record` that lies `shift` along
+    the sketch normal, or a Problem. Fusion measures the offset along the face normal, whose direction the reader does
+    not read; the measured start face (`start_offset`) decides. Exactly one sign must put the start there."""
+    measured = data.get("start_offset")
+    if not _number(measured):
+        return problem(START_OFFSET, "start")
+    fits = [way for way in (1, -1) if abs(shift + way * offset - measured) <= LENGTH_TOL]
+    if len(fits) != 1:
+        return problem(START_OFFSET, "start")
+    return Start(FACE, shift + fits[0] * offset, Target(record, plane, shift), offset=fits[0] * offset, way=fits[0])
+
+
+def start_of(data, frame, offsets=False):
     """Where the extrude starts (`Start`), or a Problem. A capture without a start (an older one) starts on the
-    sketch plane. A start on a face or plane at a distance from it is a Problem: which way Fusion measures that
-    distance is not read."""
+    sketch plane. A start on a face or plane at a distance from it is a Problem, unless the caller asks for `offsets`:
+    then the measured start face decides which way the distance goes (`_offset_start`)."""
     if "start" not in data:
         return Start(SKETCH_PLANE, 0.0)
     start = data["start"]
@@ -235,11 +261,75 @@ def start_of(data, frame):
         if isinstance(plane, Problem):
             return plane
         held = _param_value(data, "start.offset")
-        if held is not None and abs(held) > SIGN_TOL:
-            return problem(START_OFFSET, "start")
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), z)
+        if held is not None and abs(held) > SIGN_TOL:
+            return _offset_start(data, start, plane, shift, held) if offsets else problem(START_OFFSET, "start")
         return Start(FACE, shift, Target(start, plane, shift))
     return problem(START_KIND, "start")
+
+
+# ---- a face chained to the faces next to it -------------------------------------------------------------------
+
+# A point this near (mm) to the boundary of a face or an outline counts as on it.
+ON_FACE_TOL = 1e-3
+
+
+def joins_next_faces(record):
+    """True when Fusion may also stop the extrude at the faces next to the face `record` (`chained` true or not read),
+    instead of extending the face to its whole surface. Only a face can be chained; a construction plane cannot."""
+    return record.get("entity_type") == "BRepFace" and record.get("chained") is not False
+
+
+def _along(p, z, frame):
+    """`p` moved along the unit direction `z` onto the plane of `frame`, in that frame's own coordinates; None when
+    `z` lies in the plane."""
+    normal = vec.unit(frame["z"])
+    across = vec.dot(z, normal)
+    if abs(across) < PARALLEL_TOL:
+        return None
+    on = vec.add(p, vec.scale(z, vec.dot(vec.sub(frame["origin"], p), normal) / across))
+    return vec.frame_to_local(frame, on)[:2]
+
+
+def _points(region):
+    """The points along the loops of an outline or face record ({ frame, loops }), in model coordinates."""
+    return [vec.frame_apply(region["frame"], [u, v, 0.0]) for loop in region.get("loops") or []
+            for curve in loop.get("curves") or [] for u, v in polyline(curve)]
+
+
+def _inside(footprint, uv, strictly=False):
+    """True when `uv` lies in the region of `footprint` or on its edge; with `strictly`, inside and off its edge."""
+    gap = footprint.nearest_curve(uv)[1]
+    if strictly:
+        return gap > ON_FACE_TOL and footprint.covers(uv)
+    return gap <= ON_FACE_TOL or footprint.covers(uv)
+
+
+def outline_on_face(data, record, z):
+    """Whether every outline of the extrude in `data`, moved along the unit sketch normal `z`, lands on the flat face
+    `record` (its `face_outline`, `read_face.face_loops` at the step): True, False, or None when it cannot be told (no
+    face outline, an outline without loops, or a face along `z`).
+
+    Every point along an outline must land in the face or on its edge, and no point of the face's edges may land
+    strictly inside an outline (a hole of the face, or the whole face, under the outline). Then the extrude ends on
+    that face alone, whether Fusion extends it or also takes the faces next to it."""
+    face = record.get("face_outline")
+    profiles = data.get("profiles") or []
+    if not isinstance(face, dict) or not isinstance(face.get("frame"), dict) or not face.get("loops") or not profiles:
+        return None
+    face_area = Footprint(face)
+    edges = _points(face)
+    for profile in profiles:
+        if not isinstance(profile, dict) or not isinstance(profile.get("frame"), dict) or not profile.get("loops"):
+            return None
+        landed = [_along(p, z, face["frame"]) for p in _points(profile)]
+        back = [_along(p, z, profile["frame"]) for p in edges]
+        if not landed or any(uv is None for uv in landed + back):
+            return None
+        outline = Footprint(profile)
+        if not all(_inside(face_area, uv) for uv in landed) or any(_inside(outline, uv, True) for uv in back):
+            return False
+    return True
 
 
 # ---- the sides ---------------------------------------------------------------------------------------------------
@@ -266,8 +356,26 @@ def _through(side):
     return isinstance(side, dict) and side.get("kind") in _THROUGH_KINDS
 
 
-def _side(data, side, which, origin, z, measured):
-    """The SidePlan of one Fusion side with its stored direction as `sign` (None when it stores none), or a Problem."""
+def _up_to(side, which, origin, z, taper, found):
+    """The UP_TO SidePlan of a side whose face is tilted or curved, or the Problem `found` when the record is not a
+    face of the part with a point on it. The side goes toward that point (`face_point`)."""
+    point = side.get("face_point")
+    if side.get("entity_type") != "BRepFace" or not (isinstance(point, list) and len(point) == 3
+                                                     and all(_number(n) for n in point)):
+        return found
+    to = vec.dot(vec.sub(point, origin), z)
+    if abs(to) < SIGN_TOL:
+        return problem(ON_START, which)
+    if "offset" in side and side["offset"] is None:
+        return problem(UNREADABLE, which)
+    plane = side.get("plane") if found.code == TILTED else None
+    return SidePlan(UP_TO, which, sign_of(to), None, taper, Target(side, plane, to), float(side.get("offset", 0.0)),
+                    stored=sign_of(to), fixed=True)
+
+
+def _side(data, side, which, origin, z, measured, faces=False):
+    """The SidePlan of one Fusion side with its stored direction as `sign` (None when it stores none), or a Problem.
+    With `faces`, a side up to a tilted or curved face of the part is an UP_TO side (`_up_to`)."""
     kind = side.get("kind")
     if kind not in ("distance", "toEntity") + _THROUGH_KINDS:
         return problem(SIDE_KIND, which)
@@ -292,12 +400,14 @@ def _side(data, side, which, origin, z, measured):
         return SidePlan(THROUGH, which, stored, None, taper, measured=measured, stored=stored)
     plane = _plane_of(side, z, which)
     if isinstance(plane, Problem):
-        return plane
+        return _up_to(side, which, origin, z, taper, plane) if faces and plane.code in (NOT_FLAT, TILTED) else plane
     to = vec.dot(vec.sub(plane["point"], origin), z)
     if abs(to) < SIGN_TOL:
         return problem(ON_START, which)
     if "offset" in side and side["offset"] is None:
         return problem(UNREADABLE, which)
+    if joins_next_faces(side) and outline_on_face(data, side, z) is not True:
+        return problem(CHAINED, which)
     offset = float(side.get("offset", 0.0))
     length = abs(to) + offset
     if not length > 0:
@@ -394,9 +504,14 @@ def end_is_cap(data, z):
     return any(abs(end - area) <= CAP_RELATIVE_TOL * area + CAP_ABSOLUTE_TOL for area in candidates)
 
 
-def read_sides(data, frame, shift=0.0):
+def read_sides(data, frame, shift=0.0, faces=False):
     """The sides of the extrude in `data` as `SidePlan`s, or a Problem. `frame` is the sketch frame of its first
-    outline and `shift` (mm) where it starts along the sketch normal from that sketch plane (`Start.shift`)."""
+    outline and `shift` (mm) where it starts along the sketch normal from that sketch plane (`Start.shift`).
+
+    With `faces`, one side up to a tilted or curved face of the part is an UP_TO side. A curved face can lie on both
+    sides of the sketch, so its direction must agree with the measured end face (`end_offset`, a face on the curved
+    face, which is no end cap); else the direction is a Problem (WAY_UNSURE). A flat face reaches the sketch normal
+    on one side only."""
     extent = data.get("extent_type", "one")
     if extent not in ("one", "two", "symmetric"):
         return problem(EXTENT_KIND)
@@ -459,9 +574,13 @@ def read_sides(data, frame, shift=0.0):
     side = data.get("side_one")
     if not isinstance(side, dict):
         return problem(NO_READABLE_LENGTH)
-    plan = _side(data, side, "side_one", origin, z, measured)
+    plan = _side(data, side, "side_one", origin, z, measured, faces)
     if isinstance(plan, Problem):
         return plan
+    if plan.kind == UP_TO and plan.reach.plane is None:
+        raw = data.get("end_offset")
+        if not _number(raw) or abs(raw - shift) <= LENGTH_TOL or sign_of(raw - shift) != plan.sign:
+            return problem(WAY_UNSURE, "side_one")
     if not_cap and not plan.fixed and abs(data["end_offset"] - shift) > LENGTH_TOL and (
             plan.stored is None or sign_of(data["end_offset"] - shift) != plan.stored):
         # Fusion can store the direction of one side two ways, and the measured end face would decide it, but that

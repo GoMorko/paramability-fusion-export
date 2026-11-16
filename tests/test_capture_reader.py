@@ -483,6 +483,30 @@ class ExtrudeDataTest(unittest.TestCase):
         unknown = self.read(extentOne=Obj("fusion::SomethingNewExtentDefinition"))
         self.assertEqual(unknown["side_one"], {"kind": "other", "type": "SomethingNewExtentDefinition"})
 
+    def test_a_to_entity_side_says_if_fusion_chains_the_faces_next_to_it(self):
+        face = Obj("fusion::BRepFace", pointOnFace=P(2, 3, 12))
+        for chained in (True, False):
+            side = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=chained))
+            self.assertIs(side["side_one"]["chained"], chained)
+        unread = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face))
+        self.assertIsNone(unread["side_one"]["chained"])
+        # A face that may be chained keeps its outline (null here: the fake face has no flat surface to read).
+        chained = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=True))
+        extended = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=False))
+        self.assertEqual(("face_outline" in chained["side_one"], "face_outline" in extended["side_one"]), (True, False))
+
+    def test_a_start_on_a_face_measures_the_start_face_parallel_to_the_sketch(self):
+        def face(z, normal):
+            return Obj("fusion::BRepFace", pointOnFace=P(5, 5, z),
+                       evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=normal[0], y=normal[1], z=normal[2]))))
+        start = Obj("fusion::FromEntityStartDefinition", entity=face(4, (0, 0, 1)))
+        data = self.read(startExtent=start, startFaces=Coll([face(3, (1, 0, 0)), face(6, (0, 0, -1))]))
+        self.assertEqual(data["start_offset"], 6.0)
+        # Only a face that is not parallel to the sketch, or none at all: nothing is measured.
+        self.assertIsNone(self.read(startExtent=start, startFaces=Coll([face(3, (1, 0, 0))]))["start_offset"])
+        self.assertIsNone(self.read(startExtent=start)["start_offset"])
+        self.assertNotIn("start_offset", self.read())
+
     def test_several_profiles_and_face_profile(self):
         faceish = Obj("fusion::BRepFace")
         data = self.read(profile=Coll([rect_profile(), faceish]))

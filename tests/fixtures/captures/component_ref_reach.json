@@ -237,6 +237,7 @@
     "side_one": {
      "kind": "toEntity",
      "offset": 0.0,
+     "chained": false,
      "plane": {
       "point": [
        0,

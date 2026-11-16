@@ -79,8 +79,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   unexpected results.
   These steps are left out of the copy (see "When a step cannot be copied"):
   thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
-  have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
-  a tilted or curved surface, extrudes that start at a distance from a face or plane, extrudes with two sides that
+  have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
+  a tilted or curved surface, extrudes that end on a tilted or curved surface with two sides, a taper or an offset
+  past it, on such a face of another body or after a left out step, or on such a face that a size may move when no
+  copied extrude made it, extrudes that end on a flat face that Fusion joins with the faces next to it (Chain Faces
+  on) when the outline does not land on that face alone (the sizes that may move the face or the outline are marked
+  when it does), extrudes that start at a
+  distance from a face or plane when Fusion gives no start face that shows which way, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
   does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a

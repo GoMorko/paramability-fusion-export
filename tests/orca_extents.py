@@ -127,7 +127,7 @@ def to_top_face(offset=5.0):
     """A 40 by 20 plate `h` (10) tall, and a 10 by 10 post from its base sketch up to the plate's top face plus
     `offset`: the post's length follows h."""
     users, models = plate_users()
-    target = dict(face_target(10.0, (15.0, 5.0)), kind="toEntity", offset=offset)
+    target = dict(face_target(10.0, (15.0, 5.0)), kind="toEntity", chained=False, offset=offset)
     items = plate_items() + [
         sketch_item(2, "Sketch2"),
         extrude(3, "Post", [profile("Sketch2", UP, rect(-5, -5, 5, 5))], operation="join", side_one=target,
@@ -140,7 +140,7 @@ def to_offset_plane(lift=15.0):
     plane: the post's length is lift_mm."""
     users = [user("lift_mm", "%g mm" % lift, lift, "mm")]
     models = [model("d20", "lift_mm", lift, kind="constructionPlane", token="cp1")]
-    target = dict(plane_target(lift, "cp1", made_by=2), kind="toEntity", offset=0.0)
+    target = dict(plane_target(lift, "cp1", made_by=2), kind="toEntity", chained=False, offset=0.0)
     items = plate_items(sized=False) + [
         plane_item(2, "Plane1"), sketch_item(3, "Sketch2"),
         extrude(4, "Post", [profile("Sketch2", UP, rect(-5, -5, 5, 5))], operation="join", side_one=target,
@@ -159,8 +159,9 @@ def two_planes(top=20.0):
     sketch = dict(profile("Sketch1", frame, circle(5.0)),
                   reference={"kind": "constructionPlane", "token": "cp1", "made_by": 0,
                              "definition": "ConstructionPlaneOffsetDefinition", "built_on": [{"origin": True}]})
-    up = dict(plane_target(top, "cp2", made_by=1), kind="toEntity", offset=0.0)
-    down = {"kind": "toEntity", "offset": 0.0, "plane": {"point": [0.0, 0.0, 0.0], "normal": [0.0, 0.0, 1.0]},
+    up = dict(plane_target(top, "cp2", made_by=1), kind="toEntity", chained=False, offset=0.0)
+    down = {"kind": "toEntity", "chained": False,
+            "offset": 0.0, "plane": {"point": [0.0, 0.0, 0.0], "normal": [0.0, 0.0, 1.0]},
             "entity_type": "ConstructionPlane", "origin": True}
     items = [plane_item(0, "Plane1"), plane_item(1, "Plane2"), sketch_item(2, "Sketch1"),
              extrude(3, "Rod", [sketch], extent="two", side_one=up, side_two=down, end_offset=top - 5.0,

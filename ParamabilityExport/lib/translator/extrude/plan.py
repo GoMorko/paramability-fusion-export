@@ -1,7 +1,7 @@
 """The sides of an extrude as the recipe writes them. The shared reader (`design_model/steps/extrude.py`) gives how
 each side ends, which way it goes and how long it is; this module turns each side into a `RecipeSide`:
 its extent, its length and taper as values that follow sizes, and the recipe's own limits (no taper on a cut through
-all both ways, no two sided intersect, a taper under `MAX_TAPER_DEG`)."""
+all both ways, a taper under `MAX_TAPER_DEG`). A side up to a tilted or curved face is written by `up_to.py`."""
 from ...capture_model import gap_hints
 from ...design_model.problem import is_problem
 from ...design_model.steps import extrude as dm
@@ -11,6 +11,7 @@ from ..result import Refusal
 from .reach import distance_quantity, keep_reaches_positive, reach_quantity
 from .side import RecipeSide
 from .taper import taper_degrees, taper_quantity
+from .up_to import keep_on_face, up_to_side
 
 
 def _from_problem(found):
@@ -29,6 +30,8 @@ def _through_both(ctx, item, sides):
 
 def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
     """The `RecipeSide` of one side with a distance, through all or up to a face or plane, or a Refusal."""
+    if side.kind == dm.UP_TO:
+        return up_to_side(ctx, item, data, side, z)
     taper = taper_degrees(side.taper)
     if isinstance(taper, Refusal):
         return taper
@@ -41,19 +44,20 @@ def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
         return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, read=side,
                         q=given or distance_quantity(ctx, item, side.path, side.value))
     values.pin(ctx, item, side.offset_path, "it sets how far %s reaches" % item.get("name", "a step"))
+    keep_on_face(ctx, item, side.reach.record)
     return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, adjusts=True, reaches=True,
                     read=side, q=reach_quantity(ctx, item, side.which, side.reach.record, z, side.reach.distance,
                                                 side.offset, plane_q, shift_q))
 
 
-def plan_sides(item, data, frame, shift_q, combine, ctx, plane_q):
+def plan_sides(item, data, frame, shift_q, ctx, plane_q):
     """The sides to extrude, as `RecipeSide` records; or a Refusal.
 
     `shift_q` is where the extrude starts along the sketch normal (`reach.start_shift`) and `plane_q` the move of the
     sketch plane. A distance side that carries `quantity` (a `Quantity`, from a step written again as an extrude)
     writes that for its distance instead of a parameter's.
     """
-    read = dm.read_sides(data, frame, shift_q.n)
+    read = dm.read_sides(data, frame, shift_q.n, faces=True)
     if is_problem(read):
         return _from_problem(read)
     first = read[0]
@@ -67,8 +71,6 @@ def plan_sides(item, data, frame, shift_q, combine, ctx, plane_q):
         return [RecipeSide("symmetric", 1, first.length.n, taper,
                          taper_q=taper_quantity(ctx, item, first.taper_path, taper),
                          q=half.scaled(first.scale) if first.scale != 1.0 else half, read=first)]
-    if len(read) == 2 and combine == "intersect":
-        return Refusal("Two sided intersect extrudes are not copied yet.")
     z = vec.unit(frame["z"])
     out = []
     for side in read:

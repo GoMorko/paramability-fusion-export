@@ -1,6 +1,7 @@
 """Capture of a body inside a component: native target, placement, component items, target changes, foreign inputs."""
 import json
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeOccurrence, FakeSolid, apply_matrix, turn_z
@@ -344,6 +345,27 @@ class ForeignTest(unittest.TestCase):
         # The face is brought into the tray's own coordinates.
         self.assertEqual(ref["normal"], [0.0, 0.0, 1.0])
         self.assertEqual((ref["point"][2], ref["face_point"]), (36.0, [1, -8, 36]))
+
+    def test_a_chained_face_of_another_component_keeps_its_outline_in_the_target_frame(self):
+        lid, occurrence, place = self.lid()
+        body = Obj("fusion::BRepBody", entityToken="lb", name="LidBody", parentComponent=lid)
+        native = Obj("fusion::BRepFace", entityToken="lf", body=body, pointOnFace=P(1, 2, 4), parentComponent=lid)
+        corner = apply_matrix(place, (1, 2, 4))
+        proxy = Obj("fusion::BRepFace", entityToken="lf:path", assemblyContext=occurrence, nativeObject=native,
+                    pointOnFace=P(*corner), body=body,
+                    geometry=Obj("core::Plane", origin=P(*corner), normal=Obj(x=0, y=0, z=1)))
+        loops = [{"outer": True, "curves": []}]
+        # The outline as `face_loops` reads it through the occurrence: its frame in root coordinates.
+        seen = {"frame": {"origin": list(corner), "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0],
+                          "z": [0.0, 0.0, 1.0]}, "loops": loops}
+        extent = Obj("fusion::ToEntityExtentDefinition", entity=proxy, offset=param_value(0.0), isChained=True)
+        with mock.patch("lib.fusion_reader.read_solid.face_loops", lambda face, ctx: seen):
+            data = self.read_data(self.tray.extrude(extentType="OneSideFeatureExtentType", extentOne=extent))
+        side = data["side_one"]
+        self.assertNotIn("face_outline", side)
+        outline = side["ref"]["face_outline"]
+        self.assertEqual((outline["frame"]["origin"], outline["frame"]["z"], outline["loops"]),
+                         (side["ref"]["face_point"], [0.0, 0.0, 1.0], loops))
 
     def test_a_hole_on_points_of_another_components_sketch_is_read_in_the_target_frame(self):
         lid, occurrence, place = self.lid()
