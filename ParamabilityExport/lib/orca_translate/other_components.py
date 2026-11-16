@@ -15,7 +15,7 @@ part's coordinates:
   are brought in (`borrowed.bring_in`).
 """
 from ..capture_model import step_kinds
-from ..design_model import borrowed, refs
+from ..design_model import borrowed, refs, tool_chains
 from ..params import geometry_links
 
 # What a step does with a reference, by its slot (`docs/capture-format.md`, "Measured references").
@@ -40,6 +40,9 @@ def _verb(item, slot):
 
 
 def mark_refs(ctx, item):
-    """Mark the sizes that may move each entity of another component the copied step uses (`refs.mark_all`)."""
+    """Mark the sizes that may move each entity of another component the copied step uses (`refs.mark_all`). The
+    origin planes that place a Combine's tool of another component are its place, which `tools.build` marks."""
     for entry in geometry_links.item_refs(item):
+        if tool_chains.is_place_slot(entry["slot"]):
+            continue
         refs.mark_all(ctx, item, entry["ref"], _verb(item, entry["slot"]))

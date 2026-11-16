@@ -183,7 +183,7 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
 `data["volume_before"]`, and writes steps with `out.add(...)` works unchanged for a tool.
 
 - Which handlers see the tool as their target: all of them. The walk of a tool starts with the items that made the tool
-  (`tool_walk.chain_of`), in the component that holds it. The reader gave the items of the target's component their
+  (`design_model/tool_chains.py`, `read`), in the component that holds it. The reader gave the items of the target's component their
   data; for another component's items (`helper_of`) the second pass in `lib/fusion_reader/helper_pass.py` read them in
   that component's frame. For the numbers measured on the body itself (box and volume before and after), a walk takes
   `item["body_states"][token]` (`design_model/roles.py`, `seen_on`), not the exported body's fields. The Orca output

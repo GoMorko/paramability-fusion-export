@@ -7,9 +7,7 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from ...capture_model import lineage, step_kinds, tool_items
-from ...capture_model.capture import outside_component, renamed_target, same_body
-from ...design_model import roles
+from ...design_model import tool_chains
 from .. import walk
 from ..result import Refusal, StepResult, TranslateResult
 from ..words import type_words
@@ -69,8 +67,7 @@ class ToolBuild:
 
 def name_of(body):
     """The tool in plain words, with its component when it lives in another one."""
-    name = body.get("name") or "a body"
-    return "%s of %s" % (name, tool_items.component_name(body)) if tool_items.is_foreign_tool(body) else name
+    return tool_chains.name_of(body)
 
 
 def cannot_copy(body, item, why, cause=None):
@@ -83,61 +80,15 @@ def cannot_copy(body, item, why, cause=None):
 
 
 def chain_of(ctx, body, before):
-    """The items before `before` that made or changed `body`, in the component that holds it."""
-    owner = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else ctx.component
-    found = tool_items.chain(ctx.timeline, body, before, owner or "")
-    return found if owner else [item for item in found if not outside_component(item)]
-
-
-def lineage_chain(ctx, body, before):
-    """`(links, chain)` for a tool body that a split made: the splits it comes through (`lineage.of`) and the items
-    that built it, those of the bodies it was split from up to each split included. Without such a split, no links
-    and `chain_of`."""
-    links = [] if tool_items.is_foreign_tool(body) else lineage.of({"target": body, "items": [
-        item for item in ctx.timeline if item.get("index", 0) < before]})
-    found, start = {}, -1
-    for at, parent in links:
-        for item in chain_of(ctx, parent, at + 1):
-            if item["index"] > start:
-                found[item["index"]] = item
-        start = at
-    for item in chain_of(ctx, body, before):
-        if item["index"] >= start:
-            found[item["index"]] = item
-    return links, [found[i] for i in sorted(found)]
-
-
-def _keeps(item, body):
-    """The item only holds `body` as a tool it keeps, so it does not change it."""
-    data = item.get("data") or {}
-    return bool(data.get("keep_tools")) and any(same_body(t, body) for t in data.get("tools") or [])
-
-
-def _names_foreign_twin(item, body):
-    """The item takes a body of another component with the name of `body`: names repeat between components."""
-    return any(record.get("foreign") and record.get("name") == body.get("name")
-               for record, _ in tool_items.source_records(item))
+    """The items before `before` that made or changed `body`, in the component that holds it
+    (`tool_chains.made_by`)."""
+    return tool_chains.made_by(ctx.timeline, body, before, ctx.component)
 
 
 def unseen_change(ctx, body, before):
-    """`(item, why)` for an item before `before` that `chain_of` cannot see but that may have changed `body`: one of
-    another component that lists it, or one that lists its name under another token after the body first appears.
-    None when there is no such item."""
-    owner = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else ctx.component
-    chain = chain_of(ctx, body, before)
-    start = chain[0]["index"] if chain else before
-    for item in ctx.timeline:
-        if item["index"] >= before or item.get("suppressed") or step_kinds.skipped(item.get("type")):
-            continue
-        listed = item.get("bodies_after") or []
-        elsewhere = item.get("component") and item["component"] != owner if owner else outside_component(item)
-        if elsewhere:
-            if body.get("token") and any(b.get("token") == body["token"] for b in listed) and not _keeps(item, body):
-                return item, "This step changes the body from another component, which is not copied yet."
-        elif (item["index"] > start and any(renamed_target(b, body) for b in listed)
-              and not _names_foreign_twin(item, body)):
-            return item, "The body could not be followed through the timeline."
-    return None
+    """`(item, why)` for an item before `before` that may have changed `body` but that `chain_of` cannot see
+    (`tool_chains.unseen_change`), or None."""
+    return tool_chains.unseen_change(ctx.timeline, body, before, ctx.component)
 
 
 def _exported(ctx, body):
@@ -152,12 +103,10 @@ def build(ctx, body, before, depth, place=0):
     of its Combine, which keeps the ids of its steps apart from those of the other tools."""
     if depth > MAX_DEPTH:
         return Refusal("The tool body %s is built from tools nested too deep to copy." % name_of(body))
-    unseen = unseen_change(ctx, body, before)
-    if unseen is not None:
-        return cannot_copy(body, *unseen)
-    exported = _exported(ctx, body)
-    links, made = lineage_chain(ctx, body, before)
-    chain = [roles.seen_on(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
+    found = tool_chains.read(ctx.timeline, body, before, ctx.component, _exported(ctx, body))
+    if found.unseen is not None:
+        return cannot_copy(body, *found.unseen)
+    chain = list(found.items)
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:
@@ -165,7 +114,7 @@ def build(ctx, body, before, depth, place=0):
             return Refusal("The tool body %s cannot be copied: %s could not be read: %s"
                            % (name_of(body), item.get("name"), item["helper_unread"]))
     child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
-    child.lineage = links
+    child.lineage = list(found.links)
     walked = TranslateResult()
     if not walk.walk_items(child, walked):
         if walked.over_gap_cap:

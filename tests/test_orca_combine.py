@@ -123,11 +123,6 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 3)["verdict"], "skipped")
         self.assertEqual(of_type(result, FeatureType.BOOLEAN), [])
 
-    def test_a_tool_of_another_component_is_left_out(self):
-        result = run("combine_tool_foreign_fillet")
-        (gap,) = [g for g in result.left_out if g["type"] == "CombineFeature"]
-        self.assertEqual(gap["cause"], gap_hints.OTHER_COMPONENT)
-
     def test_a_combine_of_another_body_that_keeps_the_part_does_not_change_it(self):
         def edit(capture):
             data = capture["items"][4]["data"]

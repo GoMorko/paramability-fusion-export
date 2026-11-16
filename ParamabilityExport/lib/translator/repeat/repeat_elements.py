@@ -4,7 +4,6 @@ An element frame is the transform of one copy from the original (`origin` and th
 assembly space; `in_component` carries the frames into the frame of the component the recipe is written in, and drops
 copies that sit exactly on an earlier one. `read_in_component` does the same for the copies a probe state read.
 """
-from ...capture_model import tool_items
 from ...geometry import vec
 
 FIT_TOL_MM = 1e-4
@@ -50,7 +49,7 @@ def _same_frame(a, b):
 def read_in_component(read, ctx):
     """A probe read of a pattern (`{ count, elements }`) with its element frames in the frame of the component the
     walk builds in, like the captured ones."""
-    place = tool_items.component_frame(ctx)
+    place = ctx.component_frame()
     if place is None or not read.get("elements"):
         return read
     return dict(read, elements=[dict(e, frame=_carried(place, e["frame"])) for e in read["elements"]])
@@ -64,7 +63,7 @@ def in_component(item, ctx, merge=False):
     elements = data.get("elements")
     if not elements:
         return item
-    place = tool_items.component_frame(ctx)
+    place = ctx.component_frame()
     carried, kept = [], []
     for element in elements:
         frame = element["frame"] if place is None else _carried(place, element["frame"])

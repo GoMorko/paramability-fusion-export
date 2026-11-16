@@ -56,7 +56,7 @@ The modules of `lib/orca_translate/`:
   sketch follows or keeps),
   `sketches.py` and `splines.py` (outlines as Orca sketches), `outline_cuts.py` and `halfplanes.py` (outlines of
   straight lines whose corners follow sizes, built from plane cuts), `tools.py` (tool bodies for Combine, patterns and
-  mirrors), `finish_body.py`, `outline_rounds.py` and `left_corners.py` (the edges rounds and chamfers pick, and the
+  mirrors, also of other components), `finish_body.py`, `outline_rounds.py` and `left_corners.py` (the edges rounds and chamfers pick, and the
   measuring of left out rounds), `corner_tools.py` and `corner_hosts.py` (rounds and chamfers of side edges on
   outlines whose sizes follow variables, cut as corner tools), `limits.py` (how far a
   variable may go), `formulas.py` (formulas Orca can write) and `place.py` (where the part sits on the plate).
@@ -102,6 +102,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Mirror of features | the repeated steps as a tool body joined with its Mirror, a Boolean | no |
 | Mirror of the body joined to it | Mirror of the part (Add) | no |
 | Combine: join, cut, intersect | each tool body from the steps that made it, then a Boolean (Add, Cut, Intersect) | as the tool's steps |
+| Combine with a tool body of another component | the tool from its steps in its component's coordinates, a Transform to its place, then the Boolean (see "Other components") | as the tool's steps, never only that: the sizes acting on that component are marked |
 | Split Body by a plane or a flat face | Cut by that plane, keeping the part's side | no |
 | Split Body by a solid body | that body as a tool, then a Boolean (Intersect inside it, Cut outside it) | as the tool's steps |
 | Move of the body: a turn about an axis (a negative angle turns about the reversed axis) | Transform about that axis | `xf_angle_deg` |
@@ -376,9 +377,12 @@ not judged to meet material where Orca removes nothing.
   `Context.bodies`): a feature on a body that is not the last one names it, and every tool body is used up by its
   Boolean right away, so the part is body 0 and the last one again after each step. Orca reads the indexes as written
   (`body_ref_ids` is worked out by Orca on the first rebuild, not stored).
-- Tool bodies (`tools.build`): a Combine's tool, or a split's tool body, is written from the steps whose `bodies_after`
-  list it before that step (`tool_items.makers`), each by its own handler with the tool as the body it works on, the
-  first one starting a new body. Each of these steps reads what the reader measured on the tool itself
+- Tool bodies (`tools.build`): a Combine's tool, or a split's tool body, is written from the steps that made it before
+  that step (`design_model.tool_chains.read`: the steps of the tool's component whose `bodies_after` list it), each by
+  its own handler with the tool as the body it works on, the first one starting a new body. A tool that a step of
+  another component changes (`Chain.unseen`, cause `changedFromOtherComponent`), or that lists the tool's name under
+  another token (cause `bodyLost`), is left out, as is a tool that is a piece of a split (`Chain.links`, cause
+  `unsupported`). Each of these steps reads what the reader measured on the tool itself
   (`body_states`, through `design_model.roles.seen_on`), not the box and volume of the exported part: a Combine
   intersect inside a tool takes its rule (`every` or `any`) from the tool's own volume, and is left out when the tool
   was not measured. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
@@ -749,16 +753,35 @@ as numbers in the part's coordinates (`orca_translate/other_components.py`, with
   which may be the name of a sketch of the part: such an outline gets no sketch graph (`sketches.graph_for`) and no
   sketch sizes by name (`sketch_sizes.profile_sizes`), and its sketch plane names no sizes of the part
   (`design_model.reach.placement_sizes`).
+- A Combine's tool body of another component (`tools.build`, with `design_model.tool_chains`): its steps were read in
+  that component's coordinates (`helper_of`), so they are written there, each named with its component ("Extrude1 of
+  Rod", since step names repeat between components), and an Orca Transform ("Body2 of Rod place") then carries the
+  tool to its place at the Combine (`tool_chains.place_of`: the component's frame, then the inverse of the part's
+  own frame at that time). Orca turns about the component origin, then shifts; the shape the copy keeps moves the
+  same way. The ticked sizes that act on that component are marked ("Combine1 puts its tool at the place of Rod
+  that may move with it, and the copy cannot follow that"), so a size that sets a step of the tool is "partly" and
+  one that only moves the component is "fixed". A tool of the root component needs no mark. The origin planes the
+  reader measured for the place (`tool<n>.xy` and so on) mark nothing more (`tool_chains.is_place_slot`). Inside such
+  a tool, the copies of a pattern are read in the tool component's frame (`Context.component_frame`). Left out (cause
+  `otherComponent`, `refused` or the cause of the step that stops it): a place that could not be read or is not a
+  turn and a shift, a tool record that does not name its component, a tool of another component inside another
+  one, a step of the tool not read in its component or whose outline names its sketch only by name (it could be
+  taken for a sketch of the part), a split in the tool (the split rules look for later uses of its other pieces in
+  the part's component only), and a step of the tool the copy cannot hold (a round whose edges it cannot tell,
+  for one).
 - Still left out (cause `otherComponent`): a record that stays `foreign` (a curved face, an edge, a direction, axis or
-  plane whose place could not be brought in), a tool body of another component, edges of another component that a
-  round or chamfer picks, a thread on a face of another component and a sweep path in another component.
+  plane whose place could not be brought in), edges of another component that a round or chamfer picks, a thread on a
+  face of another component and a sweep path in another component.
 
 Checked live with OrcaSlicer 2.5.1 on 2026-11-16 (`scripts/orca_live_check.py`): the fixtures `component_foreign_mirror`
 (8282.7 mm3 as worked out, and 8452.4 after `depth_mm = 8`), `component_ref_reach` (8424.1, the boss up to z 25 in the
 part's coordinates), `component_ref_hole` (7803.7) and `sweep_borrowed` (1857.8), and a pattern along an axis of
 another component, a circular pattern about one, a revolve about one, a split by a plane of one and a tool body from an
 outline of another component's sketch (the captures of `tests/test_orca_other_components.py`) built as worked out,
-without an Orca error.
+without an Orca error. Also live: the fixture `component_tool_foreign` (a box cut by a tool of Rod, turned a quarter
+about z: 23214.6 mm3 as worked out, 23607.3 after `tool_len = 5`, 28407.3 after `box_h = 12`), and the same tool
+turned a quarter about x so that it lies along -y of the part (22994.7 as worked out, 23748.7 after `tool_len = 5`;
+a turn the wrong way would leave half the rod outside the box).
 
 ### Where the part sits
 

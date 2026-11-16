@@ -27,9 +27,8 @@ import copy
 
 from ...capture_model import step_kinds, tool_items
 from ...design_model.values import Quantity, reads_in
-from ...geometry import rigid
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from ...design_model import refs, roles
+from ...design_model import refs, roles, tool_chains
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
@@ -41,8 +40,8 @@ from . import tool_walk
 
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect"}
 # How the place of a tool's component is worded in a reason: "<step> puts its tool at the place of <component> ...".
-PLACE = "Place"
-WHAT = "puts its tool at"
+PLACE = tool_chains.PLACE
+WHAT = tool_chains.PLACE_VERB
 
 
 def _vector(value):
@@ -115,48 +114,30 @@ def _unusable(ctx, body):
     return None
 
 
-def _frame_refusal(name, problem):
-    return Refusal("The place of %s in the assembly cannot be used. %s" % (name, problem))
-
-
 def tool_move(ctx, item, tool):
     """`(Move, shift)` that carries the steps of a tool body of another component into the frame of the exported
     body's component, or a Refusal. The Move is the tool component's place read at the Combine, then the inverse of
-    the exported body's own place at that time. `shift` is three Quantities: the move of the tool's component that
-    sizes cause, from the measured origin planes of the component (zero at the current sizes), or None when it does
-    not move. A size that moves it in a way the probe could not follow is marked, never kept fixed silently."""
-    name = tool_items.component_name(tool)
-    found = tool.get("place")
-    if not isinstance(found, dict) or "frame" not in found:
-        why = found.get("error") if isinstance(found, dict) else None
-        return _frame_refusal(name, why or "It was not read.")
-    if found.get("target_error"):
-        return _frame_refusal("the exported body", found["target_error"])
-    problem = rigid.frame_problem(found["frame"])
-    if problem:
-        return _frame_refusal(name, problem)
-    move = rigid.move_from_frame(found["frame"])
-    if found.get("target_frame") is not None:
-        problem = rigid.frame_problem(found["target_frame"])
-        if problem:
-            return _frame_refusal("the exported body", problem)
-        move = move.then(rigid.move_from_frame(found["target_frame"]).inverse())
-    return move, _follow_place(ctx, item, tool, found)
+    the exported body's own place at that time (`tool_chains.place_of`). `shift` is three Quantities: the move of the
+    tool's component that sizes cause, from the measured origin planes of the component (zero at the current sizes),
+    or None when it does not move. A size that moves it in a way the probe could not follow is marked, never kept
+    fixed silently."""
+    found = tool_chains.place_of(tool)
+    if found.problem:
+        return Refusal(found.problem.words)
+    return found.move, _follow_place(ctx, item, found)
 
 
-def _follow_place(ctx, item, tool, found):
+def _follow_place(ctx, item, found):
     """The sized move of a tool component along the normals of its origin planes, or None. Without usable
     references on a component that is not the root, the sizes that act on the component are marked."""
-    if found.get("source") == "root":
+    if found.moves_with is None:
         return None
-    planes = [found[slot]["ref"] for slot in ("xy", "xz", "yz")
-              if isinstance(found.get(slot), dict) and isinstance(found[slot].get("ref"), dict)]
-    normals = [ref.get("normal") for ref in planes]
-    if len(planes) < 3 or not all(_vector(n) for n in normals):
-        refs.mark_all(ctx, item, {"component": tool.get("component"), "type": PLACE}, WHAT)
+    normals = [ref.get("normal") for ref in found.planes]
+    if len(found.planes) < 3 or not all(_vector(n) for n in normals):
+        refs.mark_all(ctx, item, found.moves_with, WHAT)
         return None
     shift = [Quantity(0.0)] * 3
-    for ref in planes:
+    for ref in found.planes:
         offset = ref_motion.moves(ctx, item, dict(ref, type=PLACE), refs.PLANE, WHAT)[0]
         if offset.sized:
             shift = [shift[i].plus(offset.scaled(ref["normal"][i])) if abs(ref["normal"][i]) > 1e-9 else shift[i]
