@@ -6,8 +6,8 @@ where Fusion shows the body (`placement.frame` of the capture), and for a Y up d
 `upAxis` applies to the STEP files only). 2D sketch values and revolve axes live in a sketch plane and stay.
 
 Per-axis factors (`factors` of the step kind table, the `[x, y, z]` of a scale) are put on the axes the map turns
-them to. A map that does not turn each axis onto an axis (a turn by a part of a quarter turn) has no such axes: a
-handler that writes per-axis factors checks the map first (`axis_turn`), so `place` raises there.
+them to. A map that does not turn each axis onto an axis (a turn by a part of a quarter turn) has no such axes: every
+caller checks the steps and the map first (`factors_fit`), and `place` raises when one did not.
 
 A coordinate may be a formula: the map writes affine formulas through `Quantity`, and entries of the rotation that
 are zero or plus or minus one are snapped, so a part that is only moved keeps plain formulas (`x + 100`).
@@ -77,6 +77,20 @@ def _factors(triple, move):
             return list(triple)
         raise ValueError("Per-axis factors cannot follow a map that turns an axis off the axes.")
     return [triple[j] for j in turn]
+
+
+def factors_fit(features, move):
+    """False when a step among `features` (also inside tool steps) has per-axis factors that differ and `move` turns
+    an axis off the axes, so `place` cannot carry them."""
+    if axis_turn(move.rows) is not None:
+        return True
+    for step in all_steps(features):
+        for path in FACTORS.get(step.get("kind"), ()):
+            found = []
+            _apply(step, path, lambda t: found.append(t) or t)
+            if any(any(v != t[0] for v in t) for t in found):
+                return False
+    return True
 
 
 def _apply(node, path, fn):

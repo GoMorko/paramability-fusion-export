@@ -21,11 +21,12 @@ measures cannot tell the two apart, the sizes the tools read are marked.
 A tool body made in another component (`foreign`) is handled the same way. Its steps were read in that component's
 frame (`helper_of` items); the Combine carries them into the exported body's frame with the tool's place in the
 assembly (`tool_move`) before it writes them. The place follows the sizes that move the tool's component, or marks
-them.
+them. A place that turns an axis off the axes cannot carry a scale with one factor per axis in the tool, so such a
+Combine is left out.
 """
 import copy
 
-from ...capture_model import step_kinds, tool_items
+from ...capture_model import gap_hints, step_kinds, tool_items
 from ...design_model.values import Quantity, reads_in
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
 from ...design_model import design, refs, roles, tool_chains
@@ -261,6 +262,10 @@ def write_tools(ctx, item, data, combine):
         moved = tool_move(ctx, item, body) if tool_items.is_foreign_tool(body) else (None, None)
         if isinstance(moved, Refusal):
             return moved
+        if moved[0] is not None and not place.factors_fit(tool.steps, moved[0]):
+            return Refusal("A scale in the tool body %s has its own factor per axis, and the tool sits turned at an "
+                           "angle, so the factors cannot be carried." % tool_chains.name_of(body),
+                           cause=gap_hints.SCALE)
         found.append((tool, moved))
 
     flat = not patterns and all(_writes_flat(tool) for tool, _ in found) and (

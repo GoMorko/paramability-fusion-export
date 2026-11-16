@@ -4062,7 +4062,11 @@ The handler does these checks in this sequence. When a check fails, the Scale be
 5. For a non-uniform Scale, the map that moves the recipe into the assembly must turn each axis onto an axis
    (`place.axis_turn`). This map comes from the place of the component and from the Y up turn. When the component
    is turned by an angle that is not a quarter turn, the factors have no axes in the assembly, so the Scale is left
-   out.
+   out. A Scale in a tool body of another component has one more map. The Combine moves the steps of the tool with
+   the place of the tool component, then with the inverse of the place of the exported body. Both places are read at
+   the Combine. The Combine checks this map against the steps of the tool before it moves them (`place.factors_fit`).
+   When a step of the tool has factors per axis that are not equal, and the map turns an axis off the axes, the
+   Combine is left out with the cause `scale`. The export does not stop.
 6. The measured body must agree with the Scale. The volume after the Scale must be the volume before it, multiplied
    by the three factors. Each side of the box must move as the factors and the point move it. This check finds a
    point or an axis that the reader did not read correctly. If the body was not measured, the Scale is left out.

@@ -1335,7 +1335,8 @@ The handler (`translator/bodies/scale.py`) writes a `scale` step (recipe version
 `factor` is one value or `[x, y, z]`, through the sizes, and `point` is the measured point. It refuses a scale whose
 inputs are not all bodies, a point or factor that cannot be read, a factor outside 0.001 to 1000, a scale before any
 written step, factors per axis when the recipe is carried into the assembly by a turn that is not a quarter turn
-(`place.axis_turn`), and a scale whose measured volume and box disagree with the factors and the point. The sizes
+(`place.axis_turn`; a Combine that carries a tool of another component with such a scale checks its own move with
+`place.factors_fit` and is left out), and a scale whose measured volume and box disagree with the factors and the point. The sizes
 that may move a point that is not the origin (`reach.reference_sizes`) are marked. After the step the earlier
 placers place no picks (`faces/scaled_placer.py`). `place.place` puts per-axis factors on the axes its map turns
 them to (the `factors` paths of the step kind table).

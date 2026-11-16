@@ -219,7 +219,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   construction point or a corner of the part, the sizes that can move it are marked "may give unexpected results".
   The add-in checks the scale on the measured body (its volume and its box): a scale that does not agree is left
   out. A scale that also scales sketches, a scale with factors per axis in a component that is turned at an angle
-  that is not a quarter turn, and a scale before the first copied step of the body are left out. A round, chamfer
+  that is not a quarter turn, and a scale before the first copied step of the body are left out. When a tool body
+  with such a scale is joined or cut into a part that is turned at an angle, the combine is left out. A round, chamfer
   or offset after the scale that picks faces made before it keeps its measured place, and the sizes are marked.
   Export for Orca leaves every scale out: Orca has no step that scales a body.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes

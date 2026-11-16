@@ -1,4 +1,5 @@
 """Scale features written as `scale` steps (lib/translator/bodies/scale.py)."""
+import copy
 import unittest
 
 from tests import context  # noqa: F401
@@ -123,6 +124,23 @@ class LeftOutScaleTest(unittest.TestCase):
         capture["target"]["placement"] = {"frame": {"origin": [0, 0, 0], "x": [half, half, 0], "y": [-half, half, 0],
                                                     "z": [0, 0, 1]}}
         self.assert_left_out(capture)
+
+    def test_factors_per_axis_in_a_tool_the_combine_turns_at_an_angle_leave_the_combine_out(self):
+        # The tool's component sits on the axes; the part it is carried into is turned by 45 degrees.
+        capture = load_capture("component_tool_foreign")
+        box = {"min": [0.0, 0.0, 0.0], "max": [10.0, 10.0, 10.0]}
+        scale = dict(copy.deepcopy(capture["items"][6]), index=7, name="Scale1", type="ScaleFeature", data={
+            "input_kind": "bodies", "bodies": [{"token": "t2", "name": "Body2", "box_before": box, "volume_before": 1000.0}],
+            "point": {"origin": True, "point": [0.0, 0.0, 0.0]}, "uniform": False, "factor": None, "factors": [1.0, 2.0, 1.0],
+            "after": [{"box": {"min": [0.0, 0.0, 0.0], "max": [10.0, 20.0, 10.0]}, "volume": 2000.0}]})
+        capture["items"][7]["index"] = 8
+        capture["items"].insert(7, scale)
+        half = 0.5 ** 0.5
+        capture["items"][8]["data"]["tools"][0]["place"]["target_frame"] = {
+            "origin": [0, 0, 0], "x": [half, half, 0], "y": [-half, half, 0], "z": [0, 0, 1]}
+        result = translate(capture)
+        self.assertEqual((left_out(result)["index"], result.gaps[0]["hint"]), (8, gap_hints.HINTS[gap_hints.SCALE]))
+        self.assertEqual(steps_of(result.recipe, "scale"), [])
 
     def test_a_factor_out_of_the_range_of_the_app_is_left_out(self):
         self.assert_left_out(scaled(lambda data: per_axis(data, [1.0, 1.0, 0.0001])))
