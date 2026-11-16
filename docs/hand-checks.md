@@ -541,4 +541,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `report.json` the path pattern data has `start_point` 0, `flip` false and `along_path` true, and `elements` hold
     the moves of the copies from the original. Then set `Count` to 4 in Fusion: note whether Fusion puts the fourth
     hole past the end of the line, leaves it out, or fails (the copy keeps the copies on the path). Afterwards the
-    design is as before.
+    design is as before. On another copy, set the arc pattern's start point to 0.75 and pick the arc so that the path
+    runs from (50, 20) to (70, 20), against the arc. In `report.json` the path curve has `opposed` true. The copy
+    counts the start point from the start of the path: 7.9 mm of arc lie ahead of it and the copies reach 10 mm, so
+    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`).

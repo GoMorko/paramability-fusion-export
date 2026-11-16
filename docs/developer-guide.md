@@ -3805,7 +3805,10 @@ The shared reader `design_model/steps/path_pattern.py` (`layout`) gives the plai
 4. A setting that cannot be read is a problem.
 
 `layout` also gives `room`: how far the copies can go from the start point to each end of the path. On a closed path
-(a circle), the room is the length of the path. It is not known what Fusion does with copies past an end of the path.
+(a circle), the room is the length of the path. The start point is a fraction of the path, counted from the start of
+the path. A curve can run against the path (`opposed`). Then the path starts at the end of the curve. For a line,
+`layout` turns the direction. For an arc, `layout` turns the sense of the turn. In both cases, the room toward the end
+of the path is the length x (1 - start point), and the room toward the start is the length x the start point. It is not known what Fusion does with copies past an end of the path.
 Thus the translator keeps the copies on the path.
 
 The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
@@ -3818,17 +3821,30 @@ The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
    distance. For a `spacing` distance, it is the distance x (count - 1). A travel that is longer than the room leaves
    the step out. When the count or the distance follows sizes, the travel can grow. Then the handler cuts the ranges
    of those sizes to where the copies stay on the path (`_keep_on_path`). When no cut can do that, it marks the sizes.
-4. It marks the sizes that may move or turn the path (`_mark_path`). For a sketch path, these are the sizes of the
-   sketch, the sizes that move the plane of the sketch, and the sizes before a sketch with projected geometry
-   (`reach.sketch_line_sizes`). For an edge of the part, these are the sizes of the steps before it
-   (`reach.reference_sizes`). The path is written as numbers.
+4. It marks the sizes that may change what the copy takes from the path (`_mark_path`). The path is written as
+   numbers. For an edge of the part, these are the sizes of the steps before it (`reach.reference_sizes`). For a
+   sketch path, the handler starts from the general set: the sizes of the sketch, the sizes that move the plane of
+   the sketch, and the sizes before a sketch with projected geometry (`reach.sketch_line_sizes`). Then it removes
+   sizes when it can show that they change nothing that the copy uses (`_sketch_path_sizes`):
+   - A line gives only its direction and its length. The place of the line does not move the copies. The sketch
+     solver gives the gap between the two ends of the line as formulas of the dimensions of the sketch
+     (`edges.line_sizes`). When the formulas read no projected or linked geometry, only the sizes behind these
+     dimensions and the sizes that move the plane of the sketch can turn or stretch the line. When the solver cannot
+     give the gap, the general set stays.
+   - When the size probe measured the path (its key `<item>/path` is in the motion file), a size that the probe
+     tried and that moved no value the copy uses is removed. For a line, these values are the gaps between the ends.
+     For an arc or a circle, they are every point of the curve, its radius and the place of its plane. A value that
+     the probe could not follow (the plane turned, the sketch was not read) keeps its sizes. A size that the probe
+     did not try stays.
 5. It writes the data of the plain pattern and gives it to the rectangular or the circular handler. The item keeps its
    index and name.
 
 For a line, the data has `direction_one` (the line), `quantity_one`, `distance_one` and the distance type. The
-parameters of the count and the distance go under the new names. The sketch or the edge of the path goes in as
-`direction_one_sketch` or `direction_one_place`. Thus the rectangular handler marks the sizes that may turn the line,
-as it does for a direction of its own (`ref_motion.check_own_direction`).
+parameters of the count and the distance go under the new names. An edge of the path goes in as
+`direction_one_place`. Thus the rectangular handler marks the sizes that may turn the edge, as it does for a direction
+of its own (`ref_motion.check_own_direction`). A sketch line goes in as a `direction_one_place` that is marked
+`fixed`, because step 4 already marked the sizes that may turn or stretch the line. The rectangular handler then marks
+nothing more for the direction.
 
 For an arc or a circle, the data has the axis (marked `fixed`, because the handler marked the sizes of the path), the
 count and the total angle. The radius is read rounded. Thus the handler takes the turn between copies from the

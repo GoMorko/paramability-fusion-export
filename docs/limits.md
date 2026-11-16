@@ -77,7 +77,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   copies along the line. On an arc or a circle the copies must turn with the path, and it becomes a pattern round the
   centre of the arc. Its count and distance can follow sizes. The copies must stay on the path: when a size can move
   them past an end of the path, its range stops there. The path itself is copied as it is now, so a size that moves
-  or turns the path may give unexpected results. These are left out: a path of another curve or of more than one
+  or turns the path may give unexpected results. For a straight line, only a size that turns the line or changes its
+  length is marked; a size that only moves the line is not. These are left out: a path of another curve or of more than one
   curve, copies on both sides of the start point, copies that keep their direction on a round path, and copies past
   the end of the path. A path pattern is not copied to Orca.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch

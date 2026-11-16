@@ -7,17 +7,24 @@ handlers check the measured copies against the pattern they write, so a copy Fus
 
 The copies must stay on the path: at the captured sizes the step is left out when they run past an end of it, and the
 ranges of a count or distance that can make them run past an end are cut to where they stay on it (the sizes are
-marked when no cut does that). The path itself is written as numbers: the sizes that may move or turn it (its sketch,
-the plane the sketch sits on, or the steps before an edge of the part) are marked.
+marked when no cut does that). The path itself is written as numbers: the sizes that may change what the copy takes
+from it are marked. For an edge of the part, the steps before it. For a sketch path, its sketch, the plane the
+sketch sits on and its projected geometry; a line path only gives its direction and length, which the sketch solver
+can show stay with most sizes, and the size probe shows which sizes it tried move nothing.
 """
 import math
 
 from ...capture_model import gap_hints
-from ...design_model import design, reach, words as shared
+from ...design_model import design, edges as part_edges, reach, words as shared
 from ...design_model.problem import is_problem
 from ...design_model.steps import path_pattern
 from ...design_model.steps.repeat import data_in_component, is_identity, kept_elements
+from ...geometry import vec
+from ...sketch_values import keys
+from ...sketch_values.motion import Stuck
 from .. import values
+from ..sketch import sketch_motion
+from ..sketch.curved import combine
 from ..ranges import kept_ranges
 from ..result import Refusal
 from .repeat_circular import FULL_TURN_DEG, circular
@@ -33,21 +40,71 @@ TURN_SHARE = 1e-4
 _KEPT = ("entity_type", "sources", "source_bodies", "result_bodies", "elements", "suppressed_ids")
 
 
-def _mark_path(ctx, item, data):
-    """The path is written as numbers: mark the sizes that may move or turn it. A sketch path: the sketch's sizes and
-    what moves its plane or its projected geometry (`reach.sketch_line_sizes`). An edge of the part: what may move that
-    edge (`reach.reference_sizes`). The first translation of an export marks nothing."""
+def _mark_path(ctx, item, data, found):
+    """The path is written as numbers: mark the sizes that may move or turn it. A sketch path: those of
+    `_sketch_path_sizes`. An edge of the part: what may move that edge (`reach.reference_sizes`). The first translation
+    of an export marks nothing."""
     if ctx.table is None or getattr(ctx.motion, "optimistic", False):
         return
     path, timeline = data["path"], ctx.capture.get("items") or []
     if path.get("kind") == "sketch" and path.get("sketch"):
-        names = reach.sketch_line_sizes(ctx.table, timeline, item, path["sketch"], path.get("reference"),
-                                        path.get("projected"))
-        names = [name for name in ctx.table.ticked if name in names]
+        names = _sketch_path_sizes(ctx, item, path, found)
     else:
         names = reach.reference_sizes(ctx.table, timeline, item, data.get("path_place") or {"entity_type": "BRepEdge"})
     if names:
         ctx.doubt(names, "%s copies its path as measured" % item.get("name", "a path pattern"))
+
+
+def _sketch_path_sizes(ctx, item, path, found):
+    """The ticked sizes that may change what the copy takes from the sketch path, in table order. In general the
+    sketch's sizes and what moves its plane or its projected geometry (`reach.sketch_line_sizes`). A line path gives
+    only its direction and its length (where it lies does not move the copies): `edges.line_sizes` narrows it to the
+    sizes the sketch solver shows can turn or stretch it. When the probe measured the path, a size it tried that moves
+    no value the copy takes is left out."""
+    curve, sketch = path["curves"][0], path["sketch"]
+    names = reach.sketch_line_sizes(ctx.table, ctx.capture.get("items") or [], item, sketch, path.get("reference"),
+                                    path.get("projected"))
+    if found.kind == "line":
+        source = {key: path.get(key) for key in ("sketch", "sketch_token", "reference", "projected")}
+        names &= set(part_edges.line_sizes(ctx.table, ctx.capture, item, source, curve.get("flat")))
+    moved = _probed_movers(ctx, item, path, found)
+    if moved is not None:
+        names = {name for name in names if name in moved or not sketch_motion.tried(ctx.motion, sketch, name)}
+    return [name for name in ctx.table.ticked if name in names]
+
+
+def _probed_movers(ctx, item, path, found):
+    """The sizes that move what the copy takes from the sketch path as the probe measured it, or None when the probe
+    did not measure the path. A line gives the gap between its ends; a round path every value of its curve and the
+    place of its sketch plane. A value the probe could not follow (it turned, it was not read) names its sizes."""
+    index = item.get("index")
+    curve = path["curves"][0]
+    flat, sketch = curve.get("flat"), path.get("sketch") or ""
+    if not sketch_motion.active(ctx) or keys.path(index) not in ctx.motion.curves \
+            or not isinstance(flat, dict) or flat.get("kind") != curve.get("kind"):
+        return None
+    prefix = keys.path_curve(index, 0)
+
+    def raw(field, c):
+        number = flat[field][c] if c is not None else flat[field]
+        return sketch_motion.raw(ctx, prefix + (field if c is None else "%s.%d" % (field, c)), float(number), sketch)
+    try:
+        if found.kind == "line":
+            values = []
+            for c in (0, 1):
+                ends = [raw("start", c), raw("end", c)]
+                if any(isinstance(v, Stuck) for v in ends):
+                    values += ends
+                else:
+                    values.append(combine([(1.0, ends[1]), (-1.0, ends[0])], sketch))
+        else:
+            fields = ("center",) if curve["kind"] == "circle" else ("start", "mid", "end", "center")
+            values = [raw(field, c) for field in fields for c in (0, 1)] + [raw("radius", None)]
+            frame = path["frame"]
+            values.append(sketch_motion.raw(ctx, keys.path_plane(index), vec.dot(frame["origin"], frame["z"]), sketch))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    return {name for value in values for name in sketch_motion.movers(ctx.table, value)}
 
 
 def _kept(data, ctx):
@@ -96,8 +153,9 @@ def _plain_data(data, extra):
 
 
 def _as_line(ctx, step, data, found):
-    """A line path as a rectangular pattern of one direction. The path goes in as the direction's sketch or edge, so
-    the rectangular handler marks the sizes that may turn it."""
+    """A line path as a rectangular pattern of one direction. An edge path goes in as the direction's edge, so the
+    rectangular handler marks the sizes that may turn it. A sketch path goes in as a direction worked out from this
+    step (`fixed`): `_mark_path` has marked the sizes that may turn or stretch the line."""
     params = data.get("params") or {}
     built = _plain_data(data, {
         "direction_one": found.direction, "quantity_one": int(data["quantity"]),
@@ -109,8 +167,8 @@ def _as_line(ctx, step, data, found):
     if isinstance(data.get("path_place"), dict):
         built["direction_one_place"] = data["path_place"]
     elif path.get("kind") == "sketch" and path.get("sketch"):
-        built["direction_one_sketch"] = {"sketch": path["sketch"], "reference": path.get("reference"),
-                                         "projected": path.get("projected")}
+        built["direction_one_place"] = {"entity_type": "SketchLine", "own": True, "fixed": True,
+                                        "sketch": path["sketch"]}
     return rectangular(ctx, _rewritten(step, built))
 
 
@@ -197,7 +255,7 @@ def _path(ctx, step):
     if travel.n > room + END_TOL_MM:
         return Refusal(shared.PATH_PATTERN_RUNS_OFF)
     _keep_on_path(ctx, item, travel, room)
-    _mark_path(ctx, item, data)
+    _mark_path(ctx, item, data, found)
     if found.kind == "line":
         return _as_line(ctx, step, data, found)
     return _as_round(ctx, step, data, found, way, distance_q)
