@@ -828,7 +828,8 @@ against `samples`.
 - `hole_type`: `simple`, `counterbore`, `countersink`. `tap_type`: `simple`, `clearance`, `tapped`,
   `taperTapped`. `thread_modeled`: `thread.isModeled` for a tapped hole, else null.
 - `thread`: for a tapped hole, the thread info (the keys of `ThreadFeature` below: `thread_type`, `designation`,
-  `thread_class`, `internal`, `right_hand`, `pitch`, `major_diameter`, `minor_diameter`, `angle_deg`) from
+  `thread_class`, `internal`, `right_hand`, `pitch`, `major_diameter`, `minor_diameter`, `pitch_diameter`,
+  `angle_deg`) from
   `HoleFeature.tappedHoleInfo` and the hidden thread feature `HoleFeature.thread` (its `threadInfo` and
   `isRightHanded`), plus `full_length` (`thread.isFullLength`, bool or null), `depth` (`thread.threadLength` in mm,
   how deep the thread runs when it is not full length, or null) and `offset` (`thread.threadOffset` in mm, or null);
@@ -1403,7 +1404,7 @@ order (empty when one cannot be read, since a gap would shift the order).
   "modeled": true,
   "thread_type": "ISO Metric profile", "designation": "M8x1.25", "thread_class": "6g",
   "internal": false, "right_hand": true,
-  "pitch": 1.25, "major_diameter": 8.0, "minor_diameter": 6.5, "angle_deg": null,
+  "pitch": 1.25, "major_diameter": 8.0, "minor_diameter": 6.5, "pitch_diameter": 7.19, "angle_deg": null,
   "full_length": true, "length": 10.0, "offset": 0.0,
   "faces": [{ "surface": "Cylinder", "origin": [..], "axis": [..], "radius": 4.0, "span": [0.0, 10.0],
               "face_point": [..], "outward": true }],
@@ -1413,8 +1414,8 @@ order (empty when one cannot be read, since a gap would shift the order).
 ```
 
 - `thread_type`, `designation`, `thread_class`, `internal` (`isInternal`), `right_hand` (`isRightHanded`), `pitch`
-  (`threadPitch`), `major_diameter`, `minor_diameter` and `angle_deg` (`threadAngle`, already in degrees): the
-  `threadInfo` members, except `right_hand` (on the feature). Lengths in mm; each is null when it cannot be read.
+  (`threadPitch`), `major_diameter`, `minor_diameter`, `pitch_diameter` (`pitchDiameter`) and `angle_deg`
+  (`threadAngle`, already in degrees): the `threadInfo` members, except `right_hand` (on the feature). Lengths in mm; each is null when it cannot be read.
   `angle_deg` is null when the API gives none: the profile name then decides (metric and Unified are 60 degrees).
 - `full_length` (`isFullLength`), `length` (`threadLength`) and `offset` (`threadOffset`); `params` has the length and
   offset parameters. Fusion uses the length and the offset only for a thread that is not full length, and may give
@@ -1428,7 +1429,10 @@ order (empty when one cannot be read, since a gap would shift the order).
 
 The translator writes a recipe `thread` for a metric or Unified thread with a pitch of 0.2 to 10 mm, at most 100 turns
 in all and 8 threads, and leaves other profiles, tapered threads and a thread inside a tool body out as gaps
-(`threadProfile` and `threadLimits` hints).
+(`threadProfile` and `threadLimits` hints). The step holds `diameter` (major), `minorDiameter` and, from recipe version
+17, `pitchDiameter` (mm, the diameter where the ridge is half a pitch wide). The translator writes `pitchDiameter` only
+when Fusion gave a value between the minor and the major diameter, and only when the recipe is version 17 or newer for
+another reason; it never raises the version, and it removes the field from an older recipe.
 
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
 `distance`; `faces` after it. When no face is readable before the item, `faces` holds the faces of `feature.faces`

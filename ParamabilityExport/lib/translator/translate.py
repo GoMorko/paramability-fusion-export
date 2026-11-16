@@ -38,6 +38,8 @@ SWEEP_VERSIONS = {"twistDeg": 16, "taperDeg": 16, "orientation": 16}
 SWEEP_PATH_VERSIONS = {"closed": 16}
 # Draft step fields newer than RECIPE_VERSION, the same way.
 DRAFT_VERSIONS = {"angleTwoDeg": 17}
+# A thread step's `pitchDiameter` is only written into a recipe of this version or newer; it never raises the version.
+PITCH_DIAMETER_VERSION = 17
 # A shell that grows outward, rounds its corners or has no open faces needs this version.
 SHELL_VERSION = 17
 MAX_FEATURES = 400
@@ -533,6 +535,10 @@ def _walk(capture, table, size_table, motion=None, cache=None):
                   + [_sweep_version(step) for step in written]
                   + [_shell_version(step) for step in written]
                   + [getattr(step, "version", 0) for step in written])
+    if version < PITCH_DIAMETER_VERSION:
+        for step in written:
+            if step["kind"] == "thread":
+                step.pop("pitchDiameter", None)
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps, "sizesAsWritten": True}
     over = _over_caps(recipe, ctx)
     if over:

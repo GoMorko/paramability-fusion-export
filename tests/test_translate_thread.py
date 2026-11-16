@@ -1,6 +1,8 @@
 """Modeled threads (a ThreadFeature and the thread of a tapped hole) and holes that end at a face or body."""
 import copy
+import importlib
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import TICKED, on_fixture, param, run
@@ -10,6 +12,8 @@ from lib.capture_model import gap_hints
 from lib.params.expressions import evaluate
 from lib.translator import translate
 from lib.translator.step_walk import tool_refusal
+
+TRANSLATE_MODULE = importlib.import_module("lib.translator.translate")
 
 INFO = {"thread_type": "ISO Metric profile", "designation": "M8x1.25", "internal": False, "right_hand": True,
         "pitch": 1.25, "major_diameter": 8.0, "minor_diameter": 6.5, "angle_deg": None}
@@ -80,6 +84,37 @@ class ThreadFeatureTest(unittest.TestCase):
         capture["items"].append(dict(load_capture("thread_modeled")["items"][-1], index=2, data=data))
         result, _ = run(capture)
         self.assertTrue(result.loose or result.fixed)
+
+
+class PitchDiameterTest(unittest.TestCase):
+    """`pitchDiameter` is written only when Fusion gave a plausible value and the recipe is version 17 or newer."""
+
+    def written(self, version, **more):
+        with mock.patch.object(TRANSLATE_MODULE, "RECIPE_VERSION", version):
+            result, (step,) = threads(on_thread(**more))
+        return result.recipe["version"], step
+
+    def test_a_known_pitch_diameter_is_written_in_a_version_17_recipe(self):
+        version, step = self.written(17, pitch_diameter=7.188)
+        self.assertEqual((version, step["pitchDiameter"]), (17, 7.188))
+        with mock.patch.object(TRANSLATE_MODULE, "RECIPE_VERSION", 17):
+            assert_schema_ok(self, translate(on_thread(pitch_diameter=7.188)).recipe)
+
+    def test_an_older_recipe_never_carries_it_and_it_does_not_raise_the_version(self):
+        version, step = self.written(TRANSLATE_MODULE.RECIPE_VERSION, pitch_diameter=7.188)
+        self.assertLess(version, 17)
+        self.assertNotIn("pitchDiameter", step)
+
+    def test_an_unread_or_implausible_pitch_diameter_is_left_out(self):
+        for value in (None, 6.5, 8.0, 9.0, 0.0):
+            with self.subTest(value=value):
+                self.assertNotIn("pitchDiameter", self.written(17, pitch_diameter=value)[1])
+
+    def test_the_thread_of_a_tapped_hole_carries_it_too(self):
+        with mock.patch.object(TRANSLATE_MODULE, "RECIPE_VERSION", 17):
+            result = tapped_hole(thread=dict(HOLE_INFO, pitch_diameter=5.35, made_span=[0.0, 8.0]))
+        (step,) = steps_of(result.recipe, "thread")
+        self.assertEqual(step["pitchDiameter"], 5.35)
 
 
 class ThreadRefusalTest(unittest.TestCase):

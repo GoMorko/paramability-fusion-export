@@ -2230,7 +2230,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. There are readers for
   extrudes, holes and threads, patterns, mirrors, moves and splits, rounds and chamfers, sweeps and lofts.
   - `steps/thread.py`: the thread of a ThreadFeature and the thread of a tapped hole. `spec_of` gives the `Spec` (pitch,
-    major and minor diameter, hand) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
+    major and minor diameter, hand, and the pitch diameter when Fusion gives one between the minor and the major
+    diameter) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
     degree form (cause `threadProfile`), for a number that is missing and for a thread that has no usable depth. A
     caller can pass the range of pitches that it copies (`pitches`). A pitch outside it is a `Problem` with the cause
     `threadLimits`. `cylinder` gives the one `Cylinder` that the faces make (the point on the axis, the unit axis, the
@@ -3544,7 +3545,15 @@ on one place counts as a try that breaks the rule.
 
 A recipe `thread` step is a helical thread of a set form on a cylinder. It holds an axis (origin and direction), a length,
 the major diameter, the pitch, the minor diameter, whether it is internal, and the hand (written only for a left hand
-thread). The form is a 60 degree form. Fusion's metric and Unified profiles are that form.
+thread). It can also hold the pitch diameter (`pitchDiameter`, in mm). This is the diameter where the ridge of the
+thread is half a pitch wide. The app cannot find it exactly from the major diameter, the minor diameter and the pitch,
+so it reads the number from Fusion's thread info (`ThreadInfo.pitchDiameter`). The field is optional. The translator
+writes it only when Fusion gives a value that lies between the minor and the major diameter. It writes it only in a
+recipe of version 17 or newer. A recipe gets that version for other reasons, for example a shell or a draft with two
+angles. The pitch diameter never raises the version by itself, because an app that does not know the field would
+refuse the recipe for a detail that it can do without. When the recipe stays below version 17, `translate._walk`
+removes the field from every thread step, also inside a tool body. The Orca output does not use it: the Orca thread
+feature has a pitch and a depth, and no pitch diameter. The form is a 60 degree form. Fusion's metric and Unified profiles are that form.
 
 #### A cosmetic thread
 

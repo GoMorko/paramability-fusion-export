@@ -33,12 +33,14 @@ OFFSET_TOL = 1e-6
 
 
 class Spec(NamedTuple):
-    """The numbers of one thread: pitch, major and minor diameter in mm, and the hand."""
+    """The numbers of one thread: pitch, major and minor diameter in mm, the hand, and the pitch diameter in mm where
+    the ridge is half a pitch wide (None when Fusion does not give it or it lies outside the minor and major)."""
 
     pitch: float
     major: float
     minor: float
     right: bool
+    pitch_diameter: object = None
 
 
 class Cylinder(NamedTuple):
@@ -105,7 +107,9 @@ def spec_of(info, what, major=None, minor=None, pitches=None):
         return Problem("pitch", words.THREAD_PITCH % (pitch, *pitches), gap_hints.THREAD_LIMITS)
     if not (0 < minor < major) or (major - minor) / 2.0 < 0.05 * pitch:
         return Problem("threadDepth", words.THREAD_NO_DEPTH % what)
-    return Spec(float(pitch), float(major), float(minor), bool(right))
+    middle = info.get("pitch_diameter")
+    middle = float(middle) if _number(middle) and minor < middle < major else None
+    return Spec(float(pitch), float(major), float(minor), bool(right), middle)
 
 
 def cylinder(data):

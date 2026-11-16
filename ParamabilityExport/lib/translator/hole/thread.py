@@ -1,8 +1,8 @@
 """Modeled threads as recipe `thread` steps: a ThreadFeature on a cylinder face, and the thread of a tapped hole.
 
-The recipe thread is a 60 degree form with a pitch, a major and a minor diameter, a hand and a length. Fusion's metric
-and Unified profiles are that form; other profiles, tapered threads and anything over the recipe's caps are refused
-(a gap with a hint). The numbers, the cylinder and the end the thread starts at are read by the shared layer
+The recipe thread is a 60 degree form with a pitch, a major and a minor diameter, an optional pitch diameter, a hand
+and a length. Fusion's metric and Unified profiles are that form; other profiles, tapered threads and anything over
+the recipe's caps are refused (a gap with a hint). The numbers, the cylinder and the end the thread starts at are read by the shared layer
 (`design_model/steps/thread.py`); a read problem there becomes a refusal here (`refusal`). Every number can be
 missing: the thread is then left out, never guessed.
 
@@ -68,6 +68,9 @@ def write(origin, direction, length, spec, internal):
             "length": length.json() if isinstance(length, Quantity) else length,
             "diameter": round(spec.major, 6), "pitch": round(spec.pitch, 6), "minorDiameter": round(spec.minor, 6),
             "internal": bool(internal)}
+    if spec.pitch_diameter:
+        # Dropped again by the translator when the recipe is older than `translate.PITCH_DIAMETER_VERSION`.
+        step["pitchDiameter"] = round(spec.pitch_diameter, 6)
     if not spec.right:
         step["hand"] = "left"
     return step

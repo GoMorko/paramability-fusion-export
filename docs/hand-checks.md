@@ -192,7 +192,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     cylinder, started from the lower end. Make a third with an ANSI Unified thread, and a fourth with an ACME thread.
     Export: tick `Neck`. In `report.json`, the item of the thread must hold `thread_type`, `pitch` (2.0, from
     `threadPitch`), `angle_deg` (60, or null), `major_diameter`
-    (30.0), `minor_diameter`, `right_hand`, and a `faces` entry with `radius` 15, a `span` and `outward` true. If
+    (30.0), `minor_diameter`, `pitch_diameter` (between the minor and the major diameter, from `pitchDiameter`),
+    `right_hand`, and a `faces` entry with `radius` 15, a `span` and `outward` true. If
     a number is missing or 10 times too big or too small, the units of the thread info differ from the reader's guess
     (cm). The thread copies as a `thread` step; the metric and Unified ones copy, the ACME one is left out with the
     hint about 60 degree threads. Changing `Neck` in Paramability changes the thread length. In the partial thread

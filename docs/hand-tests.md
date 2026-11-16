@@ -1994,7 +1994,7 @@ read the capture in `report.json`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`.
 - `ThreadFeature.isModeled`, `isRightHanded`, `isFullLength`, `threadLength`, `threadOffset`, `threadInfo` and its
   `threadType`, `threadDesignation`, `threadClass`, `isInternal`, `threadAngle` (degrees), `threadPitch`, `majorDiameter`,
-  `minorDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
+  `minorDiameter`, `pitchDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
   and `faces` after the step (the made thread faces: their `vertices` give `made_span`). These names match the Fusion API
   stub (July 2025); every member is optional in the reader. Hand check TD1 in `docs/hand-checks.md` lists what to look for.
 - Tapped hole thread (hand check TD2): Fusion (September 2025 and later) keeps the tap type in

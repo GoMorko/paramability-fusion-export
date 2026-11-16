@@ -2281,6 +2281,9 @@
         "pitch": {
           "$ref": "#/$defs/Num"
         },
+        "pitchDiameter": {
+          "$ref": "#/$defs/Num"
+        },
         "startAngleDeg": {
           "$ref": "#/$defs/Num"
         },

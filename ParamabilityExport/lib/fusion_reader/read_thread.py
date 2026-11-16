@@ -1,8 +1,8 @@
 """Thread features (adsk.fusion.ThreadFeature) and the thread of a tapped hole as plain dicts (docs/capture-format.md).
 
-A modeled thread is read as the numbers of its `ThreadInfo` (profile name, `threadPitch`, major and minor diameter,
-`threadAngle`) and `ThreadFeature.isRightHanded`, and as the faces it sits on (`inputCylindricalFaces`): for each input face its cylinder, the axial span between its end vertices, a point
-on it and which way it faces. A cosmetic thread is only `{ "modeled": false }`. Every member is read on its own: one
+A modeled thread is read as the numbers of its `ThreadInfo` (profile name, `threadPitch`, major, minor and pitch
+diameter, `threadAngle`) and `ThreadFeature.isRightHanded`, and as the faces it sits on (`inputCylindricalFaces`): for
+each input face its cylinder, the axial span between its end vertices, a point on it and which way it faces. A cosmetic thread is only `{ "modeled": false }`. Every member is read on its own: one
 that cannot be read becomes null, and the translator then leaves the thread out instead of guessing.
 """
 from . import read_geometry as geo
@@ -22,8 +22,8 @@ def _bool(value):
 def thread_info(*sources):
     """The thread numbers of the first source that gives each member. A source is a thread feature, its `ThreadInfo`,
     or for a tapped hole the object that holds its thread (where the hole keeps it is hand check TD2). Member names are
-    the Fusion API's: `threadPitch`, `majorDiameter` and `minorDiameter` are cm and leave in mm; `threadAngle` is
-    already in degrees."""
+    the Fusion API's: `threadPitch`, `majorDiameter`, `minorDiameter` and `pitchDiameter` are cm and leave in mm;
+    `threadAngle` is already in degrees."""
     def read(name):
         for source in sources:
             value = geo.safe(lambda: getattr(source, name), None)
@@ -44,6 +44,7 @@ def thread_info(*sources):
         "pitch": length("threadPitch"),
         "major_diameter": length("majorDiameter"),
         "minor_diameter": length("minorDiameter"),
+        "pitch_diameter": length("pitchDiameter"),
         "angle_deg": angle if isinstance(angle, (int, float)) and not isinstance(angle, bool) else None,
     }
 
