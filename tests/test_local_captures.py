@@ -15,6 +15,7 @@ from tests.schema_check import check_recipe
 
 from lib.export_plan.body_scope import body_links, scope_inputs
 from lib.export_plan.probe_flow import probe_view
+from lib.package.naming import addin_of_writer
 from lib.params import size_table
 from lib.probe import build as probe_build
 from lib.sketch_values.motion import Stuck, Terms
@@ -48,8 +49,17 @@ def _present(case, key="package"):
 
 
 def package_report(case):
+    """The report of a package; its capture names the add-in version its writer text gives (`addin`)."""
     with zipfile.ZipFile(_path(case, "package")) as package:
-        return json.loads(package.read("report.json"))
+        return with_addin(json.loads(package.read("report.json")))
+
+
+def with_addin(report):
+    """`report` with the add-in version of its writer text in its capture, as a capture of the current reader holds it."""
+    version = addin_of_writer(report.get("writer"))
+    if version and isinstance(report.get("capture"), dict) and not report["capture"].get("addin"):
+        report = dict(report, capture=dict(report["capture"], addin=version))
+    return report
 
 
 def table_for(case, capture):
@@ -92,7 +102,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_assembly_steps_are_skipped_and_the_walk_reaches_the_part(self):
         def check(case):
             with open(_path(case, "file"), encoding="utf-8") as f:
-                capture = json.load(f)["capture"]
+                capture = with_addin(json.load(f))["capture"]
             own = capture["target"]["component"]["token"]
             result = translate(capture)
             walked = {v["index"]: v["verdict"] for v in result.items}

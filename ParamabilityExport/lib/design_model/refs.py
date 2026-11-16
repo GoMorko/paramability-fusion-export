@@ -13,12 +13,15 @@ docs/capture-format.md "Measured references"). This module states the facts ever
   which occurrence such an item places, so these count for every reference of another component;
 - the doubt for a reference the copy keeps where it is (`mark_all`): those sizes. When the capture cannot say which
   sizes those are, the recorder is told (`movers_unknown`) and each destination decides what to do;
-- steps from add-ins before 0.10.6 that marked the part's own geometry as another component's (`from_old_export`).
+- steps read by add-ins before 0.10.6, which marked the part's own geometry as another component's
+  (`from_old_export`, told by the add-in version the capture names).
 
 How far a reference moves as sizes change is measured by the probe; the recipe translator reads that in
 `translator/ref_motion.py`. A destination that has no measured motion keeps each reference where it is and calls
 `mark_all`.
 """
+import re
+
 from ..params import geometry_links
 from . import step_links, words
 
@@ -28,9 +31,10 @@ PLANE_TYPES = ("BRepFace", "ConstructionPlane")
 TARGET_SLOTS = ("start", "side_one", "side_two")
 # Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
 BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
-# What the current reader always adds to a record of another component it cannot bring in: a sketch outline carries
-# its `component` and `placement`, a plane or axis its `ref`.
-_PLACE_KEYS = ("component", "placement", "ref", "assembly")
+# The first add-in version whose reader tells the part's own sketches and planes, seen through an occurrence, apart
+# from those of another component.
+OWN_GEOMETRY_TOLD_APART = (0, 10, 6)
+_VERSION = re.compile(r"\s*(\d+)\.(\d+)\.(\d+)")
 
 
 def is_vector(value):
@@ -205,14 +209,23 @@ def _outline_or_plane(record):
                                                      and (is_vector(record.get("normal")) or is_vector(record.get("dir"))))
 
 
-def from_old_export(item):
-    """True when every record of another component in the step is a sketch outline, a plane or an axis with none of the
-    place data the current reader writes for it. Add-in versions before 0.10.6 marked the part's own sketches and
-    planes, seen through an occurrence, as another component's, so such a step may be the part's own geometry. An edge
-    or a face record cannot be told apart this way."""
+def old_writer(capture):
+    """True when the capture names the add-in version that read it (`addin`) and that version is older than
+    `OWN_GEOMETRY_TOLD_APART`. A capture that names no version, or one that cannot be read, is not taken as old."""
+    found = _VERSION.match(str((capture or {}).get("addin") or ""))
+    return found is not None and tuple(int(g) for g in found.groups()) < OWN_GEOMETRY_TOLD_APART
+
+
+def from_old_export(item, capture):
+    """True when the capture was read by an add-in before 0.10.6 (`old_writer`) and every record of another component
+    in the step is a sketch outline, a plane or an axis. Those versions marked the part's own sketches and planes,
+    seen through an occurrence, as another component's, so such a step may be the part's own geometry. An edge or a
+    face record cannot be told apart this way."""
+    if not old_writer(capture):
+        return False
     found = []
     _foreign_records(item.get("data"), found)
-    return bool(found) and all(_outline_or_plane(r) and not any(k in r for k in _PLACE_KEYS) for r in found)
+    return bool(found) and all(_outline_or_plane(r) for r in found)
 
 
 def why_foreign(item):

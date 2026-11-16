@@ -1168,7 +1168,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
-| `oldExport` | a step whose only records of another component are sketch outlines, planes or axes with none of the place data of the current reader (an export from before 0.10.6) | Export again with this version of the add-in. |
+| `oldExport` | a step whose only records of another component are sketch outlines, planes or axes, in a capture that an add-in before 0.10.6 read (`addin` of the capture, `refs.old_writer`) | Export again with this version of the add-in. |
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
 | `afterGap` | a step that picks faces of a gap, repeats a gap, or sits on a floating join | Fix the step it builds on first. |
@@ -1818,7 +1818,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     of several components, so any ticked size can move the other component.
 - `refs.py`: planes, faces, axes, directions and points of other components. The shape names (`PLANE`, `AXIS`,
   `POINT`, `DIRECTION`), `BODY_LISTS`, `is_foreign`, `bring_in`, `acting_sizes`, `reaching`, `mark_all`,
-  `from_old_export` and `why_foreign`.
+  `old_writer`, `from_old_export` and `why_foreign`.
 - `step_links.py`: the facts of the steps that the geometry links (`params/geometry_links.py`) need. The geometry
   links tell which user parameters can move the part through the geometry of another component. That module is in
   `params`, below the shared layer, and it does not read the data of a step. This module reads the data and gives
@@ -2995,6 +2995,16 @@ is true:
 Inside a tool of another component, the copies of a pattern are carried into the frame of that component
 (`Context.component_frame`).
 
+The reader gives an outline of another component's sketch in two ways. In the first way, Fusion gives the profile
+through the occurrence of that component. The reader then reads the place of the sketch through that occurrence. In
+the second way, Fusion gives the native profile, with no occurrence. This is the usual way for an extrude, a revolve,
+a loft or a sweep that a person made with the operation New Component. That step and its body are in the new
+component, but the sketch stays in the component that was active (often the root). Fusion reads the operation of such
+a step as New Body. The reader then reads the place of the sketch from the component of the sketch
+(`placement.native_sketch_placement`). A sketch of the root gets the frame of the root. A sketch of another component
+gets the place of the one occurrence of that component. When that component has more than one occurrence, the place
+is not known, and the step stays a gap. The size probe reads the place of the sketch in the same way at each try.
+
 An outline of another component's sketch follows the same rules (`design_model/borrowed.py`). When the motion file has
 values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
 is written as numbers, and every size that can move that sketch is marked. `borrowed.movers` finds these sizes:
@@ -3295,11 +3305,13 @@ A step becomes a gap (left out, recipe still written):
   a cap that is passed, a step in a tool body: see 3.12 and 3.13);
 - its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
   angles);
-- it reaches into another component in a way the copy cannot follow (`foreign` records). An export from before 0.10.6
-  marked the part's own sketches and planes, when seen through an occurrence, as records of another component. A step
-  whose only such records are sketch outlines, planes or axes with none of the place data of the current reader is left
-  out with the cause `oldExport` and the tip to export again (`design_model/refs.py`, `from_old_export`). An edge or a face record
-  carries no place data in any version, so it is never taken for old;
+- it reaches into another component in a way the copy cannot follow (`foreign` records). An add-in before 0.10.6
+  marked the part's own sketches and planes, when seen through an occurrence, as records of another component. The
+  capture tells which add-in version read it (`addin`). When that version is before 0.10.6, a step whose only such
+  records are sketch outlines, planes or axes is left out with the cause `oldExport` and the tip to export again
+  (`design_model/refs.py`, `old_writer` and `from_old_export`). A capture with no version, or with a later one, is
+  never taken for old. A missing key of a record does not tell the version. An edge or a face record is never taken
+  for old;
 - it picks faces of a gap, or may pick them (`cause: picks`);
 - it is a pattern or mirror of a gap;
 - it is a Combine whose tool cannot be built;

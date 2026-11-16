@@ -375,16 +375,20 @@ def feature_readers():
     return readers
 
 
-def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None, timer=None):
+def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None, timer=None, addin=None):
     """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
     Only the items before the timeline marker are read; `marker` records where it was. fusion, name and up_axis
     come from the running app when not given. extra_readers adds feature readers (type name to (before, after)).
     `timer` (`timing.capture_timer.CaptureTimer`) is given the time of each step and of the parts of the read.
+    `addin` is the version of the add-in that reads the capture; it is kept as `addin` when given.
     """
     timer = timer if timer is not None else CaptureTimer()
     with timer.span("total"):
-        return _read_capture(design, body, fusion, name, up_axis, extra_readers, timer)
+        capture = _read_capture(design, body, fusion, name, up_axis, extra_readers, timer)
+    if addin:
+        capture["addin"] = str(addin)
+    return capture
 
 
 def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):

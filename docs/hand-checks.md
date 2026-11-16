@@ -578,3 +578,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. NC1, steps that make a new component. Add a user parameter `Len` = 30 mm. With the top level active, sketch a
+    30 x 20 mm rectangle on the XY plane, width `Len`, and extrude it 10 mm with the operation New Component. In the
+    same way revolve a 10 x 20 mm rectangle on the XZ plane (50 to 60 mm from the Z axis) a full turn about the Z axis,
+    and loft a 20 mm square on the XY plane to a 10 mm square on a plane 15 mm up, each with New Component.
+    Export: export the body of each new component, tick `Len` for the extrude. Each copy is written as a recipe and
+    matches the STEP, with no "older version of the add-in" reason. In Paramability, change `Len` to 40 mm: the
+    extrude grows like in Fusion. Then move the first new component 20 mm along X (Position, Capture Position) and
+    export it again: the copy still matches. Afterwards the design is as before.

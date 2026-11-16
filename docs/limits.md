@@ -73,7 +73,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   for it. A component used several times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, and a body made in another component and moved in. A step of the
-  body that reaches into another component's edges, bodies or curved faces is left out of the copy. A step that uses a sketch of another component is copied
+  body that reaches into another component's edges, bodies or curved faces is left out of the copy. An extrude,
+  revolve or loft made with the operation New Component makes its body in the new component while its sketch stays
+  in the component that was active: the copy of that body places the sketch through the assembly. A sweep made so is
+  left out, since its path stays in the other component. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
@@ -119,7 +122,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
   does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
-  plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
+  plane tilted to its face or set to follow tangent faces that are rounded, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
   along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes
   along the edge, rounds with curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
@@ -168,7 +171,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   with a corner point), or in a 3D path, corners too close together for the outline, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
-  sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
+  sweep that makes a new component (its path stays in another component). A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
   path), or the sweep is left out; so is a tapered one whose volume fits neither an offset nor a scaled outline. A
   twist or taper that follows a size marks the size past the values where it would reach the limits. A twist along a
   closed path turns as Fusion walks the path. A later round or chamfer on all edges of a sweep's start or end cap names
@@ -184,7 +187,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
   lofts are left out: three or more outlines, a point end, a curved face or a loop of edges that is open or not flat,
   tangent or direction
-  ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component. A round or chamfer
+  ends, rails, a centre line, a closed loft and a surface loft. A round or chamfer
   on all edges of an outline of a loft (no holes) names the loft and follows its sizes; a pick on part of an outline
   keeps its points and marks the sizes the loft reads, and a pick on its side marks every size before it.
 - A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add

@@ -164,6 +164,11 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(c["targets"], [c["target"]])
         self.assertEqual([i["type"] for i in c["items"]], ["Sketch", "ExtrudeFeature"])
         self.assertEqual(json.loads(json.dumps(c)), c)
+        self.assertNotIn("addin", c)
+
+    def test_the_capture_names_the_add_in_version_that_read_it(self):
+        capture = read_capture(self.design, self.target, fusion="", name="", up_axis="z", addin="0.13.0")
+        self.assertEqual(capture["addin"], "0.13.0")
 
     def test_the_capture_carries_the_sketch_graphs_and_survives_a_graph_read_that_raises(self):
         self.assertEqual(self.capture["sketch_graphs"], [])

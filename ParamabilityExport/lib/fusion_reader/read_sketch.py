@@ -3,7 +3,7 @@ import math
 
 from ..geometry import rigid, text_outlines
 from . import read_geometry as geo
-from .placement import read_sketch_placement, target_move
+from .placement import native_sketch_placement, read_sketch_placement, target_move
 
 # Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
 # every point is at z = 0 and the sketch frame is not the identity, the curve is compared with its sketch entity
@@ -375,10 +375,17 @@ def into_target(frame, placement_frame, ctx):
 
 def _borrowed(proxy, sketch, frame, ctx):
     """Another component's sketch: that component, the sketch's place in the assembly, the dimensions that move it,
-    and `frame` brought into the target's coordinates (`native_frame` keeps the sketch's own). Without a readable
-    place on both sides the frame stays the sketch's own and `placement` holds the reason."""
+    and `frame` brought into the target's coordinates (`native_frame` keeps the sketch's own). The place is read
+    through `proxy`, the profile as the step got it through an occurrence; without one (a sketch of the root or of a
+    parent component that a step of a new component uses) it is read from the sketch's component
+    (`native_sketch_placement`). Without a readable place on both sides the frame stays the sketch's own and
+    `placement` holds the reason."""
     component = geo.safe(lambda: sketch.parentComponent, None)
-    placement = read_sketch_placement(proxy, sketch)
+    if proxy is not None:
+        placement = read_sketch_placement(proxy, sketch)
+    else:
+        placement = geo.safe(lambda: native_sketch_placement(ctx.root, sketch),
+                             {"path": "", "error": "The place of the sketch could not be read."})
     out = {
         "component": {"token": geo.safe(lambda: component.entityToken, "") or "",
                       "name": geo.safe(lambda: component.name, "") or ""},
@@ -439,13 +446,15 @@ def _curve_record(profile_curve, space):
     return record
 
 
-def read_profile(profile, ctx=None):
+def read_profile(profile, ctx=None, place=True):
     """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's.
 
     `sketch_token` and `reference` (what the sketch sits on) are added when Fusion gives them.
 
-    A profile of another component's sketch, seen through an occurrence, is read from its native object (that
-    component's coordinates) and adds `component`, `placement` and `sketch_params` (see `_borrowed`).
+    A profile of another component's sketch is read from its native object (that component's coordinates) and, with
+    `place`, adds `component`, `placement` and `sketch_params` (see `_borrowed`): seen through an occurrence, or handed
+    over native, as a step of a new component gets a sketch of the root or of its parent. The size probe reads a
+    sketch of another component without `place` and places the whole sketch itself.
     """
     profile = geo.native_input(profile, ctx)
     proxy = None
@@ -473,11 +482,10 @@ def read_profile(profile, ctx=None):
     reference = sketch_reference(sketch, ctx)
     if reference is not None:
         record["reference"] = reference
-    if proxy is not None:
+    if proxy is not None or geo.foreign(profile, ctx) or geo.foreign(sketch, ctx):
         record["foreign"] = True
-        record.update(_borrowed(proxy, sketch, frame, ctx))
-    elif geo.foreign(profile, ctx) or geo.foreign(sketch, ctx):
-        record["foreign"] = True
+        if place:
+            record.update(_borrowed(proxy, sketch, frame, ctx))
     return record
 
 

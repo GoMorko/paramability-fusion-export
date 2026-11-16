@@ -44,11 +44,21 @@ def with_extension(path, extension=EXTENSION):
     return path if path.lower().endswith(extension) else path + extension
 
 
+_WRITER_PREFIX = "Paramability Fusion export "
+
+
 def writer_text(addin_version, fusion_version):
-    text = f"Paramability Fusion export {addin_version}"
+    text = f"{_WRITER_PREFIX}{addin_version}"
     if fusion_version:
         text += f", Fusion {fusion_version}"
     return text[:200]
+
+
+def addin_of_writer(writer):
+    """The add-in version a `writer_text` names, or "" for any other text."""
+    if not isinstance(writer, str) or not writer.startswith(_WRITER_PREFIX):
+        return ""
+    return writer[len(_WRITER_PREFIX):].split(",")[0].strip()
 
 
 def addin_version(manifest_path):

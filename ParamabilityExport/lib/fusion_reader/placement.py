@@ -233,6 +233,22 @@ def find_occurrence(root, component, path_name=""):
     return [found[0]] + occurrence_path(found[0])
 
 
+def native_sketch_placement(root, sketch, path_name=""):
+    """Where a native sketch of another component sits in the assembly, read without an entity seen through an
+    occurrence (a step of a new component can use a sketch of its parent so): the root's own frame for a sketch of the
+    root, else the place of its component's occurrence (`find_occurrence`, then `sketch_placement_at`). A record like
+    `read_sketch_placement`'s, or one with `error`."""
+    component = geo.safe(lambda: sketch.parentComponent, None)
+    if component is None:
+        return {"path": path_name, "error": "The component of the sketch could not be read."}
+    if geo.same_entity(component, root):
+        return {"path": "", "frame": dict(ROOT_FRAME), "source": "root", "checked_points": 0}
+    path = find_occurrence(root, component, path_name)
+    if path is None:
+        return {"path": path_name, "error": "The place of the sketch's component could not be found."}
+    return sketch_placement_at(path, sketch)
+
+
 _UNREAD = object()
 
 
