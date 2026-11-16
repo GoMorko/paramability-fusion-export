@@ -88,7 +88,9 @@ def _extent(definition, taper_deg, ctx, slot):
     if name.startswith("All"):
         return {"kind": "all"}
     if "ToEntity" in name:
-        return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
+        # `chained`: Fusion also stops at the faces next to the face (True) or extends the face (False).
+        return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None),
+                     "chained": geo.safe(lambda: bool(definition.isChained), None)},
                     **_target(definition, ctx, slot))
     if name == "DistanceExtentDefinition":
         # Fusion can refuse the distance of a valid extrude; the step is then left out, not the whole copy stopped.
@@ -271,9 +273,23 @@ def _end_face(faces, z):
 _PARALLEL_TOL = 1e-6
 
 
+def _start_offset(feature, z, origin):
+    """Signed distance along the sketch normal `z` from the sketch plane through `origin` to the first face of
+    `startFaces` that is parallel to the sketch plane, or None when there is none or it cannot be read."""
+    faces = geo.collection_items(geo.safe(lambda: feature.startFaces, None))
+    if not faces:
+        return None
+    face, normal = _end_face(faces, z)
+    if normal is None or abs(abs(vec.dot(normal, z)) - 1.0) > _PARALLEL_TOL:
+        return None
+    p = geo.safe(lambda: geo.point(face.pointOnFace), None)
+    return None if p is None else round(vec.dot(vec.sub(p, origin), z), 6) + 0.0
+
+
 def extrude_after(feature, ctx, data):
     """end_offset: signed distance from the first profile's sketch plane to a point on the end face (`_end_face`: the
-    first face of `endFaces` parallel to the sketch plane, else the first one).
+    first face of `endFaces` parallel to the sketch plane, else the first one). start_offset, for an extrude that
+    starts from a face or plane: the same distance to the start face (`_start_offset`), null when none was measured.
 
     end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes), and end_normal its
     unit normal at that point (null when it cannot be read). side_leans: how far each side face leans along the first
@@ -292,6 +308,8 @@ def extrude_after(feature, ctx, data):
         leans = geo.safe(lambda: _side_leans(feature, frame["z"]), None)
         if leans is not None:
             out["side_leans"] = leans
+        if (data.get("start") or {}).get("kind") == "fromEntity":
+            out["start_offset"] = geo.safe(lambda: _start_offset(feature, vec.unit(frame["z"]), frame["origin"]), None)
     if not faces:
         return out
     face, normal = _end_face(faces, vec.unit(frame["z"]) if frame is not None else None)

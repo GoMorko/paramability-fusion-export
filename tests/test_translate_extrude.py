@@ -421,13 +421,11 @@ class OperationTest(unittest.TestCase):
         (step,) = under_test(translate_fixture("extrude_intersect"), 3)
         self.assertEqual(step["combine"], "intersect")
 
-    def test_intersect_with_two_profiles_or_two_sides_refuses(self):
+    def test_intersect_with_two_profiles_refuses(self):
         capture = load_capture("extrude_intersect")
         data = capture["items"][-1]["data"]
         data["profiles"].append(copy.deepcopy(data["profiles"][0]))
         self.assertIsNotNone(left_out(translate(capture)))
-        two_sided = lambda d: d.update(extent_type="two", side_two={"kind": "distance", "distance": 2.0, "taper_deg": 0.0})
-        self.assertIsNotNone(left_out(variant("extrude_intersect", two_sided)))
 
     def test_two_sided_cut_cuts_twice(self):
         def edit(d):

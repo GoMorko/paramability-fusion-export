@@ -156,6 +156,16 @@ def follow_points(ctx, item, points, edge=True, what="edges"):
     return out
 
 
+def placed_point(ctx, item, p):
+    """A point on a face as a position that follows sizes, or None when no step of the copy places it. Unlike
+    `follow_points`, nothing is marked when it is None: the caller leaves its step out instead."""
+    found = locate(ctx, p)
+    if found is None:
+        return None
+    _keep_copies(ctx, item, found)
+    return found.coordinates(p) if found.moves else picks.face_points([{"point": p}])[0]
+
+
 def edges_near(ctx, item, edge_list):
     """`{ near }` for a group of capture edges, with points that follow sizes where they move."""
     points = picks.near_points(edge_list)

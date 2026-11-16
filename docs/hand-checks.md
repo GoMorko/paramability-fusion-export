@@ -292,9 +292,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: tick no size. In `report.json`, note `end_offset` of the two sided cut (a face of side two at 10 mm or
     one at another place), and note `params["side_one.taper_deg"]` of the extrude to the plane. The two sided cut is
     copied with side one along the stored direction. The tapered extrude to the plane is copied with its taper and
-    ends on the plane. The extrude from the face with an offset is left out with "This extrude starts at a distance
-    from a face or plane, which is not copied."; note which way Fusion moved its start (along the sketch normal
-    or along the face's normal), so a later copy can follow it.
+    ends on the plane. The extrude from the face with an offset is copied 2 mm from the face, on the side where
+    Fusion put it; its `start_offset` in `report.json` is the measured start face (EX4 checks both signs).
 
 30. OC3, the left out steps under the body picker of Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
     origin, then add a Thicken step on one of its faces (a type that the copy does not make), and a Coil step.
@@ -354,3 +353,32 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     part thicker at some places, and `Tilt` moves the copies. On the copy without the boss, the thread reason names
     `Plate` only. Export the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same
     pattern reason. Afterwards the design is as before.
+36. EX3, extrudes up to a tilted face and up to a curved face. Add a user parameter `Height` = 10 mm. On the XY
+    plane draw a 60 x 40 mm rectangle from the origin and extrude it up by `Height`. Chamfer the top edge along
+    y = 40 by 8 mm (equal distance). Add a construction plane 30 mm above the XY plane, sketch a 6 mm circle on it at
+    (30, 36) and extrude it down "To object" up to the chamfer face as a join, with Chain Faces off. Make the same
+    post at (20, 36) with Chain Faces on. On the YZ plane draw a 10 mm radius circle centred at y = 20, z = 10, and
+    extrude it 60 mm along +X as a join (a round roof on the box). Sketch a 6 mm circle on the plane
+    30 mm up at (30, 25) and extrude it down "To object" up to the round face as a join.
+    Export: tick no size. In `report.json`, note `side_one.chained` of the two chamfer posts and `end_offset` of the
+    roof post. Expect `chained` false and true. The chamfer post with Chain Faces off and the roof post are copied
+    with `extent: { upTo: { near } }` and match the STEP. The post with Chain Faces on is left out with "may also
+    end on the faces next to it". Export again with `Height` ticked: the roof post is still copied (the extrude that
+    made the roof places its point); the chamfer post is left out with "may move when the sizes change". Afterwards
+    the design is as before.
+37. EX4, an extrude that starts at a distance from a face, both ways. Add user parameters `Height` = 10 mm and
+    `Lift` = 3 mm. On the XY plane draw a 40 x 40 mm rectangle from the origin and extrude it up by `Height`. On the
+    XY plane draw a 10 mm square centred at (20, 20) and extrude it 5 mm up as a new body, with Start set to "From
+    object", the top face of the box, and the offset `Lift`. Make a second new body the same way at (10, 10) with
+    the offset `-Lift`. Make a third extrude like the first as a join with the offset -2 mm, so it starts inside
+    the box.
+    Export: export each new body with both sizes ticked. In `report.json` note `start_offset` of each extrude and
+    which way Fusion moved the start. Expect the first body to start at `Height + Lift` and the second at
+    `Height - Lift`, both following the sizes in Paramability. Export the box: note `start_offset` of the join. When
+    it is null (no start face inside material), the join is left out with "starts at a distance from a face or
+    plane".
+38. EX5, an intersect to two sides. On the XY plane draw a 40 x 40 mm rectangle from the origin and extrude it
+    20 mm up. Add a construction plane 10 mm above the XY plane. On it draw a 20 mm circle centred at (20, 20) and
+    extrude it as an intersect with Two Sides: side one 4 mm up, side two 6 mm down.
+    Export: tick no size. The intersect is copied as one tool body that the part intersects (recipe version 15),
+    and the copy is a disc 20 mm across from z 4 to z 14 that matches the STEP.

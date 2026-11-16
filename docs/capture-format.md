@@ -640,14 +640,17 @@ against `samples`.
   length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
   `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
-  (`FromEntityStartDefinition`, TARGET below). A start on a face whose parameter `start.offset` is not zero is left
-  out: which way Fusion measures that offset is not read.
+  (`FromEntityStartDefinition`, TARGET below). The API does not say which way Fusion measures a `start.offset` that
+  is not zero, so `start_offset` decides it (see below). Without it the step is left out.
 - `extent_type`: `one`, `two`, `symmetric`.
 - EXTENT: `{ "kind": "distance", "distance": mm, "taper_deg": d }` (`DistanceExtentDefinition.distance`, the value
   as Fusion stores it, sign kept), `{ "kind": "throughAll", "positive": bool, "taper_deg": d }`
   (`ThroughAllExtentDefinition.isPositiveDirection`), `{ "kind": "all" }` (a legacy extent with no direction: only a
-  measured end face gives one), `{ "kind": "toEntity", "plane": PLANE or null, "offset": mm, "entity_type": "...",
-  "face_point": [..] }` (TARGET below; its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`), `{ "kind": "other", "type": "..." }`
+  measured end face gives one), `{ "kind": "toEntity", "plane": PLANE or null, "offset": mm, "chained": bool,
+  "entity_type": "...", "face_point": [..] }` (TARGET below; `chained` is `ToEntityExtentDefinition.isChained`:
+  true when Fusion also stops at the faces next to the face, false when it extends the face, null when it cannot be
+  read; its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`),
+  `{ "kind": "other", "type": "..." }`
   (also a distance extent whose `distance` Fusion refuses to give; a symmetric one then has `symmetric` null, so the
   step is left out instead of stopping the copy).
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
@@ -678,6 +681,13 @@ against `samples`.
   (`end_is_cap`: by `end_normal`, else by `end_area` against the outline areas within 0.1 % plus 0.001 mm2; no
   answer for a tapered or thin extrude) is not used: the stored direction and lengths stand, and a one way extrude
   whose face would turn the stored direction is left out.
+- `start_offset` (only for a start `fromEntity`; null when none was measured): signed distance along the first
+  profile's sketch `z` from its sketch plane to `pointOnFace` of the first face of `startFaces` that is parallel to
+  the sketch plane. With a `start.offset` that is not zero, exactly one sign of the offset must put the start there
+  (within 1e-3 mm), else the step is left out (`design_model/steps/extrude.py`, `start_of`).
+- A side up to a tilted or curved `BRepFace` of the body is written as `extent: { upTo: { near: [face_point] } }`
+  for an extrude of one side, without taper and without `offset`, and for a flat face only when `chained` is false.
+  A curved face needs `end_offset` on the same side of the sketch as `face_point`. See the developer guide, 3.14.
 - `end_normal` (optional; null when it cannot be read): the unit normal of the measured end
   face at `pointOnFace` (`BRepFace.evaluator.getNormalAtPoint`). Older captures do not have it.
 - `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at

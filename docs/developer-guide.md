@@ -1124,7 +1124,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `draftSteep` | a draft of 30 degrees or more (`finishes/draft.py`) | Draw the sloped wall in the sketch, or give the extrude a taper. |
 | `taperSteep` | an extrude or a sweep with a taper that is too steep | Use a taper under 45 degrees, or draw the sloped wall in the sketch. |
 | `taperCutBothWays` | a tapered cut through all, both ways | Make two tapered cuts through all, one for each way, or give the cut a distance. |
-| `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one) | Start and end on flat faces or planes, or give a distance. |
+| `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, 3.14) | Start and end on flat faces or planes, or give a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write | Use a fillet with one radius. |
 | `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
@@ -1728,7 +1728,8 @@ one folder per family of steps.
     `design_model/steps/extrude.py`), `side.py` (`RecipeSide`: one side as the recipe writes it), `reach.py` (the
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
-    measured checks of the shared reader), `built.py`, `order.py`, `common.py`, and `emboss.py` (the Emboss handler).
+    measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
+    curved face, see 3.14), and `emboss.py` (the Emboss handler).
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -2152,17 +2153,27 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   the Orca output checks the limits of Orca and the part that it built.
 - `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
   (`orca_translate/steps._sides`) read the same sides. Each output then applies its own limits.
-  - `start_of(data, frame)` gives a `Start`. The kind is the sketch plane, an offset, or a flat face or plane
-    (`Target`). `shift` is the signed distance along the sketch normal from the sketch plane to the start. A start on
-    a face that is not flat, on a tilted face, on a curved face of another component, or at a distance from a face
-    gives a `Problem`. The reader does not read in which direction Fusion measures that distance, so it does not
-    guess.
-  - `read_sides(data, frame, shift)` gives one `SidePlan` for each side, or a `Problem`. A `SidePlan` has the kind
-    (`DISTANCE`, `REACH`, `THROUGH`, `THROUGH_BOTH`, `SYMMETRIC`), the capture field of the side (`which`, which is
-    also the start of its parameter paths), the direction (`sign`), the length as a `Quantity` of the number, Fusion's
-    taper in degrees, the face or plane of a `REACH` side and Fusion's offset past it, the measured end face, the
-    direction that Fusion stored, and the number that Fusion stores for the length (`value`, `scale`). Each output
-    makes the length follow the sizes with its own rules.
+  - `start_of(data, frame, offsets)` gives a `Start`. The kind is the sketch plane, an offset, or a flat face or
+    plane (`Target`). `shift` is the signed distance along the sketch normal from the sketch plane to the start. A
+    start on a face that is not flat, on a tilted face, or on a curved face of another component gives a `Problem`.
+    A start at a distance from a face also gives a `Problem`, unless the caller sets `offsets`. The API does not
+    tell in which direction Fusion measures that distance. With `offsets`, the measured start face (`start_offset`)
+    tells it. The face plus the distance, or the face minus the distance, must put the start on the measured face.
+    When exactly one of the two does this, `Start.offset` is the distance with that sign, and `Start.way` is the
+    sign. Else the result is a `Problem`. The recipe output sets `offsets`. The Orca output does not set it.
+  - `read_sides(data, frame, shift, faces)` gives one `SidePlan` for each side, or a `Problem`. A `SidePlan` has
+    the kind (`DISTANCE`, `REACH`, `UP_TO`, `THROUGH`, `THROUGH_BOTH`, `SYMMETRIC`), the capture field of the side
+    (`which`, which is also the start of its parameter paths), the direction (`sign`), the length as a `Quantity` of
+    the number, Fusion's taper in degrees, the face or plane of a `REACH` or `UP_TO` side and Fusion's offset past it,
+    the measured end face, the direction that Fusion stored, and the number that Fusion stores for the length
+    (`value`, `scale`). Each output makes the length follow the sizes with its own rules.
+  - `UP_TO` is a side that ends on a tilted or curved face of the part. Only a caller that sets `faces` gets it, and
+    only for an extrude with one side. For all other callers, such a face gives a `Problem`. The face
+    must be a `BRepFace` with a `face_point`. The side goes toward that point. A curved face can lie on the two sides
+    of the sketch, so the measured end face (`end_offset`) must lie on the same side as the point. Else the result
+    is a `Problem` (`WAY_UNSURE`). A flat face that is tilted meets the line of the sketch normal on one side only,
+    so its point gives the direction. The `Target` of the side has the plane of a tilted face, and no plane for a
+    curved face. The side has no length. The recipe output sets `faces` (see 3.14). The Orca output does not set it.
   - The direction of one side: the measured end face (`end_offset`) wins over the direction that Fusion stored,
     because Fusion can store the direction in two ways. An end face nearer than 0.001 mm to the start does not show a
     direction. A side that has `direction` (a step that the translator writes again as an extrude) goes in that
@@ -3422,6 +3433,72 @@ them, every value is a number and its sizes are marked.
 
 A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
 and the `coil` kind has no repeat rule.
+
+### 3.14 Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides
+
+#### An extrude up to a tilted or curved face
+
+Fusion can extrude up to a face that is not square to the sketch normal ("To object"). Example: a post is drawn on
+a plane above a domed lid, and the post goes down to the dome. The app has an extent for this:
+`extent: { upTo: { near: [p] } }` (recipe version 5, and version 12 when `p` holds formulas). The app grows the
+outline along the sketch normal until it meets the face that the point `p` picks. The app uses a flat face as its
+whole plane. The app uses a curved face as it is, so the face must lie in front of the whole outline. If it does
+not, the app refuses the step. This is not a wrong shape.
+
+The shared reader gives such a side as `UP_TO` (see `steps/extrude.py` in 2.2). Then `translator/extrude/up_to.py`
+writes the step. A point that is not on the face picks a different face. That gives a wrong copy. Thus the add-in
+leaves the step out in these conditions:
+
+1. The face is on a different body (`body` of the face record is not the body that the walk builds).
+2. A step before this step is a gap. The gap can have made the face, and the copy does not have that face. The
+   reason names the gaps, and the gap depends on them.
+3. A size that the person can change can move the face (`design_model.reach.reach_sizes`), and no step that the
+   copy wrote before places the point (`faces.follow.placed_point`, the slabs of 3.3). When a slab places the point,
+   the point follows the sizes, as a point of a round or a shell does.
+
+The app cannot build some sides. Thus the add-in also leaves the step out in these conditions:
+
+1. The side has a taper.
+2. The side has an offset past the face.
+3. The face is flat and Fusion does not extend it. Fusion reads `isChained` of `ToEntityExtentDefinition`
+   (`chained` in the capture). When it is true, Fusion also stops at the faces next to the face. The app extends a
+   flat face to its whole plane. These two shapes are different when the outline goes past the face. When
+   `chained` is null, the add-in does not know, so it also leaves the step out. A curved face does not need this
+   check: where the two shapes are different, the face does not cover the outline, and the app refuses the step.
+
+A thin extrude up to a face never gets to `up_to.py`: `faces/thin_wall.prepare` leaves it out before. An extrude
+with two sides, where one side goes up to such a face, stays a `Problem` of the reader. The step of an `UP_TO` side
+has no slab. A later step that picks a face of it cannot follow sizes there, so its sizes are marked. Patterns and
+mirrors do not repeat the step, because Fusion finds its length again for each copy.
+
+The Orca output does not change: Orca names a face by its own numbering, and the Orca output does not set `faces`.
+
+#### A start at a distance from a face
+
+Fusion can start an extrude at a distance from a face or a plane (`FromEntityStartDefinition` with `offset`). The
+API says that a positive distance goes along the positive normal of the face. The reader does not read which way
+that normal points. Thus the reader measures the start face. `extrude_after` reads `startFaces` and takes the first
+face that is parallel to the sketch. `start_offset` is the signed distance from the sketch plane to a point of that
+face, along the sketch normal.
+
+Example. The sketch is on the top face of a lid at height 4 mm. The extrude starts 2 mm from that face. Fusion
+measures the start face at 2 mm from the sketch plane. The face plus 2 mm gives 2 mm, and the face minus 2 mm gives
+-2 mm. Only the first fits, so the start is at 2 mm and `way` is +1. The written sketch origin then follows the
+parameter of the distance: `4 + start_mm`.
+
+The add-in leaves the step out in these conditions:
+
+- There is no measured start face. For example, a join starts inside material, so Fusion makes no start face.
+- No sign puts the start on the measured face.
+- The two signs put the start on the measured face. This occurs when the distance is almost zero.
+
+#### An intersect to two sides
+
+Fusion keeps the part where it meets the two sides of an intersect. The tool is one solid: the two sides start on
+the same plane, so they touch. The recipe writes the two sides as one `toolBody` step with `combine: "intersect"`
+(recipe version 15). Its first step makes a new body with side one. Its second step joins side two. A tool step
+that is already nested as deep as the cap (`tool_walk.MAX_DEPTH`) cannot hold one more level, so the step is left
+out. An intersect with more than one outline is left out.
 
 ## 4. Debugging
 

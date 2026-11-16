@@ -15,6 +15,11 @@ def plane_at(height, normal=(0.0, 0.0, 1.0), **more):
                  "plane": {"point": [5.0, 5.0, height], "normal": list(normal)}}, **more)
 
 
+def face_at(point, **more):
+    """A face of the part that a side reaches to: curved (no plane) unless `plane` is given."""
+    return dict({"kind": "toEntity", "entity_type": "BRepFace", "offset": 0.0, "face_point": list(point)}, **more)
+
+
 def distance(value, **more):
     return dict({"kind": "distance", "distance": value, "taper_deg": 0.0}, **more)
 
@@ -66,6 +71,24 @@ class StartTest(unittest.TestCase):
                 found = dm.start_of(data, FRAME)
                 self.assertTrue(is_problem(found))
                 self.assertEqual(found.code, code)
+
+    def test_an_offset_from_a_face_takes_the_sign_the_measured_start_face_shows(self):
+        flat = {"kind": "fromEntity", "plane": {"point": [0, 0, 4.0], "normal": [0, 0, 1]}}
+
+        def start(offset, measured):
+            data = {"start": flat, "start_offset": measured,
+                    "params": {"start.offset": {"name": "d1", "expression": "%g mm" % offset, "value": offset}}}
+            return dm.start_of(data, FRAME, offsets=True)
+
+        found = start(2.0, 6.0)
+        self.assertEqual((found.kind, found.shift, found.offset, found.way, found.target.distance),
+                         (dm.FACE, 6.0, 2.0, 1, 4.0))
+        found = start(2.0, 2.0)
+        self.assertEqual((found.shift, found.offset, found.way), (2.0, -2.0, -1))
+        # No sign puts the start there, nothing was measured, or both signs fit an offset of almost nothing.
+        for offset, measured in ((2.0, 5.0), (2.0, None), (1e-4, 4.0)):
+            with self.subTest(offset=offset, measured=measured):
+                self.assertEqual(start(offset, measured).code, dm.START_OFFSET)
 
 
 class OneSideTest(unittest.TestCase):
@@ -120,6 +143,30 @@ class OneSideTest(unittest.TestCase):
             with self.subTest(code=code):
                 self.assertEqual(sides(data).code, code)
         self.assertEqual(sides(one(plane_at(2.0, offset=-3.0))).code, dm.NO_LENGTH)
+
+    def test_a_tilted_or_curved_face_of_the_part_is_an_up_to_side_only_when_asked(self):
+        tilted = face_at([2.0, 0.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]})
+        self.assertEqual(sides(one(tilted)).code, dm.TILTED)
+        (found,) = dm.read_sides(one(tilted), FRAME, faces=True)
+        self.assertEqual((found.kind, found.sign, found.length, found.reach.distance), (dm.UP_TO, 1, None, 8.0))
+        self.assertEqual(found.reach.plane, tilted["plane"])
+        (found,) = dm.read_sides(one(face_at([0.0, 0.0, -6.0]), end_offset=-5.0), FRAME, faces=True)
+        self.assertEqual((found.kind, found.sign, found.reach.plane), (dm.UP_TO, -1, None))
+
+    def test_up_to_sides_that_stay_problems(self):
+        tilted = {"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]}
+        cases = [
+            # A curved face can lie on both sides of the sketch: the measured end face must show the way.
+            (dm.WAY_UNSURE, one(face_at([0.0, 0.0, 6.0]), end_offset=-5.0)),
+            (dm.WAY_UNSURE, one(face_at([0.0, 0.0, 6.0]))),
+            (dm.ON_START, one(face_at([3.0, 0.0, 0.0], plane=tilted))),
+            (dm.TILTED, one(plane_at(8.0, normal=(1.0, 0.0, 1.0)))),
+            (dm.TILTED, two(face_at([0.0, 0.0, 8.0], plane=tilted), distance(2.0))),
+            (dm.FOREIGN, one(face_at([0.0, 0.0, 8.0], plane=tilted, foreign=True))),
+        ]
+        for code, data in cases:
+            with self.subTest(code=code, data=data):
+                self.assertEqual(dm.read_sides(data, FRAME, faces=True).code, code)
 
     def test_the_taper_of_a_side_to_a_plane_comes_from_its_parameter_or_the_walls(self):
         held = {"side_one.taper_deg": {"name": "a", "expression": "3 deg", "value": 3.0}}

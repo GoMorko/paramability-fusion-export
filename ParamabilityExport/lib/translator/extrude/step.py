@@ -1,12 +1,17 @@
-"""The handler of an extrude feature: checks it and writes one recipe extrude step per outline and side."""
+"""The handler of an extrude feature: checks it and writes one recipe extrude step per outline and side.
+
+Fusion keeps the part where it meets either side of a two sided intersect. Both sides are then written as one tool
+body (a new body and a join) that the part intersects (`_intersect_tool`)."""
 from ...capture_model import gap_hints
 from ...design_model.loops import flip_y
 from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
 from .. import placement
+from ..combine.tool_walk import MAX_DEPTH
 from ..faces import thin_wall
 from ..faces.placer_makers import SlabMaker, ThinWallMaker
+from ..faces.tool_placer import ToolMaker
 from ..result import Refusal, StepResult
 from ..sketch import face_outline, loops, sketch_motion
 from .built import outlines_built, thin_wall_step
@@ -69,7 +74,7 @@ def handle(ctx, step):
     if isinstance(shift_q, Refusal):
         return shift_q
     shift = shift_q.n
-    plan = plan_sides(item, data, first_frame, shift_q, combine, ctx, plane_q)
+    plan = plan_sides(item, data, first_frame, shift_q, ctx, plane_q)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])
@@ -89,11 +94,15 @@ def handle(ctx, step):
                                [drawn for _, _, drawn in built])
     if refusal:
         return refusal
-    if combine == "intersect" and (len(plan) * len(built) > 1):
+    if combine == "intersect" and len(built) > 1:
         return Refusal("Intersect extrudes with several outlines are not copied yet.")
+    both = combine == "intersect" and len(plan) > 1
+    if both and ctx.depth + 1 > MAX_DEPTH:
+        return Refusal("The tool body for both sides of this intersect would be nested too deep to copy.")
+    written = "new" if both else combine
 
     units = [(one, entry) for one in built for entry in plan]
-    if combine in ("new", "add") and len(built) > 1:
+    if written in ("new", "add") and len(built) > 1:
         units = touching_order(ctx, units, shift, combine == "add")
     out = StepResult()
     for (profile, (outer, inner), drawn), entry in units:
@@ -111,7 +120,7 @@ def handle(ctx, step):
         recipe_step = {
             "kind": "extrude",
             "sketch": sketch,
-            "combine": combine if not out.entries else ("add" if combine == "new" else combine),
+            "combine": written if not out.entries else ("add" if written == "new" else written),
             "extent": entry.extent,
         }
         if entry.distance is not None:
@@ -130,4 +139,15 @@ def handle(ctx, step):
             placers.append(SlabMaker(on, entry.extent, entry.q or Quantity(entry.distance), profile,
                                      entry.taper_q or Quantity(entry.taper or 0.0), drawn))
         out.add(recipe_step, placers, repeatable=not entry.adjusts)
+    return _intersect_tool(ctx, item, out) if both else out
+
+
+def _intersect_tool(ctx, item, sides):
+    """One `toolBody` step that holds the steps of both sides (`sides`, a new body and a join) and that the part
+    intersects."""
+    held = ctx.child({"name": item.get("name")}, "%st%s_" % (ctx.id_prefix, item["index"]), depth=ctx.depth + 1)
+    held.add_steps(item, sides)
+    out = StepResult()
+    out.add({"kind": "toolBody", "combine": "intersect", "features": held.steps}, [ToolMaker(held)],
+            repeatable=all(entry.repeatable for entry in sides.entries))
     return out
