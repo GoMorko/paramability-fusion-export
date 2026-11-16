@@ -21,7 +21,7 @@ from ...capture_model.capture import outside_component, same_body
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
-from ...design_model import refs
+from ...design_model import refs, roles
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
 from ..combine import tool_walk
@@ -170,7 +170,7 @@ def _listed(body, tools):
 def _pattern_that_made(ctx, tool, before):
     """The pattern item that made the copy `tool`, when nothing changed the copy since; else None."""
     chain = tool_walk.chain_of(ctx, tool, before)
-    if len(chain) != 1 or not _of_bodies(chain[0]) or not walk.copies_bodies(chain[0]):
+    if len(chain) != 1 or not _of_bodies(chain[0]) or not roles.copies_bodies(chain[0]):
         return None
     if tool_walk.unseen_change(ctx, tool, before) is not None:
         return None

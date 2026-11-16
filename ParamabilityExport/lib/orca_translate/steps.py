@@ -21,7 +21,7 @@ worked out in `sketch_sizes`.
 import math
 
 from ..capture_model import gap_hints
-from ..capture_model.capture import same_body
+from ..design_model import roles
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
@@ -412,7 +412,7 @@ def extrude(ctx, item):
     if not ctx.has_body and operation in ("cut", "intersect"):
         return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
                     gap_hints.AFTER_GAP)
-    others = _new_bodies(ctx, item)
+    others = roles.new_bodies(item, [ctx.target])
     if operation == "newBody" and len(profiles) > 1 and others:
         return Skip("This extrude makes several bodies, and the Orca copy cannot tell which outline is the part.")
     if operation == "cut" and others:
@@ -579,17 +579,6 @@ def _cut_built(ctx, outline, made, formulas):
     if isinstance(found, str):
         made.notes.append("%s keeps its numbers: %s." % (made.feature.name, found))
     return made
-
-
-def _new_bodies(ctx, item):
-    """Bodies the step lists after it that are not the body it builds and did not exist before it."""
-    target = ctx.target
-    before = item.get("bodies_before")
-    if not isinstance(before, list):
-        data = _data(item)
-        before = list(data.get("participants") or []) + list(data.get("bodies") or [])
-    return [b for b in item.get("bodies_after") or []
-            if not same_body(b, target) and not any(same_body(b, e) for e in before)]
 
 
 HANDLERS = {"ExtrudeFeature": extrude}

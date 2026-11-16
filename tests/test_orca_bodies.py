@@ -1,7 +1,9 @@
 """Split Body and Move in the Orca copy (`orca_translate/bodies.py`): a split keeps the part's side (an Orca Cut by
 the plane, or a Boolean with the tool body), a Move becomes an Orca Transform."""
 import copy
+import importlib
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.orca_sized import fixture, split_by_body, split_by_plane, table_of
@@ -10,6 +12,9 @@ from tests.translator_helpers import verdict_of
 from lib.orca_recipe.enums import BooleanMode, FeatureType
 from lib.orca_translate import causes, translate
 from lib.orca_translate.formulas import orca_value
+
+# The module: the package's `translate` is the function.
+orca_walk = importlib.import_module("lib.orca_translate.translate")
 
 
 def of_type(result, kind):
@@ -29,6 +34,24 @@ class SplitTest(unittest.TestCase):
         result = translate(split_by_plane("t2"))
         self.assertEqual(verdict_of(result, 1)["verdict"], "copied")
         self.assertEqual(result.place.point([25, 0, 0])[0] + 7.5, 128.0)
+
+    def test_a_step_before_the_split_reads_the_measures_of_the_body_it_came_from(self):
+        capture = split_by_plane("t2")
+        whole = {"min": [0, 0, 0], "max": [40, 20, 10]}
+        step = capture["items"][1]
+        step["data"]["target_box_before"] = {"min": [0, 0, 0], "max": [1, 1, 1]}  # read on the exported piece
+        step["body_states"] = {"t1": {"box_before": whole, "volume_before": 8000.0, "volume_after": 8000.0}}
+        seen = []
+        extrude = orca_walk.HANDLERS["ExtrudeFeature"]
+
+        def spy(ctx, item):
+            seen.append(item["data"]["target_box_before"])
+            return extrude(ctx, item)
+
+        with mock.patch.dict(orca_walk.HANDLERS, {"ExtrudeFeature": spy}):
+            result = translate(capture)
+        self.assertEqual(seen[-1], whole)
+        self.assertEqual(verdict_of(result, 1)["verdict"], "copied")
 
     def test_pieces_on_both_sides_of_the_plane_leave_the_split_out(self):
         capture = split_by_plane("t1")

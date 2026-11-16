@@ -11,8 +11,9 @@ Boolean, so later cuts are still checked against what the copy builds.
 """
 import copy
 
-from ..capture_model import gap_hints, step_kinds, tool_items
-from ..capture_model.capture import outside_component
+from ..capture_model import gap_hints, lineage, step_kinds, tool_items
+from ..capture_model.capture import outside_component, same_body
+from ..design_model import roles
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..translator.words import type_words
@@ -85,6 +86,9 @@ def build(ctx, record, anchor):
              if not item.get("suppressed") and not step_kinds.skipped(item.get("type"))]
     if not chain:
         return Skip("The steps that build the tool body %s were not found." % name)
+    # The steps read what the reader measured on the tool itself, not on the exported part (`roles.seen_on`).
+    exported = any(same_body(record, b) for b in roles.held(ctx.capture["target"], lineage.of(ctx.capture),
+                                                               anchor.get("index", 0)))
     body = ctx.push(Body(record, name))
     try:
         for item in chain:
@@ -92,7 +96,7 @@ def build(ctx, record, anchor):
             made = None
             start = len(body.solid.pieces)
             if why is None:
-                brought = other_components.bring_in(ctx, item)
+                brought = other_components.bring_in(ctx, roles.seen_on(item, record, exported))
                 made = _handlers()[item["type"]](ctx, brought)
                 if isinstance(made, Skip):
                     why = (made.reason.rstrip("."), made.cause)

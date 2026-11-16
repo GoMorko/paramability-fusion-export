@@ -983,7 +983,8 @@ the tool body. The box reaches four half diagonals of the body plus 100 mm past 
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
 body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
-later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`). A split by a solid
+later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`, with the facts from
+`lib/design_model/roles.py`). A split by a solid
 body whose pieces lack an `inside` answer is completed only when the body came apart into exactly two pieces
 (`lib/translator/bodies/split_inside.py`): the missing answer is the opposite of the other piece's, else it comes from
 the boxes and volumes of the tool and the pieces (a piece that does not fit the tool's box, or is larger than the tool,

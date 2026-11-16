@@ -1,5 +1,6 @@
 """Combine steps in the Orca copy (`orca_translate/combine.py`, `tools.py`): each tool body written from the steps
 that made it, then an Orca Boolean into the part, with the body indexes Orca resolves at that point."""
+import copy
 import unittest
 
 from tests import context  # noqa: F401
@@ -20,6 +21,33 @@ def run(name, edit=None):
     if edit is not None:
         edit(capture)
     return translate(capture)
+
+
+PART = {"token": "t9", "name": "Plate"}
+
+
+def intersect_tool(state=None):
+    """`intersect_every` as a tool: its Combine (index 6) makes Body1 from what it shares with Body2 and Body3, then a
+    plate (Plate, exported) is extruded and Body1 cut from it. The reader read the intersect rule with the plate's
+    volume ("any"); `state` is what it measured on Body1 itself around the Combine."""
+    capture = fixture("intersect_every")
+    capture["items"][6]["data"]["intersect_model"] = "any"
+    if state is not None:
+        capture["items"][6]["body_states"] = {"t1": state}
+    plate = copy.deepcopy(capture["items"][1])
+    plate.update(index=7, name="Plate", bodies_after=[PART])
+    plate["data"].update(participants=[], profiles=[dict(plate["data"]["profiles"][0], sketch="Sketch1")])
+    plate["data"]["profiles"][0]["loops"][0]["curves"] = [
+        {"kind": "line", "start": a, "end": b} for a, b in
+        (([-10, -10], [50, -10]), ([50, -10], [50, 30]), ([50, 30], [-10, 30]), ([-10, 30], [-10, -10]))]
+    cut = copy.deepcopy(capture["items"][6])
+    cut.pop("body_states", None)
+    cut.update(index=8, name="Combine2", bodies_after=[PART])
+    cut["data"] = {"target": PART, "tools": [{"token": "t1", "name": "Body1", "volume": 2000.0}],
+                   "operation": "cut", "keep_tools": False, "volume_before": 24000.0, "volume_after": 22000.0}
+    capture["items"] += [plate, cut]
+    capture["target"] = dict(PART, box={"min": [-10, -10, 0], "max": [50, 30, 10]}, volume_mm3=22000.0)
+    return capture
 
 
 class CombineTest(unittest.TestCase):
@@ -58,6 +86,17 @@ class CombineTest(unittest.TestCase):
         booleans = of_type(result, FeatureType.BOOLEAN)
         # The inner Combine works on the tool (body 1) with its own tool after it (body 2); the outer one on the part.
         self.assertEqual([(b.target_body, b.bool_tool_body) for b in booleans], [(1, 2), (0, 1)])
+
+    def test_a_combine_inside_a_tool_reads_the_rule_measured_on_the_tool(self):
+        result = translate(intersect_tool({"box_before": None, "volume_before": 8000.0, "volume_after": 2000.0}))
+        # Body1 kept what it shares with every tool: two intersects on it, then the cut of the plate.
+        booleans = of_type(result, FeatureType.BOOLEAN)
+        self.assertEqual([b.mode for b in booleans], [BooleanMode.INTERSECT] * 2 + [BooleanMode.CUT])
+        self.assertEqual(verdict_of(result, 8)["verdict"], "copied")
+
+    def test_a_combine_inside_a_tool_with_no_measure_of_the_tool_is_left_out(self):
+        result = translate(intersect_tool())
+        self.assertEqual([(g["index"], g["cause"]) for g in result.left_out], [(8, causes.INTERSECT_RULE)])
 
     def test_a_tool_moved_by_a_move_turns_with_the_angle_parameter(self):
         capture = fixture("move_rotate_sized")

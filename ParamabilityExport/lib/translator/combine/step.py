@@ -28,7 +28,7 @@ import copy
 from ...capture_model import step_kinds, tool_items
 from ...geometry import rigid
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from ...design_model import refs
+from ...design_model import refs, roles
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
@@ -36,7 +36,6 @@ from ..repeat import body_copies
 from ..result import Refusal, StepResult
 from ..step_walk import tool_refusal
 from ..values import Quantity, reads_in
-from ..walk import copies_bodies
 from . import tool_walk
 
 
@@ -93,7 +92,7 @@ def _writes_flat(tool):
         # A step that names the bodies it made or changed (`made`, a coil) is judged by those, not by every body of
         # its component.
         listed = data["made"] if isinstance(data.get("made"), list) else item.get("bodies_after")
-        if (data.get("tools") or len(listed or []) != 1 or refs.is_foreign(data) or copies_bodies(item)
+        if (data.get("tools") or len(listed or []) != 1 or refs.is_foreign(data) or roles.copies_bodies(item)
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True

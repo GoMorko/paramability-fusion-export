@@ -859,7 +859,24 @@ The driver is `translate()` in `lib/translator/translate.py`. In order:
 #### 1.9.1 The walk, item by item
 
 The item loop is `walk_items(ctx, result)` in `lib/translator/walk.py`. It visits every item of the capture in
-timeline order. For each item it makes one of these decisions. The first rule that matches wins:
+timeline order.
+
+Before the walk makes a decision, it gets the role of the item from the shared layer (`roles.role_of` in
+`lib/design_model/roles.py`). The role is a set of facts. It does not tell the walk to copy or to stop. The role
+gives:
+
+- the kind of the item: suppressed, not a step (a sketch or construction geometry), an assembly item, a step of
+  another component that builds a tool body, another step of another component, a step that builds the body, or a
+  step of another body of the same component (a helper);
+- the body that the walk builds just before the item and just after it (they are different only at a split of the
+  lineage, see 3.4);
+- whether the item lists one of these bodies (`touches`);
+- the bodies that the item makes and that did not exist before it (`new_bodies`), and whether they are copies of
+  other bodies (a Paste, or a pattern or mirror of bodies);
+- the reader's `target_changed`;
+- whether the item lists a body with the name of the target but with a different token (`lost`).
+
+The walk then makes one of these decisions from the role. The first rule that matches wins:
 
 | The item is | Verdict |
 | --- | --- |
@@ -1674,9 +1691,9 @@ one folder per family of steps.
     `FUSION_EXTRA_SIDE`). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
   - `finishes/`: `finish.py` (fillet, chamfer, shell), `draft.py`, `offset.py`.
-  - `bodies/`: `move.py`, `paste.py`, `split.py`, `split_rules.py`, `split_inside.py` (which pieces of a split by a body
-    lie inside the tool, when the reader could not say, see 3.4), `body_states.py` (`seen_on`: an item seen from another
-    body, such as a tool body).
+  - `bodies/`: `move.py`, `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
+    the split facts of `design_model/roles.py`) and `split_inside.py` (which pieces of a split by a body lie inside the
+    tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
   `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
@@ -1712,6 +1729,26 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `BORROWED_KEYS`). This came from
   `translator/sketch/borrowed.py`. The probe flow reads `usable` and `BORROWED_KEYS` (`export_plan/probe_flow/
   borrowed_view.py`).
+- `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
+  the item. These came from `translator/walk.py`, `translator/bodies/body_states.py` and
+  `translator/bodies/split_rules.py`. The walk of the recipe and the walk of the Orca output both read them:
+  - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,
+    `TOOL_ELSEWHERE`, `OTHER_COMPONENT`, `BUILDS`, `HELPER`), the body before and after the item, the bodies that
+    the walk builds around the item (`held`), `touches`, `new_bodies`, `copies`, `changed` and `lost`. See 1.9.1.
+  - `seen_on(item, body, exported)` gives the item with the measures of `body` (`body_states[token]`: the box and
+    the volume before, the volume after). The data fields of the exported body (`target_box_before`,
+    `volume_before`, `volume_after`, `intersect_model`) get the values of `body`. The item's `target_before` and
+    `target_after` become null, because they are measures of the exported body. When the reader did not measure
+    `body`, these fields are null, and the handlers do not do the checks that need them. A walk of a tool body uses
+    this function for each step of the tool.
+  - `seen_before_split(item, target, chain)` does the same for an item before the split that made the exported
+    body: the item gets the measures of the body that was split. It does not change the split itself, a step of
+    another component, or an item that the reader did not measure on that body.
+  - `other_pieces(item, before, kept)` and `used_later(timeline, item, body, target, chain)`: the pieces that a
+    split leaves in addition to the piece that the walk follows, and the first later step that changes one of them
+    together with the body. The recipe walk stops on such a step (`split_rules.stop_reason`).
+  - `copies_bodies`, `changes_named_bodies`, `only_splits_faces`, `existing_bodies`: smaller facts that the walks
+    and some handlers use.
 - `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
   the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
 
@@ -2215,7 +2252,8 @@ copies a Split Body only when the picked body comes out of it as one piece, and 
 When the picked body was made by a split, its token is new at that split. The steps before the split built the body it
 was split from. `lib/capture_model/lineage.py` finds the chain: `of(capture)` gives `[(index of split, parent body)]`.
 During the walk, `Context.is_target` answers yes for the parent body before the split. The steps before the split read
-the parent's measures (`body_states`, from the reader).
+the parent's measures (`body_states`, from the reader). The shared layer gives these measures
+(`design_model/roles.py`, `seen_before_split`). The Orca output reads them in the same way.
 
 #### The checks
 

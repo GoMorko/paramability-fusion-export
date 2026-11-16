@@ -186,7 +186,8 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
   (`tool_walk.chain_of`), in the component that holds it. The reader gave the items of the target's component their
   data; for another component's items (`helper_of`) the second pass in `lib/fusion_reader/helper_pass.py` read them in
   that component's frame. For the numbers measured on the body itself (box and volume before and after), a walk takes
-  `item["body_states"][token]` (`bodies.body_states.seen_on`), not the exported body's fields.
+  `item["body_states"][token]` (`design_model/roles.py`, `seen_on`), not the exported body's fields. The Orca output
+  reads tool steps the same way.
 - What a handler may not assume: that the part is its target's whole world. A child walk cannot see the part. A step
   that reaches to a face of the part has no place for it in the child; `tool_walk.on_part` works such steps out again
   against the part when a Combine writes them one by one, and a tool step that holds them marks the sizes it cannot
