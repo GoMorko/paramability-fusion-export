@@ -1160,6 +1160,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
 | `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
+| `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
 | `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face, also with flat faces in the same step (`finishes/offset.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
@@ -3155,6 +3156,21 @@ Combine then looks at each gap of the tool (`tool_walk.unfinished`, `tool_walk.s
 A pattern of bodies that the Combine takes whole is checked in the same way. When a source of the pattern has a gap
 that does not only finish surfaces, the Combine does not write the pattern (`_whole_patterns`). It walks each tool on
 its own, and that walk refuses the Combine and names the step.
+
+**The Move of a body with no corners.** The Move handler (`bodies/move.py`) measures what the body did from its first
+vertices before and after the Move. A sphere, a torus and a closed revolve have no vertices. For such a body the
+reader also reads the box of the body before and after the Move (`boxes_before`, `boxes_after`). A box moves by
+exactly the same vector as the body when the body only shifts. A box does not show a turn. Thus the handler does
+this:
+
+- A Move along X, Y and Z must move the box by its distances. Then the handler writes the Move with its distances as
+  sizes. A box that moves by a different vector, or that changes its size, refuses the Move.
+- A free Move whose transform only shifts must move the box by that shift. A free Move that turns refuses.
+- A Rotate and the kinds that only the points can measure (point to point, to a position, along an entity) refuse.
+  The reason says that the body has no corners.
+- A body with no box after the Move refuses ("could not be measured").
+
+The Orca output uses the same box shift for a Move along X, Y and Z only (`orca_translate/bodies.py`, `_motion`).
 
 A tool may not hold a thread or a coil together with other steps. The recipe keeps these kinds out of a tool body
 (`RecipeKind.in_tool`, 1.9.2), since they build on the whole part. A Combine, or a pattern of bodies, whose tool walk

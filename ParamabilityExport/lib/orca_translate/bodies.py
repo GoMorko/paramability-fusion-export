@@ -12,7 +12,8 @@ A split is left out too when a later step changes another of its pieces together
 the copy keeps only the part's piece, so what that step brings back would be missing. For a tool body only the steps
 before the item that takes the tool count.
 
-Move: the body's first vertices before and after the step give the rigid move (`design_model/steps/move.py`). Orca's Transform turns
+Move: the body's first vertices before and after the step give the rigid move (`design_model/steps/move.py`). A body
+with no vertices (a sphere, a torus) moved along the axes gives the shift of its box instead. Orca's Transform turns
 about an axis, then moves. A Move that turns about an axis writes that axis and binds `xf_angle_deg` to the angle;
 any other move is written as its measured turn and shift. Orca cannot tie a move distance to a variable, so such
 sizes keep their numbers.
@@ -24,7 +25,7 @@ from ..capture_model.capture import same_body
 from ..design_model import roles
 from ..geometry import rigid, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
-from ..design_model.steps.move import fit
+from ..design_model.steps.move import box_shift, fit
 from ..design_model.steps.split import resolve as inside_of
 from ..design_model import words as shared
 from . import causes, kept_refs
@@ -155,6 +156,20 @@ def _turns_like(rows, offset, point, axis, degrees):
     return True
 
 
+def _at(values, n):
+    return values[n] if isinstance(values, list) and n < len(values) else None
+
+
+def _motion(data, at):
+    """The rigid move of body `at` of a Move, or None. A body with no vertices shows only a shift, by its box, so it
+    is used only for a Move along the axes, which Fusion makes as a pure shift."""
+    before, after = _at(data.get("points_before"), at), _at(data.get("points_after"), at)
+    if before or data.get("move_type") != "translateXYZ":
+        return fit(before or [], after or [])
+    shift = box_shift(_at(data.get("boxes_before"), at), _at(data.get("boxes_after"), at))
+    return None if shift is None else rigid.Move(rigid.IDENTITY_ROWS, shift)
+
+
 def move(ctx, step):
     item, data = step.brought, step.brought_data
     if data.get("input_kind") != "bodies":
@@ -165,8 +180,7 @@ def move(ctx, step):
         return Pass("It moves another body; this part stays where it is.")
     if not ctx.has_body:
         return Skip("The part this Move carries is not in the copy.", gap_hints.AFTER_GAP)
-    before, after = data.get("points_before") or [], data.get("points_after") or []
-    motion = fit(before[at] or [], after[at] or []) if at < len(before) and at < len(after) else None
+    motion = _motion(data, at)
     if motion is None:
         return Skip("The points of the part before and after this Move do not show a turn and a shift.")
     rows = [list(row) for row in motion.rows]

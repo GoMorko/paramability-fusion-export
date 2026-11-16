@@ -6,6 +6,7 @@ from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import left_out, load_capture, steps_of, verdict_of
 
+from lib.capture_model import gap_hints
 from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -88,6 +89,52 @@ class WrittenMoveTest(unittest.TestCase):
             data["points_before"] = [[[11, 10, 3], [11, 10, 7]]]
             data["points_after"] = [[[31, 10, 3], [31, 10, 7]]]
         self.assertEqual(inner(translate(moved(round_body)))[1]["translate"], [20.0, 0.0, 0.0])
+
+    def test_a_body_with_no_corners_moved_along_the_axes_is_checked_by_its_box(self):
+        def ball(shift):
+            def edit(data):
+                data["points_before"], data["points_after"] = [[]], [[]]
+                data["boxes_before"] = [{"min": [0, 0, 0], "max": [10, 10, 10]}]
+                data["boxes_after"] = [{"min": shift, "max": vec.add(shift, [10, 10, 10])}]
+            return edit
+        self.assertEqual(inner(sized(moved(ball([20, 0, 0]))))[1]["translate"], [{"expr": "gap_mm"}, 0.0, 0.0])
+        self.assertTrue(stopped_by_move(translate(moved(ball([21, 0, 0])))))
+
+    def test_a_body_with_no_corners_is_refused_when_it_turns_or_its_box_was_not_read(self):
+        def no_corners(data):
+            data["points_before"], data["points_after"] = [[]], [[]]
+            data["boxes_before"] = [{"min": [0, 0, 0], "max": [10, 10, 10]}]
+            data["boxes_after"] = [{"min": [20, 0, 0], "max": [30, 10, 10]}]
+
+        def turning_box(data):
+            no_corners(data)
+            data["boxes_after"] = [{"min": [20, 0, 0], "max": [40, 10, 5]}]
+
+        def free_turn(data):
+            no_corners(data)
+            as_measured(data, "free")
+            data["transform"] = {"origin": [20, 0, 0], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+
+        cases = {
+            "box unread": lambda d: (no_corners(d), d.pop("boxes_after")),
+            "box changes size": turning_box, "free move that turns": free_turn,
+            "measured kind": lambda d: (no_corners(d), as_measured(d, "pointToPoint")),
+        }
+        for name, edit in cases.items():
+            with self.subTest(name):
+                self.assertTrue(stopped_by_move(translate(moved(edit))))
+        rotated = translate(moved(no_corners, "move_rotate_sized"))
+        self.assertTrue(stopped_by_move(rotated))
+        self.assertEqual(rotated.gaps[0]["hint"], gap_hints.HINTS[gap_hints.MOVE_UNMEASURED])
+
+    def test_a_free_move_of_a_body_with_no_corners_that_only_shifts_is_written(self):
+        def free_shift(data):
+            as_measured(data, "free")
+            data["transform"] = dict(FLAT, origin=[20, 0, 0])
+            data["points_before"], data["points_after"] = [[]], [[]]
+            data["boxes_before"] = [{"min": [0, 0, 0], "max": [10, 10, 10]}]
+            data["boxes_after"] = [{"min": [20, 0, 0], "max": [30, 10, 10]}]
+        self.assertEqual(inner(translate(moved(free_shift)))[1]["translate"], [20.0, 0.0, 0.0])
 
     def test_design_space_distances_are_checked_in_the_frame_of_the_component(self):
         capture = moved(lambda data: data.update(is_design_space=True, translate=[0, 20, 0], params={}))
