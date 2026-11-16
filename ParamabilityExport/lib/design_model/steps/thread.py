@@ -4,7 +4,7 @@ Two Fusion items make a modeled thread: a ThreadFeature on the cylinder faces of
 hole. This module reads both without a destination: the 60 degree form with its pitch, major and minor diameter and
 hand (`spec_of`), the one cylinder that the faces make (`cylinder`), whether the thread is inside or outside it, how
 far it runs and at which end it starts (`read_feature`), and the depth of the thread of a tapped hole (`hole_spec`,
-`hole_depth`, `measured_ends`).
+`hole_depth`; where a hole through all comes out is `hole.through_ends`).
 
 Every number of Fusion's thread info can be missing: a reader then gives a `Problem` and never a guess. Metric and
 Unified threads are the 60 degree form; other profiles and tapered threads are a `Problem` with the cause
@@ -250,20 +250,12 @@ def hole_depth(data, bore=None):
     reach = float(info.get("pitch") or 0.0) + 0.5
     start = thread_mouth(data, bore)
     if start is None or (made and abs(made[0] - start) > reach):
-        return Problem("threadSpan", words.THREAD_HOLE_SPAN)
+        return Problem("threadSpan", words.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE)
     if full is True:
         return Depth(True, None, start)
     if full is False and info.get("depth"):
         depth = float(info["depth"])
         if not made or abs(made[1] - start - depth) > reach:
-            return Problem("threadSpan", words.THREAD_HOLE_SPAN)
+            return Problem("threadSpan", words.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE)
         return Depth(False, depth, start)
-    return Problem("depthUnread", words.THREAD_DEPTH_UNREAD)
-
-
-def measured_ends(data, count):
-    """The measured end points of a hole through all, one for each of its `count` positions, or a Problem."""
-    ends = [list(p) for p in data.get("end_points") or [] if isinstance(p, (list, tuple))]
-    if len(ends) != count:
-        return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD)
-    return ends
+    return Problem("depthUnread", words.THREAD_DEPTH_UNREAD, gap_hints.THREAD_HOLE)

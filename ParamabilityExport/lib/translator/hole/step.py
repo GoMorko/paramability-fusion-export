@@ -10,6 +10,7 @@ flat face, of another component moves with that place (ref_motion.py).
 """
 import math
 
+from ...capture_model import gap_hints
 from ...design_model.problem import Problem
 from ...design_model.steps import hole as facts
 from ...design_model.values import Quantity, Sized
@@ -68,7 +69,7 @@ def _is_tipped(data, tip, ctx):
     if measured is None:
         return stored_tipped
     if measured == facts.MIXED:
-        return Refusal("The end of this hole could not be told apart as flat or pointed.")
+        return Refusal("The end of this hole could not be told apart as flat or pointed.", cause=gap_hints.HOLE_END)
     tipped = measured == facts.CONE
     if tipped != stored_tipped:
         ctx.note("Fusion stored the drill tip of this hole differently from its measured end; the measured end was used.")

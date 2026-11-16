@@ -375,18 +375,21 @@ class UnreadableTest(unittest.TestCase):
         self.assertEqual((data["symmetric"], data["side_one"]["kind"], round(data["side_one"]["taper_deg"], 6)),
                          (None, "throughAll", round(math.degrees(0.05), 6)))
 
-    def test_end_face_types_follow_the_end_points(self):
+    def test_only_flat_or_pointed_faces_along_the_hole_are_its_end(self):
+        # Fusion lists the helical faces of a modeled thread among the end faces; they have no geometry type.
         target = body()
         hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="SimpleHoleType",
                              holeTapType="SimpleHoleTapType", holeDiameter=param(0.5), position=P(0, 0, 0),
+                             direction=P(0, 0, -1),
                              extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)),
-                             endFaces=Coll([Obj(pointOnFace=P(0, 0, 1), geometry=Obj("core::Cone")),
-                                            Obj(pointOnFace=P(0, 0, 2), geometry=Obj("core::Plane")),
-                                            Obj(pointOnFace=P(0, 0, 3), geometry=Obj("core::Torus")),
-                                            Obj(pointOnFace=P(0, 0, 4))])))
+                             endFaces=Coll([Obj(pointOnFace=P(0, 0, 1), geometry=Obj("core::Cone", axis=P(0, 0, -2))),
+                                            Obj(pointOnFace=P(0, 0, 2), geometry=Obj("core::Plane", normal=P(0, 0, 1))),
+                                            Obj(pointOnFace=P(0, 0, 3), geometry=Obj("core::Plane", normal=P(1, 0, 0))),
+                                            Obj(pointOnFace=P(0, 0, 4), geometry=Obj("core::Torus")),
+                                            Obj(pointOnFace=P(1, 0, 5))])))
         data = self.capture([hole], target)["items"][0]["data"]
-        self.assertEqual(data["end_face_types"], ["cone", "plane", None, None])
-        self.assertEqual(len(data["end_points"]), 4)
+        self.assertEqual(data["end_face_types"], ["cone", "plane"])
+        self.assertEqual(data["end_points"], [[0, 0, 1], [0, 0, 2]])
 
     def test_group_children_not_in_the_walk_refuse_the_capture(self):
         target = body()
@@ -670,8 +673,9 @@ class HoleTest(unittest.TestCase):
                 Obj(worldGeometry=P(10, 10, 10)), Obj(worldGeometry=P(20, 10, 10))])),
             extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)),
             sideFaces=Coll([Obj(geometry=Obj("core::Cylinder", origin=P(10, 10, 10), axis=Obj(x=0, y=0, z=-1.0),
-                                             radius=0.25))]),
-            endFaces=Coll([Obj(pointOnFace=P(10, 10, 2))]))
+                                             radius=0.25),
+                                vertices=Coll([Obj(geometry=P(12.5, 10, 2)), Obj(geometry=P(12.5, 10, 10))]))]),
+            endFaces=Coll([Obj(pointOnFace=P(10, 10, 2), geometry=Obj("core::Plane", normal=P(0, 0, 1)))]))
         base.update(kw)
         hole = entry(feature("HoleFeature", "Hole1", bodies=[target], **base))
         design = FakeDesign([hole], target)
@@ -684,7 +688,8 @@ class HoleTest(unittest.TestCase):
         self.assertEqual(data["direction"], [0, 0, -1])
         self.assertEqual(data["positions"], [[10, 10, 10], [20, 10, 10]])
         self.assertEqual(data["extent"], {"kind": "distance", "depth": 8.0})
-        self.assertEqual(data["side_cylinders"], [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 2.5}])
+        self.assertEqual(data["side_cylinders"], [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 2.5,
+                                                   "span": [0, 8]}])
         self.assertEqual(data["end_points"], [[10, 10, 2]])
         self.assertIsNone(data["counterbore"])
         self.assertIsNone(data["thread_modeled"])

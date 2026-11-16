@@ -564,7 +564,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and modeled M6x1, through all. Add a user parameter `Bore` = 3 mm and set the counterbore depth to `Bore`.
     Export: tick `Bore`. In `report.json` note `thread.made_span` of each hole: expect it to start near 3 mm for the
     counterbore hole and near 3.5 mm for the countersink hole (where the cone narrows to the 5 mm bore). Both holes
-    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In Paramability,
+    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In the Orca copy the
+    counterbore hole has a thread from the counterbore floor and `Bore` is followed in part; the countersink hole is
+    left out. In Paramability,
     change `Bore` to 5 mm: the thread of the counterbore hole starts 5 mm down and ends at the bottom of the hole.
     When `made_span` starts at 0 instead, Fusion starts its thread at the top: the holes are left out with "does not
     start at the top of the hole (or below its counterbore or countersink)". Afterwards the design is as before.
@@ -578,3 +580,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. TD4, tapped holes through all and a cosmetic one. Add a user parameter `Plate` = 30 mm. Make a box 80 x 60 mm,
+    `Plate` high. On the top face add three Holes, "Tapped", M6x1: at (-20, 0) Simple, "Modeled" ticked, through all;
+    at (0, 0) Counterbore 10 mm across and 3 mm deep, "Modeled" ticked, through all; at (20, 0) Simple, cosmetic
+    (Modeled off), 15 mm deep.
+    Export: tick `Plate`, once to Paramability and once to Orca. In `report.json` each hole lists no thread faces in
+    `end_points` (the through holes have none), and each `side_cylinders` entry has a `span` that covers the bore:
+    30 mm long for the simple through hole, 27 mm for the counterbore one. The through holes copy as a hole at the
+    minor diameter plus a thread from the top (simple) or from the counterbore floor (3 mm down) to the bottom face;
+    the cosmetic hole copies as a plain hole 5.035 mm across. In Paramability, change `Plate` to 40 mm: both threads
+    still reach the bottom face. In Orca, the counterbore hole has a lead-in at the counterbore floor and at the
+    bottom face. When a `span` is null or covers only part of the bore, note what `vertices` the side face of the
+    hole has. Afterwards the design is as before.

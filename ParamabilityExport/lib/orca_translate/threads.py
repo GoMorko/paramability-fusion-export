@@ -156,12 +156,13 @@ class Ends:
         return [n for n, kind in enumerate(self.kinds) if kind == OPEN]
 
 
-def _ends(ctx, start, rise, length, spec, internal, wall, what):
+def _ends(ctx, start, rise, length, spec, internal, wall, what, solid=None):
     """The `Ends` of a Fusion thread from `start` along `rise` for `length` mm, or a Skip when an end cannot be told
-    or its lead-in cannot be cut."""
+    or its lead-in cannot be cut. The ends are judged by `solid`, else by the part the copy built."""
+    solid = solid if solid is not None else ctx.solid
     points = [list(start), vec.add(start, vec.scale(rise, length))]
     outs = [vec.scale(rise, -1.0), list(rise)]
-    kinds = [_end(ctx.solid, p, o, spec, internal, wall) for p, o in zip(points, outs)]
+    kinds = [_end(solid, p, o, spec, internal, wall) for p, o in zip(points, outs)]
     if None in kinds:
         return Skip("The copy cannot tell whether the thread of %s runs out of the part at %s, and a thread with a "
                     "plain end where it runs out would stop a bolt or nut, so it is left out."
@@ -170,7 +171,7 @@ def _ends(ctx, start, rise, length, spec, internal, wall, what):
         return Skip("The pitch of the thread of %s is too fine for the lead-in Orca needs where it runs out of the "
                     "part, so it is left out." % what, gap_hints.THREAD_LIMITS)
     for n in [n for n, kind in enumerate(kinds) if kind == OPEN]:
-        if not ctx.solid.meets(_lead_prism(points[n], vec.scale(outs[n], -1.0), spec, internal)):
+        if not solid.meets(_lead_prism(points[n], vec.scale(outs[n], -1.0), spec, internal)):
             return _misses(ctx)
     return Ends(points, list(rise), kinds)
 
@@ -337,24 +338,31 @@ def tapped(item, data):
 
 
 def hole_lengths(item, data, spec, positions, normal, depth, ctx):
-    """The length of the thread of each hole of a tapped hole as Fusion has it (`Quantity`s), or a Skip. `depth` is the
-    hole's depth `Quantity`, None for a hole through all (its length is then measured from the end faces)."""
-    if depth is None:
-        ends = facts.measured_ends(data, len(positions))
-        if isinstance(ends, Problem):
-            return Skip.of(ends)
-        lengths = [Quantity(abs(vec.dot(vec.sub(e, list(p)), normal))) for p, e in zip(positions, ends)]
-    else:
-        lengths = [depth] * len(positions)
+    """(start, lengths) of the thread of a tapped hole as Fusion has it, or a Skip. `start` is how far below each
+    position the thread starts (mm: the depth of a counterbore, else 0, `facts.hole_depth`); `lengths` are the lengths
+    of the thread of each hole from there (`Quantity`s). `depth` is the hole's depth `Quantity`, None for a hole through
+    all (its length is then measured to where its bore leaves the part, `hole.through_ends`). A thread that starts
+    below the top must have its measured faces (`made_span`) start there."""
     reach = facts.hole_depth(data)
     if isinstance(reach, Problem):
         return Skip.of(reach)
+    start = reach.start
+    if start and not (data.get("thread") or {}).get("made_span"):
+        return Skip("This tapped hole has a counterbore, and the copy cannot tell where Fusion starts its thread then, "
+                    "so it is left out.", causes.TAPPED_RECESS)
+    if depth is None:
+        ends = hole_facts.through_ends(data, normal)
+        if isinstance(ends, Problem):
+            return Skip.of(ends)
+        lengths = [Quantity(abs(vec.dot(vec.sub(e, list(p)), normal)) - start) for p, e in zip(positions, ends)]
+    else:
+        lengths = [depth.plus(-start)] * len(positions)
     if not reach.full:
         part = ctx.quantity(item, "thread.depth", reach.length)
         if any(part.n > s.n + 1e-6 for s in lengths):
             return Skip(shared.THREAD_DEEPER_THAN_HOLE)
         lengths = [part] * len(positions)
-    return lengths
+    return start, lengths
 
 
 def mark_through_length(ctx, item, data):
@@ -370,21 +378,23 @@ def mark_through_length(ctx, item, data):
                   % (item.get("name") or "a hole"))
 
 
-def hole_ends(ctx, where, spec, length, what):
-    """The `Ends` of the thread of one tapped hole (`where`, its `hole_place.Place`, drilled along its normal), or a
-    Skip. Asked before the hole is cut: the ends are judged by the part around the hole."""
+def hole_ends(ctx, where, spec, start, length, what, solid=None):
+    """The `Ends` of the thread of one tapped hole (`where`, its `hole_place.Place`, drilled along its normal) that
+    starts `start` mm below the hole's place, or a Skip. Asked before the hole is cut: the ends are judged by the part
+    around the hole, `solid` when given (the part with the hole's counterbore cut), else the part the copy built."""
     problem = _check(spec, inset(length, spec.pitch).n, what)
     if problem:
         return problem
-    return _ends(ctx, where.centre(), where.normal, length.n, spec, True, spec.minor / 2.0, what)
+    first = vec.add(where.centre(), vec.scale(where.normal, start))
+    return _ends(ctx, first, where.normal, length.n, spec, True, spec.minor / 2.0, what, solid)
 
 
-def hole_thread(ctx, name, where, spec, length, ends):
+def hole_thread(ctx, name, where, spec, start, length, ends):
     """The Orca thread of one tapped hole (`where`, its `hole_place.Place`): on the hole's plane moved into the part
-    by the inset, its axis at the hole's place, rising into the part; then the lead-ins at its open ends. `length`
-    is from `hole_lengths`, `ends` from `hole_ends`."""
+    by `start` (mm, where the thread starts) and the inset, its axis at the hole's place, rising into the part; then
+    the lead-ins at its open ends. `start` and `length` are from `hole_lengths`, `ends` from `hole_ends`."""
     moved = copy.copy(where)
-    moved.origin = vec.add(where.origin, vec.scale(where.normal, INSET * spec.pitch))
+    moved.origin = vec.add(where.origin, vec.scale(where.normal, start + INSET * spec.pitch))
     made = [_feature(ctx, name + " thread", moved.plane(ctx.place), spec, inset(length, spec.pitch), True,
                      (where.x_value, where.y_value))]
     for n in ends.open:

@@ -151,10 +151,21 @@ class ToolRuleTest(unittest.TestCase):
 HOLE_INFO = dict(INFO, internal=True, major_diameter=6.0, minor_diameter=5.0, pitch=1.0, full_length=True, depth=None)
 
 
+def bores(data, *radii):
+    """A measured bore of each radius at each position of a hole drilled down from z 10: down to its depth, or
+    through the 10 mm part."""
+    return [{"origin": list(p), "axis": [0, 0, -1], "radius": r, "span": [0.0, _deep(data)]}
+            for p in data["positions"] for r in radii]
+
+
+def _deep(data):
+    return (data.get("extent") or {}).get("depth") or 10.0
+
+
 def tapped(name="hole_blind_flat", **more):
     def edit(data):
-        data.update(tap_type="tapped", thread_modeled=True, diameter=6.0, thread=dict(HOLE_INFO), tip_angle_deg=None,
-                    side_cylinders=[{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 2.5}])
+        data.update(tap_type="tapped", thread_modeled=True, diameter=6.0, tip_angle_deg=None,
+                    thread=dict(HOLE_INFO, made_span=[0.0, _deep(data)]), side_cylinders=bores(data, 2.5))
         for key, value in more.items():
             data[key] = value
     return edit
@@ -181,6 +192,22 @@ class TappedHoleTest(unittest.TestCase):
         (step,) = steps_of(result.recipe, "thread")
         self.assertEqual(step["length"], 10)
         self.assertIsNone(steps_of(result.recipe, "hole")[0]["depth"])
+
+    def test_a_through_hole_thread_runs_to_where_the_bore_leaves_the_part_not_to_an_end_face(self):
+        # Fusion lists faces of a modeled thread as end faces; one halfway down must not set the thread length.
+        result = tapped_hole("hole_through", end_points=[[10, 10, 6]], end_face_types=["plane"])
+        (step,) = steps_of(result.recipe, "thread")
+        self.assertEqual(step["length"], 10)
+
+    def test_a_through_hole_thread_whose_end_is_not_measured_is_left_out_with_a_tip(self):
+        cases = {"bore not measured": dict(side_cylinders=[{"origin": [10, 10, 10], "axis": [0, 0, -1],
+                                                            "radius": 2.5}]),
+                 "thread stops short": dict(thread=dict(HOLE_INFO, made_span=[0.0, 6.0]))}
+        for label, edit in cases.items():
+            with self.subTest(label):
+                result = tapped_hole("hole_through", **edit)
+                self.assertEqual(steps_of(result.recipe, "thread"), [])
+                self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.THREAD_HOLE]])
 
     def test_a_part_depth_thread_and_several_holes(self):
         (step,) = steps_of(tapped_hole(thread=dict(HOLE_INFO, full_length=False, depth=5.0,
