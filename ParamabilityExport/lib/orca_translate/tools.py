@@ -67,8 +67,9 @@ def _handlers():
 
 def _why(step, owner):
     """`(reason, cause)` for the resolved step `step` (`design.ResolvedStep`) that builds a tool when it cannot be
-    copied (the reason is a sentence), else None. `owner` is the token of the other component whose tool body the step builds ("" for the part's component): such a
-    step must have been read in that component's coordinates (`helper_of`)."""
+    copied (the reason is a sentence), else None. `owner` is the token of the other component whose tool body the
+    step builds ("" for the part's component): such a step must have been read in that component's coordinates
+    (`helper_of`)."""
     item = step.item
     if owner and not item.get("helper_of"):
         return shared.STEP_UNREAD, gap_hints.REFUSED
