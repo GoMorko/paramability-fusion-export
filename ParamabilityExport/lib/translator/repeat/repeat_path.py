@@ -5,6 +5,10 @@ The pattern is handed to the rectangular or the circular pattern handler as the 
 as a circular pattern about the axis of the arc, with the turn worked out from the distance along the arc. Those
 handlers check the measured copies against the pattern they write, so a copy Fusion put elsewhere leaves the step out.
 
+On an arc or a circle the copies must start at the start of the path and run along it: from a start point part way
+along a round path, or with the direction flipped, Fusion has been seen to put the copies off the path, so the step
+is left out.
+
 The copies must stay on the path: at the captured sizes the step is left out when they run past an end of it, and the
 ranges of a count or distance that can make them run past an end are cut to where they stay on it (the sizes are
 marked when no cut does that). The path itself is written as numbers: the sizes that may change what the copy takes
@@ -36,6 +40,8 @@ END_TOL_MM = 1e-3
 # Share of the turn between copies by which the measured turn may differ from the one the distance and the rounded
 # radius give.
 TURN_SHARE = 1e-4
+# A start point (a share of the path's length) up to this counts as the start of the path.
+START_TOL = 1e-9
 # The keys of the data that the plain pattern takes over as they are.
 _KEPT = ("entity_type", "sources", "source_bodies", "result_bodies", "elements", "suppressed_ids")
 
@@ -250,6 +256,9 @@ def _path(ctx, step):
     way = -1 if data["flip"] else 1
     if found.kind == "line" and _line_runs_against(found, data, ctx, way):
         return Refusal(shared.PATH_PATTERN_WRONG_WAY)
+    if found.kind == "round" and (data["flip"] or float(data.get("start_point") or 0.0) > START_TOL):
+        # Seen in Fusion 2706: from a start point part way along an arc and against it, the copies land off the arc.
+        return Refusal(shared.PATH_PATTERN_OFF_ROUND)
     room = found.room[0 if way > 0 else 1]
     distance_q, travel = _travel(ctx, item, data)
     if travel.n > room + END_TOL_MM:

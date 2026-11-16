@@ -457,9 +457,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     degrees, quantity 3.
     Export: Export for Orca. In `report.json` note `elements` of the pattern: each `id` and the turn of its `frame`
     about Z (atan2 of x[1] and x[0]). Fusion 2706 gave ids 0 to 5 with turns 0, 120, 180, 240, 300 and 0 (no copy
-    at 60), and 0, 120 and 180 for the second, so both patterns were left out as not spread evenly. Note the turns
-    Fusion gives, and whether the holes in Fusion sit at 0, 60, 120 and so on: they decide how the reader must read
-    `PatternElement.transform`.
+    at 60), and 0, 120 and 180 for the second, while the holes sat at 0, 60, 120 and so on. The add-in now places
+    the copies by their ids and checks them against their `faces`: both patterns are copied, 6 holes round the full
+    circle and 3 holes over 120 degrees, and they match the STEP. Note the turns Fusion gives: when they agree with the
+    faces, Fusion has fixed the transforms.
 
 44. SK1, what a sketch on a face says it sits on. Make a 30 x 20 x 10 mm box (user parameter `Height` for the 10 mm).
     Sketch a 6 mm circle on its top face and extrude it 5 mm up (Join). Sketch a point on the top face and drill a
@@ -557,7 +558,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     design is as before. On another copy, set the arc pattern's start point to 0.75 and pick the arc so that the path
     runs from (50, 20) to (70, 20), against the arc. In `report.json` the path curve has `opposed` true. The copy
     counts the start point from the start of the path: 7.9 mm of arc lie ahead of it and the copies reach 10 mm, so
-    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`).
+    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`). Fusion 2706 put
+    them off the arc, with transforms that do not agree with their faces: an arc pattern with a start point other
+    than 0 or the flip is left out with the reason that Fusion can put the copies off the path.
 52. TD3, a tapped hole with a counterbore and one with a countersink. Make a plate 40 x 40 x 12 mm. Add a Hole at
     (10, 20) on the top face: Counterbore, counterbore 10 mm across and 3 mm deep, "Tapped", "Modeled" ticked,
     M6x1, 10 mm deep, full length thread. Add a Hole at (30, 20): Countersink, 12 mm across at 90 degrees, tapped
@@ -578,3 +581,32 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. PE1, where Fusion says the copies of a rectangular pattern are. Make a 100 x 60 x 5 mm plate with its corner at
+    the origin. Drill a simple 5 mm hole through all at (10, 10). Make a rectangular pattern of the hole: direction
+    one along X, quantity 4, distance 20 mm, spacing; direction two along Y, quantity 3, distance 15 mm. On a copy of
+    the design, tick Symmetric in direction one and set its quantity to 5, with the hole at (50, 10). On another copy,
+    suppress the copy at (50, 25).
+    Export: Export for Paramability and Export for Orca. In `report.json`, for each element compare the shift of its
+    `frame` (`origin`) with the move from the original's `source_faces` to the element's `faces`. Expect them to
+    agree, and the holes at x 10, 30, 50, 70 and y 10, 25, 40. Each pattern is copied (the suppressed copy as a
+    skip in the recipe; Orca leaves that one out) and matches the STEP. If a pattern is left out with "Fusion gives a
+    place for a copy of this pattern that is not where the faces of that copy are", note the ids, frames and face
+    centres: the transforms of rectangular patterns are wrong too.
+55. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
+    its corner at the origin. Sketch a circle of radius 20 mm centred at (30, 30) on the top face, and a circle of
+    radius 2 mm at (50, 30); cut the small circle through all. Make a Pattern on Path of the cut along the large
+    circle: quantity 6, extent, distance the whole circle (125.664 mm), orientation Path Direction.
+    Export: Export for Paramability. In `report.json` note each element's `id`, the turn of its `frame` about the
+    circle's centre and the centre of its `faces`. Expect 6 different places 60 degrees apart and transforms that
+    agree with the faces. The pattern is copied as a full turn of 6 and matches the STEP. If two elements share a
+    place, or a transform does not agree with its faces, the pattern is left out with that reason: note the values.
+56. PE3, where Fusion says the copies of a pattern of bodies are. Make a 10 x 10 x 10 mm box at (20, -5, 0) to
+    (30, 5, 10) as its own body, and a disc of 80 mm diameter, 5 mm high, centred on the origin as a second body. Make
+    a circular pattern of the box body (Pattern Type Bodies) about the Z axis: Full, quantity 6. On a copy of the
+    design, make it Angle, total 120 degrees, quantity 3. On another copy, make a rectangular pattern of the box body
+    instead: along X, quantity 3, distance 15 mm. Then Combine Join the disc with every box.
+    Export: Export for Paramability the disc. In `report.json` compare each element's `frame` with the move from
+    `source_faces` to its `faces`, and with the place of its body in `result_bodies`. The Combine writes one pattern
+    of the box tool: 6 copies round the circle, 3 over 120 degrees, and 3 along X. Each copy matches the STEP. If
+    a pattern is left out with "The copies of this pattern could not be matched to the bodies it made", note the
+    frames and the body points.

@@ -315,7 +315,7 @@ def window_pattern_capture(copies=2, spacing=30.0):
     """The window cut through the plate, at (5, 6), then repeated `copies` times `spacing` apart along x by a
     rectangular pattern of features."""
     found = window_capture(Shape(dict(WINDOW.values, wx=5.0), WINDOW.draw))
-    elements = [{"id": k + 1, "suppressed": False,
+    elements = [{"id": k, "suppressed": False,
                  "frame": {"origin": [k * spacing, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
                 for k in range(copies)]
     data = {"entity_type": "features", "sources": [3], "direction_one": [1, 0, 0], "quantity_one": copies,

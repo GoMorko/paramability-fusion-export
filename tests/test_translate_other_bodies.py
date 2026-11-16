@@ -158,7 +158,7 @@ def pattern_of(expression, count):
     data = capture["items"][6]["data"]
     data["quantity_one"] = count
     data["elements"] = [
-        {"id": n + 1, "suppressed": False,
+        {"id": n, "suppressed": False,
          "frame": {"origin": [24 * n, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(count)]
     data["params"]["quantity_one"] = {"name": "d8", "expression": expression, "value": float(count)}
     model = next(m for m in capture["parameters"]["model"] if m["name"] == "d8")

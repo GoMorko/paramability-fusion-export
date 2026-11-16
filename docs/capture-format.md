@@ -965,10 +965,14 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   "direction_two": null, "quantity_two": 1, "distance_two": 0.0,
   "distance_type": "spacing",
   "symmetric_one": false, "symmetric_two": false,
-  "elements": [{ "id": 1, "suppressed": false, "frame": FRAME }, ...],
-  "suppressed_ids": []
+  "elements": [{ "id": 0, "suppressed": false, "frame": FRAME, "faces": [FACE, ...] }, ...],
+  "suppressed_ids": [],
+  "source_faces": [FACE, ...]
 }
 ```
+
+`FACE` is `{ "center": [x, y, z], "area": 94.2 }`: the centroid of a face in mm (`BRepFace.centroid`) and its area in
+mm2 (`BRepFace.area`).
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
   feature. A Combine of the target among the sources is repeated by the steps it wrote (its `toolBody` step, or its
@@ -982,10 +986,19 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   copy to its source and element by the points.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
-- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
-  the identity frame; in a symmetric direction it is not the first one. The frames are in assembly space, so for a
+- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame, and `faces`: up to 8 of the faces
+  that element made, `PatternElement.faces`, null when they cannot be read). The ids start at 0 (the original) and
+  follow the order of the copies. The transform is not always right: in Fusion 2706 the transform of each copy of a
+  circular pattern after the original is one step ahead (hand check CP1). So the translators take the places of
+  one-sided circular copies from their ids and check every place against the faces
+  (`design_model/steps/pattern_places.py`, developer guide 3.18). The original is the element with the identity
+  frame; in a symmetric direction it is not the first one.
+- `source_faces` (rectangular, circular and path patterns): up to 32 faces of the original, read with the marker
+  before the item: the faces each source feature made (`Feature.faces`), the source faces of a pattern of faces, or
+  the faces of the source bodies. Null when they cannot be read, absent in older captures. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`), and the face centroids with
+  them. In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
@@ -2695,9 +2708,16 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 Read in the same stubs on 2026-11-16 for Path Pattern: `PathPatternFeature` (`inputEntities`, `patternEntityType`,
 `path`, `quantity`, `distance`, `startPoint`, `isFlipDirection`, `patternDistanceType`, `isSymmetric`,
 `isOrientationAlongPath`, `suppressedElementsIds`, `patternElements`), `Path` (`count`, `item`, `isClosed`),
-`PathEntity` (`entity`, `curve`, `isOpposedToEntity`), `PatternElement` (`id`, `isSuppressed`, `transform`). Not run:
-what `startPoint` counts from on an opposed path, what Fusion does with copies past an end of the path, and whether
-an element transform of a path pattern is the move of the copy from the original (hand check PP1).
+`PathEntity` (`entity`, `curve`, `isOpposedToEntity`), `PatternElement` (`id`, `isSuppressed`, `transform`). Hand
+check PP1 (Fusion 2706): on a line, copies past the end run on along the line with no warning; on an arc that starts
+at 0, the element transforms are the moves of the copies and agree with their faces; with a start point of 0.75 and
+the flip, the copies land off the arc and the transforms do not agree with the faces, so the translator leaves a
+round path pattern with a start point other than 0 or the flip out.
+
+Read in the same stubs on 2026-11-16 for the places of pattern copies: `PatternElement` (`faces`, a list of
+`BRepFace`; `transform`, documented as the identity for the first element), `Feature.faces`, `BRepBody.faces`,
+`BRepFace` (`centroid`, `area`). Hand check CP1 (Fusion 2706, circular patterns): the ids follow the order of the
+copies, the faces show where each copy is, and the transform of each copy after the original is one step ahead.
 
 Read in the same stubs on 2026-11-12 for Split Body (hand tests SB1 and SB2; exports of 0.10.5 on Fusion 2706.1.17
 confirm a split by an origin plane, by an offset plane and by a body, and that `splittingTool` gives nothing with
@@ -2727,7 +2747,8 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
 | Revolve turning sense | `start_face_normal`, `end_face_normal`, `made_box`; the Turned knob test, hand check RC1 |
 | Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; the Holes test |
-| `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; the Bin test |
+| `patternElements` includes suppressed elements | a place with no element is skipped only when a copy is suppressed (an element marked suppressed or `suppressed_ids`); else the pattern is left out (`pattern_places.listed_places`); the Bin test |
+| `PatternElement.transform` of rectangular, path and body patterns is the move of the copy | the translators check each place against the faces of the copy and refuse places that repeat or do not fill the count; hand checks PE1, PE2 and PE3 |
 | `entityToken` of a body stays the same across marker positions | a token that changes makes the translator refuse the capture; the Combine test |
 | `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | Moving the marker marks the document changed or adds undo entries | the Marker and document test |

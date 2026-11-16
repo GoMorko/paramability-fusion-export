@@ -1,8 +1,9 @@
 """The destination-neutral reading of patterns and mirrors: the copies Fusion kept and where they sit.
 
 An element frame is the transform of one copy from the original (`origin` and the three axes). Fusion gives it in
-assembly space; `data_in_component` carries the frames in the data of a pattern into the frame of the component the
-steps are written in, and drops copies that sit exactly on an earlier one. `read_in_component` does
+assembly space; `data_in_component` carries the frames (and the centres of the faces of each copy and of the original,
+`pattern_places`) in the data of a pattern into the frame of the component the steps are written in, and drops copies
+that sit exactly on an earlier one. `read_in_component` does
 the same for the copies a probe state read. `solve_lattice` gives the grid index of a copy, `reach` the steps a
 symmetric direction runs each way, and `mirror_plane` the plane of a mirror. `repeated_items` gives the timeline
 items a pattern or a mirror repeats. What a copy does about a size, and how a copy is written, stay with
@@ -47,6 +48,28 @@ def carried_frame(place, frame):
     return dict(axes, origin=back(shifted))
 
 
+def carried_point(place, point):
+    """The point `point` (assembly space) seen in the component frame `place` (component to assembly)."""
+    return [vec.dot(place[name], vec.sub(point, place["origin"])) for name in "xyz"]
+
+
+def carried_faces(place, faces):
+    """Face records (`{ center, area }`, `pattern_places`) with their centres in the component frame `place`; other
+    values as they are."""
+    if place is None or not isinstance(faces, list):
+        return faces
+    return [dict(f, center=carried_point(place, f["center"]))
+            if isinstance(f, dict) and isinstance(f.get("center"), list) else f for f in faces]
+
+
+def _carried_element(place, element):
+    """An element with its frame and the centres of its faces in the component frame `place`."""
+    out = dict(element, frame=carried_frame(place, element["frame"]))
+    if "faces" in element:
+        out["faces"] = carried_faces(place, element["faces"])
+    return out
+
+
 def same_frame(a, b):
     return (vec.close(a["origin"], b["origin"], FIT_TOL_MM)
             and all(vec.close(a[name], b[name], ROTATION_TOL * 1e3) for name in "xyz"))
@@ -57,7 +80,7 @@ def read_in_component(read, place):
     walk builds in (`place`, component to assembly, or None), like the captured ones."""
     if place is None or not read.get("elements"):
         return read
-    return dict(read, elements=[dict(e, frame=carried_frame(place, e["frame"])) for e in read["elements"]])
+    return dict(read, elements=[_carried_element(place, e) for e in read["elements"]])
 
 
 def repeated_items(item):
@@ -79,12 +102,15 @@ def data_in_component(data, place, merge=False):
         return data
     kept = []
     for element in elements:
-        frame = element["frame"] if place is None else carried_frame(place, element["frame"])
-        if merge and any(same_frame(frame, other["frame"]) and element.get("suppressed") == other.get("suppressed")
-               for other in kept):
+        element = element if place is None else _carried_element(place, element)
+        if merge and any(same_frame(element["frame"], other["frame"])
+                         and element.get("suppressed") == other.get("suppressed") for other in kept):
             continue
-        kept.append(dict(element, frame=frame))
-    return dict(data, elements=kept)
+        kept.append(element)
+    out = dict(data, elements=kept)
+    if place is not None and "source_faces" in data:
+        out["source_faces"] = carried_faces(place, data["source_faces"])
+    return out
 
 
 def solve_lattice(offset, axes):

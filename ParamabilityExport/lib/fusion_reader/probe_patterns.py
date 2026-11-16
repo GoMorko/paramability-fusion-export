@@ -34,7 +34,7 @@ def read_patterns(design, wanted):
             missed[key] = NOT_READ
             continue
         counts = _counts(feature, kind)
-        elements = geo.safe(lambda: pattern_elements(feature), None)
+        elements = geo.safe(lambda: pattern_elements(feature, faces=False), None)
         if elements is None or None in counts:
             missed[key] = NOT_READ
             continue

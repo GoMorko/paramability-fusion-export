@@ -33,6 +33,8 @@ The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the
 For some steps the add-in measures the shape that Fusion made, for example the radius of a round set by chord
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle.
+The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
+pattern out when the two do not agree.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).

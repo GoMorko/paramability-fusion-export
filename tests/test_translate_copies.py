@@ -37,7 +37,7 @@ def copy_extrude(index, name, operation, frame, square, distance, params=None):
 
 
 def _grid(index, sources, spacing, count=2, params=None):
-    elements = [{"id": n + 1, "suppressed": False, "frame": dict(FLAT, origin=[n * spacing, 0, 0])} for n in range(count)]
+    elements = [{"id": n, "suppressed": False, "frame": dict(FLAT, origin=[n * spacing, 0, 0])} for n in range(count)]
     return copy_item(index, "R-Pattern1", "RectangularPatternFeature", {
         "entity_type": "features", "sources": sources, "direction_one": [1, 0, 0], "quantity_one": count,
         "distance_one": spacing, "direction_two": None, "quantity_two": 1, "distance_two": 0.0,
@@ -184,7 +184,7 @@ def turned_copy(about, degrees, vertical=False):
 
 
 def _circular(index, axis, count=4):
-    elements = [{"id": n + 1, "suppressed": False,
+    elements = [{"id": n, "suppressed": False,
                  "frame": turned_copy(axis["point"], 360.0 * n / count, axis["dir"] == [0, 0, 1])}
                 for n in range(count)]
     return copy_item(index, "C-Pattern1", "CircularPatternFeature", {
