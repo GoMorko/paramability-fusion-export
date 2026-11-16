@@ -11,11 +11,11 @@ from ..capture_model.capture import same_body
 from ..orca_recipe.enums import BooleanMode
 from . import causes
 from .steps import Skip
-from .tools import OPERATIONS, Pass, boolean, build, data_of, label
+from .tools import OPERATIONS, Pass, boolean, build, label
 
 
-def combine(ctx, item):
-    data = data_of(item)
+def combine(ctx, step):
+    item, data = step.brought, step.brought_data
     tools = [t for t in data.get("tools") or [] if isinstance(t, dict)]
     if not same_body(data.get("target"), ctx.target):
         if data.get("keep_tools") and any(same_body(t, ctx.target) for t in tools):

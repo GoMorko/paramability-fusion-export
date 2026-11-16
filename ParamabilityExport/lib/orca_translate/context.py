@@ -6,7 +6,7 @@ its number, and the sizes are recorded with the reason (`doubt`), so the result 
 """
 import re
 
-from ..design_model import reach, tool_chains, words
+from ..design_model import design, reach, tool_chains, words
 from ..design_model.values import Quantity
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
@@ -144,7 +144,7 @@ class Context:
         expression reads no size is its number; one whose formula cannot be written is its number with a doubt."""
         if self.table is None:
             return Quantity(float(number))
-        found = ((item.get("data") or {}).get("params") or {}).get(path)
+        found = design.params_of(item).get(path)
         if not isinstance(found, dict) or not isinstance(found.get("expression"), str):
             return Quantity(float(number))
         unit = self.table.unit_of(found.get("name") or "")

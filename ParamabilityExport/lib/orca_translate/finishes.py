@@ -45,11 +45,6 @@ ROUND = _Kind("round", "round", FeatureType.FILLET)
 CHAMFER = _Kind("chamfer", "chamfer", FeatureType.CHAMFER)
 
 
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def _label(item):
     return item.get("name") or "the step"
 
@@ -95,10 +90,9 @@ def _by_size(ctx, item, sets, sizes):
     return found
 
 
-def fillet(ctx, item):
-    """The Orca round of a fillet step, or a Skip."""
-    data = _data(item)
-    sets = sets_of.round_sets(data)
+def fillet(ctx, step):
+    """The Orca round of a fillet step, or a Skip. Its round sets are the step's facts (`design.ResolvedStep`)."""
+    item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Skip(shared.ROUND_NO_EDGES)
     quantity = _quantity(ctx, item)
@@ -140,10 +134,10 @@ def _even_chamfer(ctx, item, one):
     return one.size(_quantity(ctx, item))
 
 
-def chamfer(ctx, item):
-    """The Orca chamfer of a chamfer step, or a Skip."""
-    data = _data(item)
-    sets = sets_of.chamfer_sets(data)
+def chamfer(ctx, step):
+    """The Orca chamfer of a chamfer step, or a Skip. Its chamfer sets are the step's facts
+    (`design.ResolvedStep`)."""
+    item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Skip(shared.CHAMFER_NO_EDGES)
     sizes = []
@@ -299,16 +293,16 @@ def _part_sized(ctx):
     return any(f.expr for f in ctx.features if f.type not in (FeatureType.FILLET, FeatureType.CHAMFER))
 
 
-def shell(ctx, item):
+def shell(ctx, step):
     """Shells are left out: see the module note."""
-    if _data(item).get("bodies_input"):
+    if step.brought_data.get("bodies_input"):
         return Skip("Orca's shell without an open face keeps the inside block instead of a hollow part, so this "
                     "closed hollow shell is left out.", causes.FACE_BY_NUMBER)
     return Skip("Orca opens a shell only at a face it picks by its own numbering, which the copy cannot know, so "
                 "this shell is left out.", causes.FACE_BY_NUMBER)
 
 
-def draft(ctx, item):
+def draft(ctx, step):
     """Drafts are left out: see the module note."""
     return Skip("Orca tilts only a face it picks by its own numbering, which the copy cannot know, and always about "
                 "the bottom of the part, so this draft is left out.", causes.FACE_BY_NUMBER)

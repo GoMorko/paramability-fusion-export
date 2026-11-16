@@ -31,14 +31,15 @@ from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
 from . import causes
-from ..design_model.steps.repeat import (FIT_TOL_MM, in_component, is_identity, is_identity_rotation, mirror_plane,
-                                        reach as symmetric_reach, solve_lattice)
+from ..design_model import design
+from ..design_model.steps.repeat import (FIT_TOL_MM, data_in_component, is_identity, is_identity_rotation,
+                                        mirror_plane, reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from ..results.verdicts import LEFT_OUT, SKIPPED
 from .solid import ADD, Moved, Solid
 from .steps import Skip
-from .tools import OPERATIONS, Pass, boolean, build, data_of, feature, hold_place, label, of_steps, step_mode
+from .tools import OPERATIONS, Pass, boolean, build, feature, hold_place, label, of_steps, step_mode
 
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 ANGLE_TOL_DEG = 1e-6
@@ -99,22 +100,23 @@ def _bind_count(ctx, made, value, where):
 
 def _params_doubt(ctx, item, used, why):
     """Sizes behind the step's parameters that no written field follows get `why`."""
-    for path, found in (data_of(item).get("params") or {}).items():
+    for path, found in design.params_of(item).items():
         if path not in used and isinstance(found, dict) and found.get("name"):
             ctx.doubt(ctx.depends([found["name"]]), why)
 
 
 # ---- what is repeated ------------------------------------------------------------------------------------------
 
-def _covered(ctx, item, indexes, what):
+def _covered(ctx, indexes, what):
     """Timeline indexes of the steps that built the tools of each Combine among the sources (repeated through the
     Combine), or a Skip when some of them are not sources."""
     chosen, covered = set(indexes), set()
     for index in indexes:
         source = _item(ctx, index)
-        if not _is_combine(source):
+        tools = _tools_of(source)
+        if tools is None:
             continue
-        for tool in data_of(source).get("tools") or []:
+        for tool in tools:
             if not isinstance(tool, dict):
                 continue
             found = tool_items.built_by(ctx.capture["items"], tool, source)
@@ -125,9 +127,10 @@ def _covered(ctx, item, indexes, what):
     return covered
 
 
-def _is_combine(item):
-    """A step that takes tool bodies (a Combine): its data lists them."""
-    return item is not None and isinstance(data_of(item).get("tools"), list)
+def _tools_of(item):
+    """The tool body records of a source that takes tool bodies (a Combine: its data lists them), else None."""
+    tools = design.as_read(item).brought_data.get("tools") if item is not None else None
+    return tools if isinstance(tools, list) else None
 
 
 def _item(ctx, index):
@@ -138,14 +141,14 @@ def _verdict(ctx, index):
     return next((v for v in ctx.items if v.get("index") == index), None)
 
 
-def sources(ctx, item, what):
-    """The sources of a repeat of features as groups `(mode, kind, payload)` in timeline order: kind "steps" with the
-    timeline indexes of copied steps that work the same way (adding or removing), or "combine" with a Combine item.
-    A Skip when a source cannot be repeated."""
-    indexes = sorted(i for i in data_of(item).get("sources") or [] if isinstance(i, int))
+def sources(ctx, data, what):
+    """The sources of a repeat of features (`data`, the data of its step) as groups `(mode, kind, payload)` in
+    timeline order: kind "steps" with the timeline indexes of copied steps that work the same way (adding or
+    removing), or "combine" with a Combine item. A Skip when a source cannot be repeated."""
+    indexes = sorted(i for i in data.get("sources") or [] if isinstance(i, int))
     if not indexes:
         return Skip("This %s has no features to repeat." % what)
-    covered = _covered(ctx, item, indexes, what)
+    covered = _covered(ctx, indexes, what)
     if isinstance(covered, Skip):
         return covered
     groups = []
@@ -157,8 +160,8 @@ def sources(ctx, item, what):
         if verdict is not None and verdict.get("verdict") == LEFT_OUT:
             return Skip("A step this %s repeats (%s) is left out of the Orca copy." % (what, verdict.get("name")),
                         gap_hints.AFTER_GAP)
-        if _is_combine(source):
-            mode = OPERATIONS.get(data_of(source).get("operation"))
+        if _tools_of(source) is not None:
+            mode = OPERATIONS.get(design.as_read(source).brought_data.get("operation"))
             if mode not in (BooleanMode.ADD, BooleanMode.CUT):
                 return Skip(shared.REPEAT_TOOL_KEEPS % (label(source), what))
             groups.append((mode, "combine", source))
@@ -185,7 +188,7 @@ def _tool(ctx, kind, payload, name):
     if kind == "steps":
         return of_steps(ctx, payload, name)
     built = []
-    for tool in data_of(payload).get("tools") or []:
+    for tool in _tools_of(payload) or []:
         if isinstance(tool, dict):
             body = build(ctx, tool, payload)
             if isinstance(body, Skip):
@@ -238,9 +241,8 @@ def write(ctx, item, groups, layouts, copies, what):
     return ctx.features[start:]
 
 
-def _separate_copies(ctx, item, what):
-    """A pattern or mirror of bodies that leaves its copies as separate bodies."""
-    data = data_of(item)
+def _separate_copies(ctx, data, what):
+    """A pattern or mirror of bodies (`data`, the data of its step) that leaves its copies as separate bodies."""
     sources_ = [b for b in data.get("source_bodies") or [] if isinstance(b, dict)]
     if sources_ and not any(same_body(b, ctx.target) for b in sources_):
         return Skip("This body is a copy made by a %s of another body, which is not copied." % what)
@@ -365,17 +367,16 @@ def _linear_copies(ctx, tool, layout, name):
     return moves
 
 
-def rectangular(ctx, item):
-    data = data_of(item)
+def rectangular(ctx, step):
+    item, data = step.brought, step.brought_data
     if data.get("entity_type") == "bodies":
-        return _separate_copies(ctx, item, "pattern")
+        return _separate_copies(ctx, data, "pattern")
     if data.get("entity_type") != "features":
         return Skip("Patterns of faces are not copied to Orca yet.", gap_hints.REPEAT_FACES)
-    groups = sources(ctx, item, "pattern")
+    groups = sources(ctx, data, "pattern")
     if isinstance(groups, Skip):
         return groups
-    item = in_component(item, ctx.component_frame(), merge=True)
-    data = item["data"]
+    data = data_in_component(data, ctx.component_frame(), merge=True)
     elements = data.get("elements") or []
     if not elements:
         return Skip(shared.PATTERN_COPIES_UNREAD)
@@ -445,13 +446,13 @@ def _copy_numbers(turns, delta, count, sign, symmetric):
     return out
 
 
-def circular(ctx, item):
-    data = data_of(item)
+def circular(ctx, step):
+    item, data = step.brought, step.brought_data
     if data.get("entity_type") == "bodies":
-        return _separate_copies(ctx, item, "pattern")
+        return _separate_copies(ctx, data, "pattern")
     if data.get("entity_type") != "features":
         return Skip("Patterns of faces are not copied to Orca yet.", gap_hints.REPEAT_FACES)
-    groups = sources(ctx, item, "pattern")
+    groups = sources(ctx, data, "pattern")
     if isinstance(groups, Skip):
         return groups
     axis = data.get("axis") or {}
@@ -468,8 +469,7 @@ def circular(ctx, item):
     if not full and not 0 < abs(raw) < FULL_TURN_DEG:
         return Skip(shared.PATTERN_ANGLE_UNREAD)
     delta = FULL_TURN_DEG / n if full else abs(raw) / (n - 1)
-    item = in_component(item, ctx.component_frame())
-    data = item["data"]
+    data = data_in_component(data, ctx.component_frame())
     elements = data.get("elements") or []
     if not elements:
         return Skip(shared.PATTERN_COPIES_UNREAD)
@@ -523,8 +523,8 @@ def _mirror_feature(ctx, name, plane, body):
                    mode=BooleanMode.ADD, mirror_keep_original=True, target_body=body.index)
 
 
-def mirror(ctx, item):
-    data = data_of(item)
+def mirror(ctx, step):
+    item, data = step.brought, step.brought_data
     found = data.get("plane") or {}
     if found.get("foreign"):
         return Skip("The mirror plane belongs to another component and could not be brought into the part's place, "
@@ -536,7 +536,7 @@ def mirror(ctx, item):
     entity = data.get("entity_type")
     if entity == "bodies":
         if not data.get("combine"):
-            return _separate_copies(ctx, item, "mirror")
+            return _separate_copies(ctx, data, "mirror")
         if not ctx.has_body:
             return Skip("The part this mirror copies is not in the copy.", gap_hints.AFTER_GAP)
         made = _mirror_feature(ctx, label(item), plane, ctx.scope)
@@ -545,7 +545,7 @@ def mirror(ctx, item):
         return [made]
     if entity != "features":
         return Skip(shared.MIRROR_FACES, gap_hints.REPEAT_FACES)
-    groups = sources(ctx, item, "mirror")
+    groups = sources(ctx, data, "mirror")
     if isinstance(groups, Skip):
         return groups
 

@@ -45,12 +45,14 @@ The modules of `lib/orca_translate/`:
   reads: what each step is for the body (a sketch, an assembly item, a step of another component, a step of the body
   or of another body) and the body before and after it (`design_model.roles`), what about it cannot be read (the
   step, its bodies, or a step in error in Fusion), and the step with the geometry of other components brought in. A
-  left out round or chamfer is measured from the sets in the resolved step (`facts`).
+  left out round or chamfer is measured from the sets in the resolved step (`facts`). Each handler gets the resolved
+  step (`handler(ctx, step)`) and reads its step only through it (see "Handlers read the resolved step" in
+  `docs/developer-guide.md`).
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
   (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
   that follows sizes is a `design_model.values.Quantity`, the same type the recipe translator uses: `Context.quantity`
-  reads it from the capture, and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
+  reads it from the model parameters of the step (`design_model.design.params_of`), and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
   writes it into the field.
 - `other_components.py`: geometry of other components (see "Other components" below).
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,

@@ -1,11 +1,11 @@
 """The destination-neutral reading of patterns and mirrors: the copies Fusion kept and where they sit.
 
 An element frame is the transform of one copy from the original (`origin` and the three axes). Fusion gives it in
-assembly space; `in_component` carries the frames into the frame of the component the steps are written in, and drops
-copies that sit exactly on an earlier one. `read_in_component` does the same for the copies a probe state read.
-`solve_lattice` gives the grid index of a copy, `reach` the steps a symmetric direction runs each way, and
-`mirror_plane` the plane of a mirror. What a copy does about a size, and how a copy is written, stay with the
-destination.
+assembly space; `in_component` (`data_in_component` for the data alone) carries the frames into the frame of the
+component the steps are written in, and drops copies that sit exactly on an earlier one. `read_in_component` does
+the same for the copies a probe state read. `solve_lattice` gives the grid index of a copy, `reach` the steps a
+symmetric direction runs each way, and `mirror_plane` the plane of a mirror. What a copy does about a size, and how a
+copy is written, stay with the destination.
 """
 from ...geometry import vec
 from ...package.numbers import round9
@@ -63,17 +63,24 @@ def in_component(item, place, merge=False):
     assembly, or None). With `merge`, copies that sit exactly on an earlier one are dropped (a direction with a
     distance of zero makes such copies). The item itself when it has no elements."""
     data = item.get("data") or {}
+    carried = data_in_component(data, place, merge)
+    return item if carried is data else dict(item, data=carried)
+
+
+def data_in_component(data, place, merge=False):
+    """The data of a pattern with its element frames carried as `in_component` carries them. The data itself when it
+    has no elements."""
     elements = data.get("elements")
     if not elements:
-        return item
-    carried, kept = [], []
+        return data
+    kept = []
     for element in elements:
         frame = element["frame"] if place is None else carried_frame(place, element["frame"])
         if merge and any(same_frame(frame, other["frame"]) and element.get("suppressed") == other.get("suppressed")
                for other in kept):
             continue
         kept.append(dict(element, frame=frame))
-    return dict(item, data=dict(data, elements=kept))
+    return dict(data, elements=kept)
 
 
 def solve_lattice(offset, axes):
