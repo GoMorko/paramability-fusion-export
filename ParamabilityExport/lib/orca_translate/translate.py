@@ -115,7 +115,7 @@ def _walk(ctx):
         changed = role.changed is True
         if role.kind in (roles.ASSEMBLY, roles.TOOL_ELSEWHERE, roles.OTHER_COMPONENT):
             if changed:
-                leave_out(step, "This step changes the part from another component, which is not copied yet.",
+                leave_out(step, "This step changes the part from another component, which is not copied.",
                           gap_hints.CHANGED_FROM_OTHER_COMPONENT)
             else:
                 ctx.items.append(verdict(item, SKIPPED, shared.IN_OTHER_COMPONENT))

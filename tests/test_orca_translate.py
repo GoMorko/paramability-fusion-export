@@ -13,6 +13,7 @@ from tests.translator_helpers import load_capture
 
 from lib.capture_model import gap_hints
 from lib.capture_model.capture import CaptureError
+from lib.design_model import words
 from lib.orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from lib.orca_recipe.recipe import deserialize, serialize
 from lib.orca_translate import FIXED, PARTLY, UNUSED, VARIABLE, causes, translate
@@ -274,6 +275,49 @@ class ExtrudeTest(unittest.TestCase):
             with self.subTest(end=end):
                 result = translate(two_sided_cut(end))
                 self.assertEqual([g["name"] for g in result.left_out], [] if copied else ["Cut"])
+
+    def test_an_extrude_to_a_face_of_another_component_says_why_that_face_cannot_be_placed(self):
+        face = {"kind": "toEntity", "offset": 0.0, "foreign": True, "entity_type": "BRepFace",
+                "ref": {"type": "BRepFace"}}
+        plane = {"kind": "toEntity", "offset": 0.0, "foreign": True, "entity_type": "ConstructionPlane",
+                 "ref": {"type": "ConstructionPlane"}, "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}}
+        for target, why in ((face, words.CURVED_TARGET), (plane, words.UNPLACED_TARGET)):
+            with self.subTest(why=why):
+                items = ex.plate_items(sized=False) + [ex.sketch_item(2, "Sketch2"), ex.extrude(
+                    3, "Post", [ex.profile("Sketch2", ex.at(10.0), ex.rect(-5, -5, 5, 5))], operation="join",
+                    side_one=target, end_offset=10.0, target_box_before={"min": [-20, -10, 0], "max": [20, 10, 10]})]
+                (gap,) = translate(ex.capture(items, ((-20, -10, 0), (20, 10, 20)), 9000.0)).left_out
+                self.assertEqual((gap["reason"], gap["cause"]), (why, gap_hints.OTHER_COMPONENT))
+
+    def test_a_nearer_end_face_is_accepted_only_where_its_own_side_leaves_the_part(self):
+        def two_sided_cut(one, two, end_offset, pocket=False, **face):
+            """A 40 by 20 by 10 plate and a 10 by 10 cut sketched 5 up, `one` up and `two` down. With `pocket`, a
+            cut first takes the top 4 of the plate inside the same square."""
+            items = ex.plate_items(sized=False) + [ex.sketch_item(2, "Sketch2")]
+            if pocket:
+                items.append(ex.extrude(3, "Pocket", [ex.profile("Sketch2", ex.at(10.0), ex.rect(-5, -5, 5, 5))],
+                                        operation="cut", side_one=ex.side(-4.0), end_offset=-4.0,
+                                        target_box_before={"min": [-20, -10, 0], "max": [20, 10, 10]}))
+            items.append(ex.extrude(4, "Cut", [ex.profile("Sketch2", ex.at(5.0), ex.rect(-5, -5, 5, 5))],
+                                    operation="cut", extent="two", side_one=ex.side(one), side_two=ex.side(two),
+                                    end_offset=end_offset,
+                                    target_box_before={"min": [-20, -10, 0], "max": [20, 10, 10]}, **face))
+            return ex.capture(items, ((-20, -10, 0), (20, 10, 10)), 7000.0)
+
+        cases = (
+            ((8.0, 3.0, 5.0, False), True),  # the face is the plate top; its side ends 3 above the part
+            ((8.0, 3.0, -2.0, False), False),  # the face is on the side that ends inside material
+            ((3.0, 3.0, 2.0, False), False),  # neither side leaves the part
+            ((3.0, 3.0, 1.0, True), True),  # the pocket floor: the copy holds no material past it on that side
+            ((8.0, 3.0, -2.0, False, {"end_area": 0.96}), True),  # not an end cap: no measure
+            ((8.0, 3.0, -2.0, False, {"end_normal": [1, 0, 0]}), True),
+            ((8.0, 3.0, -2.0, False, {"end_normal": [0, 0, 1]}), False),
+        )
+        for args, copied in cases:
+            with self.subTest(args=args):
+                face = args[4] if len(args) > 4 else {}
+                result = translate(two_sided_cut(*args[:4], **face))
+                self.assertEqual("Cut" not in [g["name"] for g in result.left_out], copied)
 
     def test_the_recipe_writes_and_reads_back(self):
         result = translate(box_capture(), table_of(box_capture(), BOX_TICKED))

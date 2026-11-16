@@ -65,7 +65,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
   have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
   a tilted or curved surface, extrudes that start at a distance from a face or plane, extrudes with two sides that
-  both end on faces or planes on the same side of the sketch, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
+  both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
+  does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
+  that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds with variable or chord length
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the

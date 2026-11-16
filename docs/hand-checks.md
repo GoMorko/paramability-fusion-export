@@ -303,3 +303,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     solid with an extrude, sweep, loft or shell) but no tip for the Coil step (the coil tip is about Paramability).
     Pick no body: the list goes. Export: the result window lists the same two steps with the same words. Then remove
     both steps and pick the body again: no list shows.
+31. EX2, a two sided cut through ribs: which end face Fusion lists. Model a 40 x 40 x 20 mm box with its base on the
+    XY plane, shell it 2 mm with the top face removed, and extrude four ribs 0.6 x 2 mm up the full height on the
+    inside of each wall. Sketch a 3 mm tall slot on the YZ plane across the whole width at the bottom, and cut it
+    with two sides: side one 30 mm (out through the +X wall), side two 18.5 mm (ending inside the -X wall).
+    Export: in `report.json`, note `end_offset`, `end_area` and `end_normal` of the cut. Expect a face whose
+    `end_normal` is parallel to X when Fusion lists one (an end cap at -18.5 mm, `end_area` about the slot area
+    inside the wall), else a rib wall with a normal across X and a small area. Either way the cut is copied in both
+    outputs; write down which face Fusion listed first and whether `endFaces` held a cap at all.

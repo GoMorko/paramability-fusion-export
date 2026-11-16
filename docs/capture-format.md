@@ -655,15 +655,22 @@ against `samples`.
   `taperAngle`, so the translator writes a cut through all both ways. A cut through all both ways with a taper, or with
   a taper that cannot be read, is left out; an untapered one marks the sizes behind its taper.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
-- `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
-  `endFaces[0].pointOnFace`, or null. The measured check of the direction and of the length
-  (`design_model/steps/extrude.py`, `end_check`): measured from the start (`end_offset - start shift`), the face must
-  lie at the end of the side on its side of the sketch within 1e-3 mm (half the length either way for a symmetric
-  extrude). A face nearer than 1e-3 mm to the start shows no direction. A side of a cut that ends past the whole
-  `target_box_before` makes no end face of its own, so a nearer face on the way of a side is accepted when a side of
-  the cut passes the whole part. A two sided extrude has faces on both sides of its sketch, so the measured face turns
-  its direction only when it lies out of reach of the stored one. A side to a face or plane goes toward it, and the
-  measured face does not turn it.
+- `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to `pointOnFace` of the
+  measured end face, or null. The measured end face is the first face of `endFaces` whose normal is parallel to the
+  sketch normal (an end cap), else the first face. Captures made before `end_normal` was read always measured the
+  first face. The measured check of the direction and of the length (`design_model/steps/extrude.py`, `end_check`):
+  measured from the start (`end_offset - start shift`), the face must lie at the end of the side on its side of the
+  sketch within 1e-3 mm (half the length either way for a symmetric extrude). A face nearer than 1e-3 mm to the start
+  shows no direction. A side of a cut that ends past the whole `target_box_before` makes no end face of its own, so a
+  nearer face on the way of a side is accepted when that same side passes the whole part (the Orca output also when
+  the part it built has no material there); the other side does not count. A two sided extrude has faces on both
+  sides of its sketch, so the measured face turns its direction only when it lies out of reach of the stored one. A
+  side to a face or plane goes toward it, and the measured face does not turn it. A face that is not an end cap
+  (`end_is_cap`: by `end_normal`, else by `end_area` against the outline areas within 0.1 % plus 0.001 mm2; no
+  answer for a tapered or thin extrude) is not used: the stored direction and lengths stand, and a one way extrude
+  whose face would turn the stored direction is left out.
+- `end_normal` (optional; null when it cannot be read): the unit normal of the measured end
+  face at `pointOnFace` (`BRepFace.evaluator.getNormalAtPoint`). Older captures do not have it.
 - `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at
   `pointOnFace` along the first profile's sketch `z`, which is the sine of how far that wall leans. The taper check:
   a wall that narrows away from the sketch leans its outward normal along the travel; a cut lists the part's walls,
@@ -679,7 +686,8 @@ against `samples`.
   `end_area`, the area of the wall's end face, is compared with the expected area of each side of the outline,
   worked out from its lengths and corners, and decides the side. The area is used rather than the volume change
   because a wall that joins or cuts an existing part overlaps it, while the end face stays the wall's cross section.
-- `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Without
+- `profile_area`, `end_area` (optional, mm2): the area of the first profile and of the measured end face (see
+  `end_offset`). Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive
   recipe taper); a tapered extrude of several outlines is refused. Fusion's positive taper widens the walls (the
   recipe's positive `taperDeg` narrows them), so the translator writes Fusion's angle with the other sign.

@@ -153,9 +153,13 @@ tip. The result window lists up to five steps in full lines ("name: reason Tip: 
 the rest.
 
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
-the problem as it is (`Skip.of`). The sentence comes from `design_model/words.py` and names no output, so the recipe
+the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that
+cannot be placed gives the sentence of the resolved step (`ResolvedStep.why_foreign`, through `extents.reader_skip`):
+a curved face, or a face or plane whose place could not be read. The sentence comes from `design_model/words.py` and names no output, so the recipe
 and the Orca copy give the same words for the same fact: "This extrude starts in a way that is not copied." A refusal
-that comes from a limit of Orca only is worded in `orca_translate` ("... which is not copied to Orca yet.").
+that comes from a limit of Orca only is worded in `orca_translate` ("... which is not copied to Orca yet."). A
+sentence of `orca_translate` that names no output ("This extrude makes a new component, which is not copied.") does not
+say "yet", as in the shared layer.
 
 Orca stops the whole rebuild on a cut or hole that removes nothing, so the copy checks each cut, intersect and hole
 against the part it has built so far (`orca_translate/solid.py`: every copied extrude and hole as an outline swept
@@ -200,11 +204,13 @@ not judged to meet material where Orca removes nothing.
   the sketch, never against the other side. A cut may end before that distance only where it leaves the part: a cut
   that goes out of the part makes no end face of its own, and Fusion then measures a wall that the cut went through.
   The copy accepts this nearer face only when no material can lie inside the cut's outlines between the measured
-  face and the end of the cut, or, for two sides, when a side ends past the whole Fusion part
-  (`target_box_before`). No material lies there when the end of the cut lies past the whole Fusion part, or when the
-  part that the copy built has no material there (rounds and chamfers count as material) and no earlier step of the
-  body was left out. A cut that ends inside material must end at the measured face. A face behind the start, or past
-  the end, is not accepted.
+  face and the end of the side that the face lies on. No material lies there when that side ends past the whole
+  Fusion part (`target_box_before`, `design_model.steps.extrude.passes_box`), or when the part that the copy built
+  has no material there (rounds and chamfers count as material) and no earlier step of the body was left out. The
+  other side of a two sided cut does not make the face acceptable. A cut that ends inside material must end at the
+  measured face. A face behind the start, or past the end, is not accepted. A measured face that is not an end cap
+  (`design_model.steps.extrude.end_is_cap`: its normal, or else its area) is no measure at all: the stored direction
+  and lengths stand, as for the recipe.
 - An extrude of spline outlines must make the volume of its outlines times its length
   (`design_model.steps.extrude.volume_problem`, as for a recipe).
 - The distance follows the sizes that move the plane, where the copy can tell how: an origin plane stays; an offset
@@ -429,7 +435,12 @@ not judged to meet material where Orca removes nothing.
   intersect inside a tool takes its rule (`every` or `any`) from the tool's own volume, and is left out when the tool
   was not measured. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
   the tool that cannot be copied leaves the whole step out, naming the tool and that step, and nothing of it is
-  written. Those steps were passed by as building another body; once copied into a tool their verdict says so.
+  written. The reason reads "The tool body X cannot be copied, because its step Y is left out: <reason of the
+  step>." (for a step that the chain of the tool cannot see: "..., because of the step Y: ..."), with no reason in
+  parentheses inside another. While a tool body is built, the reasons of its steps name the tool and not the part
+  (`Context.body_words`: "the part", or "the tool body X"), for example the rounds and chamfers (`finishes`) and a
+  cut that meets nothing (`steps.misses_reason`). A pattern whose tool cannot be built gives "This pattern cannot be
+  copied." and then the reason of the tool. Those steps were passed by as building another body; once copied into a tool their verdict says so.
 - Orca drops the tool after the Boolean even when Fusion keeps it (`keep_tools`): only the part is copied. A Combine
   that changes another body and keeps the part as a tool is passed by. An intersect with several tools follows the
   capture's `intersect_model`: `every` is one Boolean per tool, `any` joins the tools first, `unknown` is left out.

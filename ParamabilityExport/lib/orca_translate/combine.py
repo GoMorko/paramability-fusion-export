@@ -20,10 +20,10 @@ def combine(ctx, item):
     if not same_body(data.get("target"), ctx.target):
         if data.get("keep_tools") and any(same_body(t, ctx.target) for t in tools):
             return Pass("It changes another body and keeps this part as it is.")
-        return Skip("This Combine adds the part to another body, which is not copied yet.", causes.OTHER_BODY)
+        return Skip("This Combine adds the part to another body, which is not copied.", causes.OTHER_BODY)
     mode = OPERATIONS.get(data.get("operation"))
     if mode is None:
-        return Skip("This kind of Combine is not copied yet.")
+        return Skip("This kind of Combine is not copied.")
     if not ctx.has_body:
         return Skip("The part this Combine works on is not in the copy.", gap_hints.AFTER_GAP)
     if not tools:

@@ -15,6 +15,8 @@ after the Combine to the two measured candidates.
 """
 import math
 
+from .footprint import closed_chain
+
 REL_TOL = 2e-3
 ABS_TOL_MM3 = 1.0
 # Two measured volumes are the same when they differ by less than this (mm3) or by this share of the larger one.
@@ -23,9 +25,15 @@ SAME_VOLUME_RELATIVE = 1e-6
 
 
 def _loop_area(loop):
-    """Area of one closed outline in sketch units, or None for a curve this does not model."""
+    """Area of one closed outline in sketch units, or None for a curve this does not model. Lines and arcs are put in
+    order first (`footprint.closed_chain`): the capture lists the curves of a loop in any order and direction."""
+    curves = list(loop.get("curves") or [])
+    if curves and all(c.get("kind") in ("line", "arc") for c in curves):
+        curves = closed_chain(curves)
+        if curves is None:
+            return None
     total = 0.0
-    for curve in loop.get("curves") or []:
+    for curve in curves:
         kind = curve.get("kind")
         if kind == "circle":
             total += math.pi * curve["radius"] ** 2
@@ -51,9 +59,13 @@ def _arc_term(curve):
     return 0.5 * (r * r * sweep + cx * (y1 - y0) - cy * (x1 - x0))
 
 
-def _profile_area(profile):
+def profile_area(profile):
+    """The area of a profile record (outer loops less holes, in sketch units squared), or None when it has no loops
+    or a curve this does not model."""
+    if not profile.get("loops"):
+        return None
     area = 0.0
-    for loop in profile.get("loops") or []:
+    for loop in profile["loops"]:
         found = _loop_area(loop)
         if found is None:
             return None
@@ -86,7 +98,7 @@ def step_volume(item):
         return None
     area = 0.0
     for profile in data["profiles"]:
-        found = _profile_area(profile)
+        found = profile_area(profile)
         if found is None:
             return None
         area += found

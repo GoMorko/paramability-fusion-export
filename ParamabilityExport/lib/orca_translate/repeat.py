@@ -217,8 +217,7 @@ def write(ctx, item, groups, layouts, copies, what):
             made = _tool(ctx, kind, payload, tag)
             if isinstance(made, Skip):
                 ctx.rollback(mark)
-                return Skip("This %s cannot be copied: %s" % (what, made.reason[:1].lower() + made.reason[1:]),
-                            made.cause)
+                return Skip("This %s cannot be copied. %s" % (what, made.reason), made.cause)
             tool, holes = made
             placed += [h for h in holes if all(h is not p for p in placed)]
             seed = tool.solid.copy()
@@ -244,9 +243,9 @@ def _separate_copies(ctx, item, what):
     data = data_of(item)
     sources_ = [b for b in data.get("source_bodies") or [] if isinstance(b, dict)]
     if sources_ and not any(same_body(b, ctx.target) for b in sources_):
-        return Skip("This body is a copy made by a %s of another body, which is not copied yet." % what)
+        return Skip("This body is a copy made by a %s of another body, which is not copied." % what)
     if len(ctx.scopes) > 1:
-        return Skip("A %s of bodies inside a tool body is not copied yet." % what)
+        return Skip("A %s of bodies inside a tool body is not copied." % what)
     return Pass("Its copies are separate bodies; this part does not change.")
 
 

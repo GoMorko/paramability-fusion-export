@@ -232,6 +232,14 @@ class Context:
         return self.scope.solid
 
     @property
+    def body_words(self):
+        """How a reason names the body the handlers work on: "the part", or "the tool body <name>" while a tool body
+        is built (`tools.build`), so a reason of a step of a tool names the tool."""
+        if len(self.scopes) == 1 or not self.scope.label:
+            return "the part"
+        return "the tool body %s" % self.scope.label
+
+    @property
     def has_body(self):
         return self.scope.has_body
 

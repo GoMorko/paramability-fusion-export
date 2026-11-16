@@ -137,8 +137,8 @@ def build(ctx, record, anchor):
                              exported)
     if found.unseen is not None:
         item, why = found.unseen
-        return Skip("The tool body %s cannot be copied: %s (%s)." % (name, label(item), _lower(why.rstrip("."))),
-                    _UNSEEN_CAUSES.get(why))
+        return Skip("The tool body %s cannot be copied, because of the step %s: %s." % (
+            name, label(item), _lower(why.rstrip("."))), _UNSEEN_CAUSES.get(why))
     if found.links:
         return Skip("The tool body %s is a piece of a split body, which is not copied to Orca yet." % name,
                     gap_hints.UNSUPPORTED)
@@ -163,8 +163,8 @@ def build(ctx, record, anchor):
                 elif made and not isinstance(made, Pass):
                     other_components.mark_refs(ctx, brought)
             if why is not None:
-                return Skip("The tool body %s cannot be copied: %s (%s)." % (name, label(item), _lower(why[0])),
-                            why[1])
+                return Skip("The tool body %s cannot be copied, because its step %s is left out: %s." % (
+                    name, label(item), _lower(why[0])), why[1])
             if not isinstance(made, Pass):
                 ctx.written[item["index"]] = list(made)
                 ctx.shapes[item["index"]] = body.solid.pieces[start:]
