@@ -266,7 +266,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     shape, so Paramability must not offer that value. In Paramability, set `Width` to the smallest value: the
     triangle is trimmed to the lid and is not left floating.
 
-27. OR1, a tool made by an intersect, for Export for Orca. Model a 60 x 40 x 10 mm plate (Body1) with its corner at
+27. OC1, a tool made by an intersect, for Export for Orca. Model a 60 x 40 x 10 mm plate (Body1) with its corner at
     the origin. Make three bodies that overlap near the middle of the plate, each 10 mm high from the plate's base: a
     20 x 20 mm box (Body2) from x = 20, y = 10, a 20 mm cylinder (Body3) centred at x = 30, y = 20, and a 10 x 20 mm
     box (Body4) from x = 25, y = 10. Combine Body2 with Body3 and Body4 as tools, Intersect, without "Keep Tools".
@@ -276,7 +276,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     cuts the shape that Fusion cuts (compare it with the Fusion part from above), and the result lists no step left
     out. If `body_states` is missing, the Cut is left out with the reason that the intersect rule is not known.
 
-28. OR2, one chamfer step with two sizes, for Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
+28. OC2, one chamfer step with two sizes, for Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
     origin. In one Chamfer step, pick the four top edges as one set with 1 mm and the four bottom edges as a second set
     with 2 mm (Fusion shows two edge sets, each with its own distance).
     Export: Export for Orca with the plate. The result lists the step as copied as 2 Orca features: a chamfer of the top
@@ -296,7 +296,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     from a face or plane, which is not copied."; note which way Fusion moved its start (along the sketch normal
     or along the face's normal), so a later copy can follow it.
 
-30. OR3, the left out steps under the body picker of Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
+30. OC3, the left out steps under the body picker of Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
     origin, then add a Thicken step on one of its faces (a type that the copy does not make), and a Coil step.
     Export: open Export for Orca and pick the plate. Under the body picker the dialog lists "Likely left out of the
     copy:" with one line for each of the two steps: "name: reason", and "Tip: ..." for the Thicken step (build the
@@ -320,7 +320,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `end_normal` is parallel to X when Fusion lists one (an end cap at -18.5 mm, `end_area` about the slot area
     inside the wall), else a rib wall with a normal across X and a small area. Either way the cut is copied in both
     outputs; write down which face Fusion listed first and whether `endFaces` held a cap at all.
-32. OR4, a rectangle centred by its diagonals, for Export for Orca. Add user parameters `Width` 40 mm and `Depth`
+33. OC4, a rectangle centred by its diagonals, for Export for Orca. Add user parameters `Width` 40 mm and `Depth`
     30 mm. On the XY plane draw a 2 point rectangle, two construction lines from corner to opposite corner, and a
     sketch point; make the point coincident with both construction lines (no midpoint constraint) and with the
     origin. Give the sides the dimensions `Width` and `Depth`, and extrude it 10 mm.

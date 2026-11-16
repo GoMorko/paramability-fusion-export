@@ -58,7 +58,7 @@ package may import only packages above it in this list (not every one of them). 
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).
 - `fusion_reader`: reads the design with `adsk` into a capture.
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
-- `commands/`: the two buttons, their flows and the panel; also uses `adsk`.
+- `commands/`: the three buttons, their flows and the panel; also uses `adsk`.
 
 ## Output difference check
 

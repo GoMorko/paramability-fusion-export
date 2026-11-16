@@ -1464,7 +1464,7 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       move it by (`RodX`, 10, 0) (type `RodX` in the move distance). Activate the root again and make a Combine: target
       `Body1`, tool `Body2` of `Rod`, operation Cut, keep tools off.
       Export `Body1` for Orca with all three parameters ticked.
-      Expect: no step left out; the two extrudes of `Rod` show "Copied into the tool body Body2 of Rod". The Design
+      Expect: no step left out; the extrude of `Rod` (one step with both circles) shows "Copied into the tool body Body2 of Rod". The Design
       tab holds "Extrude1 of Rod" and a Transform "Body2 of Rod place" before the Boolean, and the two holes sit at
       (30, 10) and (20, 10) of the box, as in Fusion. `BoxH` follows its variable; `ToolLen` follows partly and
       `RodX` stays a number, both with the reason "Combine1 puts its tool at the place of Rod that may move with it,

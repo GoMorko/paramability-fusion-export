@@ -63,13 +63,16 @@ The guide has five parts:
 
 ### 1.1 The big picture
 
-The add-in has two buttons in the Utilities tab, in the panel "Paramability":
+The add-in has three buttons in the Utilities tab, in the panel "Paramability":
 
 - "Export for Paramability" saves one body (or several bodies) with its modeling steps. Paramability opens it as an
   editable part with sizes. Most of this guide is about this button.
 - "Export size choices" saves fixed shapes at several sets of parameter values. Paramability shows them as a
   dropdown. This button is simple: it sets the values, lets Fusion rebuild, writes one STEP file per row and puts the
   values back (`commands/ExportSizeChoices/`, `lib/design_edit/runner.py`).
+- "Export for Orca (experimental)" saves one body as an OrcaSlicer 2.5 project with Design tab features. It uses the
+  same reader, the same shared design layer and the same `PutBack`, but its own translator (`lib/orca_translate/`).
+  `docs/orca-output.md` tells how it works.
 
 "Export for Paramability" does these stages, in this order:
 
@@ -126,7 +129,7 @@ Two ideas are important from the start:
 ### 1.2 The click and the dialog
 
 The file `ParamabilityExport/ParamabilityExport.py` is the add-in entry. Fusion calls `run(context)` when the add-in
-starts. `run` calls `commands.start()`, which adds the two buttons (`commands/panel.py`). When the add-in stops,
+starts. `run` calls `commands.start()`, which adds the three buttons (`commands/panel.py`). When the add-in stops,
 `stop(context)` removes the buttons and drops the add-in modules from the Python cache (`_forget_modules`). So "Stop"
 and then "Run" in the Scripts and Add-Ins dialog loads the files on disk again. Use this after you change the code.
 
@@ -1623,7 +1626,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
 | `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
-| `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The two buttons, their flows and the panel. |
+| `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The three buttons, their flows and the panel. |
 
 Only `fusion_reader`, `fusion_ui` and `commands` use `adsk`. Everything else is pure Python and runs without Fusion.
 

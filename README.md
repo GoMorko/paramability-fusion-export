@@ -7,12 +7,14 @@ Autodesk and Fusion are trademarks of Autodesk, Inc. Paramability is not affilia
 
 ## What it does
 
-The add-in adds two buttons to Fusion:
+The add-in adds three buttons to Fusion:
 
 - **Export for Paramability** saves one or more bodies with their modeling steps and your user parameters. In
   Paramability, you change a parameter and the part rebuilds.
 - **Export size choices** saves fixed sizes of one body, for example S, M and L. In Paramability, you select a size
   from a list.
+- **Export for Orca (experimental)** saves one body as an OrcaSlicer 2.5 project. The Design tab of OrcaSlicer
+  rebuilds the part, and your user parameters become its variables (`docs/orca-output.md`).
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.
@@ -38,7 +40,7 @@ Paramability then shows the original shape and a list of the missing steps.
 4. Select the `ParamabilityExport` folder. Select the folder itself, not a file in it.
 5. Find the add-in in the list and click **Run**. To load it each time Fusion starts, turn on **Run on Startup**.
 
-The two buttons are in the **Utilities** tab, in the **Paramability** panel.
+The three buttons are in the **Utilities** tab, in the **Paramability** panel.
 
 ## Use
 
