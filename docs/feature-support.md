@@ -85,8 +85,8 @@ can be.
 | Hole: depth distance or through all | Copied | - | Copied | - | |
 | Hole: To face | Copied | - | Left out | Yes, add-in only | Paramability: the face must give a flat end. |
 | Hole: drill point | Copied | - | Partly | Needs Orca | Orca: the drill point is left flat. |
-| Hole: tapped, cosmetic thread | Copied | - | Copied | - | Cut at the drill size, as Fusion shows it. |
-| Hole: tapped, modeled thread | Copied | - | Partly | Needs Orca | Orca: simple holes only, right hand only. |
+| Hole: tapped, cosmetic thread | Copied | - | Copied | - | Cut at the drill size Fusion measured (the thread's minor diameter). |
+| Hole: tapped, modeled thread | Copied | - | Partly | Needs Orca | Through all holes need an export with this version. Orca: simple and counterbore holes, right hand only; the thread start under a counterbore keeps its number. |
 | Hole: taper tapped | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Thread: modeled | Copied | - | Partly | Needs Orca | Metric and Unified 60 degree threads. Paramability: at most 100 turns of threads and coils, not in a tool body. Orca: right hand only. |
 | Thread: cosmetic | Copied | - | Copied | - | It changes no shape. |

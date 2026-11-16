@@ -103,7 +103,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Hole: simple, counterbore, countersink; a depth or through all; one Orca hole per point | Hole | diameter, depth, counterbore and countersink sizes |
 | Hole on sketch points, with the sketch's frame (`sketch_frame`) and graph in the capture | Hole on the sketch plane, at `hole_x`, `hole_y` | `hole_x`, `hole_y` |
 | Tapped hole with a cosmetic thread | Hole at the drill size | as Hole |
-| Tapped hole with a modeled thread (metric or Unified, right hand), simple only | Hole at the minor diameter, then an inside Thread per point, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth |
+| Tapped hole with a modeled thread (metric or Unified, right hand), simple or counterbore | Hole at the minor diameter, then an inside Thread per point from the counterbore floor or the top, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth (the thread start under a counterbore keeps its number) |
 | Thread, modeled, on one cylinder (a rod or a hole wall) | Thread, half a pitch inside each end, and a lead-in at each open end (a Hole in a hole, a ring cut on a rod) | `thread_height` (a set length) |
 | Thread, cosmetic | nothing (it changes no shape) | |
 | Fillet or chamfer (an even chamfer) whose edges are exactly one of Orca's edge groups of the copied part, or, with sets of different sizes, a top group and a bottom group | Fillet or Chamfer of that face group: all, top, bottom or side edges; one for each size | `dressup_size` |
@@ -129,7 +129,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
-the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
+the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
 part may have a new token, so the copy cannot tell whether the step changes it). A left out step changes the shape Orca builds; later steps are still
@@ -434,12 +434,17 @@ not judged to meet material where Orca removes nothing.
 - A tapped hole: Fusion keeps its thread numbers in `HoleFeature.tappedHoleInfo` and in the hidden thread feature
   `HoleFeature.thread`. A cosmetic thread is drilled at its measured drill size; a modeled one at the thread's minor
   diameter, with an inside thread on the hole's plane after each hole and its lead-ins at the hole's plane and, for a
-  through hole, at the far face (that Hole's plane faces back into the part; both follow the hole centre). A tapped
-  hole with a counterbore or countersink and a modeled thread is left out (cause `tappedRecess`): the capture does not
-  say whether Fusion's thread starts at the sketch plane or at the bottom of the counterbore or countersink (hand
-  test OR12). The faces of a modeled thread must start at the hole's mouth and, for a thread over part of the hole,
-  end at its length (`made_span`, `design_model/steps/thread.py` `hole_depth`); a modeled thread that Fusion did
-  not build (the bore is not at the minor diameter) is left out too.
+  through hole, at the far face (that Hole's plane faces back into the part; both follow the hole centre). The
+  length of the thread of a hole through all runs to where the bore comes out of the part, measured from the side
+  cylinders of the hole and never from Fusion's end faces (`hole.through_ends`; Fusion lists the faces of a modeled
+  thread among them). Under a counterbore the thread starts at the counterbore floor, where Fusion starts it (measured
+  live: `made_span` starts at the counterbore depth); its ends are judged with the counterbore cut, so the start gets
+  a lead-in. The thread plane keeps its number, so a size that changes the counterbore depth is followed in part. A
+  counterbore hole whose thread faces were not measured, and a tapped hole with a countersink and a modeled thread,
+  are left out (cause `tappedRecess`): just below the mouth of a countersink the cone is only a little wider than the
+  bore, so the copy cannot judge the start of the thread. The faces of a modeled thread must start at the hole's
+  mouth and, for a thread over part of the hole, end at its length (`made_span`, `design_model/steps/thread.py`
+  `hole_depth`); a modeled thread that Fusion did not build (the bore is not at the minor diameter) is left out too.
 - The records of what changed a body's edges (rounds, chamfers, threads) live on the body (`context.Body.finishes`).
 
 ### Patterns, mirrors, Combine, split, move and revolve

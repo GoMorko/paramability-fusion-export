@@ -2,7 +2,8 @@
 
 A HoleFeature stores a kind (simple, counterbore or countersink), a tap (plain, tapped or tapered tapped), a depth
 (a distance, through all, or up to a face or body), a diameter, positions and a direction. The reader also measures
-the cylinders and the end faces of the made hole (`side_cylinders`, `end_points`, `end_face_types`). This module
+the cylinders of the made hole with where each starts and ends (`side_cylinders`), and its flat or pointed end faces
+(`end_points`, `end_face_types`). This module
 reads those without a destination. Where the stored and the measured values disagree, the measured ones win and the
 reader says so as a fact (`Direction.flipped`, `size_differs`).
 
@@ -27,6 +28,10 @@ BEHIND_TOL = 1e-3
 DIAMETER_TOL = 1e-3
 # Measured depths of the holes of one step agree within this, mm.
 DEPTH_TOL = 1e-4
+# A measured cylinder is on a hole's axis line when its axis is along the hole within this (1 less the cosine) and
+# its origin within this distance of the line, mm.
+AXIS_TOL = 1e-6
+LINE_TOL = 1e-3
 
 
 class Kind(NamedTuple):
@@ -117,12 +122,60 @@ def direction_of(data):
 
 
 def drill_diameter(data):
-    """The measured diameter of the drilled bore of a tapped hole, or None. It is the widest measured cylinder that is
-    not wider than the stored size: a counterbore wall is wider, and the thread's nominal size is the stored one."""
-    limit = float(data["diameter"]) / 2.0 + DIAMETER_TOL
+    """The measured diameter of the drilled bore of a tapped hole, or None: the narrowest measured cylinder (a
+    counterbore wall is wider). Fusion drills a tapped hole at the thread's minor diameter, which can be wider than
+    the stored size, so the stored size does not limit it."""
     radii = [float(c["radius"]) for c in data.get("side_cylinders") or []
-             if isinstance(c, dict) and isinstance(c.get("radius"), (int, float)) and float(c["radius"]) <= limit]
-    return 2.0 * max(radii) if radii else None
+             if isinstance(c, dict) and _number(c.get("radius")) and c["radius"] > 0]
+    return 2.0 * min(radii) if radii else None
+
+
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _exit_depth(cylinders, position, unit):
+    """How far along `unit` from `position` the farthest end of the measured cylinders on the hole's axis line lies,
+    or None when none of them has a measured span."""
+    far = None
+    for c in cylinders:
+        origin, axis, span = c.get("origin"), c.get("axis"), c.get("span")
+        if not (isinstance(origin, (list, tuple)) and isinstance(axis, (list, tuple)) and isinstance(span, (list, tuple))
+                and len(span) == 2 and all(_number(s) for s in span) and vec.length(axis) > 0):
+            continue
+        axis = vec.unit(list(axis))
+        off = vec.sub(list(origin), list(position))
+        if abs(abs(vec.dot(axis, unit)) - 1.0) > AXIS_TOL \
+                or vec.length(vec.sub(off, vec.scale(unit, vec.dot(off, unit)))) > LINE_TOL:
+            continue
+        for s in span:
+            depth = vec.dot(vec.add(off, vec.scale(axis, float(s))), unit)
+            far = depth if far is None else max(far, depth)
+    return far
+
+
+def through_ends(data, unit):
+    """The points where the bores of a tapped hole through all leave the part, one per position, or a Problem.
+
+    Each is the farthest end, along the hole's direction `unit`, of the measured side cylinders on that hole's axis
+    line (`side_cylinders` with their `span`). Fusion's end faces do not say it: a hole through all has no bottom, and
+    Fusion lists the faces of a modeled thread among them. The faces of the modeled thread (`made_span`, depths below
+    the first position) must be measured and must reach as deep as the deepest bore when the thread runs the whole
+    hole, within a pitch and half a millimetre."""
+    positions = data["positions"]
+    cylinders = [c for c in data.get("side_cylinders") or [] if isinstance(c, dict)]
+    depths = [_exit_depth(cylinders, p, unit) for p in positions]
+    if any(d is None or d <= DEPTH_TOL for d in depths):
+        return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD, gap_hints.THREAD_HOLE)
+    info = data.get("thread") or {}
+    made = info.get("made_span")
+    if data.get("thread_modeled"):
+        if not (isinstance(made, (list, tuple)) and len(made) == 2):
+            return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD, gap_hints.THREAD_HOLE)
+        deepest = max(vec.dot(vec.sub(list(p), list(positions[0])), unit) + d for p, d in zip(positions, depths))
+        if info.get("full_length") is True and abs(made[1] - deepest) > float(info.get("pitch") or 0.0) + 0.5:
+            return Problem("threadSpan", words.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE)
+    return [vec.add(list(p), vec.scale(unit, d)) for p, d in zip(positions, depths)]
 
 
 def size_differs(data, count, diameter):
@@ -176,6 +229,9 @@ def tapped_bore(data, what, pitches=None):
     if not modeled:
         if drill is None:
             return Problem("drillUnread", words.HOLE_DRILL_UNREAD)
+        minor = (data.get("thread") or {}).get("minor_diameter")
+        if _number(minor) and abs(drill - minor) > thread.DIAMETER_TOL:
+            return Problem("holeSize", words.THREAD_HOLE_MISMATCH % what)
         return drill, None
     spec = thread.hole_spec(data, what, drill, pitches)
     if isinstance(spec, Problem):

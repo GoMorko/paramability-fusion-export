@@ -795,7 +795,7 @@ against `samples`.
   "direction": [0, 0, -1],
   "positions": [[10, 10, 10]],
   "extent": { "kind": "distance", "depth": 8.0 },
-  "side_cylinders": [{ "origin": [..], "axis": [..], "radius": 2.5 }],
+  "side_cylinders": [{ "origin": [..], "axis": [..], "radius": 2.5, "span": [0.0, 8.0] }],
   "end_points": [[10, 10, 2.0]],
   "end_face_types": ["cone"],
   "participants": [ ... ]
@@ -836,10 +836,17 @@ against `samples`.
   `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an
   entity is copied as a blind hole of the depth measured from `end_points` (flat ends only, all holes of the step at
   the same depth); the depth follows the face with `translator/faces/follow.py`.
-- `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`).
-  `end_points`: `pointOnFace` of each `endFaces` item. `end_face_types`: the geometry type of each of those faces
-  (`"plane"` or `"cone"`; `null` when the type is another one or cannot be read), one per `end_points` entry; a flat or
-  tipped bottom is decided from it, not from `tip_angle_deg`. Measured checks of direction, count and diameter.
+- `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`, and `span`:
+  `[low, high]` in mm of the face's vertices along `axis` from `origin`, or null). The far end of the cylinders on a
+  hole's axis line is where a hole through all comes out of the part (`design_model/steps/hole.py`, `through_ends`).
+  The narrowest one is the drill size of a tapped hole (Fusion drills it at the thread's minor diameter, which can be
+  wider than `diameter`). A capture without `span` gives no exit, so the thread of a tapped hole through all is left
+  out.
+  `end_points`: `pointOnFace` of each `endFaces` item that is a `Plane` whose `normal` lies along `direction`, or a
+  `Cone` whose `axis` does. Fusion also lists the helical faces of a modeled thread as end faces; they are left out.
+  A hole through all has no end face. `end_face_types`: `"plane"` or `"cone"` for each of those faces, one per
+  `end_points` entry; a flat or tipped bottom is decided from it, not from `tip_angle_deg`. Captures of earlier
+  versions kept every end face, with `null` for another type. Measured checks of direction, count and diameter.
 
 **FilletFeature** (`edgeSets`, `isRollingBallCorner`):
 

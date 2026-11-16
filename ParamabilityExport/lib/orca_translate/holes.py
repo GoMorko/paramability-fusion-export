@@ -4,7 +4,8 @@ reason the step is left out of the copy.
 Simple, counterbore and countersink holes; a depth or through all; one Orca hole per position, on a plane whose normal
 is the drilling direction (Orca drills along the normal): the sketch plane with the centre's sketch coordinates when
 they are known (`hole_place`), else a plane at the centre. A tapped hole is drilled at the drill size of a cosmetic
-thread, or at the minor diameter of a modeled one with an Orca thread after it (`threads`). A hole that does not meet
+thread, or at the minor diameter of a modeled one with an Orca thread after it (`threads`); under a counterbore the
+thread starts at its floor, and a tapped hole with a countersink is left out. A hole that does not meet
 the part the copy built (`solid.Solid`) is left out: Orca stops the whole rebuild on a hole that removes nothing. A
 through all hole with no measured bottom goes to the side where it meets that part when Fusion's stored direction
 meets none (`steps.toward_material`).
@@ -75,13 +76,14 @@ def hole(ctx, step):
         if "cone" in (data.get("end_face_types") or []):
             ctx.notes.append("%s: the drill point at the bottom is left flat in Orca." % label(item))
     box = (item.get("target_before") or {}).get("box") or data.get("target_box_before")
-    style, extra = 0, []
+    style, extra, bore_depth = 0, [], None
     if kind == hole_facts.COUNTERBORE:
         style = 1
         cb = recess
+        bore_depth = ctx.quantity(item, "counterbore.depth", float(cb["depth"]))
         extra = [("hole_cbore_diameter", "counterbore diameter",
                   ctx.quantity(item, "counterbore.diameter", float(cb["diameter"]))),
-                 ("hole_cbore_depth", "counterbore depth", ctx.quantity(item, "counterbore.depth", float(cb["depth"])))]
+                 ("hole_cbore_depth", "counterbore depth", bore_depth)]
     elif kind == hole_facts.COUNTERSINK:
         style = 2
         cs = recess
@@ -89,19 +91,23 @@ def hole(ctx, step):
                   ctx.quantity(item, "countersink.diameter", float(cs["diameter"]))),
                  ("hole_csink_angle", "countersink angle",
                   ctx.quantity(item, "countersink.angle_deg", float(cs["angle_deg"]), "angle"))]
-    if spec is not None and style:
-        return Skip("This tapped hole has a %s, and the copy cannot tell where Fusion starts its thread then, so it is "
-                    "left out." % ("counterbore" if style == 1 else "countersink"), causes.TAPPED_RECESS)
+    if spec is not None and style == 2:
+        return Skip("This tapped hole has a countersink, and the Orca copy cannot judge where its thread starts in the "
+                    "cone, so it is left out.", causes.TAPPED_RECESS)
     radius = diameter.n / 2.0
     if depth is None and not (ends and len(ends) == len(positions)):
         if toward_material(ctx, item, lambda low, high: [_bore(p, normal, radius, low, high) for p in positions],
                             1) < 0:
             normal = vec.scale(normal, -1.0)
-    lengths = None
+    start, lengths = 0.0, None
     if spec is not None:
-        lengths = threads.hole_lengths(item, data, spec, positions, normal, depth, ctx)
-        if isinstance(lengths, Skip):
-            return lengths
+        found = threads.hole_lengths(item, data, spec, positions, normal, depth, ctx)
+        if isinstance(found, Skip):
+            return found
+        start, lengths = found
+        if start and bore_depth is not None:
+            ctx.doubt(bore_depth.reads, "%s: its thread starts at the bottom of the counterbore as drawn"
+                      % label(item))
     drilled, measured = [], []
     for n, position in enumerate(positions):
         if depth is not None:
@@ -129,8 +135,12 @@ def hole(ctx, step):
     if spec is not None and depth is None:
         threads.mark_through_length(ctx, item, data)
     ends = {}
-    for n, _, _ in drilled if spec is not None else ():
-        ends[n] = threads.hole_ends(ctx, found[n], spec, lengths[n], label(item))
+    for n, _, tools in drilled if spec is not None else ():
+        around = None
+        if len(tools) > 1:
+            around = ctx.solid.copy()
+            around.add(CUT, tools[1])
+        ends[n] = threads.hole_ends(ctx, found[n], spec, start, lengths[n], label(item), around)
         if isinstance(ends[n], Skip):
             return ends[n]
 
@@ -159,7 +169,7 @@ def hole(ctx, step):
         ctx.add(feature)
         out.append(feature)
         if spec is not None:
-            out += threads.hole_thread(ctx, name, where, spec, lengths[n], ends[n])
+            out += threads.hole_thread(ctx, name, where, spec, start, lengths[n], ends[n])
     if spec is not None:
         ctx.notes.append(threads.note(label(item), True, any(e.open for e in ends.values())))
     elif tapped:

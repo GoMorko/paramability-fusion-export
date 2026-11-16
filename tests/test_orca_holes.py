@@ -174,8 +174,9 @@ def tapped(modeled, **more):
     if modeled:
         data["thread"] = {"thread_type": "ISO Metric profile", "designation": "M6x1", "internal": True,
                           "right_hand": True, "pitch": 1.0, "major_diameter": 6.0, "minor_diameter": 4.917,
-                          "angle_deg": None, "full_length": True, "depth": None}
-        data["side_cylinders"] = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 4.917 / 2}]
+                          "angle_deg": None, "full_length": True, "depth": None, "made_span": [0.0, 10.0]}
+        data["side_cylinders"] = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 4.917 / 2,
+                                   "span": [0.0, 10.0]}]
     data.update(more)
     return capture
 
@@ -225,10 +226,11 @@ class TappedTest(unittest.TestCase):
         capture = box_hole()
         data = capture["items"][-1]["data"]
         data.update(tap_type="tapped", thread_modeled=True,
-                    side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2}],
+                    side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2,
+                                     "span": [0.0, 32.0]}],
                     thread={"thread_type": "ISO Metric profile", "designation": "M12x1.75", "internal": True,
                             "right_hand": True, "pitch": 1.75, "major_diameter": 12.0, "minor_diameter": 10.106,
-                            "angle_deg": None, "full_length": True, "depth": None})
+                            "angle_deg": None, "full_length": True, "depth": None, "made_span": [0.0, 32.0]})
         made = holes_and_threads(run(capture, BOX_TICKED))
         self.assertEqual(len(made), 4)
         place = Placement(capture)
@@ -244,8 +246,10 @@ class TappedTest(unittest.TestCase):
         cases = {"tapered": (tapped(True, tap_type="taperTapped"), gap_hints.THREAD_PROFILE),
                  "unread thread": (load_capture("hole_tapped_modeled"), gap_hints.REFUSED),
                  "unread kind": (tapped(True, thread_modeled=None), gap_hints.REFUSED),
-                 "counterbore": (tapped(True, hole_type="counterbore", counterbore={"diameter": 9.0, "depth": 3.0}),
-                                 causes.TAPPED_RECESS),
+                 "counterbore, thread faces not measured": (
+                     tapped(True, hole_type="counterbore", counterbore={"diameter": 9.0, "depth": 3.0},
+                            thread=dict(tapped(True)["items"][3]["data"]["thread"], made_span=None)),
+                     causes.TAPPED_RECESS),
                  "countersink": (tapped(True, hole_type="countersink",
                                         countersink={"diameter": 9.0, "angle_deg": 90.0}), causes.TAPPED_RECESS)}
         for name, (capture, cause) in cases.items():
@@ -253,6 +257,28 @@ class TappedTest(unittest.TestCase):
                 result = translate(capture)
                 self.assertEqual(holes(result), [])
                 self.assertEqual([g["cause"] for g in result.left_out], [cause])
+
+    def test_a_modeled_thread_under_a_counterbore_starts_at_its_floor(self):
+        # A counterbore 3 mm deep through the 10 mm part: Fusion's thread runs from the floor to the bottom face.
+        capture = tapped(True, hole_type="counterbore", counterbore={"diameter": 9.0, "depth": 3.0})
+        data = capture["items"][3]["data"]
+        data["thread"]["made_span"] = [3.0, 10.0]
+        data["params"] = {"counterbore.depth": {"name": "d9", "expression": "recess", "value": 3.0}}
+        capture["parameters"] = {"user": [{"name": "recess", "expression": "3 mm", "value": 0.3, "unit": "mm",
+                                           "kind": "length", "display_value": 3}],
+                                 "model": [{"name": "d9", "expression": "recess", "value": 0.3, "unit": "mm"}]}
+        result = run(capture, ["recess"])
+        hole, thread, entry, exit_ = holes_and_threads(result)
+        place = Placement(capture)
+        self.assertEqual(hole.hole_style, 1)
+        self.assertAlmostEqual(thread.thread_height, 7.0 - 1.0)
+        for a, b in zip(thread.plane.origin, place.point([10, 10, 6.5])):
+            self.assertAlmostEqual(a, b)
+        for lead, z in ((entry, 7), (exit_, 0)):
+            for a, b in zip(plane_point(lead.plane, (lead.hole_x, lead.hole_y)), place.point([10, 10, z])):
+                self.assertAlmostEqual(a, b)
+        # The thread start keeps its number, so the counterbore depth is followed only in part.
+        self.assertEqual(outcome(result, "recess")["outcome"], PARTLY)
 
     def test_a_cosmetic_thread_in_a_counterbore_is_drilled(self):
         result = translate(load_capture("hole_tapped_counterbore"))

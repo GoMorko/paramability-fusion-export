@@ -58,10 +58,10 @@ def tapped(capture):
     """`capture` with its hole tapped M12 through all, the thread modeled over the whole hole."""
     capture["items"][-1]["data"].update(
         tap_type="tapped", thread_modeled=True,
-        side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2}],
+        side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2, "span": [0.0, 32.0]}],
         thread={"thread_type": "ISO Metric profile", "designation": "M12x1.75", "internal": True,
                 "right_hand": True, "pitch": 1.75, "major_diameter": 12.0, "minor_diameter": 10.106,
-                "angle_deg": None, "full_length": True, "depth": None})
+                "angle_deg": None, "full_length": True, "depth": None, "made_span": [0.0, 32.0]})
     return capture
 
 

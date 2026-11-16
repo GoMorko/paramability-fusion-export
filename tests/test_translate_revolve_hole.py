@@ -2,6 +2,7 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
+from lib.capture_model import gap_hints
 from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, close, load_capture, steps_of, translate_fixture, verdict_of
 
@@ -264,6 +265,7 @@ class HoleTest(unittest.TestCase):
     def test_unclear_end_faces_refuse(self):
         result = variant("hole_blind_tip", lambda i: i["data"].update(end_face_types=["cone", "plane"]))
         self.assertIsNotNone(left_out(result))
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.HOLE_END]])
 
     def test_a_hole_that_cannot_be_copied_is_left_out(self):
         cases = {

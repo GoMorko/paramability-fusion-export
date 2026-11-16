@@ -29,6 +29,8 @@ LOFT_KIND = "loftKind"
 THREAD_PROFILE = "threadProfile"
 THREAD_LIMITS = "threadLimits"
 THREAD_TOOL = "threadTool"
+THREAD_HOLE = "threadHole"
+HOLE_END = "holeEnd"
 COIL = "coil"
 COIL_SPIRAL = "coilSpiral"
 COIL_TAPER = "coilTaper"
@@ -75,6 +77,8 @@ HINTS = {
     THREAD_PROFILE: "Use a metric or Unified thread (60 degrees) that is not tapered, or a cosmetic thread.",
     THREAD_LIMITS: "Use a pitch of 0.2 to 10 mm, at most 100 turns in all and 8 threads, or a cosmetic thread.",
     THREAD_TOOL: "Make the thread on the finished part, not on a body that is combined later, or use a cosmetic thread.",
+    THREAD_HOLE: "Make the thread of the hole cosmetic: the hole then copies at its drill size, without the thread.",
+    HOLE_END: "Let the hole end inside the part with a flat or pointed end, or make it go through all.",
     COIL: "Your AI assistant can add a coil to the copy.",
     COIL_SPIRAL: "Use a coil with a height, or let your AI assistant add the spiral to the copy.",
     COIL_TAPER: "Use a taper angle of 0, or let your AI assistant add the taper to the copy.",

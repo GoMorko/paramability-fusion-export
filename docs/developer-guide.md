@@ -1152,6 +1152,8 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `threadProfile` | a thread that is not a 60 degree metric or Unified form, or is tapered (3.12) | Use a metric or Unified thread (60 degrees) that is not tapered, or a cosmetic thread. |
 | `threadLimits` | a pitch outside 0.2 to 10 mm, more than 8 threads, or more than 100 turns in all | Use a pitch of 0.2 to 10 mm, at most 100 turns in all and 8 threads, or a cosmetic thread. |
 | `threadTool` | a thread that would stand in a tool body with other steps | Make the thread on the finished part, not on a body that is combined later, or use a cosmetic thread. |
+| `threadHole` | the modeled thread of a tapped hole whose depth, start or end cannot be measured or does not agree with the faces of the thread (section "A tapped hole") | Make the thread of the hole cosmetic: the hole then copies at its drill size, without the thread. |
+| `holeEnd` | a hole whose end faces are flat and pointed at the same time, so the shape of its end cannot be told | Let the hole end inside the part with a flat or pointed end, or make it go through all. |
 | `coil` | any other coil that does not copy (an older export, sizes that could not be read, a shape that is not a plain helix) | Your AI assistant can add a coil to the copy. |
 | `coilSpiral` | a spiral (3.13) | Use a coil with a height, or let your AI assistant add the spiral to the copy. |
 | `coilTaper` | a coil with a taper angle | Use a taper angle of 0, or let your AI assistant add the taper to the copy. |
@@ -2190,17 +2192,19 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     a face of another component, faces that are not one cylinder, and faces that do not touch. `is_full` and
     `start_end` say if the thread runs the whole face and at which end it starts. `read_feature` does all of these and
     the checks of the side and the size in order, and gives a `Feature`. For a tapped hole, `hole_spec` gives the
-    `Spec` and checks it against the measured bore, `hole_depth` gives how deep the thread runs (`Depth`), and
-    `measured_ends` gives the measured end of each position.
+    `Spec` and checks it against the measured bore, and `hole_depth` gives how deep the thread runs (`Depth`).
   - `steps/hole.py`: the HoleFeature. `placed` checks the position, the direction and the diameter. `kind_of` gives the
     `Kind` (simple, counterbore or countersink, with its record), `tap_of` says if the tap is plain, tapped or
     tapered, and `extent_of` gives the depth as a distance, through all or up to a face. `direction_of` gives the unit
     direction of the hole into the material. The stored direction is turned round when a measured end lies behind the
     position it belongs to, and the fact `flipped` says so. `drill_diameter` gives the measured drill size of a tapped
-    hole: the widest measured cylinder that is not wider than the stored size. `size_differs` says that the measured
-    cylinders disagree with the stored size. `end_shape` gives the measured end of the hole (cone, plane or mixed).
-    `reach_depth` gives the measured depth of a hole that ends at a face. `tapped_bore` gives the diameter at which
-    the bore is cut and the thread `Spec` (None for a cosmetic thread).
+    hole: the narrowest measured cylinder. The stored size does not limit it, because Fusion drills a tapped hole at
+    the minor diameter of the thread, and this diameter can be larger than the stored size. `size_differs` says that
+    the measured cylinders disagree with the stored size. `end_shape` gives the measured end of the hole (cone, plane
+    or mixed). `reach_depth` gives the measured depth of a hole that ends at a face. `through_ends` gives the point
+    where the bore of each hole through all comes out of the part (see "A tapped hole"). `tapped_bore` gives the
+    diameter at which the bore is cut and the thread `Spec` (None for a cosmetic thread). For a cosmetic thread, the
+    measured drill size must agree with the minor diameter of the thread when Fusion gives it.
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
 - `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
@@ -3440,7 +3444,8 @@ A Hole step with a tapped thread that is modelled is written as two things: a ho
 and an internal `thread` step for each hole position (`design_model/steps/thread.py` `hole_spec`, and `hole/thread.py` `hole_threads`). Before, such a hole was
 a gap. This path is unproven until hand checks TD2 and TD3 pass (see the end of this part). The depth of each thread:
 
-- a through hole: measured from the entry to the end faces (`end_points`), less the start of the thread (see below);
+- a through hole: measured from the entry to the point where the bore comes out of the part, less the start of the
+  thread (see below and "Where a through hole comes out");
 - a blind hole: the depth of the hole, less the start of the thread;
 - a thread over part of the length: `thread.depth` (a parameter that can follow a size);
 - when it cannot be told whether the thread is full length, the hole is left out.
@@ -3469,14 +3474,47 @@ thread. It copies the thread only when the measured faces agree with the mouth:
 direction of the hole by the start. `hole/step.py` (`_thread_start`) gives the start as a value that follows the
 sizes: the counterbore depth, or the cone depth from the countersink diameter and the hole diameter. Thus the start
 and the length of the thread follow a size that changes the counterbore depth. The countersink angle is pinned
-already, so the cone depth stays exact. The Orca output still leaves out a tapped hole with a counterbore or a
-countersink (cause `tappedRecess`).
+already, so the cone depth stays exact.
+
+The Orca output copies the thread of a tapped hole with a counterbore. The thread starts at the counterbore floor
+(`threads.hole_lengths` gives the start from `hole_depth`). The measured faces of the thread (`made_span`) must be
+there; without them the hole is left out (cause `tappedRecess`). The Orca thread plane is a fixed number, so the
+start of the thread does not follow a size that changes the counterbore depth. Thus the Orca output marks these sizes
+as followed in part. The ends of the thread are judged with the counterbore already cut from the part, so the start at
+the floor is an open end and gets a lead-in. The Orca output still leaves out a tapped hole with a countersink (cause
+`tappedRecess`): just below the mouth, the cone of the countersink is only a little wider than the bore, so the copy
+cannot tell whether the start of the thread is open or closed.
+
+##### Where a through hole comes out
+
+Fusion gives no end face for a hole through all. For a modeled thread, Fusion puts the helical faces of the thread into
+`HoleFeature.endFaces`. Thus an end face cannot tell where a hole through all comes out. If the copy measured to such a
+face, the thread would stop at a point on the thread. This is a wrong copy.
+
+The reader keeps an end face only when it is a plane whose normal is along the hole, or a cone whose axis is along the
+hole (`_end_face` in `read_hole.py`). The faces of a thread have no such geometry, so the reader leaves them out. For
+each side cylinder, the reader also records the span of its vertices along its axis (`span`).
+
+`through_ends` in `design_model/steps/hole.py` uses the side cylinders, not the end faces. For each position, it finds
+the measured cylinders on the axis line of that hole. The far end of these cylinders along the hole direction is where
+the bore comes out of the part. Then it does these checks:
+
+- Each position must have a cylinder with a measured span. Else the hole is left out (cause `threadHole`).
+- The faces of the modeled thread (`made_span`) must be measured. Else the hole is left out (cause `threadHole`).
+- For a thread over the full length, the faces of the thread must reach the deepest exit, within one pitch and 0.5
+  mm. Else the hole is left out (cause `threadHole`). Thus a hole through two walls with a thread in one wall only
+  gives a gap, not a thread through both walls.
+
+The recipe output and the Orca output both use `through_ends`. The recipe output then makes the exit points follow the
+sizes that move the face where the hole comes out.
 
 The measured bore must also be at the minor diameter of the thread (`hole_spec`). Fusion can keep the "Modeled" flag on
 and still make no thread, so that the bore stays at the full size. Such a hole is left out.
 
 A tapered tapped hole is refused ("Tapered threads are not copied.", cause `threadProfile`). A cosmetic tapped hole is
-still a plain hole at the drill diameter, with a note. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
+still a plain hole at the drill diameter, with a note. The drill diameter is the narrowest measured cylinder of the hole.
+Fusion drills a tapped hole at the minor diameter of the thread, also for a cosmetic thread. For an M6x1 hole, the stored
+size is 5 mm and the bore is 5.035 mm. Thus the stored size does not limit the drill diameter. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
 has no repeat rule, so the pattern refuses with "A step of this pattern cannot be repeated."
 
 Fusion (September 2025 and later) keeps the numbers of a tapped hole in two places (`_hole_thread` in `read_hole.py`):
@@ -3497,7 +3535,8 @@ Fusion does not give reads as null, and the hole then stays a gap with a reason.
 
 A Hole whose extent is "To" a face or a body is written as a blind hole of the measured depth, with a flat end only
 (`hole.step._up_to_depth`). The depth is the distance from the entry to the end point that the reader measured
-(`end_points`). All holes of the step must end at the same depth, and the end faces must be planes. A hole that ends in a
+(`end_points`; the reader keeps only a flat end or a drill point along the hole). All holes of the step must end at the
+same depth, and the end faces must be planes. A hole that ends in a
 drill point on such a face is left out with a reason. The depth follows the face or body that the hole goes up to
 (`follow.target_shift`) and the entry, as the length of an extrude up to an entity does. When the depth could be zero or
 negative at some sizes, those sizes are marked.

@@ -12,7 +12,7 @@ made thread touches. The start and the length follow the sizes that move the cyl
 """
 from ...capture_model import gap_hints
 from ...design_model.problem import Problem
-from ...design_model.steps import thread as facts
+from ...design_model.steps import hole as hole_facts, thread as facts
 from ...design_model.values import Quantity
 from ...design_model import words as shared
 from .. import values
@@ -161,7 +161,7 @@ def _below(point, direction, start):
 
 def hole_threads(ctx, item, data, spec, points, direction, depth, through, start):
     """The thread steps of a tapped hole, one per position, after the hole's own steps. `depth` is the hole's depth as
-    a Quantity (None for a through hole, measured from the end faces instead). `start` is where the thread starts
+    a Quantity (None for a through hole, measured to where its bore leaves the part instead, `hole.through_ends`). `start` is where the thread starts
     below each position, as a Quantity: the bottom of a counterbore or countersink (`facts.thread_mouth`), else zero.
     A Refusal when it cannot be written."""
     capped = _fit_caps(ctx, len(points))
@@ -171,9 +171,9 @@ def hole_threads(ctx, item, data, spec, points, direction, depth, through, start
     if isinstance(reach, Problem):
         return refusal(reach)
     if abs(reach.start - start.n) > 1e-6:
-        return refusal(Problem("threadSpan", shared.THREAD_HOLE_SPAN))
+        return refusal(Problem("threadSpan", shared.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE))
     if through:
-        ends = facts.measured_ends(data, len(points))
+        ends = hole_facts.through_ends(data, direction)
         if isinstance(ends, Problem):
             return refusal(ends)
         followed = follow.follow_points(ctx, item, ends, False, "faces")

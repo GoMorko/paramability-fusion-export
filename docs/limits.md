@@ -265,6 +265,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   sizes may give unexpected results.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
+- The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
+  that point from the wall of the hole, so an export made with an earlier version leaves such a hole out: export
+  again. The thread is left out, with the tip to make it cosmetic, when the thread Fusion made does not reach that
+  point (for example a hole through two walls with a thread in one wall only). The Orca copy starts the thread of a
+  counterbore hole at the counterbore floor and keeps that start as a number, so a size that changes the counterbore
+  depth is followed only in part there; it leaves a tapped hole with a countersink and a modeled thread out.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
   chamfer with more than 32 edges (picked in groups), a direction or size that Fusion stored two ways, and a step that
   Fusion shows a warning on.

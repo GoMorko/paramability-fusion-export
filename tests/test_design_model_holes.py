@@ -143,9 +143,6 @@ class ThreadOfAHoleTest(unittest.TestCase):
         # Without the drilled diameter the cone gives no start.
         self.assertIsInstance(thread.hole_depth(dict(sunk, thread=dict(part, made_span=[2.5, 7.5]))), Problem)
 
-    def test_each_position_needs_a_measured_end(self):
-        self.assertEqual(thread.measured_ends({"end_points": [[0, 0, 1], [1, 0, 1]]}, 2), [[0, 0, 1], [1, 0, 1]])
-        self.assertIsInstance(thread.measured_ends({"end_points": [[0, 0, 1]]}, 2), Problem)
 
 
 def hole_data(**more):
@@ -209,12 +206,44 @@ class HoleDirectionTest(unittest.TestCase):
             self.assertIsInstance(hole.reach_depth(data, [0.0, 0.0, -1.0]), Problem)
 
 
+def bore(position, span, radius=2.5, origin_shift=0.0, axis=(0, 0, -1)):
+    """A measured side cylinder on the axis line of a hole at `position`, its origin moved along the line."""
+    return {"origin": [position[0], position[1], position[2] - origin_shift], "axis": list(axis), "radius": radius,
+            "span": list(span)}
+
+
+def through(**more):
+    """A modeled tapped hole through a 10 mm part at two positions, its bores measured."""
+    data = hole_data(tap_type="tapped", thread_modeled=True, extent={"kind": "throughAll"},
+                     thread={"full_length": True, "pitch": 1.0, "made_span": [0.0, 10.0]},
+                     side_cylinders=[bore([0, 0, 10], (0.0, 10.0)), bore([10, 0, 10], (-5.0, 5.0), origin_shift=5.0)])
+    data.update(more)
+    return data
+
+
 class HoleMeasureTest(unittest.TestCase):
-    def test_the_drill_size_is_the_widest_cylinder_not_wider_than_the_stored_size(self):
-        data = hole_data(diameter=6.0, side_cylinders=[{"radius": 2.5}, {"radius": 5.0}, {"radius": 3.0}])
-        self.assertEqual(hole.drill_diameter(data), 6.0)
+    def test_the_drill_size_is_the_narrowest_cylinder_even_wider_than_the_stored_size(self):
+        data = hole_data(diameter=5.0, side_cylinders=[{"radius": 5.0}, {"radius": 2.5175}])
+        self.assertAlmostEqual(hole.drill_diameter(data), 5.035)
         self.assertIsNone(hole.drill_diameter(hole_data()))
-        self.assertIsNone(hole.drill_diameter(hole_data(side_cylinders=[{"radius": 9.0}])))
+
+    def test_a_through_hole_ends_where_each_bore_leaves_the_part(self):
+        self.assertEqual(hole.through_ends(through(), [0.0, 0.0, -1.0]), [[0, 0, 0], [10, 0, 0]])
+        # A cylinder of another hole, or across the axis, says nothing about this hole.
+        aside = through(side_cylinders=[bore([0, 0, 10], (0.0, 10.0)), bore([12, 0, 10], (0.0, 10.0)),
+                                        bore([10, 0, 10], (0.0, 10.0), axis=(1, 0, 0))])
+        self.assertEqual(hole.through_ends(aside, [0.0, 0.0, -1.0]).cause, gap_hints.THREAD_HOLE)
+
+    def test_a_through_hole_end_needs_a_measured_bore_and_a_thread_that_reaches_it(self):
+        unmeasured = through(side_cylinders=[dict(bore([0, 0, 10], (0, 10)), span=None), bore([10, 0, 10], (0, 10))])
+        unmade = through(thread={"full_length": True, "pitch": 1.0, "made_span": None})
+        short = through(thread={"full_length": True, "pitch": 1.0, "made_span": [0.0, 6.0]})
+        for data in (unmeasured, unmade, short):
+            found = hole.through_ends(data, [0.0, 0.0, -1.0])
+            self.assertEqual(found.cause, gap_hints.THREAD_HOLE)
+        # A thread over part of the hole need not reach the far end.
+        part = through(thread={"full_length": False, "pitch": 1.0, "made_span": [0.0, 6.0]})
+        self.assertEqual(len(hole.through_ends(part, [0.0, 0.0, -1.0])), 2)
 
     def test_a_measured_size_that_differs_from_the_stored_one_is_a_fact(self):
         self.assertFalse(hole.size_differs(hole_data(side_cylinders=[{"radius": 2.5}, {"radius": 2.5}]), 2, 5.0))
@@ -233,6 +262,10 @@ class TappedBoreTest(unittest.TestCase):
     def test_a_cosmetic_thread_is_drilled_at_the_measured_size_with_no_spec(self):
         data = hole_data(tap_type="tapped", thread_modeled=False, diameter=6.0, side_cylinders=[{"radius": 2.5}])
         self.assertEqual(hole.tapped_bore(data, "h"), (5.0, None))
+        # Fusion drills at the minor diameter, wider than the stored size; a bore far from it is not this thread's.
+        minor = dict(data, diameter=5.0, thread=dict(INFO, minor_diameter=5.035), side_cylinders=[{"radius": 2.5175}])
+        self.assertEqual(hole.tapped_bore(minor, "h"), (5.035, None))
+        self.assertIsInstance(hole.tapped_bore(dict(minor, side_cylinders=[{"radius": 2.0}]), "h"), Problem)
 
     def test_a_modeled_thread_is_cut_at_its_minor_diameter(self):
         data = hole_data(tap_type="tapped", thread_modeled=True, diameter=8.0, thread=INFO,
