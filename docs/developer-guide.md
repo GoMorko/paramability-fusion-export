@@ -209,6 +209,11 @@ same before and after the export. The result of `summarize` has these keys: `hin
 `{ index, name, reason, hint }`) and `more_may_show`. For several bodies, `summarize_many` joins the lines of each
 body, with the name of the body in front, and adds "More may show after the export." once.
 
+The dialog of Export for Orca uses the same parameter table. Its offers name their destination
+(`size_offers.offers(..., destination=ORCA)`, the key `destination` of each offer). Thus the texts of the table name
+Orca's Design tab and not Paramability: the reason of a tick, the line under the table for a ticked row, the title of
+the status column ("In Orca", `dialog_rows.header`) and the tooltip of the up direction (`dialog_rows.up_tooltip`).
+
 The dialog of Export for Orca has the same box under the body picker. Its warning comes from `preview(capture, up_axis)`
 in `dialog_model/orca_result.py`, and `commands/ExportForOrca/entry.py` shows it through `recipe_dialog.show_stop`. The
 preview makes one Orca translation of the capture, with no sizes ticked. It lists up to three steps under "Likely left
