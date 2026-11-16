@@ -256,7 +256,10 @@ target through a link (`reach`), in this order:
 2. `via: "body"`: when the link's `bodies` name a body that items before the target's sketch made or changed
    (`bodies_after`), one of those items is one it drives; when such items exist and it drives none of them, it has
    no link through that component;
-3. `via: "component"`: otherwise, when the link's component is one it acts on.
+3. `via: "component"`: otherwise, when the link's component is one it acts on;
+4. `via: "assembly"`: otherwise, when it acts on an item that may place an occurrence (`places_occurrence`: a
+   dependent of kind `joint`, an assembly item of the timeline, or a Move whose `input_kind` is not `bodies` or
+   `faces`). The capture does not say which occurrence the item places, so every link to another component counts.
 
 Tokens are compared, names only when a token is missing. The export works with the sketches the picked body's own
 steps use (`body_scope.body_links`), and the translator, given a size table without links, takes them from the whole

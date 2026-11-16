@@ -16,7 +16,7 @@ package may import only packages above it in this list (not every one of them). 
 - `orca_recipe`: the OrcaSlicer 2.5 Design tab recipe (`Metadata/orca_cad.bin`): the cereal binary values, the
   feature fields in Orca's order with its defaults, the recipe reader and writer, and a 3MF writer. Export for Orca
   (experimental) writes it through `orca_translate`; see `docs/orca-output.md`.
-- `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
+- `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table, and the geometry links (which parameters may reach a sketch or a place of the part through another component; it reads the step kind table of `capture_model` to find the items that place an occurrence).
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion, and says which projected entities no size moves (`constants.py`). Export for Orca uses its extended reading (`extended=True`), which the recipe output does not use.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).

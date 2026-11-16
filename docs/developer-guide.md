@@ -1613,7 +1613,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
-| `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
+| `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links read the step kind table to find the items that can place an occurrence (`geometry_links.places_occurrence`). |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
@@ -2665,6 +2665,15 @@ The facts that do not need the probe are in the shared layer, `lib/design_model/
     inputs are not bodies or faces. Such an item is usually in the root component, not in the component that it
     moves. The capture does not say which occurrence such an item places. Thus these sizes apply to every reference
     of another component. They do not apply to a reference of the component of the exported body (`own`).
+    `params.geometry_links.places_occurrence` finds these parameters. The geometry links use the same test: such a
+    parameter gets a link (`via: "assembly"`) to every sketch of the part that is tied to another component, for
+    example a sketch that projects an edge of that component. Thus the size counts as a size that the sketch reads
+    (`reach.sketch_sizes`):
+    1. The probe tries it like a size behind a sketch dimension. When the row limit leaves it without a try, it is
+       listed as not tried.
+    2. The recipe translator follows the sketch as the probe measured it. It marks the size when no try set it, or
+       when there is no motion file.
+    3. The Orca output marks the size, because it writes the sketch with its numbers.
 - `mark_all` marks those sizes with a doubt: the copy keeps the reference where it is now. When the capture cannot say
   which sizes can move the reference, `mark_all` calls `movers_unknown` on the recorder, and the output decides (see
   `recorder.py` in 2.2).
