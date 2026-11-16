@@ -90,10 +90,10 @@ class SweepTest(unittest.TestCase):
         width, height = outcome(result, "bar_w"), outcome(result, "bar_h")
         self.assertEqual((width["outcome"], height["outcome"]), (VARIABLE, VARIABLE))
         # The bend has a radius of 10: the bar may grow to twice that across the path's plane, and freely along it.
-        # A limit below zero is told too: the copy cannot tell a width from a place that may go below zero.
-        self.assertAlmostEqual(limit_of(width).low, -20.0, delta=0.11)
+        # Neither side may reach zero, where the outline vanishes.
+        self.assertEqual(limit_of(width).low, 0.01)
         self.assertAlmostEqual(limit_of(width).high, 20.0, delta=0.11)
-        self.assertIsNone(limit_of(height))
+        self.assertEqual((limit_of(height).low, limit_of(height).high), (0.01, None))
 
     def test_sizes_that_move_the_outline_plane_are_marked(self):
         capture = sw.bar_along_bend()
@@ -304,6 +304,7 @@ class SplinePathTest(unittest.TestCase):
         self.assertTrue(path["reasons"])
         # The wire may grow close to twice the radius of the spline's tightest bend, never past it.
         bend = sweep_splines.tightest([sw.spline_curve(sw.BEND_SPLINE)])
+        self.assertEqual(limit_of(wire).low, 0.01)
         self.assertLessEqual(limit_of(wire).high, 2.0 * bend)
         self.assertGreater(limit_of(wire).high, 0.9 * 2.0 * bend)
 

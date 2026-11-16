@@ -12,6 +12,10 @@ they keep their numbers. `tell` leaves out a limit far from the current value: O
 
 Each told limit is a `Limit`: the words on the parameter's line, with the numbers they give.
 
+A field that sizes a shape (`POSITIVE`: a sketch width, height or radius, a round, a hole, a thickness, a thread)
+never fits at zero or below, whatever the step's check says, and the lower limit of a variable that drives one is
+told even when it is small: the person sees where the shape stops, never a limit below zero.
+
 The search walks out from the current value in growing steps until the check fails, then halves the gap. The
 growing steps can jump over a band where the check fails, so the search then tests evenly spaced values on each side
 between the current value and the end it found (for a side with no end, up to `FAR` times the current value away)
@@ -41,6 +45,14 @@ FAR = 10.0
 # A lower limit this close to zero says only "keep it above zero", which a size always is.
 _AT_ZERO = 1e-3
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# Fields that size a shape: at zero or below the shape vanishes or turns inside out, so a value there never fits, and
+# the lower limit of a variable that drives one is told even when it is small (it is where the shape stops).
+POSITIVE = frozenset((
+    "width", "height", "radius", "dressup_size", "hole_diameter", "hole_depth", "hole_cbore_diameter",
+    "hole_cbore_depth", "hole_csink_diameter", "shell_thickness", "thicken_thickness", "rib_thickness",
+    "thread_diameter", "thread_radius", "thread_pitch", "thread_height", "thread_depth", "helix_pitch",
+    "helix_radius", "plane_u_size", "plane_v_size",
+))
 
 
 def _free(text):
@@ -69,6 +81,16 @@ def _numbers(fields, values):
     return out
 
 
+def _shaped(fields, numbers):
+    """True when every field that sizes a shape (`POSITIVE`) stays above zero."""
+    return all(n > 0 for (_, field), n in zip(fields, numbers) if field in POSITIVE)
+
+
+def _sizing(variables, fields):
+    """The variables that a field sizing a shape (`POSITIVE`) reads."""
+    return _reads(variables, [feature.expr.get(field) for feature, field in fields if field in POSITIVE])
+
+
 def ranges(ctx, fields, ok):
     """`{Orca variable: (low, high)}` for each free variable the bound `fields` ((feature, field name) pairs) read:
     the values, around the current one, at which `ok(numbers of the fields)` still holds; None for a side with no
@@ -78,7 +100,8 @@ def ranges(ctx, fields, ok):
 
 def _search(ctx, fields, ok):
     """`(ranges, unsure)`: the ranges as `ranges` gives them, and the free variables read whose check does not hold
-    (or cannot be worked out) at the current values."""
+    (or cannot be worked out) at the current values. A value that takes a field sizing a shape to zero or below
+    does not fit (`_shaped`), whatever `ok` says."""
     variables = ctx.variables()
     texts = [feature.expr.get(field) for feature, field in fields]
     out, unsure = {}, []
@@ -90,7 +113,8 @@ def _search(ctx, fields, ok):
         def fits(x, name=name):
             try:
                 values = variable_values(dict(variables, **{name: repr(float(x))}))
-                return bool(ok(_numbers(fields, values)))
+                numbers = _numbers(fields, values)
+                return _shaped(fields, numbers) and bool(ok(numbers))
             except (ExpressionError, ArithmeticError, ValueError):
                 return False
 
@@ -207,7 +231,7 @@ def tell(ctx, fields, ok, floor=False):
     """Work out `ranges` and add each limit near the current value to the line of the parameter behind its variable
     (`ctx.follows`). For a step Orca stops on with an error past the limit; `floor` as for `words`. Returns
     `{Orca variable: Limit}`."""
-    return _tell(ctx, _search(ctx, fields, ok)[0], True, floor)[0]
+    return _tell(ctx, _search(ctx, fields, ok)[0], True, floor, _sizing(ctx.variables(), fields))[0]
 
 
 def tell_sizes(ctx, fields, names, ok):
@@ -229,7 +253,8 @@ def tell_sizes(ctx, fields, names, ok):
         def fits(x, entry=entry, name=name):
             try:
                 values = variable_values(dict(variables, **{name: repr(float(x))}))
-                return bool(ok(_numbers(fields, values), size_env(ctx.table, {entry.name: x})))
+                numbers = _numbers(fields, values)
+                return _shaped(fields, numbers) and bool(ok(numbers, size_env(ctx.table, {entry.name: x})))
             except (ExpressionError, ArithmeticError, ValueError):
                 return False
 
@@ -251,8 +276,9 @@ def lineless(ctx, found):
     return [name for name in found if name not in lines]
 
 
-def _tell(ctx, found, near, floor=False):
-    """`({Orca variable: Limit}, [Orca variables with a limit that has no parameter line])`."""
+def _tell(ctx, found, near, floor=False, sizing=()):
+    """`({Orca variable: Limit}, [Orca variables with a limit that has no parameter line])`. `floor` as for `words`,
+    for every variable or for those in `sizing` (variables that size a shape)."""
     told, untold = {}, []
     if ctx.table is None:
         return told, untold
@@ -265,7 +291,7 @@ def _tell(ctx, found, near, floor=False):
             continue
         unit = {"length": " mm", "angle": " degrees"}.get(entry.kind, "")
         text = words(name, low, high, _free(variables.get(name)) if name in variables else entry.value, unit, near,
-                     floor)
+                     floor or name in sizing)
         if text is None:
             continue
         where = ctx.follows.setdefault(entry.name, [])
@@ -281,8 +307,9 @@ def guard(ctx, fields, ok, reason):
     check fails at the current values, or the variable has no parameter line) is not left to chance: every field
     that reads it is unbound and keeps its number, and the sizes it read get `reason`. Returns `{Orca variable:
     Limit}`. Every limit found is told, also one far from the current value."""
-    found, unsure = _search(ctx, [(f, n) for f, n, _ in fields], ok)
-    told, untold = _tell(ctx, found, False)
+    pairs = [(f, n) for f, n, _ in fields]
+    found, unsure = _search(ctx, pairs, ok)
+    told, untold = _tell(ctx, found, False, sizing=_sizing(ctx.variables(), pairs))
     loose = set(unsure) | set(untold)
     if not loose:
         return told

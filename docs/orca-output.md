@@ -255,7 +255,11 @@ not judged to meet material where Orca removes nothing.
   `taper_gap` still holds, and the parameter's line says how far it may go ("keep lift_mm over 5 mm", "keep
   draft_deg between -44.8 and 79.9"). Every limit found is told, also one far from the current value, since past it
   Orca gives no error (the walk goes up to about 16000 times the value). A lower limit at zero or below is told only
-  for a value below zero (a taper angle): a size stays above zero anyway. When a limit cannot be worked out (the check
+  for a value below zero (a taper angle): a size stays above zero anyway. A field that sizes a shape (a sketch
+  `width`, `height` or `radius`, a round or chamfer size, a hole size, a thickness, a thread size: `limits.POSITIVE`)
+  never fits at zero or below, whatever the step's own check says, so the walk of a variable that drives one stops
+  where that field reaches zero, and that lower limit is told even when it is small ("keep wire between 0.01 and
+  18.5 mm" for the diameter of a swept circle, never a limit below zero). When a limit cannot be worked out (the check
   fails at the current values, or the variable has no parameter line), the field keeps its number and its sizes get
   the reason. The told limit is a `limits.Limit`: the words, with the variable and the low and high numbers.
 - The end faces of a copied extrude (`solid.Prism.ends`, which a later "To" follows) are set once its fields are
@@ -538,7 +542,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - The path keeps its numbers (Orca cannot tie a path sketch to a variable): the sizes behind the path's sketch and
   its plane, or for a path of body edges every size read before the sweep, are marked. A plain rectangle or circle
   outline follows its sizes, and the parameter's line says how far it may grow before it reaches the centre of the
-  tightest bend or another part of the path ("keep bar_w under 19.9 mm" for a bend of radius 10).
+  tightest bend or another part of the path ("keep bar_w between 0.01 and 19.9 mm" for a bend of radius 10; the
+  lower limit is where the outline vanishes, see "Limits").
 - Orca's Loft builds one wire per outline sketch and skins them (OCCT `BRepOffsetAPI_ThruSections`, ruled), which is
   what Fusion makes between two outlines with free ends. OCCT joins the points of the two loops its own way. Two
   circles join point to point at the same angle when both sketches have one plane normal, so the copy writes them

@@ -1491,7 +1491,8 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       once round it. Give the first line of the path its length as a dimension `Run` = 20 mm.
       Export: each body for Orca with `Wire` and `Run` ticked. Expect: the first two, the fourth and the fifth copied
       as one Orca sweep each (the fourth and fifth after their block extrude), the path sketch a line and B-spline
-      pieces starting at the outline, `Wire` follows with a limit, and `Run` stays a number with the reason "Orca
+      pieces starting at the outline, `Wire` follows with a limit whose lower end is above 0 ("keep Wire
+      between 0.01 and ..."), and `Run` stays a number with the reason "Orca
       cannot tie the path of a sweep to a variable"; the third under "Left out" (sharp corner); the sixth under
       "Left out" (a closed loop with a free curve). Each Orca body has the box and volume Fusion measures (Inspect >
       Properties); set `Wire` to 6 in both and compare again. Send `report.json` when a spline path is left out with
