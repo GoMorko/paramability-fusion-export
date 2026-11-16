@@ -1124,7 +1124,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `draftSteep` | a draft of 30 degrees or more (`finishes/draft.py`) | Draw the sloped wall in the sketch, or give the extrude a taper. |
 | `taperSteep` | an extrude or a sweep with a taper that is too steep | Use a taper under 45 degrees, or draw the sloped wall in the sketch. |
 | `taperCutBothWays` | a tapered cut through all, both ways | Make two tapered cuts through all, one for each way, or give the cut a distance. |
-| `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, 3.14) | Start and end on flat faces or planes, or give a distance. |
+| `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write | Use a fillet with one radius. |
 | `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
@@ -1729,7 +1729,7 @@ one folder per family of steps.
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
     measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
-    curved face, see 3.14), and `emboss.py` (the Emboss handler).
+    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), and `emboss.py` (the Emboss handler).
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -2173,7 +2173,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     of the sketch, so the measured end face (`end_offset`) must lie on the same side as the point. Else the result
     is a `Problem` (`WAY_UNSURE`). A flat face that is tilted meets the line of the sketch normal on one side only,
     so its point gives the direction. The `Target` of the side has the plane of a tilted face, and no plane for a
-    curved face. The side has no length. The recipe output sets `faces` (see 3.14). The Orca output does not set it.
+    curved face. The side has no length. The recipe output sets `faces` (see the section about extrudes in part 3). The Orca output does not set it.
   - The direction of one side: the measured end face (`end_offset`) wins over the direction that Fusion stored,
     because Fusion can store the direction in two ways. An end face nearer than 0.001 mm to the start does not show a
     direction. A side that has `direction` (a step that the translator writes again as an extrude) goes in that
@@ -3434,7 +3434,7 @@ them, every value is a number and its sizes are marked.
 A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
 and the `coil` kind has no repeat rule.
 
-### 3.14 Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides
+### Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides
 
 #### An extrude up to a tilted or curved face
 
@@ -3460,18 +3460,46 @@ The app cannot build some sides. Thus the add-in also leaves the step out in the
 
 1. The side has a taper.
 2. The side has an offset past the face.
-3. The face is flat and Fusion does not extend it. Fusion reads `isChained` of `ToEntityExtentDefinition`
-   (`chained` in the capture). When it is true, Fusion also stops at the faces next to the face. The app extends a
-   flat face to its whole plane. These two shapes are different when the outline goes past the face. When
-   `chained` is null, the add-in does not know, so it also leaves the step out. A curved face does not need this
-   check: where the two shapes are different, the face does not cover the outline, and the app refuses the step.
+3. The face is flat, Fusion can also stop at the faces next to it, and the outline does not land on the face
+   alone. See "A face that Fusion chains to the faces next to it" below.
 
 A thin extrude up to a face never gets to `up_to.py`: `faces/thin_wall.prepare` leaves it out before. An extrude
 with two sides, where one side goes up to such a face, stays a `Problem` of the reader. The step of an `UP_TO` side
 has no slab. A later step that picks a face of it cannot follow sizes there, so its sizes are marked. Patterns and
 mirrors do not repeat the step, because Fusion finds its length again for each copy.
 
-The Orca output does not change: Orca names a face by its own numbering, and the Orca output does not set `faces`.
+The Orca output does not copy such a side: Orca names a face by its own numbering, and the Orca output does not
+set `faces`.
+
+#### A face that Fusion chains to the faces next to it
+
+The reader reads `isChained` of `ToEntityExtentDefinition` (`chained` in the capture). When it is false, Fusion
+extends the face to its whole surface. When it is true, Fusion also stops at the faces next to the face. The app
+always extends a flat face to its whole plane. The two shapes are different when the outline goes past the edge of
+the face. Then the extrude ends on the faces next to it in Fusion, but on the plane in the copy. This applies to a
+side up to a flat face square to the sketch (`REACH`) and to a side up to a tilted flat face (`UP_TO`).
+
+Thus the reader also reads the outline of a face that can be chained (`face_outline`, `read_face.face_loops`, with
+the marker before the step). For a face of another component, the outline goes into the measured reference (`ref`)
+in the coordinates of the part, and `refs.bring_in` takes it from there. `outline_on_face` in
+`design_model/steps/extrude.py` then moves each outline of the extrude along the sketch normal onto the face. The
+answer is true when these two conditions are true:
+
+1. Each point along each outline lands in the face or on its edge (within 0.001 mm).
+2. No point along the edges of the face lands inside an outline. Such a point shows a hole of the face under the
+   outline, or a face that is smaller than the outline.
+
+When `chained` is true or null (not read), and the answer is not true, the reader gives a `Problem` (`CHAINED`).
+This includes a face without an outline. Both outputs then leave the step out. When `chained` is null, the add-in
+does not know what Fusion does, so it uses the same rule as for true. Every export reads `chained`, so null occurs
+only in captures of older versions and when Fusion does not give the value.
+
+When the answer is true, the extrude ends on the face alone at the values of the export. At other values, a size can
+move the outline past the edge of the face. The add-in does not measure the edges of the face at other values. Thus
+each output marks the sizes that can move the face or the outline (`reach_sizes`): `extrude/up_to.keep_on_face` for
+the recipe and `extents.reach` for Orca. These sizes stay free, with the reason "ends on a face that Fusion joins with
+the faces next to it". A curved face needs no outline: where the two shapes are different, the face does not cover
+the outline, and the app refuses the step. A construction plane is never chained.
 
 #### A start at a distance from a face
 

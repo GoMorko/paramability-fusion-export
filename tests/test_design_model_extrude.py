@@ -153,6 +153,35 @@ class OneSideTest(unittest.TestCase):
         (found,) = dm.read_sides(one(face_at([0.0, 0.0, -6.0]), end_offset=-5.0), FRAME, faces=True)
         self.assertEqual((found.kind, found.sign, found.reach.plane), (dm.UP_TO, -1, None))
 
+    def test_a_face_fusion_may_chain_is_read_only_when_every_outline_lands_on_it(self):
+        def rect(x0, y0, x1, y1, outer=True):
+            corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+            return {"outer": outer, "curves": [{"kind": "line", "start": a, "end": b}
+                                               for a, b in zip(corners, corners[1:] + corners[:1])]}
+
+        def face(*loops, chained=True):
+            frame = {"origin": [0.0, 0.0, 8.0], "x": [1.0, 0.0, 0.0], "y": [0.0, -1.0, 0.0], "z": [0.0, 0.0, -1.0]}
+            return dict(face_at([1.0, -1.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [0, 0, -1.0]},
+                                chained=chained), face_outline={"frame": frame, "loops": list(loops)})
+
+        square = {"frame": FRAME, "loops": [rect(0.0, 0.0, 4.0, 4.0)]}
+        cases = [
+            (face(rect(-1.0, 1.0, 5.0, -5.0)), dm.REACH),
+            # The face ends right at the outline's edge.
+            (face(rect(0.0, 0.0, 4.0, -4.0)), dm.REACH),
+            (face(rect(-1.0, 1.0, 3.0, -5.0)), dm.CHAINED),
+            # A hole of the face under the outline.
+            (face(rect(-1.0, 1.0, 5.0, -5.0), rect(1.0, -1.0, 2.0, -2.0, outer=False)), dm.CHAINED),
+            (dict(face_at([1.0, 1.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [0, 0, 1.0]}, chained=None)),
+             dm.CHAINED),
+            # Fusion extends the face to its plane: no outline is needed.
+            (face(rect(-1.0, 1.0, 3.0, -5.0), chained=False), dm.REACH),
+        ]
+        for side, kind in cases:
+            with self.subTest(side=side):
+                found = sides(one(side, profiles=[square]))
+                self.assertEqual(found.code if is_problem(found) else found[0].kind, kind)
+
     def test_up_to_sides_that_stay_problems(self):
         tilted = {"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]}
         cases = [

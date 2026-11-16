@@ -52,8 +52,8 @@ can be.
 | Extrude: one side, distance | Copied | - | Copied | - | |
 | Extrude: symmetric | Copied | - | Copied | - | |
 | Extrude: two sides | Partly | - | Copied | - | Paramability: an intersect to two sides is one tool body of both sides. Both: two sides that end on the same side of the sketch are left out. |
-| Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. |
-| Extrude: To object, tilted or curved | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one side, no taper, no offset, a face of the same body; a tilted flat face only with Chain Faces off. A face that a size may move is followed only when a copied extrude made it, else the step is left out. Orca names a face by its own numbering. |
+| Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. Both: with Chain Faces on, only when the outline lands on the face alone, and the sizes that may move the face or the outline are marked. |
+| Extrude: To object, tilted or curved | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one side, no taper, no offset, a face of the same body; with Chain Faces on, a tilted flat face only when the outline lands on it alone. A face that a size may move is followed only when a copied extrude made it, else the step is left out. Orca names a face by its own numbering. |
 | Extrude: All, cut or intersect | Copied | - | Copied | - | Orca: a one way cut with material behind its sketch is a 1000 mm cut. |
 | Extrude: All, join or new body | Left out | Yes, needs an app change | Left out | Needs Orca | Fusion ends it where the part ends. |
 | Extrude: start offset | Copied | - | Partly | Needs Orca | Orca: the offset keeps its number. |

@@ -151,6 +151,10 @@ def _brought_target(record):
         out["face_point"] = list(ref["face_point"])
     elif "face_point" in out:
         out["face_point"] = None
+    # The outline of the face (whether the extrude lands on it alone) only in the part's coordinates.
+    out.pop("face_outline", None)
+    if isinstance(ref.get("face_outline"), dict):
+        out["face_outline"] = ref["face_outline"]
     out["assembly"] = True
     return out
 

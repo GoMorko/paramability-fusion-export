@@ -490,6 +490,10 @@ class ExtrudeDataTest(unittest.TestCase):
             self.assertIs(side["side_one"]["chained"], chained)
         unread = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face))
         self.assertIsNone(unread["side_one"]["chained"])
+        # A face that may be chained keeps its outline (null here: the fake face has no flat surface to read).
+        chained = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=True))
+        extended = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=False))
+        self.assertEqual(("face_outline" in chained["side_one"], "face_outline" in extended["side_one"]), (True, False))
 
     def test_a_start_on_a_face_measures_the_start_face_parallel_to_the_sketch(self):
         def face(z, normal):

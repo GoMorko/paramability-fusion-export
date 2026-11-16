@@ -348,6 +348,18 @@ def ref_record(entity, ctx, slot, geometry=None):
     return out
 
 
+def outline_in_target(entity, ctx, outline):
+    """A face outline (`read_face.face_loops`: { frame, loops }) of an entity whose geometry is in root coordinates,
+    brought into the target's coordinates: its loops stay in the frame, only the frame moves. None when the outline is
+    missing or the target's place cannot be read."""
+    back = _back_move(entity, ctx)
+    frame = (outline or {}).get("frame")
+    if back is None or not isinstance(frame, dict):
+        return None
+    moved = {key: _turned(back, frame[key], key == "origin") for key in ("origin", "x", "y", "z")}
+    return dict(outline, frame=moved)
+
+
 def from_assembly(record, entity, ctx, point="point", direction="normal", slot=None):
     """A plane or axis record of another component brought into the target's coordinates.
 

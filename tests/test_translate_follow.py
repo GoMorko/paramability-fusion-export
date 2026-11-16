@@ -64,7 +64,8 @@ def tab(start=None, side_one=None, index=10):
             "operation": "join", "profiles": [{"sketch": "Sketch9", "frame": frame,
                                                "loops": [{"outer": True, "curves": curves}]}],
             "start": start or {"kind": "profilePlane"}, "extent_type": "one",
-            "side_one": side_one or {"kind": "toEntity", "plane": {"point": TOP, "normal": [0, 0, 1]}, "offset": 0.0,
+            "side_one": side_one or {"kind": "toEntity", "chained": False,
+                                     "plane": {"point": TOP, "normal": [0, 0, 1]}, "offset": 0.0,
                                      "entity_type": "BRepFace", "face_point": TOP},
             "side_two": None, "symmetric": None, "thin": False, "participants": [{"token": "t1", "name": "Body1"}],
             "target_box_before": {"min": [0, 0, 0], "max": [80, 60, 32]}, "end_offset": 32.0,
@@ -143,7 +144,8 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["distance"], {"expr": HEIGHT})
 
     def test_up_to_a_construction_plane_stays_a_number(self):
-        side = {"kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
+        side = {"kind": "toEntity", "chained": False,
+                "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
                 "entity_type": "ConstructionPlane"}
 
         def edit(capture):
@@ -154,7 +156,8 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["distance"], 20)
 
     def test_up_to_an_unknown_face_marks_the_earlier_sizes(self):
-        side = {"kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
+        side = {"kind": "toEntity", "chained": False,
+                "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
                 "entity_type": "BRepFace", "face_point": [5, 5, 20]}
 
         def edit(capture):

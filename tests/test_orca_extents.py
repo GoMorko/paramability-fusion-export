@@ -114,7 +114,7 @@ class ToTest(unittest.TestCase):
                                         target_box_before=box))
             items += [ex.plane_item(4, "Plane1"), ex.sketch_item(5, "Sketch2"),
                       ex.extrude(6, "Cut", [ex.profile("Sketch2", ex.UP, ex.rect(-5, -5, 5, 5))], operation="cut",
-                                 side_one=dict(ex.plane_target(top, "cp1"), kind="toEntity", offset=0.0),
+                                 side_one=dict(ex.plane_target(top, "cp1"), kind="toEntity", chained=False, offset=0.0),
                                  end_offset=end, target_box_before=box)]
             return ex.capture(items, (box["min"], box["max"]), 7000.0)
 
@@ -277,7 +277,7 @@ class LimitTest(unittest.TestCase):
         cap = copy.deepcopy(capture["items"][-1])
         cap["index"], cap["name"] = 4, "Cap"
         cap["data"].update(profiles=[ex.profile("Sketch2", ex.UP, ex.rect(-2, -2, 2, 2))], end_offset=15.0,
-                           side_one=dict(ex.face_target(15.0, (1.0, 1.0)), kind="toEntity", offset=0.0),
+                           side_one=dict(ex.face_target(15.0, (1.0, 1.0)), kind="toEntity", chained=False, offset=0.0),
                            target_box_before={"min": [-20, -10, 0], "max": [20, 10, 15]})
         capture["items"].append(cap)
         real = limits.guard

@@ -96,7 +96,8 @@ class MoreThanOneToolStepTest(unittest.TestCase):
     def test_a_tool_step_that_reaches_to_a_curved_face_is_left_out(self):
         def edit(capture):
             tool_steps_of("cut")(capture)
-            capture["items"][5]["data"]["side_one"] = {"kind": "toEntity", "plane": None, "offset": 0.0,
+            capture["items"][5]["data"]["side_one"] = {"kind": "toEntity", "chained": False,
+                                                       "plane": None, "offset": 0.0,
                                                        "entity_type": "BRepFace", "face_point": [20, 10, 14]}
         result = edited("combine_tool_two_steps", edit)
         self.assertEqual(left_out(result)["index"], 5)
@@ -193,7 +194,7 @@ class FlatToolOnThePartTest(unittest.TestCase):
     def test_a_tool_that_reaches_a_face_of_the_part_follows_that_face(self):
         capture = one_step_tool()
         capture["items"][3]["data"].update(end_offset=7.0, side_one={
-            "kind": "toEntity", "plane": {"point": [12, 10, 10], "normal": [0, 0, 1]}, "offset": 0.0,
+            "kind": "toEntity", "chained": False, "plane": {"point": [12, 10, 10], "normal": [0, 0, 1]}, "offset": 0.0,
             "entity_type": "BRepFace", "face_point": [12, 10, 10]})
         cut = steps_of(sized(capture).recipe, "extrude")[1]
         self.assertEqual(cut["distance"], {"expr": "plate_h_mm - 3"})

@@ -361,9 +361,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     extrude it 60 mm along +X as a join (a round roof on the box). Sketch a 6 mm circle on the plane
     30 mm up at (30, 25) and extrude it down "To object" up to the round face as a join.
     Export: tick no size. In `report.json`, note `side_one.chained` of the two chamfer posts and `end_offset` of the
-    roof post. Expect `chained` false and true. The chamfer post with Chain Faces off and the roof post are copied
-    with `extent: { upTo: { near } }` and match the STEP. The post with Chain Faces on is left out with "may also
-    end on the faces next to it". Export again with `Height` ticked: the roof post is still copied (the extrude that
+    roof post. Expect `chained` false and true. The two chamfer posts and the roof post are copied with
+    `extent: { upTo: { near } }` and match the STEP: the posts land on the chamfer face alone. Then move the post with
+    Chain Faces on to (20, 33), so it reaches past the chamfer onto the top face, and export again: Fusion ends it on
+    both faces, and the post is left out with "its outline may reach past that face". Move it back. Export again with `Height` ticked: the roof post is still copied (the extrude that
     made the roof places its point); the chamfer post is left out with "may move when the sizes change". Afterwards
     the design is as before.
 37. EX4, an extrude that starts at a distance from a face, both ways. Add user parameters `Height` = 10 mm and
@@ -382,3 +383,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     extrude it as an intersect with Two Sides: side one 4 mm up, side two 6 mm down.
     Export: tick no size. The intersect is copied as one tool body that the part intersects (recipe version 15),
     and the copy is a disc 20 mm across from z 4 to z 14 that matches the STEP.
+39. EX6, an extrude up to a face square to it, with Chain Faces on. On the XY plane draw a 40 x 40 mm rectangle from
+    the origin and extrude it up 20 mm. Shell it 2 mm with the top face removed. Make a shelf: on a plane 15 mm up
+    draw a rectangle from (0, 0) to (40, 20) and extrude it 2 mm up as a join, then chamfer the lower edge of the
+    shelf at y = 20 by 3 mm. On the XY plane draw a 6 mm circle at (20, 10) and extrude it up "To object" up to the
+    bottom face of the shelf as a join, with Chain Faces on. Make a second post the same way at (20, 16), so that it
+    reaches past the bottom face onto the chamfer.
+    Export: tick no size. In `report.json`, `side_one.chained` is true and `side_one.face_outline` holds the bottom
+    face of the shelf. The first post is copied and matches the STEP. The second post is left out with "its outline
+    may reach past that face"; note where Fusion ended it. Turn Chain Faces off on the second post: it is copied and
+    ends on the plane of the shelf bottom, as Fusion then makes it.

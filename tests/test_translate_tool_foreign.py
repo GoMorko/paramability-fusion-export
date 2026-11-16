@@ -197,7 +197,7 @@ class RefusedToolTest(unittest.TestCase):
 
     def test_a_step_that_reaches_into_a_third_component_leaves_the_combine_out(self):
         capture = load_capture(NAME)
-        capture["items"][6]["data"]["side_one"] = {"kind": "toEntity", "foreign": True}
+        capture["items"][6]["data"]["side_one"] = {"kind": "toEntity", "chained": False, "foreign": True}
         self.assertIn("another component", self.refusal(capture)["reason"])
 
     def test_a_tool_whose_place_cannot_be_used_leaves_the_combine_out_and_names_the_component(self):
@@ -251,7 +251,7 @@ class ReachingToolTest(unittest.TestCase):
         capture = load_capture(NAME)
         del capture["items"][5:7]
         capture["items"][4]["data"].update(side_one={
-            "kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
+            "kind": "toEntity", "chained": False, "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
             "entity_type": "BRepFace", "face_point": [0, 0, 20]}, params={})
         result = translate(capture)
         self.assertEqual([s["kind"] for s in result.recipe["features"]], ["extrude", "toolBody"])

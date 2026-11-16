@@ -649,7 +649,9 @@ against `samples`.
   measured end face gives one), `{ "kind": "toEntity", "plane": PLANE or null, "offset": mm, "chained": bool,
   "entity_type": "...", "face_point": [..] }` (TARGET below; `chained` is `ToEntityExtentDefinition.isChained`:
   true when Fusion also stops at the faces next to the face, false when it extends the face, null when it cannot be
-  read; its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`),
+  read; `face_outline` is the outline of a flat face for which `chained` is not false (`read_face.face_loops`: `{
+  frame, loops }`, null when it cannot be read; for a face of another component it is in `ref`, in the part's
+  coordinates); its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`),
   `{ "kind": "other", "type": "..." }`
   (also a distance extent whose `distance` Fusion refuses to give; a symmetric one then has `symmetric` null, so the
   step is left out instead of stopping the copy).
@@ -686,8 +688,12 @@ against `samples`.
   the sketch plane. With a `start.offset` that is not zero, exactly one sign of the offset must put the start there
   (within 1e-3 mm), else the step is left out (`design_model/steps/extrude.py`, `start_of`).
 - A side up to a tilted or curved `BRepFace` of the body is written as `extent: { upTo: { near: [face_point] } }`
-  for an extrude of one side, without taper and without `offset`, and for a flat face only when `chained` is false.
-  A curved face needs `end_offset` on the same side of the sketch as `face_point`. See the developer guide, 3.14.
+  for an extrude of one side, without taper and without `offset`. A curved face needs `end_offset` on the same side
+  of the sketch as `face_point`.
+- A side up to a flat face for which `chained` is not false (also a face square to the sketch) is copied only when
+  every outline, moved along the sketch normal, lands on `face_outline` (`outline_on_face`); the sizes that may move
+  the face or the outline are then marked. See the developer guide, section "Extrudes: a tilted or curved end face,
+  a start at a distance from a face, an intersect to two sides".
 - `end_normal` (optional; null when it cannot be read): the unit normal of the measured end
   face at `pointOnFace` (`BRepFace.evaluator.getNormalAtPoint`). Older captures do not have it.
 - `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at

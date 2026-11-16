@@ -125,7 +125,8 @@ class ReachTest(unittest.TestCase):
     def test_a_face_of_another_component_an_extrude_reaches_to_marks_its_sizes(self):
         def edit(capture):
             side = capture["items"][3]["data"]["side_one"]
-            side.update(entity_type="BRepFace", face_point=[3, 3, 12], assembly=True, ref=ref("BRepFace", "side_one"))
+            side.update(entity_type="BRepFace", face_point=[3, 3, 12], assembly=True, chained=False,
+                        ref=ref("BRepFace", "side_one"))
         result = run(on_fixture("extrude_to_plane", edit))
         self.assertIsNone(result.refusal)
         self.assertIn("Extrude2", marked(result)["gap_mm"])

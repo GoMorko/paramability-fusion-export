@@ -11,7 +11,7 @@ from ..result import Refusal
 from .reach import distance_quantity, keep_reaches_positive, reach_quantity
 from .side import RecipeSide
 from .taper import taper_degrees, taper_quantity
-from .up_to import up_to_side
+from .up_to import keep_on_face, up_to_side
 
 
 def _from_problem(found):
@@ -31,7 +31,7 @@ def _through_both(ctx, item, sides):
 def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
     """The `RecipeSide` of one side with a distance, through all or up to a face or plane, or a Refusal."""
     if side.kind == dm.UP_TO:
-        return up_to_side(ctx, item, side)
+        return up_to_side(ctx, item, data, side, z)
     taper = taper_degrees(side.taper)
     if isinstance(taper, Refusal):
         return taper
@@ -44,6 +44,7 @@ def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
         return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, read=side,
                         q=given or distance_quantity(ctx, item, side.path, side.value))
     values.pin(ctx, item, side.offset_path, "it sets how far %s reaches" % item.get("name", "a step"))
+    keep_on_face(ctx, item, side.reach.record)
     return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, adjusts=True, reaches=True,
                     read=side, q=reach_quantity(ctx, item, side.which, side.reach.record, z, side.reach.distance,
                                                 side.offset, plane_q, shift_q))

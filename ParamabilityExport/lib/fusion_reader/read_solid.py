@@ -11,8 +11,9 @@ from ..geometry import vec
 from . import read_geometry as geo
 from . import read_intersect
 from .param_refs import Params, with_params
-from .placement import foreign_target_ref, from_assembly, ref_record
+from .placement import foreign_target_ref, from_assembly, outline_in_target, ref_record
 from .read_bodies import tool_ref
+from .read_face import face_loops
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles, sketch_reference
 from .read_thread import thread_info
 
@@ -88,10 +89,20 @@ def _extent(definition, taper_deg, ctx, slot):
     if name.startswith("All"):
         return {"kind": "all"}
     if "ToEntity" in name:
-        # `chained`: Fusion also stops at the faces next to the face (True) or extends the face (False).
-        return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None),
-                     "chained": geo.safe(lambda: bool(definition.isChained), None)},
-                    **_target(definition, ctx, slot))
+        # `chained`: Fusion also stops at the faces next to the face (True) or extends the face (False). A flat face
+        # that may be chained keeps its outline, which shows whether the extrude lands on that face alone; a face of
+        # another component keeps it in its `ref`, in the target's coordinates.
+        found = dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None),
+                      "chained": geo.safe(lambda: bool(definition.isChained), None)},
+                     **_target(definition, ctx, slot))
+        if found["chained"] is not False and found["entity_type"] == "BRepFace":
+            entity = geo.safe(lambda: definition.entity, None)
+            outline = geo.safe(lambda: face_loops(entity, ctx), None)
+            if not found.get("foreign"):
+                found["face_outline"] = outline
+            elif isinstance(found.get("ref"), dict):
+                found["ref"]["face_outline"] = geo.safe(lambda: outline_in_target(entity, ctx, outline), None)
+        return found
     if name == "DistanceExtentDefinition":
         # Fusion can refuse the distance of a valid extrude; the step is then left out, not the whole copy stopped.
         distance = geo.safe(lambda: geo.length(definition.distance), None)

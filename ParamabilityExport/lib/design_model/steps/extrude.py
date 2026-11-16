@@ -4,7 +4,9 @@ An extrude starts on its sketch plane, at an offset from it, or on a flat face o
 (`start_of`). From there each side goes along the sketch normal or against it (`read_sides`, one `SidePlan` per side):
 
 - DISTANCE: a set length. Fusion stores it signed: a negative distance goes against the sketch normal.
-- REACH: up to a flat face or plane square to the sketch normal (`Target`), plus Fusion's offset past it.
+- REACH: up to a flat face or plane square to the sketch normal (`Target`), plus Fusion's offset past it. Fusion can
+  also stop at the faces next to a face (`chained`); such a side is read only when every outline lands on the face
+  itself (`outline_on_face`), else it is a Problem (CHAINED).
 - UP_TO: up to a tilted or curved face of the part (`Target` with its `face_point`, its plane None when curved). Only a
   caller that asks (`read_sides(..., faces=True)`) gets it, for one side; for any other caller such a face stays a
   Problem.
@@ -36,6 +38,7 @@ from typing import Optional
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ...geometry.combine_volume import profile_area
+from ...geometry.footprint import Footprint, polyline
 from ..problem import Problem
 from ..values import Quantity
 from .. import words
@@ -84,6 +87,7 @@ TAPER_NO_CHANGE = "taperNoChange"
 VOLUME_UNMEASURED = "volumeUnmeasured"
 VOLUME_DIFFERS = "volumeDiffers"
 WAY_UNSURE = "wayUnsure"
+CHAINED = "chained"
 
 _THROUGH_KINDS = ("throughAll", "all")
 # What a face or plane is to the extrude, by the capture field that holds it.
@@ -110,6 +114,7 @@ _WORDS = {
     VOLUME_UNMEASURED: (words.VOLUME_UNMEASURED, None),
     VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
     WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, None),
+    CHAINED: (words.EXTRUDE_CHAINED, gap_hints.EXTRUDE_END_FACE),
 }
 
 
@@ -263,6 +268,70 @@ def start_of(data, frame, offsets=False):
     return problem(START_KIND, "start")
 
 
+# ---- a face chained to the faces next to it -------------------------------------------------------------------
+
+# A point this near (mm) to the boundary of a face or an outline counts as on it.
+ON_FACE_TOL = 1e-3
+
+
+def joins_next_faces(record):
+    """True when Fusion may also stop the extrude at the faces next to the face `record` (`chained` true or not read),
+    instead of extending the face to its whole surface. Only a face can be chained; a construction plane cannot."""
+    return record.get("entity_type") == "BRepFace" and record.get("chained") is not False
+
+
+def _along(p, z, frame):
+    """`p` moved along the unit direction `z` onto the plane of `frame`, in that frame's own coordinates; None when
+    `z` lies in the plane."""
+    normal = vec.unit(frame["z"])
+    across = vec.dot(z, normal)
+    if abs(across) < PARALLEL_TOL:
+        return None
+    on = vec.add(p, vec.scale(z, vec.dot(vec.sub(frame["origin"], p), normal) / across))
+    return vec.frame_to_local(frame, on)[:2]
+
+
+def _points(region):
+    """The points along the loops of an outline or face record ({ frame, loops }), in model coordinates."""
+    return [vec.frame_apply(region["frame"], [u, v, 0.0]) for loop in region.get("loops") or []
+            for curve in loop.get("curves") or [] for u, v in polyline(curve)]
+
+
+def _inside(footprint, uv, strictly=False):
+    """True when `uv` lies in the region of `footprint` or on its edge; with `strictly`, inside and off its edge."""
+    gap = footprint.nearest_curve(uv)[1]
+    if strictly:
+        return gap > ON_FACE_TOL and footprint.covers(uv)
+    return gap <= ON_FACE_TOL or footprint.covers(uv)
+
+
+def outline_on_face(data, record, z):
+    """Whether every outline of the extrude in `data`, moved along the unit sketch normal `z`, lands on the flat face
+    `record` (its `face_outline`, `read_face.face_loops` at the step): True, False, or None when it cannot be told (no
+    face outline, an outline without loops, or a face along `z`).
+
+    Every point along an outline must land in the face or on its edge, and no point of the face's edges may land
+    strictly inside an outline (a hole of the face, or the whole face, under the outline). Then the extrude ends on
+    that face alone, whether Fusion extends it or also takes the faces next to it."""
+    face = record.get("face_outline")
+    profiles = data.get("profiles") or []
+    if not isinstance(face, dict) or not isinstance(face.get("frame"), dict) or not face.get("loops") or not profiles:
+        return None
+    face_area = Footprint(face)
+    edges = _points(face)
+    for profile in profiles:
+        if not isinstance(profile, dict) or not isinstance(profile.get("frame"), dict) or not profile.get("loops"):
+            return None
+        landed = [_along(p, z, face["frame"]) for p in _points(profile)]
+        back = [_along(p, z, profile["frame"]) for p in edges]
+        if not landed or any(uv is None for uv in landed + back):
+            return None
+        outline = Footprint(profile)
+        if not all(_inside(face_area, uv) for uv in landed) or any(_inside(outline, uv, True) for uv in back):
+            return False
+    return True
+
+
 # ---- the sides ---------------------------------------------------------------------------------------------------
 
 def taper_of(data, side, which):
@@ -337,6 +406,8 @@ def _side(data, side, which, origin, z, measured, faces=False):
         return problem(ON_START, which)
     if "offset" in side and side["offset"] is None:
         return problem(UNREADABLE, which)
+    if joins_next_faces(side) and outline_on_face(data, side, z) is not True:
+        return problem(CHAINED, which)
     offset = float(side.get("offset", 0.0))
     length = abs(to) + offset
     if not length > 0:

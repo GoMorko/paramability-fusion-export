@@ -27,7 +27,8 @@ def face_at(point, token="f9", body="t1"):
 def reaching(capture, index, target, at):
     """`capture` with the extrude at `index` reaching up to `target` at height `at`."""
     data = capture["items"][index]["data"]
-    data["side_one"] = dict(target, kind="toEntity", offset=0.0, plane={"point": [0, 0, at], "normal": [0, 0, 1]})
+    data["side_one"] = dict(target, kind="toEntity", chained=False,
+                            offset=0.0, plane={"point": [0, 0, at], "normal": [0, 0, 1]})
     data["end_offset"] = at - data["profiles"][0]["frame"]["origin"][2]
     return capture
 
@@ -131,7 +132,8 @@ class StartAndReachBothMoveTest(unittest.TestCase):
         capture["parameters"]["user"].append(dict(capture["parameters"]["user"][1], name="slot_mm"))
         data = reaching(capture, 5, plane_on_hidden_face(), 8)["items"][5]["data"]
         data["extent_type"] = "two"
-        data["side_two"] = {"kind": "toEntity", "offset": 0.0, "plane": {"point": [0, 0, -20], "normal": [0, 0, 1]},
+        data["side_two"] = {"kind": "toEntity", "chained": False,
+                            "offset": 0.0, "plane": {"point": [0, 0, -20], "normal": [0, 0, 1]},
                             "entity_type": "ConstructionPlane", "token": "cp8", "definition": OFFSET,
                             "built_on": [{"origin": True}]}
         return capture

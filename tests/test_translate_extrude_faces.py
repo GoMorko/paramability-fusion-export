@@ -18,6 +18,8 @@ ITEM = 3
 BODY = {"token": "t1", "name": "Body1"}
 # A slanted post sketched above the lid, its normal leaning 37 degrees off the lid's, that ends on the lid top.
 SLANTED = {"origin": [30.0, 20.0, 20.0], "x": [0.8, 0.0, 0.6], "y": [0.0, -1.0, 0.0], "z": [0.6, 0.0, -0.8]}
+# The same post sketched straight above the lid: the lid top is square to it.
+STRAIGHT = {"origin": [30.0, 20.0, 20.0], "x": [1.0, 0.0, 0.0], "y": [0.0, -1.0, 0.0], "z": [0.0, 0.0, -1.0]}
 SQUARE = [{"kind": "line", "start": a, "end": b}
           for a, b in (([-3, -3], [3, -3]), ([3, -3], [3, 3]), ([3, 3], [-3, 3]), ([-3, 3], [-3, -3]))]
 
@@ -28,14 +30,22 @@ def lid_face(point=(30.0, 20.0, 4.0), **more):
                  "plane": {"point": [0, 0, 4], "normal": [0, 0, 1]}, "face_point": list(point), "body": BODY}, **more)
 
 
-def slanted_post(side=None, **more):
-    """The lid capture with item ITEM a join from the slanted sketch up to `side` (the lid top by default)."""
+def lid_outline(width=60.0):
+    """The lid top as `read_face.face_loops` gives it: a rectangle `width` x 40 mm from the origin, at z 4."""
+    corners = [[0.0, 0.0], [width, 0.0], [width, 40.0], [0.0, 40.0]]
+    return {"frame": {"origin": [0.0, 0.0, 4.0], "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0], "z": [0.0, 0.0, 1.0]},
+            "loops": [{"outer": True, "curves": [{"kind": "line", "start": a, "end": b}
+                                                 for a, b in zip(corners, corners[1:] + corners[:1])]}]}
+
+
+def slanted_post(side=None, frame=SLANTED, **more):
+    """The lid capture with item ITEM a join from the sketch `frame` up to `side` (the lid top by default)."""
     capture = load_capture(LID)
     item = capture["items"][ITEM]
     item["type"] = "ExtrudeFeature"
     item["data"] = dict({
         "operation": "join",
-        "profiles": [{"sketch": "Sketch2", "frame": SLANTED, "loops": [{"outer": True, "curves": SQUARE}]}],
+        "profiles": [{"sketch": "Sketch2", "frame": frame, "loops": [{"outer": True, "curves": SQUARE}]}],
         "start": {"kind": "profilePlane"}, "extent_type": "one", "side_one": side or lid_face(),
         "side_two": None, "symmetric": None, "thin": False, "participants": [BODY],
         "target_box_before": {"min": [0.0, 0.0, 0.0], "max": [60.0, 40.0, 4.0]}, "end_offset": None}, **more)
@@ -77,8 +87,10 @@ class UpToFaceTest(unittest.TestCase):
 
     def test_sides_the_app_cannot_build_or_pick_are_left_out(self):
         cases = {
+            # Fusion may also stop at the faces next to the lid top, and no outline of the face shows where it ends.
             "chained": slanted_post(lid_face(chained=True)),
             "chained unread": slanted_post(lid_face(chained=None)),
+            "chained past the face": slanted_post(lid_face(chained=True, face_outline=lid_outline(31.0))),
             "offset": slanted_post(lid_face(offset=1.0)),
             "taper": slanted_post(params={"side_one.taper_deg": {"name": "d9", "expression": "2 deg", "value": 2.0}}),
             "other body": slanted_post(lid_face(body={"token": "t2", "name": "Body2"})),
@@ -100,9 +112,56 @@ class UpToFaceTest(unittest.TestCase):
         self.assertIsNotNone(left_out(result, ITEM))
         self.assertEqual([(g["id"], g["dependsOn"]) for g in result.gaps], [("gap_2", []), ("gap_3", ["gap_2"])])
 
+    def test_a_chained_face_that_holds_the_whole_outline_is_copied(self):
+        result = translate(slanted_post(lid_face(chained=True, face_outline=lid_outline())))
+        self.assertIn("upTo", steps_of(result.recipe, "extrude")[-1]["extent"])
+
     def test_orca_still_leaves_it_out(self):
         result = orca_translate.translate(slanted_post())
         self.assertEqual([g["index"] for g in result.left_out], [ITEM])
+
+
+class ChainedFaceTest(unittest.TestCase):
+    """A post straight above the lid that ends on the lid top, a face Fusion may chain to the faces next to it."""
+
+    def test_the_post_is_copied_only_when_its_outline_lands_on_the_face(self):
+        for outline, copied in ((lid_outline(), True), (lid_outline(31.0), False), (None, False)):
+            with self.subTest(width=outline and outline["loops"][0]["curves"][1]["start"][0]):
+                capture = slanted_post(lid_face(chained=True, face_outline=outline), frame=STRAIGHT)
+                self.assertEqual(left_out(translate(capture), ITEM) is None, copied)
+                orca = orca_translate.translate(capture)
+                self.assertEqual(ITEM not in [g["index"] for g in orca.left_out], copied)
+
+    def test_the_sizes_that_may_carry_the_outline_past_the_face_are_marked(self):
+        chained = sized(slanted_post(lid_face(chained=True, face_outline=lid_outline()), frame=STRAIGHT))
+        self.assertEqual([entry["name"] for entry in chained.loose], ["lid_mm"])
+        extended = sized(slanted_post(lid_face(face_outline=lid_outline()), frame=STRAIGHT))
+        self.assertEqual(extended.loose, [])
+        capture = slanted_post(lid_face(chained=True, face_outline=lid_outline()), frame=STRAIGHT)
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["lid_mm"], params["model"], "mm")
+        (lid,) = orca_translate.translate(capture, size_table=table).parameters
+        self.assertEqual(lid["outcome"], orca_translate.PARTLY)
+
+
+    def test_a_face_of_another_component_is_checked_by_its_outline_in_the_part(self):
+        def cover(right):
+            """The face's outline as the reader brings it into the part: a square from x -20 to `right` at z 25."""
+            corners = [[-20.0, -10.0], [right, -10.0], [right, 10.0], [-20.0, 10.0]]
+            return {"frame": {"origin": [0.0, 0.0, 25.0], "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0],
+                              "z": [0.0, 0.0, 1.0]},
+                    "loops": [{"outer": True, "curves": [{"kind": "line", "start": a, "end": b}
+                                                         for a, b in zip(corners, corners[1:] + corners[:1])]}]}
+
+        # The boss is a 3 mm circle at x -10: it lands on the face that reaches to x 0, not on the one to x -9.
+        for outline, copied in ((cover(0.0), True), (cover(-9.0), False), (None, False)):
+            with self.subTest(outline=outline and outline["loops"][0]["curves"][0]["end"][0]):
+                capture = load_capture("component_ref_reach")
+                side = capture["items"][3]["data"]["side_one"]
+                side["chained"] = True
+                if outline is not None:
+                    side["ref"]["face_outline"] = outline
+                self.assertEqual(left_out(translate(capture), 3) is None, copied)
 
 
 class StartOffsetTest(unittest.TestCase):
