@@ -2834,10 +2834,13 @@ Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the
 `Body2` starts 3 mm above the top face of `Body1` (`Lift`).
 
 - The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
-- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
-  body that the walk builds (`Context.is_target`), the face is never "on this body" (`follow._beyond_tool`). This
-  is also true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step
-  uses.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is proven to
+  be another body, the face is never "on this body" (`follow._another_body`, `follow._beyond_tool`). This is also
+  true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step uses.
+- "Proven" means two things. The body is not the body that the walk builds (`Context.is_target`, also through the
+  lineage). And the body does not have the name of that body under another token. Fusion can give the exported body
+  a new token along the timeline (`capture.renamed_target`). Such a face can be on the exported body, so the
+  translator places it on the slabs as before.
 - No slab places the face. Thus every size that the items before the step read can move it
   (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
 - When the probe measured the face, the measured move is written instead (see the next part). In the example, the
@@ -2854,7 +2857,8 @@ translator uses the move of the slabs only when these two conditions are true (`
 
 1. The slabs place the face without a doubt.
 2. The move of the slabs is equal to the measured move at each try that built and that set the free sizes inside
-   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`).
+   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`). At least one such try must be available,
+   unless neither move follows a size. Without a try, nothing proves that the two moves agree.
 
 When one condition is false, the translator writes the measured move (`_measured_shift`). It also writes the
 measured move when the measured move is stuck, because then the two answers cannot be compared. Thus a move that

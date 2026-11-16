@@ -19,9 +19,9 @@ HIDDEN = [30, 15, 8]
 OFFSET = "ConstructionPlaneOffsetDefinition"
 
 
-def face_at(point, token="f9", body="t1"):
+def face_at(point, token="f9", body="t1", name="Body1"):
     return {"entity_type": "BRepFace", "token": token, "face_point": list(point), "surface": "Plane",
-            "body": {"token": body, "name": "Body1"}}
+            "body": {"token": body, "name": name}}
 
 
 def reaching(capture, index, target, at):
@@ -190,16 +190,16 @@ FOLLOWS_LIFT = {"const": -8, "terms": {"lift_mm": 1}}
 TRIES = [{"values": {"plate_mm": 12}}, {"values": {"lift_mm": 9}}]
 
 
-def post_on_top(body):
-    """The post (Extrude3) reaching to a face at the plate's top, on the body with token `body`."""
-    return reaching(load_capture("sketch_offset_plane"), 5, face_at(TOP, body=body), TOP[2])
+def post_on_top(body, name="Helper"):
+    """The post (Extrude3) reaching to a face at the plate's top, on the body with token `body` and `name`."""
+    return reaching(load_capture("sketch_offset_plane"), 5, face_at(TOP, body=body, name=name), TOP[2])
 
 
 class FaceOfAnotherBodyTest(unittest.TestCase):
     """The post reaches to a face of a helper body (t2) that lies where the plate's top face is."""
 
     def test_the_measured_move_is_followed_and_not_the_face_of_this_body_at_the_same_place(self):
-        result = run(post_on_top("t2"), ["plate_mm", "lift_mm"], measured("5.side_one", FOLLOWS_LIFT))
+        result = run(post_on_top("t2"), ["plate_mm", "lift_mm"], measured("5.side_one", FOLLOWS_LIFT, states=TRIES))
         self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "lift_mm + 2")
         self.assertEqual(reasons(result), {})
 
@@ -208,14 +208,24 @@ class FaceOfAnotherBodyTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[2]["distance"], 10.0)
         self.assertIn("plate_mm", reasons(result))
 
+    def test_a_face_of_the_part_under_a_new_token_is_still_on_the_part(self):
+        # Body1 is the exported body's name: Fusion may have given it another token, so nothing proves another body.
+        result = run(post_on_top("t9", name="Body1"), ["plate_mm", "lift_mm"], Motion.from_json({"values": LIFTED}))
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "plate_mm")
+        self.assertEqual(reasons(result), {})
+
 
 class MeasuredMoveWinsTest(unittest.TestCase):
     """The post reaches to the plate's top face, which the slabs place: they say it moves with plate_mm."""
 
-    def test_the_slab_formula_is_kept_only_when_it_moves_as_measured_at_every_try(self):
-        for label, value, length in (("agrees", FOLLOWS_PLATE, "plate_mm"), ("differs", FOLLOWS_LIFT, "lift_mm + 2")):
+    def test_the_slab_formula_is_kept_only_when_tries_show_it_moves_as_measured(self):
+        unbuilt = [dict(t, built=False) for t in TRIES]
+        for label, value, tries, length in (("agrees", FOLLOWS_PLATE, TRIES, "plate_mm"),
+                                            ("differs", FOLLOWS_LIFT, TRIES, "lift_mm + 2"),
+                                            ("no try built", FOLLOWS_LIFT, unbuilt, "lift_mm + 2")):
             with self.subTest(label):
-                result = run(post_on_top("t1"), ["plate_mm", "lift_mm"], measured("5.side_one", value, states=TRIES))
+                result = run(post_on_top("t1", "Body1"), ["plate_mm", "lift_mm"],
+                             measured("5.side_one", value, states=tries))
                 self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), length)
                 self.assertEqual(reasons(result), {})
 
