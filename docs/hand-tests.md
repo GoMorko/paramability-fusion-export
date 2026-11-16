@@ -23,12 +23,17 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6 and RV1 to RV4, 
       Export: tick `Height`, export for Paramability and for Orca. The revolve `axis` has `entity_type: "BRepEdge"`
       and `edge_points`. Both results mark `Height` with a reason that Revolve1 turns about an edge that may move with
       it.
-- [ ] RV3, construction geometry on points, edges and a path. On a 40 by 20 by 10 mm box make: an axis Through Edge
-      (a top edge), an axis Through Two Points (two top corners), a plane Through Three Points (three top corners), a
-      plane Through Two Edges (two parallel top edges), a plane Along Path (a top edge, at half its length) and a
-      plane Tangent at Point (on a cylinder boss). Use each axis for a circular pattern of a small hole and each plane
-      for a mirror of that hole. In another component make a box and a plane Offset from its top face; mirror the
-      hole across that plane.
+- [ ] RV3, construction geometry on points, edges and a path. A 40 by 20 by 10 mm box with its corner at the
+      origin, a cylinder boss of 10 mm diameter and 5 mm height centred at (30, 10) on the top face, and a simple
+      hole of 3 mm diameter, 3 mm deep, at (10, 10) on the top face. Make: an axis Through Edge (the top back edge,
+      y = 20, z = 10), an axis Through Two Points (the top corners (0, 0, 10) and (40, 0, 10)), a plane Through Three
+      Points ((0, 0, 0), (0, 0, 10) and (40, 20, 10), upright across the box), a plane Through Two Edges (the top
+      front edge and the bottom back edge, a slant across the box), a plane Along Path (the top front edge at half
+      its length) and a Tangent Plane (the boss at its back side, y = 15, reference the XZ plane). Use each axis for
+      a circular pattern of the hole, 2 copies over 10 degrees turned down into the box, and each plane for a mirror
+      of the hole. In another component make a 20 by 20 by 10 mm box from (60, 0) and a plane offset -5 mm from its
+      top face (z = 5); mirror the hole across that plane. Every copy cuts into material; delete and note any step
+      that Fusion shows in error.
       Export: in `report.json` each `axis` and `plane` has `definition` and a `built_on` list that names the picked
       entities (`BRepEdge`, `BRepVertex`, `BRepFace`), never an empty list; the plane of the other component's face has
       `{ "foreign": true }` in `built_on`. Note any definition whose `built_on` is missing.
