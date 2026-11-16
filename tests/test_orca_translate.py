@@ -2,6 +2,7 @@
 each ticked parameter became. No Fusion and no Orca: the planes and extents are checked against the capture's box."""
 import copy
 import math
+import re
 import sys
 import unittest
 from unittest import mock
@@ -17,7 +18,7 @@ from lib.design_model import words
 from lib.orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from lib.orca_recipe.recipe import deserialize, serialize
 from lib.orca_translate import FIXED, PARTLY, UNUSED, VARIABLE, causes, translate
-from lib.orca_translate.formulas import (OrcaFormulaError, orca_value, to_orca, variable_names,
+from lib.orca_translate.formulas import (OrcaFormulaError, orca_number, orca_value, to_orca, variable_names,
                                          variable_values)
 from lib.orca_translate.place import Placement, moved_box, plane_point
 from lib.orca_translate.skip import Skip
@@ -460,6 +461,20 @@ class FormulaTest(unittest.TestCase):
             with self.subTest(text):
                 with self.assertRaises(OrcaFormulaError):
                     to_orca(text, {"a": "a"})
+
+    def test_numbers_are_written_as_orca_reads_them(self):
+        # Orca reads a number as digits and points only (`eval_expr` in CadDocument.cpp): no exponent.
+        orca_form = re.compile(r"^-?[0-9]+(\.[0-9]+)?$")
+        for value in (1e-5, 3e-7, 2.5e20, 1e300, -4e-6, -12.5, 7.0, -0.0, 0.1 + 0.2):
+            with self.subTest(value=value):
+                text = orca_number(value)
+                self.assertRegex(text, orca_form)
+                self.assertAlmostEqual(float(text), value, delta=1e-9 * max(1.0, abs(value)))
+        self.assertEqual(orca_number(7.0), "7")
+        for value in (math.inf, -math.inf, math.nan):
+            with self.assertRaises(OrcaFormulaError):
+                orca_number(value)
+        self.assertNotIn("e", to_orca("a * 1e-05 + 3e20", {"a": "x"}).replace("x", ""))
 
     def test_variable_names_keep_clear_of_orca_words(self):
         self.assertEqual(variable_names(["width", "pi", "max", "pi_v"]),

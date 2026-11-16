@@ -21,26 +21,27 @@ def precedence(node):
     return _ATOM
 
 
-def render(node):
+def render(node, number=format_number):
+    """The formula text of an output tree; `number` writes each number (`format_number` by default)."""
     kind = node[0]
     if kind == "num":
-        return format_number(node[1])
+        return number(node[1])
     if kind == "name":
         return node[1]
     if kind in ("neg", "not"):
-        inner = render(node[1])
+        inner = render(node[1], number)
         return ("-" if kind == "neg" else "!") + (inner if precedence(node[1]) == _ATOM else "(" + inner + ")")
     if kind == "call":
-        return node[1] + "(" + ", ".join(render(a) for a in node[2]) + ")"
+        return node[1] + "(" + ", ".join(render(a, number) for a in node[2]) + ")"
     if kind == "cond":
-        test = render(node[1])
+        test = render(node[1], number)
         if precedence(node[1]) == 0:
             test = "(" + test + ")"
-        return f"{test} ? {render(node[2])} : {render(node[3])}"
+        return f"{test} ? {render(node[2], number)} : {render(node[3], number)}"
     op, left, right = node[1], node[2], node[3]
     p = PRECEDENCE[op]
-    ltext = render(left)
-    rtext = render(right)
+    ltext = render(left, number)
+    rtext = render(right, number)
     # A comparison does not chain, so a comparison on either side needs brackets.
     if precedence(left) < p or (kind == "cmp" and precedence(left) == p):
         ltext = "(" + ltext + ")"

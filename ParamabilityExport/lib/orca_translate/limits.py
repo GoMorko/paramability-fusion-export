@@ -33,7 +33,7 @@ import re
 from ..design_model.dimension_sizes import size_env
 from ..params.expressions.errors import ExpressionError
 from ..params.size_table import FREE
-from .formulas import orca_value, variable_values
+from .formulas import orca_number, orca_value, variable_values
 
 # Steps out from the current value: the first is this share of it (or of 1 when it is 0), each next one twice as
 # long, at most this many.
@@ -191,7 +191,7 @@ def _search(ctx, fields, ok):
 
         def fits(x, name=name):
             try:
-                values = variable_values(dict(variables, **{name: repr(float(x))}))
+                values = variable_values(dict(variables, **{name: orca_number(x)}))
                 numbers = _numbers(fields, values)
                 return _checked(ok(numbers)) if _shaped(fields, numbers) else Stop(SHAPE_ZERO)
             except (ExpressionError, ArithmeticError, ValueError):
@@ -266,8 +266,10 @@ def _shown(value, sign):
     """A limit as a short number, rounded toward the side where the step still fits."""
     digits = 2 if abs(value) < 10 else 1
     scale = 10 ** digits
-    value = round(value, 6)  # a limit found a hair past a round number is that number
-    number = (math.floor if sign > 0 else math.ceil)(value * scale) / scale
+    found = round(value, 6)  # a limit found a hair past a round number is that number
+    number = (math.floor if sign > 0 else math.ceil)(found * scale) / scale
+    if sign < 0 and value > 0 and number <= 0:
+        number = 1.0 / scale  # a lower limit above zero is shown above zero
     return ("%.*f" % (digits, number)).rstrip("0").rstrip(".")
 
 
@@ -359,7 +361,7 @@ def tell_sizes(ctx, fields, names, ok):
 
         def fits(x, entry=entry, name=name):
             try:
-                values = variable_values(dict(variables, **{name: repr(float(x))}))
+                values = variable_values(dict(variables, **{name: orca_number(x)}))
                 numbers = _numbers(fields, values)
                 if not _shaped(fields, numbers):
                     return Stop(SHAPE_ZERO)

@@ -306,6 +306,14 @@ class LimitTest(unittest.TestCase):
         self.assertEqual(limits.words("w", None, 20.0, 10.0, " mm", False, why=found["w"].why).why,
                          (None, limits.CUTS_DIFFER))
 
+    def test_a_shape_size_is_walked_down_to_zero_itself(self):
+        # Values near zero are tested as Orca writes them, without an exponent, so the walk reaches the true end.
+        sketch = CadFeature(name="Box sketch")
+        sketch.expr["width"] = "w"
+        found = limits.ranges(_Context({"w": "10"}), [(sketch, "width")], lambda numbers: True)
+        self.assertLess(found["w"][0], 1e-6)
+        self.assertEqual(found["w"].why, (limits.SHAPE_ZERO, None))
+
     def test_a_field_whose_limit_cannot_be_told_keeps_its_number(self):
         extrude = CadFeature(name="Post")
         ctx = _Context({"lift_mm": "15"})
