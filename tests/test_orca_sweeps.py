@@ -333,6 +333,14 @@ class SplinePathTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(left_causes(capture), [cause])
 
+    def test_a_spline_that_turns_inside_the_path_is_a_sharp_corner(self):
+        cases = (("a cubic knot three times", sw.KINKED_SPLINE, [gap_hints.SHARP_CORNER]),
+                 ("a polyline with a corner", sw.CORNERED_POLYLINE, [gap_hints.SHARP_CORNER]),
+                 ("a polyline along one line", sw.STRAIGHT_POLYLINE, []))
+        for name, spec, found in cases:
+            with self.subTest(name):
+                self.assertEqual(left_causes(sw.pipe_along(spec)), found)
+
 
 if __name__ == "__main__":
     unittest.main()

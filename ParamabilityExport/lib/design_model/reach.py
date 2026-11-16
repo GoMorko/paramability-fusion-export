@@ -567,19 +567,12 @@ def direction_kind(item, which):
 
 def hole_end_sizes(table, timeline, item, data):
     """Fusion names of the ticked sizes that may move the faces where the holes of `item` (its `data`) go in and come
-    out of the part, in table order: every size an item of the body's component reads before the step, except the
-    sizes that only the hole's own sketch reads. Those place the hole centres and change no face, but only when the
-    sketch is the item just before the hole: an item between them could take the sketch's geometry (a projection) into
-    a face of the part, so then no size is left out."""
+    out of the part, in table order: every size an item of the body's component reads before the step. The sizes of
+    the hole's own sketch count too: they move the hole centres, and on a part that is not equally thick everywhere a
+    hole that moves goes in and comes out at other faces."""
     if table is None:
         return []
-    index = item.get("index")
-    sketch = data.get("sketch") if isinstance(data, dict) else None
-    at = _sketch_item(timeline, sketch, index) if sketch and isinstance(index, int) else None
-    if at is not None and any(isinstance(i.get("index"), int) and at < i["index"] < index and not i.get("suppressed")
-                              for i in timeline):
-        at = None
-    names = _reads_before(table, [i for i in timeline if at is None or i.get("index") != at], index)
+    names = _reads_before(table, timeline, item.get("index"))
     return [name for name in table.ticked if name in names]
 
 

@@ -553,7 +553,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   without its definition, one of the splines left out below, or a spline the planner cut open where a closed path
   meets the outline), a closed path that holds a spline (`sweepPath`: live, Orca 2.5.1 crashed in OCCT's
   `BRepFill_Pipe::MakeShape` while it built a closed track of two lines and two splines), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
-  where Fusion's mitred wire has 384, and 202 for a closed square path against 439), holes along a bent path
+  where Fusion's mitred wire has 384, and 202 for a closed square path against 439), also a corner inside a spline
+  (`sharpCorner`: a joint of its Bezier pieces where the curve turns by more than 0.01 degrees, as at an inner knot
+  that a cubic has three times or at a corner of a degree one spline; `splines.joint_turns`), holes along a bent path
   (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
   known, a path in another component and the outlines of
   different planes.
@@ -577,8 +579,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   knot inserted up to the degree), and each piece is one Orca entity of 4 poles (3 for degree two), the same curve.
   The pieces must start and end where Fusion's curve does and pass within 0.002 mm of every measured point. Left
   out: a closed (periodic) spline, differing weights, a degree over three, knots not clamped at both ends, a break
-  in the curve, and a spline read without its definition (older captures). The same pieces draw a spline of a sweep
-  path.
+  in the curve, and a spline read without its definition (older captures). An inner knot as many times as the degree
+  can make a corner in the curve; Orca draws the same corner, so an outline keeps it. The same pieces draw a spline
+  of a sweep path, where such a corner leaves the sweep out (see above).
 - Live with OrcaSlicer 2.5.1 on 2026-11-16: the fixtures `sweep_pipe`, `sweep_far_end`, `sweep_closed_rim`,
   `sweep_ring`, `sweep_straight`, `sweep_edges`, `loft_two_squares` and `loft_on_plate` built with the capture's box
   and volume (1857.8, 1857.8, 420.5, 2261.9, 2400.0, the box only, 7000.0, 15000.0); the captures of
@@ -646,17 +649,24 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
   construction geometry built on the part, every size read before the step. For a direction of a rectangular pattern
   taken from an edge or axis of the part, the same (the `own` place of the capture). For a direction taken from a
-  sketch line, the sizes of that sketch. An edge or face that lies where a straight extrude made it (a side edge
-  along its axis, an edge over a fixed line of its outline, an end face or a side face) turns only with that
-  extrude's sketch plane (`design_model.edges.direction_sizes`), so a pattern along an edge of a plain box marks no
-  box size. For a thread, every size read before the step (`reach.any_face_sizes`). The thread of a tapped hole
-  through all runs the part's thickness now ("Hole1: its thread runs through the part as thick as it is now, and Orca
-  keeps that length", `threads.mark_through_length`). When each hole goes from one end face of a one sided straight
-  extrude to the other, only the sizes of that extrude's length are marked (`edges.through_sizes`); else every size
-  read before the hole, except the sizes that only the hole's own sketch reads when that sketch comes just before the
-  hole (`reach.hole_end_sizes`). Those sizes place the hole centres, which follow them, and they change no face.
-  The mark is made after the centres are placed, so it does not hold the hole's own
-  centre. An origin plane or axis gives no size. A record of an older capture that does not say
+  sketch line, the sizes of that sketch. A part is plain before a step when every step of its component before it
+  is a straight extrude (no taper, each side a distance, its end caps measured), a simple hole through all (round
+  faces and edges only), a sketch or construction geometry (`design_model.edges`). Any other step (a revolve, a loft,
+  a sweep, a pattern, a round, a move) may make an edge or face where an extrude's would lie. In a plain part, an
+  edge or face that lies where a straight extrude made it (a side edge along its axis between its end caps, an edge
+  over a fixed line of its outline at an end cap, an end face at an end cap or a side face between them) turns only
+  with the sketch planes of the part's extrudes (`edges.direction_sizes`), so a pattern along an edge of a plain box
+  marks no box size. For a thread, every size read before the step (`reach.any_face_sizes`). The thread of a tapped
+  hole through all runs the part's thickness now ("Hole1: its thread runs through the part as thick as it is now,
+  and Orca keeps that length", `threads.mark_through_length`). The thickness at a hole depends on where the hole is,
+  so in general every size read before the hole is marked, also the sizes that place the hole
+  (`reach.hole_end_sizes`): on a plate with a boss, a size that moves the hole under the boss makes it longer. Only
+  when the part is plain, every extrude is one sided, adds material along the hole and spans the same two planes, and
+  each hole goes in at one of these planes and out at the other, is the part as thick wherever a hole can go. Then
+  only the sizes of the extrudes' lengths and sketch planes are marked, and for several extrudes their start offsets
+  too (`edges.through_sizes`). The sizes that place the hole then keep following. The sizes that may move the plane
+  of the holes are marked by the hole itself. The mark is made after the centres are placed, so it does not hold the
+  hole's own centre. An origin plane or axis gives no size. A record of an older capture that does not say
   what it is gives no size either, as in the recipe output. A place of another component is marked by
   `other_components.mark_refs`. A marked size counts as held for a later hole centre (`Context.held`).
 - Each ticked parameter ends as "follows the Orca variable" (everywhere it is used), "follows ... but not everywhere"
