@@ -401,7 +401,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     changed.
 39. PI1, Pipe: start plane, section placement, hollow section. Units mm, Z up. Make a path on the XZ plane: a line
     from (0, 0) to (0, 40) mm (so it runs along Z), then a tangent arc, 90 deg, radius 15 mm, ending at
-    (15, 55) pointing along +X (one sketch, three curves joined). Make five pipes from the same path, each as a
+    (15, 55) pointing along +X (one sketch, two curves joined). Make five pipes from the same path, each as a
     new body (use Undo or copies of the design between them). Use Create > Pipe, path = the sketch, and: (a)
     Section Circle, Section Size (outside diameter) 10 mm, Hollow off. (b) Circle 10 mm, Hollow on, Section
     Thickness 2 mm. (c) Section Square, size 10 mm, Hollow off. (d) Section Triangle, size 10 mm, Hollow off.
