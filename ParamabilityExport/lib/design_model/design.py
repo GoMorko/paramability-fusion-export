@@ -20,8 +20,8 @@ copies it:
   keeps none of them. `error` is the exception that bringing in raised, if any; `replay` raises it again.
 
 A handler of an output takes the `ResolvedStep` of its step and reads the step through it: `brought` for the item,
-`brought_data` for its data, `facts` for what the shared reader of its kind gives, and `params_of` for the model
-parameters behind a value. An item that no walk resolves but that a handler reads or copies (a source of a pattern, a
+`brought_data` for its data, `facts` for what the shared reader of its kind gives, `params_of` for the model
+parameters behind a value and `sketches_of` for the sketches it names. An item that no walk resolves but that a handler reads or copies (a source of a pattern, a
 Combine among them, an item a handler writes again as another kind of step) goes in as `as_read(item)`: the item as
 it is, nothing brought in.
 
@@ -124,6 +124,26 @@ def params_of(item):
     """The model parameters that Fusion keeps for the values of an item (`data.params`): by the path of each value in
     the data, `{name, expression, value}`. {} when it has none."""
     return data_of(item).get("params") or {}
+
+
+def sketches_of(item):
+    """The names of the sketches the data of an item names (every `sketch` field, at any depth), in the order they
+    first appear."""
+    found = {}
+    _sketch_names(data_of(item), found)
+    return list(found)
+
+
+def _sketch_names(node, found):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "sketch" and isinstance(value, str) and value:
+                found.setdefault(value, None)
+            else:
+                _sketch_names(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _sketch_names(value, found)
 
 
 def _problem_codes(item):

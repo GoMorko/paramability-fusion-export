@@ -115,6 +115,10 @@ class FactsTest(unittest.TestCase):
         named = {t.facts for t in step_kinds.STEP_TYPES if t.facts}
         self.assertEqual(named - set(design.FACT_READERS), set())
 
+    def test_the_sketches_an_item_names_at_any_depth_once_each_in_order(self):
+        data = {"sketch": "Base", "profiles": [{"sketch": "Top"}, {"sketch": "Base"}], "path": {"sketch": ""}}
+        self.assertEqual(design.sketches_of(item(data=data)), ["Base", "Top"])
+
     def test_a_pattern_names_the_items_it_repeats_and_another_kind_none(self):
         self.assertEqual(repeat.repeated_items(item(3, "MirrorFeature", data={"sources": [1, 2]})), [1, 2])
         self.assertEqual(repeat.repeated_items(item(3, "CombineFeature", data={"sources": [1, 2]})), [])

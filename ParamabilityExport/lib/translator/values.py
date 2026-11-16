@@ -13,6 +13,7 @@ parser cannot read still marks the sizes on Fusion's own list of what its parame
 needs above zero that reaches zero inside the size ranges has the ranges cut instead, since the default range of a
 small angle starts at 0 degrees.
 """
+from ..design_model import design
 from ..design_model.values import Quantity, negated_text
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.formula import parse_formula
@@ -25,14 +26,8 @@ TOLERANCE = 1e-6
 ABOVE_ZERO = 0.005
 
 
-def _data(item):
-    data = item.get("data") if isinstance(item, dict) else None
-    return data if isinstance(data, dict) else item
-
-
 def _param(item, path):
-    params = _data(item).get("params")
-    found = params.get(path) if isinstance(params, dict) else None
+    found = design.params_of(item).get(path)
     return found if isinstance(found, dict) and found.get("expression") else None
 
 

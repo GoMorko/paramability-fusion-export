@@ -60,13 +60,12 @@ RAW_STEP_DATA = {
     "geometry/combine_volume.py",
     "params/geometry_links.py",
     "probe/plan/covered.py", "probe/plan/request.py",
-    "translator/audit.py", "translator/bodies/split_rules.py", "translator/combine/step.py",
-    "translator/faces/floating.py", "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py",
-    "translator/hole/step.py", "translator/hole/thread.py", "translator/repeat/body_copies.py",
-    "translator/repeat/repeat_circular.py", "translator/repeat/repeat_lattice.py",
-    "translator/repeat/repeat_mirror.py", "translator/repeat/repeat_rectangular.py",
-    "translator/repeat/repeat_sources.py", "translator/revolve/step.py", "translator/sketch/sketch_motion.py",
-    "translator/values.py",
+    "translator/bodies/split_rules.py", "translator/combine/step.py", "translator/faces/floating.py",
+    "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py", "translator/hole/step.py",
+    "translator/hole/thread.py", "translator/repeat/body_copies.py", "translator/repeat/repeat_circular.py",
+    "translator/repeat/repeat_lattice.py", "translator/repeat/repeat_mirror.py",
+    "translator/repeat/repeat_rectangular.py", "translator/repeat/repeat_sources.py", "translator/revolve/step.py",
+    "translator/sketch/sketch_motion.py",
 }
 _READS_DATA_ITSELF = ("design_model", "fusion_reader", "capture_model")
 _DATA_HELPERS = ("data_of", "_data")
