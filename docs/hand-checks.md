@@ -99,9 +99,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: the single path sweep copies; the guide surface sweep is left out and names the settings Fusion did not
    give; the edge loft names what Fusion gave for the section.
 
-6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
-   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path along a sketch
-   spline, and Boundary Fill between two bodies.
+6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it together with a sketch; on a
+   second box add a Rib (a sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern
+   on Path along a sketch spline, and Boundary Fill between two bodies.
    Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
    ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
    ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
@@ -578,3 +578,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. SC1, scale of a body. Add a user parameter `Grow` = 1.5 (no unit) and `Height` = 10 mm. Sketch a 40 x 20 mm
+    rectangle on the XY plane with one corner at the origin and extrude it by `Height`. Use Modify, Scale on the body
+    with the origin point as the point, uniform, factor `Grow`. Fillet one top edge by 2 mm after the scale. Make a
+    second design with the same box scaled Non Uniform by X 1, Y 2, Z 0.5 about the far top corner of the box (a
+    vertex), and a third with the box in a component that is turned 30 degrees about Z in the assembly, scaled Non
+    Uniform about the component's origin.
+    Export: tick `Grow` and `Height`. The first copy has a `scale` step with factor `Grow` after the extrude and
+    matches the STEP; in Paramability, change `Grow` to 2: the part grows to 80 x 40 x 20 mm, and the fillet
+    stays on its edge (the fillet may mark sizes "may give unexpected results"). The second copy
+    writes the factors [1, 2, 0.5] and the corner as the point, and `Height` is marked "may give unexpected results".
+    The third leaves the scale out with "turned at an angle". Export for Orca leaves the scale out with the tip
+    "Change the sizes in the sketches". In `report.json` note `input_kind`, `point` and `factors` of each scale.
+    Afterwards the design is as before.

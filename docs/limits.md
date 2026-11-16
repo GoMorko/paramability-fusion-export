@@ -206,6 +206,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   as the numbers Fusion measured. What they follow can move with any size, so every ticked size is marked or left
   out with the reason. A Move of faces, and a Move that mirrors or
   scales, are left out of the copy.
+- Scale of bodies is copied. The factor, or the three factors of a scale that differs per axis, follow sizes. A factor
+  whose formula could go under 0.001 or over 1000 keeps its number, and its sizes are marked. The point that stays in
+  place keeps the place Fusion measured: when it is the origin, nothing is marked; when it is a sketch point, a
+  construction point or a corner of the part, the sizes that can move it are marked "may give unexpected results".
+  The add-in checks the scale on the measured body (its volume and its box): a scale that does not agree is left
+  out. A scale that also scales sketches, a scale with factors per axis in a component that is turned at an angle
+  that is not a quarter turn, and a scale before the first copied step of the body are left out. A round, chamfer
+  or offset after the scale that picks faces made before it keeps its measured place, and the sizes are marked.
+  Export for Orca leaves every scale out: Orca has no step that scales a body.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
   the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
   sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout

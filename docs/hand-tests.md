@@ -2297,6 +2297,24 @@ Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py
   `BRepEdge.evaluator.getPointAtParameter` samples (17 per edge). Expected: two flat faces for a round, square or
   triangle section; `faces.edges` holds the helical edges.
 
+## Capture reader calls to watch (scale)
+
+Hand check SC1 is in `docs/hand-checks.md`. The reader is `read_scale.py`. These members were written from the API
+stubs and never run. A member that cannot be read gives `null` or `other`, and the translator leaves the step out.
+
+- `ScaleFeature.inputEntities` with the marker just before the item: `BRepBody` entries for a scale of bodies; a
+  `Sketch` among them gives `input_kind` `sketches`. `BRepBody.boundingBox` and `BRepBody.volume` of each input body
+  before the item, and again after it for the body found by its token (`after`).
+- `ScaleFeature.point` with the marker before the item: a `SketchPoint` (`worldGeometry`, `parentSketch`), a
+  `ConstructionPoint` (`geometry`, `entityToken`, `timelineObject.index`) or a `BRepVertex` (`geometry`, `body`).
+  The origin point of the component (`Component.originConstructionPoint`) gives `{ origin: true }`. Check that a
+  sketch point on a sketch of a turned plane gives its place in the component's coordinates.
+- `ScaleFeature.isUniform`, `scaleFactor` (uniform) and `xScale`, `yScale`, `zScale` (per axis). The API reference
+  says the axis factors are null "where isUniform is false"; note in `report.json` whether `factors` holds numbers for
+  a scale per axis. Note also along which axes Fusion scales a body in a component that is turned in the assembly:
+  the translator checks the body's box in the component's own coordinates, so a scale along the assembly axes is left
+  out as "does not change the body as its factors and point say".
+
 ## Capture reader calls to watch (reach)
 
 Written from the API reference and never run (`lib/fusion_reader/read_gap_reach.py`, used only when the first

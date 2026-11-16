@@ -127,7 +127,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together

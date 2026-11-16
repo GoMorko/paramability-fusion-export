@@ -1,0 +1,292 @@
+{
+  "_comment": "A 40 by 20 by 10 plate, scaled by grow_factor (1.5) about the origin.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        60.0,
+        30.0,
+        15.0
+      ]
+    },
+    "volume_mm3": 27000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d1",
+            "expression": "plate_h_mm",
+            "value": 10.0
+          }
+        }
+      }
+    },
+    {
+      "index": 2,
+      "name": "Scale1",
+      "type": "ScaleFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t1",
+            "name": "Body1",
+            "box_before": {
+              "min": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max": [
+                40.0,
+                20.0,
+                10.0
+              ]
+            },
+            "volume_before": 8000.0
+          }
+        ],
+        "point": {
+          "origin": true,
+          "point": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "uniform": true,
+        "factor": 1.5,
+        "factors": null,
+        "after": [
+          {
+            "box": {
+              "min": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max": [
+                60.0,
+                30.0,
+                15.0
+              ]
+            },
+            "volume": 27000.0
+          }
+        ],
+        "params": {
+          "factor": {
+            "name": "d2",
+            "expression": "grow_factor",
+            "value": 1.5
+          }
+        }
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "plate_h_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10.0
+      },
+      {
+        "name": "grow_factor",
+        "expression": "1.5",
+        "value": 1.5,
+        "unit": "",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "count",
+        "display_value": 1.5
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "plate_h_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "plate_h_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 10.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d1",
+          "name": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "grow_factor",
+        "value": 1.5,
+        "unit": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "grow_factor"
+        ],
+        "role": "Scale Factor",
+        "kind": "derived",
+        "display_value": 1.5,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d2",
+          "name": ""
+        }
+      }
+    ]
+  }
+}

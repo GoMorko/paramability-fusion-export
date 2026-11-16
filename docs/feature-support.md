@@ -122,7 +122,8 @@ can be.
 | Shell: inside, open faces | Copied | - | Left out | Needs Orca | Orca opens only a face that it picks by its own numbering. |
 | Shell: outward, closed, rounded corners | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Draft | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane. Two different angles are left out. |
-| Scale | Left out | Yes, needs an app change | Left out | Needs Orca | |
+| Scale of bodies | Copied | - | Left out | Needs Orca | Paramability: the factors follow sizes. A point that sizes can move keeps its place, and those sizes are marked. Factors per axis in a component turned at an angle are left out. |
+| Scale of sketches, or of a body and a sketch together | Left out | Yes, add-in only | Left out | Needs Orca | |
 | Combine: join, cut, intersect | Copied | - | Copied | - | The tool bodies are copied from their steps, also from other components. Orca: an intersect with several tools that the add-in cannot work out is left out. |
 | Replace Face | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Split Face | Copied | - | Left out | Yes, add-in only | Paramability passes it by when the solid stays the same, with a note: picks on the split faces may not follow. Orca leaves the step out, although the shape stays the same. |
@@ -202,7 +203,7 @@ Sorted by how many printing projects it helps:
 10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
 12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
-13. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
+13. Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
     Boundary Fill and sheet metal (app change).
 
 ## Orca does not support

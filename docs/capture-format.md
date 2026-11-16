@@ -1294,6 +1294,41 @@ other types are written as the numbers of the fit. What they follow can move wit
 marked, and the parameters in their `params` are pinned. After the step the walk's
 placers are carried by the move, so later picks follow sizes.
 
+**ScaleFeature** (`inputEntities`, `point`, `isUniform`, `scaleFactor`, `xScale`, `yScale`, `zScale`, with the
+marker before the item; the bodies again after it; `lib/fusion_reader/read_scale.py`):
+
+```json
+{ "input_kind": "bodies",
+  "bodies": [{ "token": "t1", "name": "Body1", "box_before": BOX, "volume_before": 8000.0 }],
+  "point": { "origin": true, "point": [0.0, 0.0, 0.0] },
+  "uniform": true, "factor": 1.5, "factors": null,
+  "after": [{ "box": BOX, "volume": 27000.0 }],
+  "params": { "factor": PARAM } }
+```
+
+- `input_kind`: `bodies` when every input is a body, `sketches` when a sketch is among them, else `other`. `bodies`
+  lists the body inputs in every case, each with its box (`box_before`, `{ min, max }` in mm) and volume (mm3)
+  before the item; null for a value that cannot be read.
+- `after`: per body in `bodies`, its `box` and `volume` with the marker after the item, found again by token (null
+  when it cannot be found).
+- `point`: the point that stays in place, in the component's coordinates. `{ "origin": true }` for the component's
+  origin point. Else `entity_type` (`SketchPoint`, `ConstructionPoint` or `BRepVertex`) and `point`, with `sketch`,
+  `sketch_reference` and `sketch_projected` for a sketch point (as for a sketch line axis), `token` and `made_by`
+  for a construction point, and `body` for a corner. `{ "kind": "other", "type" }` for anything else, for a point
+  that cannot be read and (with `foreign`) for a point of another component. Null when Fusion gives no point.
+- `uniform`: `isUniform` (null when unreadable). A uniform scale has `factor` (`scaleFactor`) and params path
+  `factor`; one per axis has `factors` (`xScale`, `yScale`, `zScale`, null for one that cannot be read) and params
+  paths `factors.0`, `factors.1`, `factors.2`. The factors are plain numbers (Fusion keeps them without a unit).
+
+The handler (`translator/bodies/scale.py`) writes a `scale` step (recipe version 17) in the walk of the body it scales:
+`factor` is one value or `[x, y, z]`, through the sizes, and `point` is the measured point. It refuses a scale whose
+inputs are not all bodies, a point or factor that cannot be read, a factor outside 0.001 to 1000, a scale before any
+written step, factors per axis when the recipe is carried into the assembly by a turn that is not a quarter turn
+(`place.axis_turn`), and a scale whose measured volume and box disagree with the factors and the point. The sizes
+that may move a point that is not the origin (`reach.reference_sizes`) are marked. After the step the earlier
+placers place no picks (`faces/scaled_placer.py`). `place.place` puts per-axis factors on the axes its map turns
+them to (the `factors` paths of the step kind table).
+
 Body records (`lib/fusion_reader/read_bodies.py`): `{ "token", "name" }`, `foreign` and the identity keys of a foreign
 tool for a body of another component, and `points`: up to 8 vertices in mm of the native body, in the body's vertex
 order (empty when one cannot be read, since a gap would shift the order).
@@ -2751,6 +2786,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `MoveFeature.inputEntities` (only bodies or only faces) read with the marker before the item; the same bodies found by token after it, with their vertices in the same order | `points_before` and `points_after` are fitted by the translator; a mismatch is refused; the Move hand tests B3 to B5 |
 | `MoveFeature.definition` has a class per type, and the type name contains `TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition` or `TranslateAlongEntity` | an unknown name reads `other` and the Move is refused; B3 to B5 |
 | `xDistance`, `yDistance`, `zDistance` (model parameters in cm) and `isDesignSpace` of a translate move; `angle` (model parameter in radians) and `axisEntity` of a rotate move | a member that cannot be read is null, and the Move is refused; the sign and the space (component or design) come from the fit against the points; B4, B5 |
+| `ScaleFeature.inputEntities` and `point` with the marker before the item; `isUniform`, `scaleFactor`, `xScale`, `yScale`, `zScale` as model parameters without a unit; the axis factors run along the component's own axes | a member that cannot be read is null and the scale is left out; the measured box and volume check the factors and the point; SC1 |
 | `MoveFeatureFreeMoveDefinition.transform` answers for a free move | null when it cannot be read; the fit against the points decides alone; B3 |
 | `CopyPasteBody.sourceBody`, an `ObjectCollection` in the API stubs, can be read with the marker before the item (and is empty or shorter when a source was consumed), `CopyPasteBody.bodies` after it, also when the source lives in another component | empty `sources` or null `result_bodies` refuse the Paste; B2, B8 |
 | `inputEntities` of a rectangular, circular or mirror pattern of bodies with the marker before the item, `bodies` after it holding every copy (not the sources) | null `result_bodies` refuses the pattern; copies are matched to the elements by the points; B6 |
