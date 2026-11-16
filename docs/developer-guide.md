@@ -1614,7 +1614,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
-| `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links read the step kind table to find the items that can place an occurrence (`geometry_links.places_occurrence`). |
+| `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links do not read the data of a step. They get the measured references of the steps and the names of the parameters that can place an occurrence as plain values from `design_model/step_links.py`. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
@@ -1788,6 +1788,20 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `refs.py`: planes, faces, axes, directions and points of other components. The shape names (`PLANE`, `AXIS`,
   `POINT`, `DIRECTION`), `BODY_LISTS`, `is_foreign`, `bring_in`, `acting_sizes`, `reaching`, `mark_all`,
   `from_old_export` and `why_foreign`.
+- `step_links.py`: the facts of the steps that the geometry links (`params/geometry_links.py`) need. The geometry
+  links tell which user parameters can move the part through the geometry of another component. That module is in
+  `params`, below the shared layer, and it does not read the data of a step. This module reads the data and gives
+  plain values to it:
+  - `item_refs(item)` gives the measured references of one step (`ref`, see docs/capture-format.md). A step that is
+    suppressed, that is in another component or that the reader could not read has none. `capture_refs(capture,
+    items)` gives the measured references of all steps, or of the steps in `items`.
+  - `places_item(item)` is true for an item that can place an occurrence: an assembly item, or a Move whose inputs are
+    not bodies or faces. `moves_occurrence(capture, dependent)` and `places_occurrence(capture, param)` find the model
+    parameters and the user parameters that act on such an item. `placing(capture)` gives the names of these user
+    parameters.
+  - `reach(capture, sketches)`, `reference_links(capture, items)` and `outside(capture, sketches, items)` call the
+    functions of the same name in `params/geometry_links.py` with these facts. The export plan, the probe and the
+    translators use these three functions.
 - `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `movers`, `BORROWED_KEYS`,
   `MOVERS`). The probe flow reads `usable` and `BORROWED_KEYS`
   (`export_plan/probe_flow/borrowed_view.py`). `movers` gives the sizes that can move such a sketch (see "A place of
@@ -2698,7 +2712,7 @@ The facts that do not need the probe are in the shared layer, `lib/design_model/
     inputs are not bodies or faces. Such an item is usually in the root component, not in the component that it
     moves. The capture does not say which occurrence such an item places. Thus these sizes apply to every reference
     of another component. They do not apply to a reference of the component of the exported body (`own`).
-    `params.geometry_links.places_occurrence` finds these parameters. The geometry links use the same test: such a
+    `design_model.step_links.places_occurrence` finds these parameters. The geometry links use the same test: such a
     parameter gets a link (`via: "assembly"`) to every sketch of the part that is tied to another component, for
     example a sketch that projects an edge of that component. Thus the size counts as a size that the sketch reads
     (`reach.sketch_sizes`):

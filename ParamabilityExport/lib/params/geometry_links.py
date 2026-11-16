@@ -16,8 +16,8 @@ A user parameter may reach the body through a link when:
   drives;
 - else, the link names a component the parameter acts on.
 
-- else, the parameter acts on an item that may place an occurrence (`places_occurrence`: a joint, another assembly
-  item, a Move of occurrences): the capture does not say which occurrence that item places, so it may move any other
+- else, the parameter acts on an item that may place an occurrence (`design_model.step_links.places_occurrence`: a
+  joint, another assembly item, a Move of occurrences): the capture does not say which occurrence that item places, so it may move any other
   component against the body, and every link to another component counts.
 
 The link only says the parameter is worth trying: whether the sketch really moves with it is what the size probe
@@ -28,8 +28,11 @@ A step can also use the plane, axis, face or point of another component directly
 reference (`ref`, docs/capture-format.md). A parameter that acts on the component that owns such a reference may move
 it, so it gets a link with `via` "reference" (`reference_links`): `sketch` is empty, `step` names the step that uses the
 reference and `ref` is its key (`<item index>.<slot>`).
+
+This module does not read the data of a step. The measured references of the steps and the parameters that may place
+an occurrence come from `design_model.step_links`, which also gives `reach`, `reference_links` and `outside` with
+these facts read from the capture.
 """
-from ..capture_model import step_kinds
 
 
 def _key(record):
@@ -99,86 +102,11 @@ def acts(capture, param):
     return out
 
 
-# The inputs of a Move that moves bodies or faces of its own component. A Move with other inputs moves occurrences.
-_BODY_MOVES = ("bodies", "faces")
-
-
-def _places_item(item):
-    """True for a timeline item that may place an occurrence: an assembly item (a joint, a rigid group, a motion
-    link and the like), or a Move whose inputs are not known to be bodies or faces."""
-    kind = item.get("type")
-    if step_kinds.is_assembly(kind):
-        return True
-    spec = step_kinds.step_type(kind)
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
-    return spec is not None and spec.moves_bodies and data.get("input_kind") not in _BODY_MOVES
-
-
-def moves_occurrence(capture, dependent):
-    """True when a model parameter that reads a user parameter (`dependent`, a record of `dependents`) belongs to an
-    item that may place an occurrence: a joint (also a joint origin), or an item of the timeline that may
-    (`_places_item`), found by its name in the dependent's component."""
-    if dependent.get("kind") == "joint":
-        return True
-    name, component = dependent.get("feature"), str(dependent.get("component") or "")
-    return bool(name) and any(
-        item.get("name") == name and (not component or str(item.get("component") or "") == component)
-        and _places_item(item) for item in capture.get("items") or [])
-
-
-def places_occurrence(capture, param):
-    """True when the user parameter `param` acts on an item that may place an occurrence (`moves_occurrence`)."""
-    return any(moves_occurrence(capture, d) for d in param.get("dependents") or [])
-
-
 # ---- measured references of the steps ------------------------------------------------------------------------
 
 def ref_key(index, slot):
     """The key of a measured reference: the timeline index of the step and the slot the step uses it in."""
     return "%s.%s" % (index, slot)
-
-
-def _collect(node, found):
-    """The `ref` records under `node`, then the `position_refs` of a hole (their slot is their place in the list)."""
-    if isinstance(node, dict):
-        ref = node.get("ref")
-        if isinstance(ref, dict) and ref.get("slot"):
-            found.append(ref)
-        for key, value in node.items():
-            if key == "position_refs" and isinstance(value, list):
-                found.extend(dict(r, slot="positions.%d" % n) for n, r in enumerate(value) if isinstance(r, dict))
-            elif key != "ref":
-                _collect(value, found)
-    elif isinstance(node, list):
-        for value in node:
-            _collect(value, found)
-
-
-def item_refs(item):
-    """The measured references of one step: `{ "key", "item", "slot", "name", "ref" }` each, in data order. A step
-    that is suppressed, lies in another component or could not be read has none. A slot used twice keeps the first."""
-    data = item.get("data")
-    if item.get("suppressed") or item.get("in_target_component") is False or not isinstance(data, dict) \
-            or "read_error" in data:
-        return []
-    found = []
-    _collect(data, found)
-    out, seen = [], set()
-    for ref in found:
-        key = ref_key(item.get("index"), ref["slot"])
-        if key not in seen:
-            seen.add(key)
-            out.append({"key": key, "item": item.get("index"), "slot": ref["slot"], "name": item.get("name") or "",
-                        "ref": ref})
-    return out
-
-
-def capture_refs(capture, items=None):
-    """The measured references of the capture's steps (`items`: only these steps, default all), in step order."""
-    out = []
-    for item in (capture.get("items") or []) if items is None else items:
-        out.extend(item_refs(item))
-    return out
 
 
 def _owners(refs):
@@ -197,19 +125,19 @@ def _placed_against_part(capture, ref, owner):
     return not ref.get("own") and not _same(owner, _target_component(capture))
 
 
-def reference_links(capture, items=None):
-    """The links of the user parameters that may move a reference of the steps (`items` as in `capture_refs`), once
-    per parameter and component, in parameter order: `via` "reference" for a parameter that acts on the component that
-    owns it, else "assembly" for one that may place an occurrence (`places_occurrence`) when the reference moves with
-    the place of its occurrence (`_placed_against_part`). Without `dependents` in the capture there is nothing to say
-    about where parameters act, so no links."""
-    refs = capture_refs(capture, items)
+def reference_links(capture, refs, placing):
+    """The links of the user parameters that may move one of the measured references `refs` of the steps
+    (`design_model.step_links.capture_refs`), once per parameter and component, in parameter order: `via` "reference"
+    for a parameter that acts on the component that owns it, else "assembly" for one in `placing` (the names of the
+    parameters that may place an occurrence) when the reference moves with the place of its occurrence
+    (`_placed_against_part`). Without `dependents` in the capture there is nothing to say about where parameters act,
+    so no links."""
     if not refs:
         return []
     out = []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         where = acts(capture, param)
-        placing = places_occurrence(capture, param)
+        places = param["name"] in placing
         seen = []
         for r in refs:
             owner = _key(r["ref"].get("component"))
@@ -217,7 +145,7 @@ def reference_links(capture, items=None):
                 continue
             if any(_same(owner, c) for c in where.components):
                 via = "reference"
-            elif placing and _placed_against_part(capture, r["ref"], owner):
+            elif places and _placed_against_part(capture, r["ref"], owner):
                 via = "assembly"
             else:
                 continue
@@ -274,32 +202,34 @@ def tied_sketches(capture, sketches=None):
     return out
 
 
-def reach(capture, sketches=None):
+def reach(capture, sketches, placing):
     """The links of a capture: each user parameter that may reach a sketch of the body through another component,
-    once per sketch and component, in parameter order. `sketches` as in `tied_sketches`."""
+    once per sketch and component, in parameter order. `sketches` as in `tied_sketches`. `placing` are the names of
+    the parameters that may place an occurrence (`design_model.step_links.placing`): they reach every tied sketch."""
     tied = tied_sketches(capture, sketches)
     if not any(tied.values()):
         return []
     out = []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         where = acts(capture, param)
-        placing = places_occurrence(capture, param)
+        places = param["name"] in placing
         for sketch, links in tied.items():
             for link in links:
-                via = _via(capture, sketch, link, where) or ("assembly" if placing else None)
+                via = _via(capture, sketch, link, where) or ("assembly" if places else None)
                 if via is not None:
                     out.append({"param": param["name"], "sketch": sketch,
                                 "component": link.get("name") or "another component", "via": via})
     return out
 
 
-def outside(capture, sketches=None, items=None):
+def outside(capture, sketches, refs):
     """Fusion names of the user parameters that act on another component than the body's, when a sketch of the body
-    is tied to another component (`tied_sketches`) or a step uses a reference of one (`items` as in `capture_refs`);
+    is tied to another component (`tied_sketches`) or a step uses a reference of one (`refs`, the measured references
+    of the steps, `design_model.step_links.capture_refs`);
     else empty. The ones that act on a component a sketch is tied to or that owns a reference come first, then the
     rest, each in parameter order. The size probe tries them to find links the reader cannot see."""
     tied = tied_sketches(capture, sketches)
-    owners = _owners(capture_refs(capture, items))
+    owners = _owners(refs)
     if not tied and not owners:
         return []
     own = _target_component(capture)

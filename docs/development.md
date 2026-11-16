@@ -34,7 +34,8 @@ package may import only packages above it in this list (not every one of them). 
   pieces of a split; `loops.py` the loop writer (sketch curves to recipe loops, or a `Problem`) that the translator writes with and the
   probe measures through, so a measured value is the value the translator writes; `tried_ranges.py` the range cuts
   where the size probe saw the design not rebuild, change a followed outline or come apart (`built_ranges`);
-  `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
+  `step_links.py` the measured references of the steps and the items that may place an occurrence, which it hands as plain
+  values to the geometry links of `params` (`reach`, `reference_links`, `outside`); `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
   both outputs word alike); `reach.py` which sizes may move a sketch, a plane, a face or
   a joint; `edges.py` an edge or a face of the part matched to the straight extrude that made it (which sizes may
   turn a pattern direction taken from it, and which may change the thickness a hole goes through);

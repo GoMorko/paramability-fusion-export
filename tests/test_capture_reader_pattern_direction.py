@@ -7,7 +7,7 @@ from tests.fakes import FakeOccurrence, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, Obj, P
 from tests.test_capture_reader_component import Tray, param_value, read
 
-from lib.params import geometry_links
+from lib.design_model import step_links
 
 LID_PLACE = turn_z(90, (110, 50, 32))
 
@@ -48,7 +48,7 @@ class ForeignDirectionTest(unittest.TestCase):
         self.assertEqual((place["assembly"], place["dir"], "foreign" in place), (True, [1.0, 0.0, 0.0], False))
         self.assertEqual((place["ref"]["slot"], place["ref"]["token"], place["ref"]["component"]["token"],
                           place["ref"]["dir"]), ("direction_one", "ax1", "lid", [1.0, 0.0, 0.0]))
-        self.assertEqual([r["key"] for r in geometry_links.item_refs({"index": 1, "data": data})],
+        self.assertEqual([r["key"] for r in step_links.item_refs({"index": 1, "data": data})],
                          ["1.direction_one"])
 
     def test_a_direction_that_cannot_be_read_marks_the_pattern_foreign(self):
@@ -71,7 +71,7 @@ class ForeignDirectionTest(unittest.TestCase):
         place = data["direction_one_place"]
         self.assertEqual((place["own"], place["entity_type"], place["token"]), (True, "ConstructionAxis", "own"))
         self.assertFalse(place.get("assembly") or place.get("foreign"))
-        self.assertEqual(geometry_links.item_refs({"index": 1, "data": data}), [])
+        self.assertEqual(step_links.item_refs({"index": 1, "data": data}), [])
         self.assertNotIn("direction_two_place", data)
 
 

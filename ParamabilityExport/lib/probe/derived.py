@@ -22,9 +22,9 @@ as not derived with `skipped` or `error`.
 from collections import Counter
 
 from ..design_model import dimension_sizes as sizes
+from ..design_model import step_links
 from ..geometry import tolerances
 from ..package.numbers import round9
-from ..params import geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..sketch_solve.constants import constants_of
 from ..sketch_solve.outcome import DERIVED as SOLVED, NOT_DERIVED, PARTLY
@@ -95,7 +95,7 @@ class _Context:
         self.capture, self.table, self.motion = capture, table, motion
         self.run = StateRun(capture, states, {e.name: e.value for e in table.entries})
         try:
-            self.linked = {link["sketch"] for link in geometry_links.reach(capture)}
+            self.linked = {link["sketch"] for link in step_links.reach(capture)}
         except Exception:
             self.linked = set()
         self._envs = {}

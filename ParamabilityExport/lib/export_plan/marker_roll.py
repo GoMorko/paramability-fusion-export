@@ -26,7 +26,7 @@ back (`unroll_marker`). The record it keeps goes to `report.json` under `probe.t
 """
 from ..capture_model import step_kinds
 from ..design_edit.store import timeline_control
-from ..params import geometry_links
+from ..design_model import design, step_links
 
 NO_ROLL_WHY = {
     "no_marker": "the capture does not say where the timeline marker was",
@@ -66,7 +66,7 @@ def _used_sketches(capture):
     for item in capture.get("items") or []:
         if not _is_item(item) or item.get("suppressed"):
             continue
-        _sketch_uses(item.get("data") or {}, found)
+        _sketch_uses(design.as_read(item).data, found)
         if item.get("in_target_component") is not False or item.get("helper_of"):
             found.extend((u.get("token") or "", u.get("name") or "", ANY) for u in item.get("sketch_inputs") or []
                          if isinstance(u, dict))
@@ -103,7 +103,7 @@ def links(capture):
         for link in record.get("links") or []:
             token = link.get("token") if isinstance(link, dict) else None
             out.append((token or ANY, before))
-    for entry in geometry_links.capture_refs(capture):
+    for entry in step_links.capture_refs(capture):
         component = entry["ref"].get("component")
         token = component.get("token") if isinstance(component, dict) else None
         index = entry.get("item")
