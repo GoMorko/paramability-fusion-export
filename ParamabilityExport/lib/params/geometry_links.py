@@ -16,14 +16,20 @@ A user parameter may reach the body through a link when:
   drives;
 - else, the link names a component the parameter acts on.
 
+- else, the parameter acts on an item that may place an occurrence (`places_occurrence`: a joint, another assembly
+  item, a Move of occurrences): the capture does not say which occurrence that item places, so it may move any other
+  component against the body, and every link to another component counts.
+
 The link only says the parameter is worth trying: whether the sketch really moves with it is what the size probe
-measures. A link is `{ "param", "sketch", "component", "via" }`, `via` one of "sketch", "body" or "component".
+measures. A link is `{ "param", "sketch", "component", "via" }`, `via` one of "sketch", "body", "component" or
+"assembly".
 
 A step can also use the plane, axis, face or point of another component directly. The reader records it as a measured
 reference (`ref`, docs/capture-format.md). A parameter that acts on the component that owns such a reference may move
 it, so it gets a link with `via` "reference" (`reference_links`): `sketch` is empty, `step` names the step that uses the
 reference and `ref` is its key (`<item index>.<slot>`).
 """
+from ..capture_model import step_kinds
 
 
 def _key(record):
@@ -93,6 +99,38 @@ def acts(capture, param):
     return out
 
 
+# The inputs of a Move that moves bodies or faces of its own component. A Move with other inputs moves occurrences.
+_BODY_MOVES = ("bodies", "faces")
+
+
+def _places_item(item):
+    """True for a timeline item that may place an occurrence: an assembly item (a joint, a rigid group, a motion
+    link and the like), or a Move whose inputs are not known to be bodies or faces."""
+    kind = item.get("type")
+    if step_kinds.is_assembly(kind):
+        return True
+    spec = step_kinds.step_type(kind)
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    return spec is not None and spec.moves_bodies and data.get("input_kind") not in _BODY_MOVES
+
+
+def moves_occurrence(capture, dependent):
+    """True when a model parameter that reads a user parameter (`dependent`, a record of `dependents`) belongs to an
+    item that may place an occurrence: a joint (also a joint origin), or an item of the timeline that may
+    (`_places_item`), found by its name in the dependent's component."""
+    if dependent.get("kind") == "joint":
+        return True
+    name, component = dependent.get("feature"), str(dependent.get("component") or "")
+    return bool(name) and any(
+        item.get("name") == name and (not component or str(item.get("component") or "") == component)
+        and _places_item(item) for item in capture.get("items") or [])
+
+
+def places_occurrence(capture, param):
+    """True when the user parameter `param` acts on an item that may place an occurrence (`moves_occurrence`)."""
+    return any(moves_occurrence(capture, d) for d in param.get("dependents") or [])
+
+
 # ---- measured references of the steps ------------------------------------------------------------------------
 
 def ref_key(index, slot):
@@ -153,24 +191,39 @@ def _owners(refs):
     return out
 
 
+def _placed_against_part(capture, ref, owner):
+    """True when a reference of `owner` moves with the place of its occurrence against the part: it is not a
+    reference of the part's own component (`own`, or the target's component)."""
+    return not ref.get("own") and not _same(owner, _target_component(capture))
+
+
 def reference_links(capture, items=None):
-    """The links of the user parameters that act on a component that owns a reference of the steps (`items` as in
-    `capture_refs`), once per parameter and component, in parameter order. Without `dependents` in the capture there
-    is nothing to say about where parameters act, so no links."""
+    """The links of the user parameters that may move a reference of the steps (`items` as in `capture_refs`), once
+    per parameter and component, in parameter order: `via` "reference" for a parameter that acts on the component that
+    owns it, else "assembly" for one that may place an occurrence (`places_occurrence`) when the reference moves with
+    the place of its occurrence (`_placed_against_part`). Without `dependents` in the capture there is nothing to say
+    about where parameters act, so no links."""
     refs = capture_refs(capture, items)
     if not refs:
         return []
     out = []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         where = acts(capture, param)
+        placing = places_occurrence(capture, param)
         seen = []
         for r in refs:
             owner = _key(r["ref"].get("component"))
-            if not any(owner) or any(_same(owner, k) for k in seen) or not any(_same(owner, c) for c in where.components):
+            if not any(owner) or any(_same(owner, k) for k in seen):
+                continue
+            if any(_same(owner, c) for c in where.components):
+                via = "reference"
+            elif placing and _placed_against_part(capture, r["ref"], owner):
+                via = "assembly"
+            else:
                 continue
             seen.append(owner)
             out.append({"param": param["name"], "sketch": "", "component": owner[1] or "another component",
-                        "via": "reference", "step": r["name"], "ref": r["key"]})
+                        "via": via, "step": r["name"], "ref": r["key"]})
     return out
 
 
@@ -230,9 +283,10 @@ def reach(capture, sketches=None):
     out = []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         where = acts(capture, param)
+        placing = places_occurrence(capture, param)
         for sketch, links in tied.items():
             for link in links:
-                via = _via(capture, sketch, link, where)
+                via = _via(capture, sketch, link, where) or ("assembly" if placing else None)
                 if via is not None:
                     out.append({"param": param["name"], "sketch": sketch,
                                 "component": link.get("name") or "another component", "via": via})

@@ -14,8 +14,8 @@ A measured reference (a plane, axis or point of another component that a step us
 (`ref_answer`): `Motion.refs` lists every reference the probe looked at, with the reason when it could not measure it.
 
 A size the probe never set to another value tells nothing about what it moves, so its answer is `NOT_MEASURED`
-(`tried`), never `STILL`. This holds for a size the probe tries only on a guess, such as one of a joint or of a move
-that places a component, when no row was left for it.
+(`tried`), never `STILL`, for example a size of a joint or of a move that places a component when no row was left
+for it.
 """
 from . import keys
 from .motion import Affine, Stuck, Terms

@@ -14,7 +14,7 @@ ALLOWED_IMPORTS = {
     "capture_model": {"geometry"},
     "timing": set(),
     "orca_recipe": set(),
-    "params": {"package"},
+    "params": {"capture_model", "package"},
     "sketch_values": {"package"},
     "sketch_solve": {"package", "sketch_values"},
     "design_edit": {"package", "params"},

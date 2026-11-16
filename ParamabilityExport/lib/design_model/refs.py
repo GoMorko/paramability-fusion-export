@@ -19,7 +19,6 @@ How far a reference moves as sizes change is measured by the probe; the recipe t
 `translator/ref_motion.py`. A destination that has no measured motion keeps each reference where it is and calls
 `mark_all`.
 """
-from ..capture_model import step_kinds
 from ..params import geometry_links
 from . import words
 
@@ -71,41 +70,14 @@ def _acting(ctx):
     return cache["acting"]
 
 
-# The inputs of a Move that moves bodies or faces of its own component. A Move with other inputs moves occurrences.
-_BODY_MOVES = ("bodies", "faces")
-
-
-def _places_occurrences(item):
-    """True for a timeline item that may place an occurrence: an assembly item (a joint, a rigid group, a motion
-    link and the like), or a Move whose inputs are not known to be bodies or faces."""
-    kind = item.get("type")
-    if step_kinds.is_assembly(kind):
-        return True
-    spec = step_kinds.step_type(kind)
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
-    return spec is not None and spec.moves_bodies and data.get("input_kind") not in _BODY_MOVES
-
-
-def _moves_occurrences(capture, dependent):
-    """True when a model parameter that reads a user parameter (`dependent`, a record of `dependents`) belongs to an
-    item that may place an occurrence: a joint, or an item of the timeline that `_places_occurrences`, found by its
-    name in the dependent's component."""
-    if dependent.get("kind") == "joint":
-        return True
-    name, component = dependent.get("feature"), str(dependent.get("component") or "")
-    return bool(name) and any(
-        item.get("name") == name and (not component or str(item.get("component") or "") == component)
-        and _places_occurrences(item) for item in capture.get("items") or [])
-
-
 def _assembly(ctx):
-    """Fusion names of the user parameters that act on an item that may place an occurrence (`_moves_occurrences`),
-    in parameter order. Only read when the capture says where parameters act (`_acting`)."""
+    """Fusion names of the user parameters that act on an item that may place an occurrence
+    (`geometry_links.places_occurrence`), in parameter order. Only read when the capture says where parameters act
+    (`_acting`)."""
     cache = ctx.cache.setdefault("refs", {})
     if "assembly" not in cache:
         users = (ctx.capture.get("parameters") or {}).get("user") or []
-        cache["assembly"] = [p["name"] for p in users
-                             if any(_moves_occurrences(ctx.capture, d) for d in p.get("dependents") or [])]
+        cache["assembly"] = [p["name"] for p in users if geometry_links.places_occurrence(ctx.capture, p)]
     return cache["assembly"]
 
 

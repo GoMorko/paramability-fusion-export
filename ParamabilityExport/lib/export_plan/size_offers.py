@@ -45,11 +45,14 @@ def link_text(links):
     if not links:
         return ""
     first = links[0]
-    if first.get("via") == "reference":
-        return ("It changes %s, and the step %s of this part uses a plane, axis or point of %s. The export tries it "
-                "to see if the part follows." % (first["component"], first.get("step") or "a step", first["component"]))
-    return ("It changes %s, and the sketch %s of this part is drawn around %s. The export tries it to see if the "
-            "part follows." % (first["component"], first["sketch"], first["component"]))
+    component = first["component"]
+    # A link through the assembly comes from a joint or a move that may place the component, not from its shape.
+    change = ("It may move %s in the assembly" if first.get("via") == "assembly" else "It changes %s") % component
+    if "ref" in first:
+        return ("%s, and the step %s of this part uses a plane, axis or point of %s. The export tries it to see if "
+                "the part follows." % (change, first.get("step") or "a step", component))
+    return ("%s, and the sketch %s of this part is drawn around %s. The export tries it to see if the part follows."
+            % (change, first["sketch"], component))
 
 
 # The formulas a "used through" line names; past it the rest is counted.
