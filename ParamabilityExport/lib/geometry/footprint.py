@@ -1,11 +1,13 @@
 """Where a 2D point sits against one sketch profile: inside, on an outline curve, or at a corner.
 
 Works on the capture's profile curves (sketch 2D mm, unchained). Lines, arcs and circles are measured exactly;
-ellipses are measured on a fine polyline, free curves on their dense samples.
+ellipses are measured on a fine polyline, free curves on their dense samples. `closed_chain` orders the curves of one
+loop end to end.
 """
 import math
 
 from .plane2d import to_segment as _to_segment
+from .tolerances import CHAIN_TOL
 
 CORNER_TOL = 1e-6
 ELLIPSE_SEGMENTS = 720
@@ -199,3 +201,37 @@ class Footprint:
                 if x > p[0]:
                     crossings += 1
         return crossings % 2 == 1
+
+
+def _oriented(curve, reverse):
+    """A chain link: the curve with its start and end swapped when `reverse`. An arc keeps its mid; a free curve
+    runs its samples the other way."""
+    link = dict(curve)
+    if reverse:
+        link["start"], link["end"] = curve["end"], curve["start"]
+        if "samples" in curve:
+            link["samples"] = list(reversed(curve["samples"]))
+    return link
+
+
+def closed_chain(curves):
+    """Order and orient lines and arcs so each starts where the last ended. None when they do not close."""
+    remaining = list(curves)
+    first = remaining.pop(0)
+    chain = [dict(first)]
+    while remaining:
+        tip = chain[-1]["end"]
+        for position, curve in enumerate(remaining):
+            if _dist(tip, curve["start"]) <= CHAIN_TOL:
+                chain.append(_oriented(curve, False))
+            elif _dist(tip, curve["end"]) <= CHAIN_TOL:
+                chain.append(_oriented(curve, True))
+            else:
+                continue
+            del remaining[position]
+            break
+        else:
+            return None
+    if _dist(chain[-1]["end"], chain[0]["start"]) > CHAIN_TOL:
+        return None
+    return chain

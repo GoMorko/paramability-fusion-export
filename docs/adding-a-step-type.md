@@ -129,7 +129,8 @@ sketches. A value the other handler asks for under another path is mapped back w
 `values.handled(ctx, item, "depth", same_as="side_one.distance")`. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
-A sweep hands over in two ways (`sweep/step.py`). `paths.plan` orders the path and names it. A straight path builds the data
+A sweep hands over in two ways (`sweep/step.py`). The shared planner (`design_model.paths.planner.plan`) orders the
+path and names it. A straight path builds the data
 of an extrude (`start` on the profile plane, one `side_one` distance as long as the path, no taper) and returns
 `extrude.handle(...)`, so the sweep gets the extrude's slab placer and later rounds follow sizes. One arc or a full
 circle builds the data of a revolve (the arc's axis, the arc's angle, the direction the start face looks) and returns
@@ -141,14 +142,19 @@ sizes behind the path sketch (its plane, face or projected curves), behind a pla
 the path, and behind an outline that could reach past the tightest bend (`sweep/sweep_reach.py`).
 
 The sweep code is split by concern. `sweep/step.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
-`sweep_outline`, `sweep_volume` (volume checks), `sweep_ends` (the made end face against the path end), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
-rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step written) each hold one part, and
-`sweep_limits` holds the refusal texts. `loft/step.py` is the loft handler; `loft_volume` pairs the corners of two
-straight outlines as the kernel does, for a volume check of a new body. The path side follows the same pattern: `paths/paths.py` orders and classifies the path,
-`path_curves` (curve geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat
-and corners forms), `path_closed` (closed chains), `path_rebuilt` (a path read back from numbers, for the range rules),
-`path_model` (`PathOptions`, `PathPlan`) and `path_limits` (tolerances, caps, refusal texts). A new refusal text goes into
-the limits module of its side.
+`sweep_outline` (the one outline the recipe takes), `sweep_taper`, `sweep_marks` (sizes the copy cannot follow),
+`sweep_rules` (the path's rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step
+written) each hold one part, and `sweep_limits` holds the refusal texts. `loft/step.py` is the loft handler.
+
+What both outputs need is read in `design_model`, as facts and problems (`design_model.problem.Problem`), never as
+refusals. `design_model/steps/sweep.py` holds the outline's points, the volume check and the end face check;
+`design_model/steps/loft.py` pairs the corners of two straight outlines as the kernel does, for a volume check of a
+new body. The path is planned in `design_model/paths/`: `planner.py` orders and classifies the path, `curves`
+(curve geometry, chaining), `checks` (the app's limits as problems), `writing` (arc, circle, flat and corners forms),
+`closed` (closed chains), `model` (`PathOptions`, `PathPlan`), `tolerances` and `words` (the problem texts). The
+recipe side keeps `paths/path_limits` (its caps, the planner options and the refusal of a problem), `path_rebuilt`
+(a path read back from numbers, for the range rules) and `path_motion`. A new refusal text of the recipe goes into
+the limits module of its side; a new problem of the shared layer goes into its `words` module.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
 be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the
@@ -157,7 +163,7 @@ reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile r
 sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.
 Records are expanded in the reader, never in the handler, so the position of a profile in `data.profiles` (the key of
 its motion values) is the same in the capture, the probe and the translator. A free curve (a spline) is a `kind:
-other` curve with dense `samples`, which `loops.loop_of` fits with spline segments (`sketch/spline_fit.py`); a sketch that
+other` curve with dense `samples`, which `loops.loop_of` fits with spline segments (`geometry/spline_fit.py`); a sketch that
 holds free curves or text is not followed by the size probe, so the sizes behind it stay loose or are left out.
 
 Write every value through `lib/translator/values.py`: `values.quantity` turns a Fusion expression into a formula of

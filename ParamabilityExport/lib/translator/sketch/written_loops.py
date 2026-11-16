@@ -7,7 +7,7 @@ formulas), worked out at one size setting.
 import math
 
 from ...params.expressions.evaluation import evaluate
-from . import spline_fit
+from ...geometry import spline_fit
 
 SPLINE_STEPS = 16   # readings of a fitted spline between two of its points
 _LINE_TOL = 1e-12

@@ -9,7 +9,7 @@ import math
 
 from ...geometry.plane2d import arc_points
 from ...params.expressions.errors import ExpressionError
-from ..paths.path_limits import REACH_SHARE
+from ...design_model.paths.tolerances import REACH_SHARE
 from ..ranges import range_check
 from ..sketch.written_loops import (
     point as _point, rect_corners as _corners, spline_points as _spline_points, value as _value, written_reads,

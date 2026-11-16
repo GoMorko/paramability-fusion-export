@@ -1,11 +1,12 @@
 """Sweep feature handler (SweepFeature): one sketch outline carried along a path of sketch curves or body edges.
 
-The path decides what is written (`paths.plan` orders it and checks the limits of the recipe's sweep step):
+The path decides what is written (`design_model.paths.planner.plan` orders it and checks the limits of the recipe's
+sweep step, with the recipe's caps from `path_limits`):
 - a straight path is an extrude of the outline (`extrude.handle`);
 - one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.step.handle`);
 - a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step; a closed
   chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists),
-  with an outline on a sharp corner moved along the path to the middle of the line it is square to (`path_closed`);
+  with an outline on a sharp corner moved along the path to the middle of the line it is square to (`closed`);
   in one plane, sharp corners between lines are mitred as Fusion builds them, unless the outline twists, tapers or
   keeps its direction;
 - a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
@@ -16,7 +17,7 @@ follows them too when the probe measured it (`path_motion`), and the app's rules
 ranges, which are cut where they stop holding. Any other path (a free curve, corner points, body edges, a tapered
 sweep) is written as measured, so the sizes behind its sketch are marked. A new body must have the volume the outline
 area and the path give (along a closed path that is Pappus' volume), and the end face Fusion made must lie where the
-path ends (`sweep_ends`). Twist together with taper or parallel, tapers along
+path ends (`design_model.steps.sweep`). Twist together with taper or parallel, tapers along
 free curves, guide rails and guide surfaces, a path that is not square to the outline, closed paths that bend in 3D or that taper or keep
 the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
 refused.
@@ -30,9 +31,10 @@ set as a whole.
 A sweep step gets the placer of `end_caps` (the start face, the end face where the path leaves it known, the side walls
 along a path of lines and arcs), so a later round or chamfer on a whole end face names the step.
 
-This module is the handler only. The outline, settings, volume checks, size marks, path rules and what is written live in
-`sweep_outline`, `sweep_settings`, `sweep_volume`, `sweep_ends`, `sweep_marks`, `sweep_rules` and `sweep_write`;
-refusal texts in `sweep_limits`.
+This module is the handler only. The outline's points, the volume and end face checks are read in
+`design_model.steps.sweep` (shared with the Orca output). The outline, settings, taper, size marks, path rules and
+what is written live in `sweep_outline`, `sweep_settings`, `sweep_taper`, `sweep_marks`, `sweep_rules` and
+`sweep_write`; refusal texts in `sweep_limits`.
 
 Fusion does not document how it measures the sweep taper (an offset of the outline or a scale) or which way a twist
 turns, and no export has confirmed either (`TAPER_MEANING_CONFIRMED`, `TWIST_SIGN_CONFIRMED`). Every written twist or
@@ -43,20 +45,22 @@ import math
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ..extrude import COMBINE
-from ..paths import path_model, paths
+from ...design_model.paths import planner
+from ...design_model.problem import is_problem
+from ...design_model.steps.sweep import end_check, outline_shapes, profile_points, volume_problem
+from ..paths import path_limits
 from ..result import Refusal, StepResult
 from ..sketch import borrowed
 from . import sweep_taper
-from .sweep_ends import end_check
+from .sweep_taper import taper_lean
 from .sweep_limits import (
     MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE, SEVERAL_OUTLINES, SEVERAL_TAPERED,
     TAPER_CLOSES, TWIST_CLOSED, UNREADABLE, WHOLE_TURN_TOL, ZERO_TOL,
 )
 from .sweep_marks import keep_path_on_plane, mark_path
-from .sweep_outline import outline_of, outline_shapes, profile_points
+from .sweep_outline import outline_of
 from .sweep_rules import follow_path
 from .sweep_settings import angle_value, pin_settings, settings_refusal, taper_growth, taper_path_refusal
-from .sweep_volume import taper_lean, volume_refusal
 from .sweep_write import as_extrude, as_revolve, as_sweep, written_form
 
 TAPER_MEANING_CONFIRMED = False   # true once an export shows how Fusion measures the sweep taper
@@ -122,11 +126,11 @@ def handle(item, ctx):
         return Refusal(PATH_TOO_LONG)
     twist, taper = data["twist_deg"], data["taper_deg"]
     twisted, tapered, fixed = abs(twist) > ZERO_TOL, abs(taper) > ZERO_TOL, data["orientation"] == "parallel"
-    options = path_model.PathOptions(as_step=twisted or tapered or fixed, twisted=twisted, tapered=tapered,
-                                growth=taper_growth(profile, taper), fixed=fixed)
-    found = paths.plan(path, profile["frame"], profile_points(profile), options)
-    if isinstance(found, Refusal):
-        return found
+    options = path_limits.options(as_step=twisted or tapered or fixed, twisted=twisted, tapered=tapered,
+                                  growth=taper_growth(profile, taper), fixed=fixed)
+    found = planner.plan(path, profile["frame"], profile_points(profile), options)
+    if is_problem(found):
+        return path_limits.refusal(found)
     if found.closed and twisted and abs(twist / 360.0 - round(twist / 360.0)) > WHOLE_TURN_TOL:
         return Refusal(TWIST_CLOSED)
     taper_sign = TAPER_SIGN
@@ -146,12 +150,12 @@ def handle(item, ctx):
         elif lean is None and shapes is not None and sweep_taper.closes(shapes, found.length, slope):
             return Refusal(TAPER_CLOSES)
     placed = _carried(profile, found.moved)
-    refusal = volume_refusal(item, data, combine, placed, found)
-    if refusal is not None:
-        return refusal
-    refusal, end_note = end_check(data, combine, placed, found, profile_points(placed), fixed, tapered)
-    if refusal is not None:
-        return refusal
+    problem = volume_problem(item, data, combine, placed, found)
+    if problem is not None:
+        return path_limits.refusal(problem)
+    problem, end_note = end_check(data, combine, placed, found, profile_points(placed), fixed, tapered)
+    if problem is not None:
+        return path_limits.refusal(problem)
     pin_settings(ctx, item, data, found.closed)
     if end_note:
         ctx.note(end_note % item.get("name", "this sweep"))

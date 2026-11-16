@@ -18,9 +18,9 @@ from lib.orca_translate import splines
 from lib.orca_translate.lofts import Lofted
 from lib.orca_translate.solid import Solid
 from lib.orca_translate.sweeps import carried
-from lib.translator.paths import paths
-from lib.translator.paths.path_model import PathOptions
-from lib.translator.sweep.sweep_outline import profile_points
+from lib.design_model.paths import planner
+from lib.design_model.paths.model import PathOptions
+from lib.design_model.steps.sweep import profile_points
 
 
 def types(result):
@@ -109,7 +109,7 @@ class SweepTest(unittest.TestCase):
         capture = load_capture("sweep_pipe")
         data = sweep_data(capture)
         profile = data["profiles"][0]
-        found = paths.plan(data["path"], profile["frame"], profile_points(profile), PathOptions())
+        found = planner.plan(data["path"], profile["frame"], profile_points(profile), PathOptions())
         loops = [loop["curves"] for loop in profile["loops"]]
         box = Solid([("add", carried(profile["frame"], loops, found))]).box()
         for got, want in zip(box["min"] + box["max"], capture["target"]["box"]["min"] + capture["target"]["box"]["max"]):

@@ -1,18 +1,15 @@
-"""Limits the app puts on a sweep path, as refusals: a path touching itself, two parts too close, an outline
-reaching past a bend, a sharp corner it cannot mitre, a path that stops rising, and the turn at a closed path's seam.
-Pure."""
+"""What keeps a sweep path from being built, as problems (`problems.Problem`): a path touching itself, two parts too
+close, an outline reaching past a bend, a sharp corner that cannot be mitred, a path that stops rising, and the turn at
+a closed path's seam. These are the limits of the Paramability app's sweep, which the Orca copy keeps too. Pure."""
 import math
 
-from ...capture_model import gap_hints
-from ...geometry import vec
-from ..result import Refusal
-from ..sketch import spline_fit
-from .path_curves import arc_of, curve_length, polyline, tangents, turn_deg
-from .path_limits import (
-    CORNER_TOO_TIGHT, MAX_MITRE_DEG, MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG,
-    OVERLAP_MAX_CORNER_DEG, OVERLAP_STEP_SHARE, REACH_SHARE, SHARP_CORNER, SMOOTH_JOIN_DEG, SQUARE_TOL_DEG,
-    STRAIGHT_DEG, TOUCH_TOL, TURNS_BACK,
+from ...geometry import spline_fit, vec
+from .curves import arc_of, curve_length, polyline, tangents, turn_deg
+from .tolerances import (
+    MAX_MITRE_DEG, MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG, OVERLAP_MAX_CORNER_DEG,
+    OVERLAP_STEP_SHARE, REACH_SHARE, SMOOTH_JOIN_DEG, SQUARE_TOL_DEG, STRAIGHT_DEG, TOUCH_TOL,
 )
+from .words import CORNER_TOO_TIGHT, OVERLAP, REACHES_BEND, TURNS_BACK, problem, sharp_corner as sharp_problem
 
 
 def off_square(direction, normal):
@@ -35,14 +32,14 @@ def _directions(curve):
     return [first] + steps + [last]
 
 
-def rise_refusal(ordered, normal):
-    """A Refusal when the path stops moving along the outline's normal (facing the way the path leaves), which an
+def rise_problem(ordered, normal):
+    """A problem when the path stops moving along the outline's normal (facing the way the path leaves), which an
     outline kept in one direction needs it to do at every point. The tangent is tested, as the app does."""
     first = tangents(ordered[0])[0]
     facing = normal if vec.dot(normal, first) >= 0 else vec.scale(normal, -1.0)
     for curve in ordered:
         if any(vec.dot(d, facing) < MIN_RISE for d in _directions(curve)):
-            return Refusal(TURNS_BACK)
+            return problem(TURNS_BACK)
     return None
 
 
@@ -71,8 +68,8 @@ def sharp_corner(before, after):
     return (turn, both_lines) if turn > (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG) else None
 
 
-def corners_refusal(ordered, reach, mitres, closed=False):
-    """A Refusal for a sharp corner of the chain the app cannot build. A corner between two lines is mitred when
+def corners_problem(ordered, reach, mitres, closed=False):
+    """A problem for a sharp corner of the chain the app cannot build. A corner between two lines is mitred when
     `mitres` is true: it may not turn back past `MAX_MITRE_DEG`, and its mitre takes the outline's `reach` across the
     path's plane times tan(turn / 2) of straight path on both sides, so a line between two corners needs room for
     both mitres. Any other sharp corner is refused. On a closed chain the last curve meets the first."""
@@ -85,14 +82,14 @@ def corners_refusal(ordered, reach, mitres, closed=False):
             continue
         turn, both_lines = found
         if not (mitres and both_lines) or turn > MAX_MITRE_DEG:
-            return Refusal(SHARP_CORNER, cause=gap_hints.SHARP_CORNER)
+            return sharp_problem()
         need = reach * math.tan(math.radians(turn) / 2.0)
         needs[before] += need
         needs[after] += need
     for curve, need in zip(ordered, needs):
         length = curve_length(curve)
         if need > 0 and length < need:
-            return Refusal(CORNER_TOO_TIGHT % (need, length))
+            return problem(CORNER_TOO_TIGHT, need, length)
     return None
 
 
@@ -105,32 +102,31 @@ def outline_reach(profile_points, start, normal):
     return reach
 
 
-def reach_refusal(profile_points, start, normal, radius, extra=0.0):
-    """A Refusal when the outline (grown by `extra`) reaches across the path's plane as far as the tightest bend's
+def reach_problem(profile_points, start, normal, radius, extra=0.0):
+    """A problem when the outline (grown by `extra`) reaches across the path's plane as far as the tightest bend's
     radius."""
     if not profile_points or radius == math.inf:
         return None
-    return bend_refusal(outline_reach(profile_points, start, normal) + extra, radius)
+    return bend_problem(outline_reach(profile_points, start, normal) + extra, radius)
 
 
-def axis_reach_refusal(profile_points, start, centre, radius):
-    """A Refusal when the outline reaches the axis of an arc or circle path. Only the reach toward the centre counts:
+def axis_reach_problem(profile_points, start, centre, radius):
+    """A problem when the outline reaches the axis of an arc or circle path. Only the reach toward the centre counts:
     an outline on the outer side of the arc can be as wide as it likes, since a revolve about the axis builds it."""
     if not profile_points:
         return None
     toward = vec.unit(vec.sub(centre, start))
-    return bend_refusal(max(vec.dot(vec.sub(p, start), toward) for p in profile_points), radius)
+    return bend_problem(max(vec.dot(vec.sub(p, start), toward) for p in profile_points), radius)
 
 
-def bend_refusal(reach, radius):
-    """A Refusal when an outline reaching `reach` from the path reaches the centre of a bend of `radius`."""
+def bend_problem(reach, radius):
+    """A problem when an outline reaching `reach` from the path reaches the centre of a bend of `radius`."""
     if radius != math.inf and reach >= radius * REACH_SHARE:
-        return Refusal("The outline reaches %.2f mm from the path, but the path bends in a radius of %.2f mm."
-                       % (reach, radius))
+        return problem(REACHES_BEND, reach, radius)
     return None
 
 
-def carried_reach_refusal(profile_points, start, radii, turns, twisted=False, extra=0.0):
+def carried_reach_problem(profile_points, start, radii, turns, twisted=False, extra=0.0):
     """The outline is carried along the bends, turning with each; at a bend only the part of a point's offset in
     that bend's plane counts against its radius. A twisting outline counts with its whole radius."""
     if not profile_points:
@@ -140,14 +136,13 @@ def carried_reach_refusal(profile_points, start, radii, turns, twisted=False, ex
         reach = max(vec.length(o if twisted else vec.sub(o, vec.scale(axis, vec.dot(o, axis)))) for o in carried)
         reach += extra
         if reach >= radius * REACH_SHARE:
-            return Refusal("The outline reaches %.2f mm from the path, but the path bends in a radius of %.2f mm."
-                           % (reach, radius))
+            return problem(REACHES_BEND, reach, radius)
         carried = [vec.rotate(o, axis, math.degrees(turn)) for o in carried]
     return None
 
 
-def overlap_refusal(points, reach, closed=False):
-    """A Refusal when two parts of the path that are far apart along it pass closer than twice the outline's reach:
+def overlap_problem(points, reach, closed=False):
+    """A problem when two parts of the path that are far apart along it pass closer than twice the outline's reach:
     the swept shape would run into itself. Pairs on the two arms of one corner are left to the corner's mitre. On a
     closed path (the last point is the first) the distance along it runs the short way round."""
     points = _distinct(points)
@@ -191,7 +186,7 @@ def overlap_refusal(points, reach, closed=False):
                 continue
             gap = vec.length(vec.sub(point, samples[j][0]))
             if gap < needed and not covered(at, samples[j][1]) and not (closed and covered(samples[j][1], at + total)):
-                return Refusal(OVERLAP % (gap, reach))
+                return problem(OVERLAP, gap, reach)
     return None
 
 

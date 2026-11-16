@@ -1,32 +1,31 @@
-"""A planned path written as the recipe holds it: one arc, a full circle, a flat path of 2D segments (free curves
-fitted by `spline_fit`) and a 3D corners path, each with the limit checks that apply to it. Pure."""
+"""A planned path written in the forms a recipe sweep step holds: one arc, a full circle, a flat path of 2D segments
+(free curves fitted by the destination's `PathOptions.splines`) and a 3D corners path, each with the checks that
+apply to it. Pure."""
 import math
 
-from ...capture_model import gap_hints
-from ...geometry import vec
+from ...geometry import spline_fit, vec
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
-from ..result import Refusal
-from ..sketch import spline_fit
-from .path_checks import (
-    axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal, reach_refusal, seam_turn,
+from .checks import (
+    axis_reach_problem, carried_reach_problem, off_square, outline_reach, overlap_problem, reach_problem, seam_turn,
     self_touch,
 )
-from .path_curves import arc_of, near, polyline, round_point, round_point2, tangents
-from .path_limits import (
-    BENDS_3D, CLOSED_NOT_SMOOTH, CORNER_MATCH_TOL, CROSSES, CURVATURE_SAMPLES, LINE_BEND_RADIUS, MAX_POINTS,
-    MAX_SEGMENTS, MAX_TURN_DEG, NOT_SQUARE, OFF_PLANE, PLANE_TOL, SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG,
-    TOO_COMPLEX, TOO_MANY,
+from .curves import arc_of, near, polyline, round_point, round_point2, tangents
+from .model import PathPlan
+from .tolerances import (
+    CORNER_MATCH_TOL, CURVATURE_SAMPLES, LINE_BEND_RADIUS, MAX_TURN_DEG, PLANE_TOL, SMOOTH_JOIN_DEG, STRAIGHT_DEG,
 )
-from .path_model import PathPlan
+from .words import (
+    BENDS_3D, CLOSED_NOT_SMOOTH, CROSSES, NOT_SQUARE, OFF_PLANE, TOO_COMPLEX, TOO_MANY, problem, sharp_corner,
+)
 
 
 def arc_plan(base, curve, profile_points):
     centre, radius, normal, turn = arc_of(curve)
-    refusal = axis_reach_refusal(profile_points, curve["start"], centre, radius)
-    if refusal:
-        return refusal
+    issue = axis_reach_problem(profile_points, curve["start"], centre, radius)
+    if issue:
+        return issue
     return PathPlan(kind="arc", axis={"point": round_point(centre), "dir": round_point(normal)}, radius=round9(radius),
                     angle_deg=round9(math.degrees(turn)), **base)
 
@@ -41,9 +40,9 @@ def circle_plan(ring, curves, profile_frame, profile_points):
     d = vec.dot(plane, vec.sub(origin, centre))
     size = math.hypot(a, b)
     if size <= 1e-12:
-        return Refusal(NOT_SQUARE)
+        return problem(NOT_SQUARE)
     if abs(d) > size + PLANE_TOL:
-        return Refusal(OFF_PLANE)
+        return problem(OFF_PLANE)
     spread = math.acos(max(-1.0, min(1.0, d / size)))
     angles = [math.atan2(b, a) + spread, math.atan2(b, a) - spread]
     points = [vec.add(centre, vec.add(vec.scale(u, radius * math.cos(t)), vec.scale(v, radius * math.sin(t))))
@@ -53,10 +52,10 @@ def circle_plan(ring, curves, profile_frame, profile_points):
     start = points[at]
     direction = vec.unit(vec.cross(normal, vec.sub(start, centre)))
     if off_square(direction, plane):
-        return Refusal(NOT_SQUARE)
-    refusal = axis_reach_refusal(profile_points, start, centre, radius)
-    if refusal:
-        return refusal
+        return problem(NOT_SQUARE)
+    issue = axis_reach_problem(profile_points, start, centre, radius)
+    if issue:
+        return issue
     return PathPlan(kind="circle", curves=curves, start=round_point(start), end=round_point(start),
                     direction=round_point(direction), length=round9(2 * math.pi * radius),
                     axis={"point": round_point(centre), "dir": round_point(normal)}, radius=round9(radius),
@@ -111,29 +110,29 @@ def flat_plan(base, ordered, frame, profile_points, options, closed=False):
             segments.append({"kind": "arc", "through": round_point2(local(curve["mid"])), "to": round_point2(end)})
             tightest = min(tightest, arc_of(curve)[1])
         else:
-            drawn = _spline_segments([local(p) for p in curve["samples"]], at, end)
+            drawn = _spline_segments(options.splines, [local(p) for p in curve["samples"]], at, end)
             if drawn is None:
-                return Refusal(TOO_COMPLEX)
+                return problem(TOO_COMPLEX)
             segments.extend(drawn)
             tightest = min(tightest, _spline_radius(at, drawn))
         at = end
-    if len(segments) > MAX_SEGMENTS:
-        return Refusal(TOO_MANY)
+    if len(segments) > options.max_segments:
+        return problem(TOO_MANY)
     if closed and seam_turn(local(ordered[0]["start"]), segments) > SMOOTH_JOIN_DEG:
-        return Refusal(CLOSED_NOT_SMOOTH)
+        return problem(CLOSED_NOT_SMOOTH)
     points = [p for c in ordered for p in polyline(c)]
     if self_touch(points, closed):
-        return Refusal(CROSSES)
+        return problem(CROSSES)
     if not options.fixed:
         start = ordered[0]["start"]
         across = [0.0, 0.0, 0.0] if options.twisted else frame["z"]
         extra = options.growth * base["length"]
-        refusal = reach_refusal(profile_points, start, across, tightest, extra)
-        if refusal:
-            return refusal
-        refusal = overlap_refusal(points, outline_reach(profile_points, start, across) + extra, closed)
-        if refusal:
-            return refusal
+        issue = reach_problem(profile_points, start, across, tightest, extra)
+        if issue:
+            return issue
+        issue = overlap_problem(points, outline_reach(profile_points, start, across) + extra, closed)
+        if issue:
+            return issue
     recipe = {
         "kind": "flat",
         "on": {"origin": round_point(frame["origin"]), "normal": round_point(frame["z"]),
@@ -149,9 +148,10 @@ def flat_plan(base, ordered, frame, profile_points, options, closed=False):
     return PathPlan(kind="flat", recipe=recipe, tightest=tightest, closed=True, winding=1 if area > 0 else -1, **base)
 
 
-def _spline_segments(samples, start, end):
-    """Segments through the points `spline_fit` takes from the 2D `samples`; the ends are the curve's own."""
-    pieces = spline_fit.fit(samples)
+def _spline_segments(splines, samples, start, end):
+    """Segments through the points `splines` takes from the 2D `samples`; the ends are the curve's own. None when
+    the curve cannot be fitted, or when there is no fitter (`splines` is None)."""
+    pieces = splines.fit(samples) if splines is not None else None
     if pieces is None:
         return None
     pieces[0][0], pieces[-1][-1] = list(start), list(end)
@@ -178,42 +178,43 @@ def _spline_radius(at, segments):
 def corners_plan(base, ordered, junctions, profile_points, options):
     """Lines joined by tangent arcs, written as corner points: each line extended to where its neighbours cross it."""
     if any(turn > STRAIGHT_DEG and both_lines for turn, both_lines in junctions):
-        return Refusal(SHARP_CORNER, cause=gap_hints.SHARP_CORNER)
+        return sharp_corner()
     kinds = [c["kind"] for c in ordered]
-    if (kinds[0] != "line" or kinds[-1] != "line" or "other" in kinds or any(turn > STRAIGHT_DEG for turn, _ in junctions)
+    if (kinds[0] != "line" or kinds[-1] != "line" or "other" in kinds
+            or any(turn > STRAIGHT_DEG for turn, _ in junctions)
             or any(a == b == "arc" for a, b in zip(kinds, kinds[1:]))):
-        return Refusal(BENDS_3D)
+        return problem(BENDS_3D)
     points, radii, turns = [ordered[0]["start"]], [], []
     for before, arc, after in zip(ordered, ordered[1:], ordered[2:]):
         if arc["kind"] != "arc":
             continue
         _, radius, _, turn = arc_of(arc)
         if math.degrees(turn) > MAX_TURN_DEG:
-            return Refusal(BENDS_3D)
+            return problem(BENDS_3D)
         d_in, d_out = tangents(before)[1], tangents(after)[0]
         tangent = radius * math.tan(turn / 2)
         corner = vec.add(arc["start"], vec.scale(d_in, tangent))
         if not near(corner, vec.sub(arc["end"], vec.scale(d_out, tangent)), CORNER_MATCH_TOL):
-            return Refusal(BENDS_3D)
+            return problem(BENDS_3D)
         points.append(corner)
         radii.append(radius)
         turns.append((vec.unit(vec.cross(d_in, d_out)), turn))
     points.append(ordered[-1]["end"])
-    if len(points) > MAX_POINTS:
-        return Refusal(TOO_MANY)
+    if len(points) > options.max_points:
+        return problem(TOO_MANY)
     if self_touch([p for c in ordered for p in polyline(c)]):
-        return Refusal(CROSSES)
+        return problem(CROSSES)
     start = ordered[0]["start"]
     if not options.fixed:
         extra = options.growth * base["length"]
-        refusal = carried_reach_refusal(profile_points, start, radii, turns, options.twisted, extra)
-        if refusal:
-            return refusal
-        refusal = overlap_refusal([p for c in ordered for p in polyline(c)],
-                                   max((vec.length(vec.sub(p, start)) for p in profile_points or ()), default=0.0)
-                                   + extra)
-        if refusal:
-            return refusal
+        issue = carried_reach_problem(profile_points, start, radii, turns, options.twisted, extra)
+        if issue:
+            return issue
+        issue = overlap_problem([p for c in ordered for p in polyline(c)],
+                                max((vec.length(vec.sub(p, start)) for p in profile_points or ()), default=0.0)
+                                + extra)
+        if issue:
+            return issue
     recipe = {
         "kind": "corners",
         "points": [round_point(p) for p in points],

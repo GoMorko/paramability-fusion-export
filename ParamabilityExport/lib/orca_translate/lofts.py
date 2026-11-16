@@ -11,7 +11,7 @@ outlines whose joins cannot differ:
 - two outlines of straight lines with the same corner count whose corners pair up one way only: OCCT joins the
   corners that lie closest together about the outlines' centres (seen live up to a turn of 40 degrees), and no other
   pairing may come close. A new body's measured volume must be the volume of that loft
-  (`translator.loft.loft_volume`), since that shows Fusion paired them the same way; without a measured volume each
+  (`design_model.steps.loft`), since that shows Fusion paired them the same way; without a measured volume each
   corner must lie within a degree of its partner about the centres (a square to a smaller square, a frustum).
 
 The outlines must lie in parallel planes, each on its own side of the other. Left out: other shapes or pairs of
@@ -26,12 +26,11 @@ import math
 
 from ..capture_model import gap_hints
 from ..design_model.reach import placement_sizes
+from ..design_model.steps.loft import matches, ruled_volumes
+from ..design_model.steps.sweep import loop_polygon, made_volume
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, FeatureType
-from ..translator.loft.loft_volume import matches, ruled_volumes
-from ..translator.sweep.sweep_outline import loop_polygon
-from ..translator.sweep.sweep_volume import made_volume
 from . import causes, sketch_sizes, steps
 from ..design_model.values import Quantity
 from .sketches import circle_of, outline_sketch, outlines_of

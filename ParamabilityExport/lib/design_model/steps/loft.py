@@ -1,10 +1,10 @@
-"""The volume of a ruled loft between two parallel outlines made of straight lines, with the corners paired the way
-the app's kernel pairs them. A new body Fusion made with another pairing has another volume. Pure."""
+"""What a loft step is, read from the capture for any destination: the volume of a ruled loft between two parallel
+outlines made of straight lines, with the corners paired the way the app's kernel pairs them (the Orca output uses
+it too). A new body Fusion made with another pairing has another volume. Pure."""
 import math
 
 from ...geometry import vec
-from ..sweep.sweep_limits import VOLUME_ABSOLUTE_TOL, VOLUME_RELATIVE_TOL
-from ..sweep.sweep_outline import loop_polygon
+from .sweep import VOLUME_ABSOLUTE_TOL, VOLUME_RELATIVE_TOL, loop_polygon
 
 PARALLEL_TOL = 1e-6
 TIE_TOL = 1e-9   # start shifts whose cost differs by less than this share of the best one pair the same way

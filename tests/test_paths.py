@@ -8,8 +8,10 @@ from tests.schema_check import check_recipe
 from tests.translator_helpers import close
 
 from lib.geometry import vec
-from lib.translator.paths import path_checks, path_curves, path_limits, path_model, path_rebuilt, path_writing, paths
-from lib.translator.result import Refusal
+from lib.design_model.paths import checks as path_checks, curves as path_curves, model as path_model, planner
+from lib.design_model.paths import tolerances, words
+from lib.design_model.problem import Problem
+from lib.translator.paths import path_limits, path_rebuilt
 
 S2 = math.sqrt(0.5)
 # The outline sits in the plane x = 0, so a path leaves it along x.
@@ -41,9 +43,14 @@ def path_of(curves, **extra):
     return dict({"closed": False, "kind": "sketch", "curves": curves}, **extra)
 
 
+def recipe_plan(path, frame, points, options=None):
+    """The planner as the recipe output asks it: with the recipe's caps and spline fit."""
+    return planner.plan(path, frame, points, options or path_limits.options())
+
+
 def plan(curves, points=SQUARE, outline=FRAME, **extra):
     """The plan of a path record; `extra` are more keys of that record (`closed`, `frame`)."""
-    return paths.plan(path_of(curves, **extra), outline, points)
+    return recipe_plan(path_of(curves, **extra), outline, points)
 
 
 def pipe_with_bend():
@@ -134,6 +141,19 @@ class ClassTest(unittest.TestCase):
         self.assertTrue(close(segments[-1]["to"], [20, 8]))
         self.assertEqual(check_recipe(sweep_with(found.recipe)), [])
 
+    def test_without_a_spline_fit_a_free_curve_is_too_complex(self):
+        samples = [[x, 0.02 * x * x, 0] for x in [i * 0.1 for i in range(201)]]
+        curve = {"kind": "other", "type": "NurbsCurve3D", "start": samples[0], "end": samples[-1], "mid": samples[100],
+                 "samples": samples, "tangent_start": [1, 0, 0], "tangent_end": [0.9285, 0.3714, 0]}
+        found = planner.plan(path_of([curve], frame=XY_SKETCH), FRAME, SQUARE, path_model.PathOptions())
+        self.assertEqual((found.code, found.words), ("too_complex", words.TOO_COMPLEX))
+
+    def test_the_caps_on_the_parts_of_a_path_are_the_destinations(self):
+        def planned(**caps):
+            return planner.plan(path_of(pipe_with_bend()), FRAME, SQUARE, path_model.PathOptions(**caps))
+        self.assertEqual(planned().kind, "flat")
+        self.assertEqual(planned(max_segments=2).code, "too_many")
+
     def test_a_chain_in_3d_is_written_as_corner_points(self):
         found = plan(pipe_in_3d())
         self.assertEqual(found.kind, "corners")
@@ -185,7 +205,7 @@ class RoundedCoordinatesTest(unittest.TestCase):
             return [line((0, 0, 0), start), arc(start, (15, 5, 0), mid, centre)]
 
         self.assertIsInstance(plan(with_kink(1.5), points=[[0, 0, 0]], frame=XY_SKETCH), path_model.PathPlan)
-        self.assertEqual(plan(with_kink(2.5), points=[[0, 0, 0]], frame=XY_SKETCH).reason, path_limits.SHARP_CORNER)
+        self.assertEqual(plan(with_kink(2.5), points=[[0, 0, 0]], frame=XY_SKETCH).words, words.SHARP_CORNER)
 
 
 class OrderTest(unittest.TestCase):
@@ -225,7 +245,7 @@ class OptionsTest(unittest.TestCase):
     """Paths asked for a sweep step (twist, taper, parallel): a line and an arc get a recipe path too."""
 
     def planned(self, curves, **options):
-        return paths.plan(path_of(curves), FRAME, SQUARE, path_model.PathOptions(**options))
+        return recipe_plan(path_of(curves), FRAME, SQUARE, path_limits.options(**options))
 
     def test_a_line_becomes_a_corners_path_of_its_two_ends(self):
         found = self.planned([line((0, 0, 0), (30, 0, 0))], as_step=True)
@@ -238,9 +258,9 @@ class OptionsTest(unittest.TestCase):
 
     def test_a_circle_with_a_taper_or_a_kept_direction_is_refused(self):
         ring = {"kind": "circle", "center": [0, 5, 0], "normal": [0, 0, 1], "radius": 5}
-        for option, reason in (("tapered", path_limits.CLOSED_TAPER), ("fixed", path_limits.CLOSED_PARALLEL)):
+        for option, reason in (("tapered", words.CLOSED_TAPER), ("fixed", words.CLOSED_PARALLEL)):
             with self.subTest(option):
-                self.assertEqual(self.planned([ring], as_step=True, **{option: True}).reason, reason)
+                self.assertEqual(self.planned([ring], as_step=True, **{option: True}).words, reason)
 
     def test_a_twisted_circle_is_a_closed_flat_path_of_two_half_arcs(self):
         ring = {"kind": "circle", "center": [0, 5, 0], "normal": [0, 0, 1], "radius": 5}
@@ -255,23 +275,23 @@ class OptionsTest(unittest.TestCase):
         self.assertEqual(check_recipe(sweep_with(recipe, 16)), [])
 
     def test_a_kept_direction_needs_the_path_to_keep_moving_away_from_the_outline_plane(self):
-        self.assertEqual(self.planned(pipe_with_bend(), fixed=True, as_step=True).reason, path_limits.TURNS_BACK)
+        self.assertEqual(self.planned(pipe_with_bend(), fixed=True, as_step=True).words, words.TURNS_BACK)
         eased = [line((0, 0, 0), (10, 0, 0)), quarter([10, 10, 0], [0, -1, 0], [0.5, -S2 * 1.2247, 0], 10)]
         self.assertIsNone(getattr(self.planned(eased, fixed=True, as_step=True), "reason", None))
 
     def test_a_kept_direction_skips_the_bend_checks(self):
         eased = [line((0, 0, 0), (10, 0, 0)), quarter([10, 10, 0], [0, -1, 0], [0.5, -S2 * 1.2247, 0], 10)]
         wide = [[0, y, 0] for y in (-14, 14)]
-        self.assertIsInstance(paths.plan(path_of(eased), FRAME, wide, path_model.PathOptions(as_step=True)), Refusal)
-        kept = paths.plan(path_of(eased), FRAME, wide, path_model.PathOptions(as_step=True, fixed=True))
-        self.assertNotIsInstance(kept, Refusal)
+        self.assertIsInstance(recipe_plan(path_of(eased), FRAME, wide, path_limits.options(as_step=True)), Problem)
+        kept = recipe_plan(path_of(eased), FRAME, wide, path_limits.options(as_step=True, fixed=True))
+        self.assertNotIsInstance(kept, Problem)
 
     def test_a_twist_counts_the_outline_across_the_path_plane_at_a_bend(self):
         tall = [[0, 0, z] for z in (-9, 9)]
-        flat_only = paths.plan(path_of(pipe_with_bend()), FRAME, tall, path_model.PathOptions())
-        self.assertNotIsInstance(flat_only, Refusal)
-        twisted = paths.plan(path_of(pipe_with_bend()), FRAME, tall, path_model.PathOptions(as_step=True, twisted=True))
-        self.assertIsInstance(twisted, Refusal)
+        flat_only = recipe_plan(path_of(pipe_with_bend()), FRAME, tall, path_limits.options())
+        self.assertNotIsInstance(flat_only, Problem)
+        twisted = recipe_plan(path_of(pipe_with_bend()), FRAME, tall, path_limits.options(as_step=True, twisted=True))
+        self.assertIsInstance(twisted, Problem)
 
 
 def rounded_rectangle():
@@ -297,9 +317,9 @@ class ClosedTest(unittest.TestCase):
 
     def closed_at(self, point, normal, curves=None, **options):
         plane, points = at_point(point, normal)
-        found = paths.plan(path_of(curves or rounded_rectangle(), frame=XY_SKETCH), plane, points,
-                           path_model.PathOptions(**options))
-        if not isinstance(found, Refusal):
+        found = recipe_plan(path_of(curves or rounded_rectangle(), frame=XY_SKETCH), plane, points,
+                           path_limits.options(**options))
+        if not isinstance(found, Problem):
             self.assertTrue(found.closed)
             self.assertEqual(found.recipe["segments"][-1]["to"], found.recipe["start"])
             self.assertTrue(found.recipe["closed"])
@@ -339,7 +359,8 @@ class ClosedTest(unittest.TestCase):
         found = self.closed_at((20, 0.2, 0), [1, 0, 0], rim)
         self.assertEqual(found.recipe["segments"][0]["kind"], "spline")
         self.assertEqual(found.recipe["segments"][-1]["kind"], "spline")
-        self.assertLessEqual(path_checks.seam_turn(found.recipe["start"], found.recipe["segments"]), path_limits.SMOOTH_JOIN_DEG)
+        self.assertLessEqual(path_checks.seam_turn(found.recipe["start"], found.recipe["segments"]),
+                             tolerances.SMOOTH_JOIN_DEG)
 
     def test_a_chain_listed_the_other_way_round_runs_clockwise(self):
         backwards = path_curves.turned_round(rounded_rectangle())
@@ -350,7 +371,7 @@ class ClosedTest(unittest.TestCase):
     def test_the_outline_may_sit_inside_the_loop_as_long_as_it_clears_the_bends(self):
         plane, points = at_point((20, 0, 0), [1, 0, 0])
         points = [vec.add(p, [0, 2, 0]) for p in points]
-        self.assertNotIsInstance(paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, points), Refusal)
+        self.assertNotIsInstance(recipe_plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, points), Problem)
 
     SQUARE_LOOP = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
                    line((0, 10, 0), (0, 0, 0))]
@@ -359,22 +380,22 @@ class ClosedTest(unittest.TestCase):
         found = self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP)
         self.assertEqual(self.kinds(found), ["line"] * 5)
         self.assertIsNone(found.moved)
-        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).reason,
-                         path_limits.SHARP_CORNER)
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).words,
+                         words.SHARP_CORNER)
 
     def test_an_outline_on_a_corner_is_carried_to_the_middle_of_the_line_it_is_square_to(self):
         found = self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP)
         self.assertTrue(close(found.start, [5, 0, 0]) and close(found.moved, [-5, 0, 0]))
         self.assertTrue(close(found.direction, [-1, 0, 0]))
         self.assertAlmostEqual(found.length, 40.0)
-        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).reason,
-                         path_limits.CLOSED_AT_CORNER)
+        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).words,
+                         words.CLOSED_AT_CORNER)
 
     def test_corners_closer_than_the_outline_needs_are_refused(self):
         plane, points = at_point((5, 0, 0), [1, 0, 0])
         wide = [vec.add(p, vec.scale(vec.sub(p, [5, 0, 0]), 5.0)) for p in points]
-        found = paths.plan(path_of(self.SQUARE_LOOP, frame=XY_SKETCH), plane, wide)
-        self.assertTrue(found.reason.startswith("A sharp corner of the path of this sweep is too close"))
+        found = recipe_plan(path_of(self.SQUARE_LOOP, frame=XY_SKETCH), plane, wide)
+        self.assertTrue(found.words.startswith("A sharp corner of the path of this sweep is too close"))
 
     def test_a_line_between_two_corners_needs_room_for_both_mitres(self):
         """Each 90 degree corner needs 6 mm of straight path: the 10 mm sides have room for one mitre, not two."""
@@ -382,44 +403,44 @@ class ClosedTest(unittest.TestCase):
         loop = [line(a, b) for a, b in zip(corners, corners[1:] + corners[:1])]
         plane, points = at_point((15, 0, 0), [1, 0, 0])
         wide = [vec.add(p, vec.scale(vec.sub(p, [15, 0, 0]), 5.0)) for p in points]
-        found = paths.plan(path_of(loop, frame=XY_SKETCH), plane, wide)
-        self.assertEqual(found.reason, path_limits.CORNER_TOO_TIGHT % (12.0, 10.0))
+        found = recipe_plan(path_of(loop, frame=XY_SKETCH), plane, wide)
+        self.assertEqual(found.words, words.CORNER_TOO_TIGHT % (12.0, 10.0))
 
     def test_a_closed_chain_that_bends_in_3d_is_refused(self):
         skew = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 5)),
                 line((0, 10, 5), (0, 0, 0))]
-        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], skew).reason, path_limits.CLOSED_3D)
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], skew).words, words.CLOSED_3D)
 
     def test_a_plane_that_misses_the_chain_is_refused(self):
-        self.assertEqual(self.closed_at((60, 0, 0), [1, 0, 0]).reason, path_limits.OFF_PLANE)
+        self.assertEqual(self.closed_at((60, 0, 0), [1, 0, 0]).words, words.OFF_PLANE)
 
     def test_a_chain_that_meets_the_plane_at_a_slant_is_refused(self):
-        self.assertEqual(self.closed_at((20, 0, 0), [S2, S2, 0]).reason, path_limits.NOT_SQUARE)
+        self.assertEqual(self.closed_at((20, 0, 0), [S2, S2, 0]).words, words.NOT_SQUARE)
 
     def test_a_taper_or_a_kept_direction_is_refused(self):
-        for option, reason in (("tapered", path_limits.CLOSED_TAPER), ("fixed", path_limits.CLOSED_PARALLEL)):
+        for option, reason in (("tapered", words.CLOSED_TAPER), ("fixed", words.CLOSED_PARALLEL)):
             with self.subTest(option):
                 found = self.closed_at((20, 0, 0), [1, 0, 0], as_step=True, **{option: True})
-                self.assertEqual(found.reason, reason)
+                self.assertEqual(found.words, reason)
 
     def test_an_outline_wider_than_the_bend_is_refused(self):
         plane, points = at_point((20, 0, 0), [1, 0, 0])
         wide = [vec.add(p, [0, 6, 0]) for p in points]
-        found = paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, wide)
-        self.assertIsInstance(found, Refusal)
+        found = recipe_plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, wide)
+        self.assertIsInstance(found, Problem)
 
     def test_a_loop_whose_parts_pass_closer_than_the_outline_allows_is_refused(self):
         ends = [(20 + 2 * math.sin(math.radians(a)), 2 - 2 * math.cos(math.radians(a))) for a in range(0, 181, 5)]
         back = [(-x, 4 - y) for x, y in ends]
         slim = [[x, y, 0.0] for x, y in [(-20, 0)] + ends + back + [(-20, 0)]]
-        self.assertIsNotNone(path_checks.overlap_refusal(slim, 2.2, True))
-        self.assertIsNone(path_checks.overlap_refusal(slim, 1.9, True))
+        self.assertIsNotNone(path_checks.overlap_problem(slim, 2.2, True))
+        self.assertIsNone(path_checks.overlap_problem(slim, 1.9, True))
 
     def test_the_start_and_end_of_a_closed_loop_are_neighbours(self):
         circle = [[10 * math.cos(t), 10 * math.sin(t), 0.0] for t in (2 * math.pi * k / 120 for k in range(121))]
         circle[-1] = circle[0]
-        self.assertIsNone(path_checks.overlap_refusal(circle, 1.0, True))
-        self.assertIsNotNone(path_checks.overlap_refusal(circle, 1.0, False))
+        self.assertIsNone(path_checks.overlap_problem(circle, 1.0, True))
+        self.assertIsNotNone(path_checks.overlap_problem(circle, 1.0, False))
 
     def test_the_written_directions_at_the_seam_are_compared(self):
         circle = [{"kind": "arc", "through": [10.0, 10.0], "to": [0.0, 20.0]},
@@ -433,66 +454,66 @@ class ClosedTest(unittest.TestCase):
 class RefusalTest(unittest.TestCase):
     def refused(self, curves, reason, **kwargs):
         found = plan(curves, **kwargs)
-        self.assertIsInstance(found, Refusal)
-        self.assertEqual(found.reason, reason)
+        self.assertIsInstance(found, Problem)
+        self.assertEqual(found.words, reason)
 
     def test_a_path_the_capture_calls_closed_is_not_taken_as_open(self):
-        self.refused([line((0, 0, 0), (30, 0, 0))], path_limits.CLOSED, closed=True)
+        self.refused([line((0, 0, 0), (30, 0, 0))], words.CLOSED, closed=True)
 
     def test_curves_that_do_not_join(self):
-        self.refused([line((0, 0, 0), (10, 0, 0)), line((10, 1, 0), (20, 1, 0))], path_limits.NOT_ONE_CHAIN)
+        self.refused([line((0, 0, 0), (10, 0, 0)), line((10, 1, 0), (20, 1, 0))], words.NOT_ONE_CHAIN)
 
     def test_curves_that_branch(self):
         self.refused([line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (20, 0, 0)), line((10, 0, 0), (10, 10, 0))],
-                     path_limits.NOT_ONE_CHAIN)
+                     words.NOT_ONE_CHAIN)
 
     def test_a_path_that_is_not_sketch_curves_or_edges(self):
-        found = paths.plan({"kind": "other", "curves": []}, FRAME, SQUARE)
-        self.assertEqual(found.reason, path_limits.NOT_SKETCH)
+        found = recipe_plan({"kind": "other", "curves": []}, FRAME, SQUARE)
+        self.assertEqual(found.words, words.NOT_SKETCH)
 
     def test_a_free_curve_without_samples(self):
         broken = {"kind": "other", "type": "NurbsCurve3D", "start": [0, 0, 0], "end": [9, 0, 0], "samples": []}
-        self.refused([broken], path_limits.UNREADABLE)
+        self.refused([broken], words.UNREADABLE)
 
     def test_a_zero_length_line(self):
-        self.refused([line((0, 0, 0), (0, 0, 0))], path_limits.UNREADABLE)
+        self.refused([line((0, 0, 0), (0, 0, 0))], words.UNREADABLE)
 
     def test_an_ellipse(self):
         ellipse = {"kind": "ellipse", "center": [0, 0, 0], "major_dir": [1, 0, 0], "major_radius": 4, "minor_radius": 2}
-        self.refused([ellipse], path_limits.UNKNOWN_CURVE)
+        self.refused([ellipse], words.UNKNOWN_CURVE)
 
     def test_a_path_through_the_middle_of_the_outline(self):
-        self.refused([line((-10, 0, 0), (10, 0, 0))], path_limits.BOTH_SIDES)
+        self.refused([line((-10, 0, 0), (10, 0, 0))], words.BOTH_SIDES)
 
     def test_a_path_that_never_reaches_the_outline(self):
-        self.refused([line((5, 0, 0), (20, 0, 0))], path_limits.OFF_PLANE)
+        self.refused([line((5, 0, 0), (20, 0, 0))], words.OFF_PLANE)
 
     def test_a_path_that_leaves_the_outline_at_a_slant(self):
-        self.refused([line((0, 0, 0), (10, 10, 0))], path_limits.NOT_SQUARE)
+        self.refused([line((0, 0, 0), (10, 10, 0))], words.NOT_SQUARE)
 
     def test_a_circle_whose_plane_lies_flat_on_the_outline(self):
         ring = {"kind": "circle", "center": [0, 0, 0], "normal": [1, 0, 0], "radius": 10}
-        self.refused([ring], path_limits.NOT_SQUARE)
+        self.refused([ring], words.NOT_SQUARE)
 
     def test_a_circle_the_outline_plane_misses(self):
         ring = {"kind": "circle", "center": [0, 20, 0], "normal": [0, 0, 1], "radius": 10}
-        self.refused([ring], path_limits.OFF_PLANE, outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
+        self.refused([ring], words.OFF_PLANE, outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
 
     def test_a_sharp_corner_between_two_lines_is_mitred_unless_the_outline_twists(self):
         corner = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0))]
         found = plan(corner)
         self.assertEqual([s["kind"] for s in found.recipe["segments"]], ["line", "line"])
-        twisted = paths.plan(path_of(corner), FRAME, SQUARE, path_model.PathOptions(as_step=True, twisted=True))
-        self.assertEqual((twisted.reason, twisted.cause), (path_limits.SHARP_CORNER, "sharpCorner"))
+        twisted = recipe_plan(path_of(corner), FRAME, SQUARE, path_limits.options(as_step=True, twisted=True))
+        self.assertEqual((twisted.words, twisted.cause), (words.SHARP_CORNER, "sharpCorner"))
 
     def test_a_sharp_corner_of_an_open_path_too_tight_for_its_outline(self):
         wide = [[0, 4 * y, z] for y in (-1, 1) for z in (-1, 1)]
         found = plan([line((0, 0, 0), (3, 0, 0)), line((3, 0, 0), (3, 10, 0))], points=wide)
-        self.assertTrue(found.reason.startswith("A sharp corner of the path of this sweep is too close"))
+        self.assertTrue(found.words.startswith("A sharp corner of the path of this sweep is too close"))
 
     def test_a_sharp_corner_next_to_an_arc(self):
         across = quarter([15, 0, 0], [-1, 0, 0], [0, -1, 0], 5)
-        self.refused([line((0, 0, 0), (10, 0, 0)), across], path_limits.SHARP_CORNER)
+        self.refused([line((0, 0, 0), (10, 0, 0)), across], words.SHARP_CORNER)
 
     def test_two_far_apart_parts_that_pass_closer_than_the_outline_allows(self):
         """A line, then an arc round almost a full turn that ends 0.67 mm from the line."""
@@ -500,39 +521,39 @@ class RefusalTest(unittest.TestCase):
         end = [10 + 5 * math.cos(math.radians(240)), 5 + 5 * math.sin(math.radians(240)), 0]
         loop = [line((0, 0, 0), (10, 0, 0)), arc((10, 0, 0), end, mid, (10, 5, 0))]
         found = plan(loop, frame=XY_SKETCH)
-        self.assertIn("run into itself", found.reason)
-        self.assertIn("reaches 1.00 mm", found.reason)
+        self.assertIn("run into itself", found.words)
+        self.assertIn("reaches 1.00 mm", found.words)
         self.assertIsInstance(plan(loop, frame=XY_SKETCH, points=[[0, 0.1, 0], [0, -0.1, 0]]), path_model.PathPlan)
 
     def test_a_bend_in_3d_that_is_not_tangent(self):
         chain = pipe_in_3d()
         chain[4] = line((15, 20, 5), (16, 20, 20))
-        self.refused(chain, path_limits.BENDS_3D)
+        self.refused(chain, words.BENDS_3D)
 
     def test_a_free_curve_in_3d(self):
         samples = [[0, 0, 0], [5, 0, 1], [10, 1, 3]]
         curve = {"kind": "other", "type": "NurbsCurve3D", "start": samples[0], "end": samples[-1], "mid": samples[1],
                  "samples": samples, "tangent_start": [1, 0, 0]}
-        self.refused([curve, line((10, 1, 3), (10, 1, 9))], path_limits.BENDS_3D)
+        self.refused([curve, line((10, 1, 3), (10, 1, 9))], words.BENDS_3D)
 
     def test_too_many_parts(self):
-        with mock.patch.object(path_writing, "MAX_SEGMENTS", 2):
-            self.refused(pipe_with_bend(), path_limits.TOO_MANY)
-        with mock.patch.object(path_writing, "MAX_POINTS", 3):
-            self.refused(pipe_in_3d(), path_limits.TOO_MANY)
+        with mock.patch.object(path_limits, "MAX_SEGMENTS", 2):
+            self.refused(pipe_with_bend(), words.TOO_MANY)
+        with mock.patch.object(path_limits, "MAX_POINTS", 3):
+            self.refused(pipe_in_3d(), words.TOO_MANY)
 
     def test_a_smooth_path_that_crosses_itself(self):
         samples = [[t * t - 1, t * (t * t - 1), 0] for t in [-1.5 + 3 * i / 399 for i in range(400)]]
         tangent = [-3 / math.hypot(-3, 5.75), 5.75 / math.hypot(-3, 5.75), 0]
         curve = {"kind": "other", "type": "NurbsCurve3D", "start": samples[0], "end": samples[-1], "mid": samples[200],
                  "samples": samples, "tangent_start": tangent}
-        self.refused([curve], path_limits.CROSSES, outline={"origin": samples[0], "z": tangent})
+        self.refused([curve], words.CROSSES, outline={"origin": samples[0], "z": tangent})
 
     def test_an_outline_wider_than_the_tightest_bend_is_refused_in_flat_and_3d_paths(self):
         wide = [[0, y, 0] for y in (-1, 6)]
         found = plan(pipe_with_bend(), points=wide)
-        self.assertIn("reaches 6.00 mm", found.reason)
-        self.assertIsInstance(plan(pipe_in_3d(), points=wide), Refusal)
+        self.assertIn("reaches 6.00 mm", found.words)
+        self.assertIsInstance(plan(pipe_in_3d(), points=wide), Problem)
         self.assertIsInstance(plan(pipe_in_3d()), path_model.PathPlan)
 
     def test_the_outline_is_measured_across_the_path_plane_only(self):
@@ -549,14 +570,14 @@ class AxisReachTest(unittest.TestCase):
     def test_an_outline_on_the_outer_side_of_an_arc_is_not_refused(self):
         found = plan([quarter([0, 3, 0], [0, -1, 0], [1, 0, 0], 3)], points=self.OUTER)
         self.assertIsInstance(found, path_model.PathPlan)
-        self.assertIn("reaches 4.00 mm", plan([quarter([0, 3, 0], [0, -1, 0], [1, 0, 0], 3)], points=self.INNER).reason)
+        self.assertIn("reaches 4.00 mm", plan([quarter([0, 3, 0], [0, -1, 0], [1, 0, 0], 3)], points=self.INNER).words)
 
     def test_an_outline_on_the_outer_side_of_a_circle_is_not_refused(self):
         ring = {"kind": "circle", "center": [0, 3, 0], "normal": [1, 0, 0], "radius": 3}
         frame = {"origin": [0, 0, 0], "z": [0, 0, 1]}
         outer = [[x, y, 0] for x in (-2, 2) for y in (-4, 0)]
         self.assertIsInstance(plan([ring], points=outer, outline=frame), path_model.PathPlan)
-        self.assertIsInstance(plan([ring], points=[[x, y, 0] for x in (-2, 2) for y in (0, 4)], outline=frame), Refusal)
+        self.assertIsInstance(plan([ring], points=[[x, y, 0] for x in (-2, 2) for y in (0, 4)], outline=frame), Problem)
 
 
 class RebuiltTest(unittest.TestCase):
@@ -592,16 +613,16 @@ class RebuiltTest(unittest.TestCase):
 
     def test_a_path_that_does_not_leave_the_outline_square_is_refused(self):
         slanted = self.recipe({"kind": "line", "to": [20, 5]})
-        self.assertEqual(self.refusal(slanted).reason, path_limits.NOT_SQUARE)
+        self.assertEqual(self.refusal(slanted).reason, words.NOT_SQUARE)
 
     def test_a_path_that_leaves_the_outline_the_other_way_is_refused_when_the_way_is_given(self):
         back = self.recipe({"kind": "line", "to": [-20, 0]})
         self.assertIsNone(self.refusal(back, leaves=None))
-        self.assertEqual(self.refusal(back, leaves=[1.0, 0.0, 0.0]).reason, path_limits.TURNED_ROUND)
+        self.assertEqual(self.refusal(back, leaves=[1.0, 0.0, 0.0]).reason, words.TURNED_ROUND)
 
     def test_a_corner_between_two_lines_is_refused_unless_it_is_mitred_with_room_for_the_outline(self):
         corner = self.recipe({"kind": "line", "to": [20, 0]}, {"kind": "line", "to": [20, 20]})
-        self.assertEqual(self.refusal(corner).reason, path_limits.SHARP_CORNER)
+        self.assertEqual(self.refusal(corner).reason, words.SHARP_CORNER)
         self.assertIsNone(self.refusal(corner, mitres=True))
         self.assertIn("too close", self.refusal(corner, reach=21.0, mitres=True).reason)
 
@@ -610,7 +631,7 @@ class RebuiltTest(unittest.TestCase):
         loop = self.recipe({"kind": "line", "to": [20, 0]},
                            {"kind": "arc", "through": [20 + 10 * S2, 10 + 10 * S2], "to": [10, 10]},
                            {"kind": "line", "to": [10, -5]})
-        self.assertEqual(self.refusal(loop, reach=0.1).reason, path_limits.CROSSES)
+        self.assertEqual(self.refusal(loop, reach=0.1).reason, words.CROSSES)
 
     def test_a_closed_path_of_smooth_parts_is_not_refused(self):
         stadium = self.recipe({"kind": "line", "to": [20, 0]}, {"kind": "arc", "through": [25, 5], "to": [20, 10]},
@@ -619,7 +640,7 @@ class RebuiltTest(unittest.TestCase):
         self.assertIsNone(self.refusal(stadium, reach=1.0))
 
     def test_an_outline_kept_in_one_direction_needs_the_path_to_keep_rising(self):
-        self.assertEqual(self.refusal(self.pipe(), fixed=True).reason, path_limits.TURNS_BACK)
+        self.assertEqual(self.refusal(self.pipe(), fixed=True).reason, words.TURNS_BACK)
         sixty = self.recipe({"kind": "line", "to": [20, 0]},
                             {"kind": "arc", "through": [25, 10 - 10 * math.sin(math.radians(60))],
                              "to": [20 + 10 * math.cos(math.radians(30)), 5]})
@@ -630,7 +651,7 @@ class RebuiltTest(unittest.TestCase):
             path_rebuilt.flat_curves(self.recipe({"kind": "spline", "through": [[5, 1]], "to": [10, 0]}))
 
     def test_a_line_without_length_cannot_be_read(self):
-        self.assertEqual(self.refusal(self.recipe({"kind": "line", "to": [0, 0]})).reason, path_limits.UNREADABLE)
+        self.assertEqual(self.refusal(self.recipe({"kind": "line", "to": [0, 0]})).reason, words.UNREADABLE)
 
 
 if __name__ == "__main__":

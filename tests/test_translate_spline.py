@@ -12,7 +12,8 @@ from lib.params import size_table
 from lib.probe import build
 from lib.translator import translate
 from lib.translator.result import Refusal
-from lib.translator.sketch import loops, spline_fit
+from lib.geometry import spline_fit
+from lib.translator.sketch import loops
 
 EDGE = "extrude_spline_edge"
 EXTRUDE = 1

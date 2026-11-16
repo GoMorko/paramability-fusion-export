@@ -460,9 +460,11 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   It has no twist, no taper, no guide rail and no way to keep the outline in one direction, and the outline must be
   one loop. Orca starts the wire of an open path at the free end of the first entity, and of a closed path at the
   start of the first entity, so the copy writes the path entities in order from the outline.
-- The path is planned as for a recipe (`translator.paths.plan`): ordered from the outline's plane, a closed path cut
-  open there, and its rules checked (no crossing, the outline clear of the tightest bend and of the other parts of
-  the path). A new body's measured volume and end face must match the outline and path (`translator.sweep`).
+- The path is planned as for a recipe (`design_model.paths.planner.plan`, with the recipe's caps of 64 parts and its
+  spline fit): ordered from the outline's plane, a closed path cut open there, and its rules checked (no crossing,
+  the outline clear of the tightest bend and of the other parts of the path). A new body's measured volume and end
+  face must match the outline and path (`design_model.steps.sweep`). A problem the planner finds leaves the sweep out
+  with its own words and cause.
 - A straight path is an Extrude of the outline (holes included), one arc or a full circle a Revolve about its axis,
   and lines and arcs in one plane that meet smoothly an Orca Sweep. The outline must leave its plane square to the
   path (within a millionth): Orca's extrude runs along the outline's normal.
@@ -481,8 +483,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   circles join point to point at the same angle when both sketches have one plane normal, so the copy writes them
   so. Two outlines of straight lines join at the corners closest together about the outlines' centres (live: also
   with the top square turned 20 and 40 degrees). The copy takes them when that pairing is the only close one, and
-  either a new body's measured volume shows Fusion paired them the same way, or every corner lies within a degree
-  of its partner (a square to a smaller square). Left out: other shapes or pairs (cause `loftShape`), planes that
+  either a new body's measured volume shows Fusion paired them the same way (`design_model.steps.loft`), or every
+  corner lies within a degree of its partner (a square to a smaller square). Left out: other shapes or pairs (cause `loftShape`), planes that
   are not parallel (`loftShape`), holes (`outlineHoles`), more than two outlines, points, faces or edges as
   sections, end conditions other than free, rails, a centre line and closed lofts (`loftKind`).
 - Splines: Orca's B-spline entity is clamped, uniform and of degree three (fewer poles: one less), with no weights.

@@ -10,7 +10,8 @@ from lib.geometry import text_outlines
 from lib.params import size_table
 from lib.probe import build
 from lib.translator import translate
-from lib.translator.sketch import loops, spline_fit
+from lib.geometry import spline_fit
+from lib.translator.sketch import loops
 
 EMBOSS = "emboss_text"
 EXTRUDE = "extrude_text"

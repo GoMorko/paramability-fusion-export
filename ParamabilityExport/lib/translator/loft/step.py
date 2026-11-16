@@ -11,10 +11,13 @@ closed outline, end conditions other than free, rails, a centre line, a closed l
 openings, and outlines whose planes cross or touch (the kernel needs the sections in order along the loft).
 
 Two parallel outlines of straight lines make a ruled loft whose volume follows from the way the kernel pairs the
-corners (`loft_volume`). A new body that has another volume is refused, since Fusion paired the corners another way.
+corners (`design_model.steps.loft`). A new body that has another volume is refused, since Fusion paired the corners
+another way.
 Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
 from ...capture_model import gap_hints
+from ...design_model.steps import loft as loft_reader
+from ...design_model.steps.sweep import made_volume
 from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import polyline
@@ -23,8 +26,7 @@ from ..extrude import COMBINE
 from ..faces.placer_makers import EndCapsMaker
 from ..result import Refusal, StepResult
 from ..sketch import borrowed, loops, sketch_motion
-from ..sweep.sweep_volume import made_volume
-from . import loft_sections, loft_volume
+from . import loft_sections
 
 PLANE_TOL = 1e-6
 
@@ -153,10 +155,10 @@ def _pairing_check(item, data, profiles):
     if data["operation"] != "newBody":
         return False
     made = made_volume(item, data)
-    volumes = loft_volume.ruled_volumes(profiles)
+    volumes = loft_reader.ruled_volumes(profiles)
     if made is None or volumes is None:
         return False
-    return True if loft_volume.matches(volumes, made) else Refusal(CORNERS_PAIRED)
+    return True if loft_reader.matches(volumes, made) else Refusal(CORNERS_PAIRED)
 
 
 def _turned_corners(profiles, built):

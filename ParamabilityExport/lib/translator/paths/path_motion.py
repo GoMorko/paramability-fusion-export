@@ -2,7 +2,8 @@
 
 The probe measures each sketch curve of a sweep path (`sketch_values.keys`: points in the path sketch's plane, radii,
 the angle an arc turns, the plane's position). Here those raw values are looked up for the points the path planner
-wrote (`path_model.PathPlan`): a written point is the start, end or middle of a curve of the sketch, found by its place.
+wrote (`design_model.paths.model.PathPlan`): a written point is the start, end or middle of a curve of the sketch,
+found by its place.
 The exception is the place where a closed path was cut open at the outline's plane: when that is inside a straight
 line square to the plane, the point follows the line and the plane. A path where some written point is none of these
 (a cut inside an arc, a free curve) is not followed: the caller writes it as measured.
@@ -29,7 +30,8 @@ from ...params.expressions.evaluation import evaluate_tree
 from ...params.expressions.formula import parse_formula
 from ...sketch_values import keys
 from ...sketch_values.motion import Stuck
-from . import path_curves, path_limits, path_rebuilt
+from ...design_model.paths import curves as path_curves, tolerances
+from . import path_rebuilt
 from ..ranges import range_check
 from ..sketch import sketch_motion
 from ..sketch.curved import combine
@@ -238,7 +240,7 @@ def _as_flat(raw, found):
 
 
 def follow(ctx, item, path, found, form, drawn):
-    """The `Followed` path for a path the planner found (`found`, a `path_model.PathPlan`) that is written as `form`
+    """The `Followed` path for a path the planner found (`found`, a `PathPlan`) that is written as `form`
     (`extrude` for a line, `revolve` for an arc, `sweep` for a flat chain or for a line that twists), or None when it is not followed: no motion
     values for it, a form that cannot follow, or a point that is none of the sketch's. `drawn` is the outline's
     `sketch_motion.Outline`."""
@@ -298,5 +300,5 @@ def keep_on_plane(ctx, followed, profile_frame, drawn, name):
                 ctx.doubt(names, why)
         elif q.sized:
             span = range_check.sweep(ctx.table, q.text, q.reads)
-            if not (span.at_least(-path_limits.PLANE_TOL) and span.at_most(path_limits.PLANE_TOL)):
+            if not (span.at_least(-tolerances.PLANE_TOL) and span.at_most(tolerances.PLANE_TOL)):
                 ctx.doubt(q.reads, why)

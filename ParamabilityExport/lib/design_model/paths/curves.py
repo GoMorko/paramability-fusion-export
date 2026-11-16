@@ -5,7 +5,7 @@ from ...geometry import vec
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
-from .path_limits import ARC_SAMPLE_DEG, STRAIGHT_DEG
+from .tolerances import ARC_SAMPLE_DEG, STRAIGHT_DEG
 
 
 def near(a, b, tol=CHAIN_TOL):
@@ -50,7 +50,8 @@ def readable(curve):
     if kind == "arc":
         return all(is_point(curve.get(k)) for k in ("start", "mid", "end"))
     if kind == "circle":
-        return is_point(curve.get("center")) and is_point(curve.get("normal")) and isinstance(curve.get("radius"), (int, float))
+        return (is_point(curve.get("center")) and is_point(curve.get("normal"))
+                and isinstance(curve.get("radius"), (int, float)))
     if kind == "other":
         samples = curve.get("samples")
         return (isinstance(samples, list) and len(samples) >= 2 and all(is_point(p) for p in samples)

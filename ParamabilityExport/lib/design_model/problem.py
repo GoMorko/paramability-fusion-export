@@ -13,3 +13,7 @@ class Problem:
     code: str
     words: str
     cause: str = None
+
+
+def is_problem(found):
+    return isinstance(found, Problem)
