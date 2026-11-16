@@ -9,6 +9,7 @@ steps out again against the part as it stood at each step.
 """
 from ...design_model import design, tool_chains
 from .. import walk
+from ..gaps.finishing import is_finishing
 from ..result import Refusal, StepResult, TranslateResult
 from ...design_model.words import ToolStop
 
@@ -71,6 +72,22 @@ def cannot_copy(body, item, why, cause=None, inner=None):
     whose own tool cannot be built."""
     stop = ToolStop.through(tool_chains.name_of(body), item.get("name"), why, inner)
     return Refusal(stop.reason, cause=cause, stop=stop)
+
+
+def shaping_gap(gaps):
+    """The first of `gaps` (`gaps.stops.Gap`) whose missing step does more than finish surfaces, or None. Such a step
+    (a Move, an extrude, a Combine of its own) can change the place or the material of a tool body, so a join, cut or
+    intersect with the tool as written gives a wrong part. A missing round, bevel or draft (`gaps/finishing.py`) only
+    finishes the tool, and the gap in the tool's list says so."""
+    return next((gap for gap in gaps if not is_finishing(gap.item.get("type"), design.as_read(gap.item).brought_data)),
+                None)
+
+
+def unfinished(tool):
+    """A Refusal that names the step a walked `tool` misses when that step can change its place or material
+    (`shaping_gap`), else None. The gaps inside the tool are then dropped with it."""
+    gap = shaping_gap(tool.gaps)
+    return None if gap is None else cannot_copy(tool.body, gap.item, gap.reason, gap.cause)
 
 
 def _exported(ctx, body):

@@ -12,6 +12,7 @@ type name and `unknown: true`, so nothing is silently dropped. A reader must ref
 or a null in `on`.
 """
 from . import read_geometry as geo
+from .placement import is_component_origin
 
 MAX_SKETCHES = 200
 MAX_ENTITIES = 2000
@@ -196,7 +197,8 @@ class _Graph:
         record["reference"] = self._reference(rd)
 
     def _reference(self, rd):
-        """None for own geometry, else where a projected entity comes from."""
+        """None for own geometry, else where a projected entity comes from. `origin` is true for a projection of the
+        origin point, an origin axis or an origin plane of the component named in `component`."""
         if not rd.get("isReference", bool, False):
             return None
         source = rd.get("referencedEntity")
@@ -204,8 +206,11 @@ class _Graph:
             return {"source": "none", "component": "", "token": ""}
         component = _owner(source)
         token = geo.safe(lambda: component.entityToken, "") if component is not None else ""
-        return {"source": "own" if geo.same_entity(component, self.ctx.component) else "other",
-                "component": token or "", "token": geo.safe(lambda: source.entityToken, "") or ""}
+        out = {"source": "own" if geo.same_entity(component, self.ctx.component) else "other",
+               "component": token or "", "token": geo.safe(lambda: source.entityToken, "") or ""}
+        if geo.safe(lambda: is_component_origin(source), False):
+            out["origin"] = True
+        return out
 
     def add_point(self, obj, implicit=False):
         rd = _Read(obj)

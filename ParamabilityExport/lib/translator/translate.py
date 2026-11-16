@@ -336,7 +336,7 @@ def _finish(settled, doubts, capture, motion):
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
     result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion),
-                              {name: found[0] for name, found in spans.items()})
+                              {name: found[0] for name, found in spans.items()}, _body_changes(motion))
     result.notes.extend(d["reason"] for d in result.dropped)
     result.follows_components = _followed_components(settled.ctx, checked)
     if sizes:
@@ -455,31 +455,44 @@ def _tried(motion):
     return {name for state in motion.states or () if state.get("built", True) for name in state.get("values") or {}}
 
 
-def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=(), spans=None):
+def _body_changes(motion):
+    """`Motion.body_changes` of a measured motion file: per size tried alone, whether the body changed. Empty without
+    one."""
+    if not isinstance(motion, Motion) or motion.optimistic:
+        return {}
+    return motion.body_changes
+
+
+def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=(), spans=None, body=None):
     """`{ name, reason, used }` for each ticked size that no written formula reads. `used` is True when a step reads
-    it and the copy could not follow it, False when nothing copied depends on it. `unmoved_links` names, per size
-    tied to a sketch only through another component that did not move with it, that component. A size in `tried`
-    (set to other values by the size probe) that nothing reads was measured to change nothing: it gets
-    `"tried": True` and says so; with a span in `spans` (measured over less than its range) it says between which
-    values."""
-    out = []
+    it and the copy could not follow it, or when the body changed in a try of that size alone (`body`, from
+    `Motion.body_changes`): the copy keeps the value now. False when nothing copied depends on it.
+    `unmoved_links` names, per size tied to a sketch only through another component that did not move with it, that
+    component. A size in `tried` (set to other values by the size probe) that nothing reads, and whose tries read the
+    body the same, was measured to change nothing: it gets `"tried": True` and says so; with a span in `spans`
+    (measured over less than its range) it says between which values. A size tried without a body read gets the plain
+    reason: the tries do not show that it changes nothing."""
+    out, body = [], body or {}
     for name in table.ticked:
         if table.size_name(name) in sizes:
             continue
         if name in doubts:
             out.append({"name": name, "reason": dropped_reason(name, doubts[name]), "used": True})
+        elif body.get(name):
+            out.append({"name": name, "reason": dropped_reason(name, BODY_MOVED_WHY), "used": True})
         else:
             span = (spans or {}).get(name)
+            still = name in tried and body.get(name) is False
             if name in (unmoved_links or {}):
                 reason = unmoved_link_reason(name, unmoved_links[name], span)
             elif name in unmoved:
                 reason = unmoved_reason(name)
-            elif name in tried:
+            elif still:
                 reason = tried_unmoved_reason(name, span)
             else:
                 reason = unused_reason(name)
             entry = {"name": name, "reason": reason, "used": False}
-            if name in tried or name in unmoved or name in (unmoved_links or {}):
+            if still or name in unmoved or name in (unmoved_links or {}):
                 entry["tried"] = True
             out.append(entry)
     return out

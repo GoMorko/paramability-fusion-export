@@ -444,11 +444,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (toward -Y), Join. In a second design, sketch on the XZ plane a 10 by 15 mm rectangle from x = 20 to 30, z = 0 to
     15, and revolve it about the Z axis, Direction Symmetric, angle 60 degrees (user parameter `Sweep`). Make a third
     design like the second with 200 degrees.
-    Export: Export for Orca each body. In `report.json` the first revolve has `start_face_normal` null,
-    `end_face_normal` [0, 0, 1] and a `made_box` of about x 10 to 15, y -8 to 0, z 2 to 10; it is copied, and the
-    volume in Orca equals Fusion's (8251.3 mm3). The second is copied as a turn of 120 degrees (Fusion's angle is the
-    turn to each side) with `Sweep` a fixed number; the volume equals Fusion's (7853.98 mm3). The third is a closed
-    ring (23561.94 mm3).
+    Export: Export for Orca and for Paramability each body. In `report.json` the first revolve has `start_face_normal`
+    null and `end_face_normal` [0, 0, 1]. Its `made_box` can be x 0 to 40, y -8 to 20, z 2 to 10, because Fusion
+    merged the start cap with the front face of the box. It is copied in both outputs, turned toward -Y (the body
+    boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). The second is copied as a
+    turn of 120 degrees (Fusion's angle is the turn to each side) with `Sweep` a fixed number; the volume equals
+    Fusion's (7853.98 mm3). The third is a closed ring (23561.94 mm3).
 
 43. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
     high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular
@@ -456,9 +457,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     degrees, quantity 3.
     Export: Export for Orca. In `report.json` note `elements` of the pattern: each `id` and the turn of its `frame`
     about Z (atan2 of x[1] and x[0]). Fusion 2706 gave ids 0 to 5 with turns 0, 120, 180, 240, 300 and 0 (no copy
-    at 60), and 0, 120 and 180 for the second, so both patterns were left out as not spread evenly. Note the turns
-    Fusion gives, and whether the holes in Fusion sit at 0, 60, 120 and so on: they decide how the reader must read
-    `PatternElement.transform`.
+    at 60), and 0, 120 and 180 for the second, while the holes sat at 0, 60, 120 and so on. The add-in now places
+    the copies by their ids and checks them against their `faces`: both patterns are copied, 6 holes round the full
+    circle and 3 holes over 120 degrees, and they match the STEP. Note the turns Fusion gives: when they agree with the
+    faces, Fusion has fixed the transforms.
 
 44. SK1, what a sketch on a face says it sits on. Make a 30 x 20 x 10 mm box (user parameter `Height` for the 10 mm).
     Sketch a 6 mm circle on its top face and extrude it 5 mm up (Join). Sketch a point on the top face and drill a
@@ -484,7 +486,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and the one at (57, 25) with "reaches past that face". Then move the chamfer post with
     Chain Faces on to (20, 33), so it reaches past the chamfer onto the top face, and export again: Fusion ends it on
     both faces, and the post is left out with "its outline may reach past that face". Move it back. Export again with
-    `Height` ticked: the first roof post is still copied (the extrude that made the roof places its point), and
+    `Height` ticked: the first roof post is still copied (the extrude that made the roof places its point; Fusion
+    gives no end face for this join, and the box after the step, which lies wholly below the plane 30 mm up, shows
+    that it goes down), and
     `Height` is marked with "ends on a curved face"; the chamfer post is left out with "may move when the sizes
     change". Afterwards the design is as before.
 46. EX4, an extrude that starts at a distance from a face, both ways. Add user parameters `Height` = 10 mm and
@@ -495,9 +499,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the box.
     Export: export each new body with both sizes ticked. In `report.json` note `start_offset` of each extrude and
     which way Fusion moved the start. Expect the first body to start at `Height + Lift` and the second at
-    `Height - Lift`, both following the sizes in Paramability. Export the box: note `start_offset` of the join. When
-    it is null (no start face inside material), the join is left out with "starts at a distance from a face or
-    plane".
+    `Height - Lift`, both following the sizes in Paramability. Export the box: `start_offset` of the join is null
+    (no start face inside material) and `end_offset` is 13. The join is copied: it starts 2 mm below the top face
+    (z = 8) and goes 5 mm up, and the shape matches the STEP.
 47. EX5, an intersect to two sides. On the XY plane draw a 40 x 40 mm rectangle from the origin and extrude it
     20 mm up. Add a construction plane 10 mm above the XY plane. On it draw a 20 mm circle centred at (20, 20) and
     extrude it as an intersect with Two Sides: side one 4 mm up, side two 6 mm down.
@@ -556,14 +560,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     design is as before. On another copy, set the arc pattern's start point to 0.75 and pick the arc so that the path
     runs from (50, 20) to (70, 20), against the arc. In `report.json` the path curve has `opposed` true. The copy
     counts the start point from the start of the path: 7.9 mm of arc lie ahead of it and the copies reach 10 mm, so
-    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`).
+    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`). Fusion 2706 put
+    them off the arc, with transforms that do not agree with their faces: an arc pattern with a start point other
+    than 0 or the flip is left out with the reason that Fusion can put the copies off the path.
 52. TD3, a tapped hole with a counterbore and one with a countersink. Make a plate 40 x 40 x 12 mm. Add a Hole at
     (10, 20) on the top face: Counterbore, counterbore 10 mm across and 3 mm deep, "Tapped", "Modeled" ticked,
     M6x1, 10 mm deep, full length thread. Add a Hole at (30, 20): Countersink, 12 mm across at 90 degrees, tapped
     and modeled M6x1, through all. Add a user parameter `Bore` = 3 mm and set the counterbore depth to `Bore`.
     Export: tick `Bore`. In `report.json` note `thread.made_span` of each hole: expect it to start near 3 mm for the
     counterbore hole and near 3.5 mm for the countersink hole (where the cone narrows to the 5 mm bore). Both holes
-    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In Paramability,
+    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In the Orca copy the
+    counterbore hole has a thread from the counterbore floor and `Bore` is followed in part; the countersink hole is
+    left out. In Paramability,
     change `Bore` to 5 mm: the thread of the counterbore hole starts 5 mm down and ends at the bottom of the hole.
     When `made_span` starts at 0 instead, Fusion starts its thread at the top: the holes are left out with "does not
     start at the top of the hole (or below its counterbore or countersink)". Afterwards the design is as before.
@@ -643,3 +651,80 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     5.8 mm across, and the pin stays 5.8 mm across. When `rounds_after` is empty, Fusion does not list the moved face
     after the step and both steps are left out with "could not be measured": report this. Afterwards the design is as
     before.
+60. TD4, tapped holes through all and a cosmetic one. Add a user parameter `Plate` = 30 mm. Make a box 80 x 60 mm,
+    `Plate` high. On the top face add three Holes, "Tapped", M6x1: at (-20, 0) Simple, "Modeled" ticked, through all;
+    at (0, 0) Counterbore 10 mm across and 3 mm deep, "Modeled" ticked, through all; at (20, 0) Simple, cosmetic
+    (Modeled off), 15 mm deep.
+    Export: tick `Plate`, once to Paramability and once to Orca. In `report.json` each hole lists no thread faces in
+    `end_points` (the through holes have none), and each `side_cylinders` entry has a `span` that covers the bore:
+    30 mm long for the simple through hole, 27 mm for the counterbore one. The through holes copy as a hole at the
+    minor diameter plus a thread from the top (simple) or from the counterbore floor (3 mm down) to the bottom face;
+    the cosmetic hole copies as a plain hole 5.035 mm across. In Paramability, change `Plate` to 40 mm: both threads
+    still reach the bottom face. In Orca, the counterbore hole has a lead-in at the counterbore floor and at the
+    bottom face. When a `span` is null or covers only part of the bore, note what `vertices` the side face of the
+    hole has. Then add a user parameter `HoleX` = -20 mm for the x of the simple through hole, and a box 10 mm high
+    on the top face over x -14..-6 and y -10..10, clear of the holes. Export again with `Plate` and `HoleX` ticked: the
+    thread of that hole is 30 mm long as a number, and `Plate` and `HoleX` are marked "may give unexpected results"
+    (the hole can move under the box, where Fusion's thread is 40 mm). Afterwards the design is as before.
+61. MV1, a sphere moved into a box and kept where both meet. Make a box 40 x 20 x 10 mm with its corner at the
+    origin. Make a second body: sketch a half circle of radius 60 mm on a plane through the middle of the box (y = 10),
+    centre at (20, 10, 0), with its straight side on a vertical line, and revolve it 360 degrees about that line as a
+    new body. Move the sphere with a Move along X, Y and Z by z = -52 mm. Combine the box with the sphere: Intersect,
+    the box as target.
+    Export: pick the box. The recipe has a `toolBody` with the revolve and a `move` of -52 mm along z, and the copy is
+    a dome 8 mm high that matches the STEP. In `report.json` the Move data has `boxes_before` and `boxes_after` 52 mm
+    apart along z. Then add a Rotate Move of the sphere (10 degrees about the z axis through (0, 0, 0)) before the
+    Combine and export again: the Combine is left out with a reason that names the sphere and the Rotate Move, and no
+    flat box is written. Afterwards the design is as before.
+62. HB1, an extrude that starts from a face of a helper body. Add user parameters `Height` = 10 mm and `Lift` = 3 mm.
+    Body1: a 40 x 40 mm rectangle at the origin extruded `Height` as a new body. Body2: a 10 x 10 mm rectangle
+    centred at (20, 20) on the XY plane, extruded 5 mm as a new body, with the start "From object" on the top face of
+    Body1 and an offset of `Lift`. Body3: the same with the centre at (10, 10) and an offset of `-Lift`.
+    Export: pick Body2 and tick both sizes. Both stay sizes, and the start of the extrude in `recipe.json` reads
+    `Height + Lift` (Body3: `Height - Lift`). No size is "not used" with "changes nothing". In Paramability, change
+    `Height` to 15 mm: Body2 starts at 18 mm, as in Fusion. Afterwards the design is as before.
+63. PE1, where Fusion says the copies of a rectangular pattern are. Make a 100 x 60 x 5 mm plate with its corner at
+    the origin. Drill a simple 5 mm hole through all at (10, 10). Make a rectangular pattern of the hole: direction
+    one along X, quantity 4, distance 20 mm, spacing; direction two along Y, quantity 3, distance 15 mm. On a copy of
+    the design, tick Symmetric in direction one and set its quantity to 5, with the hole at (50, 10). On another copy,
+    suppress the copy at (50, 25).
+    Export: Export for Paramability and Export for Orca. In `report.json`, for each element compare the shift of its
+    `frame` (`origin`) with the move from the original's `source_faces` to the element's `faces`. Expect them to
+    agree, and the holes at x 10, 30, 50, 70 and y 10, 25, 40. Each pattern is copied (the suppressed copy as a
+    skip in the recipe; Orca leaves that one out) and matches the STEP. If a pattern is left out with "Fusion gives a
+    place for a copy of this pattern that is not where the faces of that copy are", note the ids, frames and face
+    centres: the transforms of rectangular patterns are wrong too.
+64. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
+    its corner at the origin. Sketch a circle of radius 20 mm centred at (30, 30) on the top face, and a circle of
+    radius 2 mm at (50, 30); cut the small circle through all. Make a Pattern on Path of the cut along the large
+    circle: quantity 6, extent, distance the whole circle (125.664 mm), orientation Path Direction.
+    Export: Export for Paramability. In `report.json` note each element's `id`, the turn of its `frame` about the
+    circle's centre and the centre of its `faces`. Expect 6 different places 60 degrees apart and transforms that
+    agree with the faces. The pattern is copied as a full turn of 6 and matches the STEP. If two elements share a
+    place, or a transform does not agree with its faces, the pattern is left out with that reason: note the values.
+65. PE3, where Fusion says the copies of a pattern of bodies are. Make a 10 x 10 x 10 mm box at (20, -5, 0) to
+    (30, 5, 10) as its own body, and a disc of 80 mm diameter, 5 mm high, centred on the origin as a second body. Make
+    a circular pattern of the box body (Pattern Type Bodies) about the Z axis: Full, quantity 6. On a copy of the
+    design, make it Angle, total 120 degrees, quantity 3. On another copy, make a rectangular pattern of the box body
+    instead: along X, quantity 3, distance 15 mm. Then Combine Join the disc with every box.
+    Export: Export for Paramability the disc. In `report.json` compare each element's `frame` with the move from
+    `source_faces` to its `faces`, and with the place of its body in `result_bodies`. The Combine writes one pattern
+    of the box tool: 6 copies round the circle, 3 over 120 degrees, and 3 along X. Each copy matches the STEP. If
+    a pattern is left out with "The copies of this pattern could not be matched to the bodies it made", note the
+    frames and the body points.
+66. NC1, steps that make a new component. Add a user parameter `Len` = 30 mm. With the top level active, sketch a
+    30 x 20 mm rectangle on the XY plane, width `Len`, and extrude it 10 mm with the operation New Component. In the
+    same way revolve a 10 x 20 mm rectangle on the XZ plane (50 to 60 mm from the Z axis) a full turn about the Z axis,
+    and loft a 20 mm square on the XY plane to a 10 mm square on a plane 15 mm up, each with New Component.
+    Export: export the body of each new component, tick `Len` for the extrude. Each copy is written as a recipe and
+    matches the STEP, with no "older version of the add-in" reason. In Paramability, change `Len` to 40 mm: the
+    extrude grows like in Fusion. Then move the first new component 20 mm along X (Position, Capture Position) and
+    export it again: the copy still matches. Afterwards the design is as before.
+67. HO1, a hole placed from the projected origin. Add user parameters `Width` = 80 mm, `Depth` = 60 mm, `Height` = 30
+    mm and `HoleX` = 20 mm. Sketch a centred rectangle `Width` x `Depth` on the XY plane and extrude it `Height` up.
+    Sketch on the top face, project the origin point (Project, then the origin in the browser), add a sketch point
+    and dimension it `HoleX` along X from the projected origin, on the same line in Y. Add a simple 6 mm hole on
+    that point, 10 mm deep.
+    Export: Export for Orca, tick all four. `HoleX` is a variable of the hole place, not fixed, and no size has the
+    reason "placed by geometry projected into Sketch2". In Orca, change `HoleX` to 30 mm: the hole moves like in
+    Fusion. Afterwards the design is as before.

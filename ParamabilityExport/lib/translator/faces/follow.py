@@ -26,7 +26,7 @@ two steps cross is placed on both walls (faces/crossings.py).
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
-from ...design_model.reach import offset_param, on_part, reference_sizes
+from ...design_model.reach import any_face_sizes, offset_param, on_part, reference_sizes
 from ..sketch import sketch_motion
 from . import crossings, picks, shells
 from .copy_counts import stays_at_least
@@ -236,15 +236,23 @@ def reads_with_outer(ctx, item):
 
 
 def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):
-    """How a reference a tool step uses moves, when it is not on the tool; `_ON_THIS_BODY` when it is, or outside a
-    tool. `ask(outer)` works it out in the walk that holds the tool, as that walk stood at `item`.
+    """How a reference a step uses moves, when it is not on the body the walk builds; `_ON_THIS_BODY` when it is.
+    In a tool, `ask(outer)` works it out in the walk that holds the tool, as that walk stood at `item`.
 
     The body on record says where the reference lies. Without one, a point the tool cannot place is taken to lie
-    outside it. A body no walk builds, or a tool in another frame, cannot be followed: every size may move it."""
+    outside it, and outside a tool the reference is taken to lie on the body walked. A body no walk builds, or a tool
+    in another frame, cannot be followed: every size may move it. Outside a tool, a reference on another body (a
+    helper body) is never on this body: no step of the walk places it, and a step that has a face at the same place is
+    not the one meant. Every size read before the step may move it (`reach.any_face_sizes`)."""
     outer = ctx.outer
-    if outer is None:
-        return _ON_THIS_BODY
     body = ref.get("body")
+    if outer is None:
+        if body and not ctx.is_target(body):
+            names = any_face_sizes(ctx.table, ctx.timeline, item) if ctx.table is not None else ()
+            ctx.doubt(names, "%s %s a face of another body that may move with it, and the copy cannot follow that"
+                      % (_name(item), what))
+            return None
+        return _ON_THIS_BODY
     placed = bool(points) and all(locate(ctx, p, edge) is not None for p in points)
     why = "%s %s a face outside its tool body that may move with it, and the copy cannot follow that" % (_name(item), what)
     same_frame = ctx.component == outer.component

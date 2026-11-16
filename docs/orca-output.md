@@ -103,7 +103,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Hole: simple, counterbore, countersink; a depth or through all; one Orca hole per point | Hole | diameter, depth, counterbore and countersink sizes |
 | Hole on sketch points, with the sketch's frame (`sketch_frame`) and graph in the capture | Hole on the sketch plane, at `hole_x`, `hole_y` | `hole_x`, `hole_y` |
 | Tapped hole with a cosmetic thread | Hole at the drill size | as Hole |
-| Tapped hole with a modeled thread (metric or Unified, right hand), simple only | Hole at the minor diameter, then an inside Thread per point, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth |
+| Tapped hole with a modeled thread (metric or Unified, right hand), simple or counterbore | Hole at the minor diameter, then an inside Thread per point from the counterbore floor or the top, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth (the thread start under a counterbore keeps its number) |
 | Thread, modeled, on one cylinder (a rod or a hole wall) | Thread, half a pitch inside each end, and a lead-in at each open end (a Hole in a hole, a ring cut on a rod) | `thread_height` (a set length) |
 | Thread, cosmetic | nothing (it changes no shape) | |
 | Fillet or chamfer (an even chamfer) whose edges are exactly one of Orca's edge groups of the copied part, or, with sets of different sizes, a top group and a bottom group | Fillet or Chamfer of that face group: all, top, bottom or side edges; one for each size | `dressup_size` |
@@ -129,7 +129,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
-the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
+the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
 part may have a new token, so the copy cannot tell whether the step changes it). A left out step changes the shape Orca builds; later steps are still
@@ -434,12 +434,17 @@ not judged to meet material where Orca removes nothing.
 - A tapped hole: Fusion keeps its thread numbers in `HoleFeature.tappedHoleInfo` and in the hidden thread feature
   `HoleFeature.thread`. A cosmetic thread is drilled at its measured drill size; a modeled one at the thread's minor
   diameter, with an inside thread on the hole's plane after each hole and its lead-ins at the hole's plane and, for a
-  through hole, at the far face (that Hole's plane faces back into the part; both follow the hole centre). A tapped
-  hole with a counterbore or countersink and a modeled thread is left out (cause `tappedRecess`): the capture does not
-  say whether Fusion's thread starts at the sketch plane or at the bottom of the counterbore or countersink (hand
-  test OR12). The faces of a modeled thread must start at the hole's mouth and, for a thread over part of the hole,
-  end at its length (`made_span`, `design_model/steps/thread.py` `hole_depth`); a modeled thread that Fusion did
-  not build (the bore is not at the minor diameter) is left out too.
+  through hole, at the far face (that Hole's plane faces back into the part; both follow the hole centre). The
+  length of the thread of a hole through all runs to where the bore comes out of the part, measured from the side
+  cylinders of the hole and never from Fusion's end faces (`hole.through_ends`; Fusion lists the faces of a modeled
+  thread among them). Under a counterbore the thread starts at the counterbore floor, where Fusion starts it (measured
+  live: `made_span` starts at the counterbore depth); its ends are judged with the counterbore cut, so the start gets
+  a lead-in. The thread plane keeps its number, so a size that changes the counterbore depth is followed in part. A
+  counterbore hole whose thread faces were not measured, and a tapped hole with a countersink and a modeled thread,
+  are left out (cause `tappedRecess`): just below the mouth of a countersink the cone is only a little wider than the
+  bore, so the copy cannot judge the start of the thread. The faces of a modeled thread must start at the hole's
+  mouth and, for a thread over part of the hole, end at its length (`made_span`, `design_model/steps/thread.py`
+  `hole_depth`); a modeled thread that Fusion did not build (the bore is not at the minor diameter) is left out too.
 - The records of what changed a body's edges (rounds, chamfers, threads) live on the body (`context.Body.finishes`).
 
 ### Patterns, mirrors, Combine, split, move and revolve
@@ -493,12 +498,17 @@ not judged to meet material where Orca removes nothing.
   `(n + 1) / 2`, the other `n / 2`; Orca rounds a count half up (`lround`), so these are `n // 2 + 1` and
   `(n - 1) // 2 + 1` for any n. An extent to both sides keeps its count fixed (the spacing then depends on whether the
   count is odd).
-- Circular: a circular Pattern on a plane at the axis point whose normal is the axis, turned the way the measured
-  copies turn. With `pattern_inclusive` Orca spreads the copies over the angle with both ends kept, and over a full
+- Circular: a circular Pattern on a plane at the axis point whose normal is the axis, turned the way the copies
+  turn. With `pattern_inclusive` Orca spreads the copies over the angle with both ends kept, and over a full
   turn evenly, the same as Fusion, so the count and the angle both follow, also across 360. A part turn to both sides
-  is two tool bodies with their numbers fixed. When no copy is marked suppressed and the measured copies do not fill
-  the count and angle, the pattern is left out as one whose copies are not spread evenly (cause `copiesUneven`):
-  Fusion 2706 gave such copy places for plain circular patterns of a hole (hand check CP1).
+  is two tool bodies with their numbers fixed. Fusion 2706 gives element transforms one step ahead for circular
+  patterns (hand check CP1), so a one-sided pattern takes the places of its copies from their ids and the way they
+  turn from their faces (`design_model/steps/pattern_places.py`, developer guide 3.21). Ids that repeat or do not
+  fill the count, faces that do not sit at the places, or a way of turning that nothing shows leave the pattern out
+  (cause `copiesUneven`).
+- Rectangular and two-sided circular patterns keep the places of their transforms. Two copies on one place, places
+  that do not fill the count, or a copy whose faces are not at its place leave the pattern out (cause
+  `copiesUneven`).
 - Orca's pattern cannot leave copies out, so a pattern with suppressed copies is left out; so is one whose copies are
   turned, do not sit on an even grid, or whose direction or axis is of another component and could not be brought into
   the part's place. Fusion's path pattern
@@ -516,7 +526,9 @@ not judged to meet material where Orca removes nothing.
   Combine that takes such a piece as a tool does not count; its own handler builds that tool. Inside a tool body only
   the steps before the item that takes the tool count. Later steps that meet the part where the split would have cut
   are judged against the part as the copy builds it (cause `afterGap` when they miss it after a left out step).
-- Move: the rigid move is fitted from the body's first vertices before and after (`design_model/steps/move.py`, `fit`). A Move that
+- Move: the rigid move is fitted from the body's first vertices before and after (`design_model/steps/move.py`, `fit`). A
+  body with no vertices (a sphere, a torus) moved along X, Y and Z moves by the shift of its box (`box_shift`); any
+  other Move of such a body is left out. A Move that
   turns about an axis and agrees with the points becomes a Transform about that axis with `xf_angle_deg` bound to its
   angle (Orca turns by a positive angle, so a negative one turns about the reversed axis and its formula is
   negated); any other move a Transform by the fitted turn (about the component origin) and shift. Orca cannot tie a move
@@ -526,7 +538,9 @@ not judged to meet material where Orca removes nothing.
   anywhere in the plane. The turning sense comes from the measured caps (`design_model/steps/revolve.py`): the start
   cap's outward normal points against the turn for new material and along it for a cut, the end cap's the other way;
   when a join merged the start cap into a face of the part and the end cap does not tell (a quarter turn ends with the
-  same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only. A
+  same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only.
+  For a join, the made faces (which can include faces of the part the revolve merged with) and the body after the
+  step must fit the box of the body before it together with the swept box, one way only (`body_boxes`). A
   full turn needs none. Fusion's angle of a symmetric revolve is the turn to each side: the copy turns the sketch
   plane that angle back and turns twice the angle, so its angle keeps its number, and the measured caps must sit
   there; 180 degrees or more to each side is a full turn. A turn to two sides with two angles turns the sketch plane
@@ -640,9 +654,11 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - Geometry projected into a sketch (an edge of the part, a line of another sketch) is a measured input of the
   sketch's formulas (`@p3.x`), and the capture does not tell which sizes move it. The copy writes it as its number
   now. So when a corner or centre of an outline (of an extrude, revolve, sweep or loft), or a hole centre, reads such
-  an input, every size read before the sketch (for a hole, before the hole) is marked: "its outline is placed by
-  geometry projected into Sketch2, and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`,
-  `hole_place`, `SketchFormulas.follows_projection`, `sketches.reads_input`).
+  an input, every size read before the sketch is marked: "its outline is placed by geometry projected into Sketch2,
+  and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`, `hole_place`,
+  `reach.projection_sizes`, `SketchFormulas.follows_projection`, `sketches.reads_input`). The sketch's own dimensions
+  come after its projections, so they are never marked for it and still follow. A projection of the origin point, an
+  origin axis or an origin plane of the sketch's own component is no input: it is fixed, like the sketch origin.
 - A hole centre follows when the capture holds the frame of its sketch (`sketch_frame`) and the sketch's graph: the
   hole's plane is the sketch plane, turned so that its normal is the drilling direction, and `hole_x`, `hole_y` are
   the point's sketch coordinates as formulas of the sizes (`orca_translate/hole_place.py`). A size that an earlier

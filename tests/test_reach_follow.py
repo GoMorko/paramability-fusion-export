@@ -183,6 +183,43 @@ class FaceOfTheBodyFromAToolTest(unittest.TestCase):
                 self.assertEqual(expr(steps_of(tool, "extrude")[0]["distance"]), length)
 
 
+# The plate's top face, which the plate's extrude places (it moves with plate_mm).
+TOP = [30, 15, 10]
+# A face that moves with lift_mm alone.
+FOLLOWS_LIFT = {"const": -8, "terms": {"lift_mm": 1}}
+TRIES = [{"values": {"plate_mm": 12}}, {"values": {"lift_mm": 9}}]
+
+
+def post_on_top(body):
+    """The post (Extrude3) reaching to a face at the plate's top, on the body with token `body`."""
+    return reaching(load_capture("sketch_offset_plane"), 5, face_at(TOP, body=body), TOP[2])
+
+
+class FaceOfAnotherBodyTest(unittest.TestCase):
+    """The post reaches to a face of a helper body (t2) that lies where the plate's top face is."""
+
+    def test_the_measured_move_is_followed_and_not_the_face_of_this_body_at_the_same_place(self):
+        result = run(post_on_top("t2"), ["plate_mm", "lift_mm"], measured("5.side_one", FOLLOWS_LIFT))
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "lift_mm + 2")
+        self.assertEqual(reasons(result), {})
+
+    def test_without_a_measurement_the_sizes_read_before_are_marked(self):
+        result = run(post_on_top("t2"), ["plate_mm", "lift_mm"], Motion.from_json({"values": LIFTED}))
+        self.assertEqual(steps_of(result.recipe, "extrude")[2]["distance"], 10.0)
+        self.assertIn("plate_mm", reasons(result))
+
+
+class MeasuredMoveWinsTest(unittest.TestCase):
+    """The post reaches to the plate's top face, which the slabs place: they say it moves with plate_mm."""
+
+    def test_the_slab_formula_is_kept_only_when_it_moves_as_measured_at_every_try(self):
+        for label, value, length in (("agrees", FOLLOWS_PLATE, "plate_mm"), ("differs", FOLLOWS_LIFT, "lift_mm + 2")):
+            with self.subTest(label):
+                result = run(post_on_top("t1"), ["plate_mm", "lift_mm"], measured("5.side_one", value, states=TRIES))
+                self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), length)
+                self.assertEqual(reasons(result), {})
+
+
 def read_at(capture, plate=10.0):
     """The probe read of `post_on_hidden_face` with the plate `plate` thick: the hidden face lies 2 below its top."""
     sketches = {}

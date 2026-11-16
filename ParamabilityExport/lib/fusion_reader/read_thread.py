@@ -48,16 +48,6 @@ def thread_info(*sources):
     }
 
 
-def _face_vertices(face):
-    return [geo.point(v.geometry) for v in geo.collection_items(face.vertices)]
-
-
-def _span(origin, axis, points):
-    """[low, high] of the points along the axis from the origin, or None when there are none."""
-    along = [sum((p[i] - origin[i]) * axis[i] for i in range(3)) for p in points]
-    return [round(min(along), 6) + 0.0, round(max(along), 6) + 0.0] if along else None
-
-
 def _face_record(face, ctx):
     """One input face: its surface, and for a cylinder its axis, radius, the span of its end vertices along the axis,
     a point on it and whether it faces away from the axis (`outward`)."""
@@ -70,7 +60,7 @@ def _face_record(face, ctx):
         axis = geo.safe(lambda: geo.unit_vector(geometry.axis), None)
         record.update(origin=origin, axis=axis, radius=geo.safe(lambda: geo.length(geometry.radius), None))
         if origin and axis:
-            record["span"] = geo.safe(lambda: _span(origin, axis, _face_vertices(face)), None)
+            record["span"] = geo.safe(lambda: geo.axial_span(origin, axis, geo.face_vertices(face)), None)
             normal = geo.safe(lambda: geo.outward_normal(face), None)
             if normal and record["face_point"]:
                 radial = [record["face_point"][i] - origin[i] for i in range(3)]
@@ -113,8 +103,8 @@ def thread_after(feature, ctx, data):
         return {}
     points = []
     for face in geo.collection_items(geo.safe(lambda: feature.faces, None)):
-        points += geo.safe(lambda: _face_vertices(face), [])
-    return {"made_span": geo.safe(lambda: _span(first["origin"], first["axis"], points), None)}
+        points += geo.safe(lambda: geo.face_vertices(face), [])
+    return {"made_span": geo.safe(lambda: geo.axial_span(first["origin"], first["axis"], points), None)}
 
 
 READERS = {"ThreadFeature": (thread_before, thread_after)}

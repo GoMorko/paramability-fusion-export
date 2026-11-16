@@ -166,6 +166,17 @@ class MoveTest(unittest.TestCase):
                 else:
                     self.assertEqual(move.expr, {})
 
+    def test_a_body_with_no_corners_moved_along_the_axes_moves_by_its_box(self):
+        for kind, written in (("translateXYZ", [20.0, 0.0, 0.0]), ("free", None)):
+            with self.subTest(kind):
+                capture = fixture("move_translate_sized")
+                data = capture["items"][4]["data"]
+                data.update(move_type=kind, points_before=[[]], points_after=[[]],
+                            boxes_before=[{"min": [0, 0, 0], "max": [10, 10, 10]}],
+                            boxes_after=[{"min": [20, 0, 0], "max": [30, 10, 10]}])
+                moves = of_type(translate(capture), FeatureType.TRANSFORM)
+                self.assertEqual([[round(v, 6) for v in m.xf_translate] for m in moves], [written] if written else [])
+
     def test_a_move_that_the_points_do_not_show_is_left_out(self):
         capture = fixture("move_rotate_sized")
         capture["items"][4]["data"]["angle_deg"] = 45.0

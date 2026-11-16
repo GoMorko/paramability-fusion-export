@@ -58,10 +58,10 @@ def tapped(capture):
     """`capture` with its hole tapped M12 through all, the thread modeled over the whole hole."""
     capture["items"][-1]["data"].update(
         tap_type="tapped", thread_modeled=True,
-        side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2}],
+        side_cylinders=[{"origin": [-20, 0, 0], "axis": [0, 0, 1], "radius": 10.106 / 2, "span": [0.0, 32.0]}],
         thread={"thread_type": "ISO Metric profile", "designation": "M12x1.75", "internal": True,
                 "right_hand": True, "pitch": 1.75, "major_diameter": 12.0, "minor_diameter": 10.106,
-                "angle_deg": None, "full_length": True, "depth": None})
+                "angle_deg": None, "full_length": True, "depth": None, "made_span": [0.0, 32.0]})
     return capture
 
 
@@ -186,6 +186,11 @@ class KeptPlaceTest(unittest.TestCase):
         plain = {p["name"]: p for p in run(box_hole(), BOX_TICKED).parameters}
         found = {p["name"]: p for p in run(tapped(box_hole()), BOX_TICKED).parameters}
         self.assertEqual(found["pipe_offset_mm"]["outcome"], VARIABLE)
+        # Fusion gives a hole through all no end face: the measured bore shows where it comes out.
+        bare = tapped(box_hole())
+        bare["items"][-1]["data"]["end_points"] = []
+        self.assertEqual({p["name"]: p["outcome"] for p in run(bare, BOX_TICKED).parameters},
+                         {name: p["outcome"] for name, p in found.items()})
         # The plate's height moves the face the hole comes out at: one reason more than for a plain hole.
         self.assertEqual(len(found["height_mm"]["reasons"]), len(plain["height_mm"]["reasons"]) + 1)
         self.assertEqual(found["height_mm"]["outcome"], PARTLY)
@@ -198,6 +203,17 @@ class KeptPlaceTest(unittest.TestCase):
         capture = second_extrude(tapped(box_hole()), (0, -10, 20, 10), 32, 42)
         found = {p["name"]: p for p in run(capture, BOX_TICKED).parameters}
         self.assertEqual(found["pipe_offset_mm"]["outcome"], PARTLY)
+
+    def test_the_recipe_thread_through_all_follows_the_thickness_only_of_a_plain_part(self):
+        def recipe(capture):
+            result = translator.translate(capture, size_table=table_of(capture, BOX_TICKED))
+            (thread,) = [s for s in result.recipe["features"] if s["kind"] == "thread"]
+            return thread["length"], {entry["name"] for entry in result.loose}
+        self.assertEqual(recipe(tapped(box_hole())), ({"expr": "height_mm"}, set()))
+        # Under a boss the bore comes out higher: a size that moves the hole can change the thread Fusion makes.
+        length, loose = recipe(second_extrude(tapped(box_hole()), (0, -10, 20, 10), 32, 42))
+        self.assertEqual(length, 32)
+        self.assertIn("height_mm", loose)
 
 
 if __name__ == "__main__":

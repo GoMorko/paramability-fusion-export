@@ -169,7 +169,7 @@ class FromTest(unittest.TestCase):
     def test_a_start_at_a_distance_from_a_face_is_left_out(self):
         capture = ex.from_top_face()
         capture["items"][3]["data"]["params"]["start.offset"] = ex.param("d9", "2 mm", 2.0)
-        self.assertEqual([g["cause"] for g in run(capture).left_out], [gap_hints.EXTRUDE_END_FACE])
+        self.assertEqual([g["cause"] for g in run(capture).left_out], [gap_hints.EXTRUDE_START_OFFSET])
 
     def test_a_face_as_the_outline_is_drawn_where_it_is_now(self):
         result = run(ex.face_outline(length=5.0))

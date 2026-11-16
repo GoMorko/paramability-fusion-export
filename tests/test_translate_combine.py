@@ -43,12 +43,41 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 6)["steps"], ["extrude_6", "extrude_6_2"])
         self.assertEqual([s["combine"] for s in steps_of(result.recipe, "extrude")], ["new", "cut", "cut"])
 
-    def test_a_tool_step_that_cannot_be_copied_is_left_out_of_the_tool(self):
+    def test_a_tool_round_that_cannot_be_copied_is_left_out_of_the_tool(self):
+        refused = {"FilletFeature": lambda ctx, step: Refusal("This round cannot be copied.")}
+        result = translate(load_capture("combine_tool_filleted"), refused)
+        self.assertEqual((left_out(result)["name"], result.gaps[0]["finishing"]), ("Fillet1", True))
+        self.assertEqual(result.gaps[0]["list"], steps_of(result.recipe, "toolBody")[0]["id"])
+
+    def test_a_tool_that_misses_a_step_that_changes_its_material_leaves_the_combine_out(self):
         def edit(capture):
             capture["items"][4]["type"] = "ThickenFeature"
         result = edited("combine_tool_filleted", edit)
-        self.assertEqual(left_out(result)["name"], "Fillet1")
-        self.assertEqual(result.gaps[0]["list"], steps_of(result.recipe, "toolBody")[0]["id"])
+        self.assertEqual([gap["name"] for gap in result.gaps], ["Combine1"])
+        self.assertIn("Fillet1", result.gaps[0]["reason"])
+        self.assertEqual(steps_of(result.recipe, "toolBody"), [])
+
+    def test_a_pattern_of_tools_whose_source_misses_a_step_that_changes_it_leaves_the_combine_out(self):
+        def with_tool_step(type_name):
+            # Body2, the source of the pattern the Combine takes whole, gets a second step that cannot be copied.
+            capture = load_capture("pattern_bodies_combine")
+            items = capture["items"]
+            extra = copy.deepcopy(items[3])
+            extra.update(index=4, name="Step2", type=type_name, data={}, target_changed=False)
+            extra.pop("sketch_inputs", None)
+            for item in items[4:]:
+                item["index"] += 1
+            items.insert(4, extra)
+            return capture
+
+        refused = {"ChamferFeature": lambda ctx, step: Refusal("This bevel cannot be copied.")}
+        kept = translate(with_tool_step("ChamferFeature"), refused)
+        self.assertEqual([gap["name"] for gap in kept.gaps], ["Step2"])
+        self.assertEqual(len(steps_of(kept.recipe, "pattern")), 1)
+        result = translate(with_tool_step("ThickenFeature"))
+        self.assertEqual([gap["name"] for gap in result.gaps], ["Combine1"])
+        self.assertIn("Step2", result.gaps[0]["reason"])
+        self.assertEqual([s["kind"] for s in result.recipe["features"]], ["extrude"])
 
     def test_a_tool_listed_twice_is_taken_once(self):
         def twice(capture):
@@ -100,7 +129,8 @@ class MoreThanOneToolStepTest(unittest.TestCase):
                                                        "plane": None, "offset": 0.0,
                                                        "entity_type": "BRepFace", "face_point": [20, 10, 14]}
         result = edited("combine_tool_two_steps", edit)
-        self.assertEqual(left_out(result)["index"], 5)
+        self.assertEqual([gap["name"] for gap in result.gaps], ["Combine1"])
+        self.assertEqual(steps_of(result.recipe, "toolBody"), [])
 
     def test_a_tool_the_combine_keeps_can_be_used_by_a_second_combine(self):
         def edit(capture):

@@ -16,14 +16,18 @@ _TAP_TYPES = [("taper", "taperTapped"), ("tapped", "tapped"), ("clearance", "cle
 
 
 def _cylinder(face):
+    """A side face of a hole that is a cylinder: its `origin`, unit `axis`, `radius`, and the `span` of its vertices
+    along the axis from the origin (where the face starts and ends; None when the vertices cannot be read)."""
     geometry = face.geometry
     if geo.type_name(geometry) != "Cylinder":
         return None
-    return {
+    found = {
         "origin": geo.point(geometry.origin),
         "axis": geo.unit_vector(geometry.axis),
         "radius": geo.length(geometry.radius),
     }
+    found["span"] = geo.safe(lambda: geo.axial_span(found["origin"], found["axis"], geo.face_vertices(face)), None)
+    return found
 
 
 def _sketch_points(feature, ctx):
@@ -162,13 +166,10 @@ def _thread_span(feature, data):
     positions, direction = data.get("positions") or [], data.get("direction")
     if not positions or not direction:
         return None
-    along = []
+    points = []
     for face in geo.collection_items(geo.safe(lambda: feature.thread.faces, None)):
-        for vertex in geo.collection_items(geo.safe(lambda: face.vertices, None)):
-            p = geo.safe(lambda: geo.point(vertex.geometry), None)
-            if p is not None:
-                along.append(sum((p[i] - positions[0][i]) * direction[i] for i in range(3)))
-    return [round(min(along), 6) + 0.0, round(max(along), 6) + 0.0] if along else None
+        points += geo.safe(lambda: geo.face_vertices(face), [])
+    return geo.axial_span(positions[0], direction, points)
 
 
 def _hole_params(feature, hole_type, tapped):
@@ -216,7 +217,24 @@ def hole_before(feature, ctx):
     }, _hole_params(feature, hole_type, tapped))
 
 
-_END_FACE_TYPES = {"Plane": "plane", "Cone": "cone"}
+# The surfaces a hole can end in: a flat end (its normal along the hole) and a drill point (its axis along the hole).
+_END_FACE_TYPES = {"Plane": ("plane", "normal"), "Cone": ("cone", "axis")}
+# How far from 1 the cosine between an end face's normal or axis and the hole's direction may be.
+_ALONG_TOL = 1e-5
+
+
+def _end_face(face, direction):
+    """(`pointOnFace`, "plane" or "cone") of an end face of a hole that is a flat end square to the hole's direction or
+    a cone about it, else None. Fusion also lists other faces as end faces: the helical faces of a modeled thread
+    (whose geometry has no type) are neither the bottom of the hole nor where it comes out."""
+    geometry = face.geometry
+    kind, member = _END_FACE_TYPES.get(geo.type_name(geometry), (None, None))
+    if kind is None or not direction:
+        return None
+    along = geo.unit_vector(getattr(geometry, member))
+    if abs(abs(sum(along[i] * direction[i] for i in range(3))) - 1.0) > _ALONG_TOL:
+        return None
+    return geo.point(face.pointOnFace), kind
 
 
 def hole_after(feature, ctx, data):
@@ -227,10 +245,10 @@ def hole_after(feature, ctx, data):
             side.append(cylinder)
     ends, end_types = [], []
     for face in geo.collection_items(geo.safe(lambda: feature.endFaces, None)):
-        p = geo.safe(lambda: geo.point(face.pointOnFace), None)
-        if p is not None:
-            ends.append(p)
-            end_types.append(_END_FACE_TYPES.get(geo.safe(lambda: geo.type_name(face.geometry), None)))
+        found = geo.safe(lambda: _end_face(face, data.get("direction")), None)
+        if found is not None:
+            ends.append(found[0])
+            end_types.append(found[1])
     found = {"side_cylinders": side, "end_points": ends, "end_face_types": end_types}
     if isinstance(data.get("thread"), dict) and data.get("thread_modeled"):
         found["thread"] = dict(data["thread"], made_span=_thread_span(feature, data))

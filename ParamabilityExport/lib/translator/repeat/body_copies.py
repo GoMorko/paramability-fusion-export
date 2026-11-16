@@ -23,6 +23,7 @@ from ...geometry import vec
 from ...geometry.rigid import move_from_frame
 from ...design_model import design, roles, tool_chains
 from ...results.verdicts import TRANSLATED
+from ...design_model.steps import pattern_places as places
 from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
@@ -63,16 +64,25 @@ def _is_mirror(data):
     return "plane" in data
 
 
+def _motion_of(frame):
+    found = move_from_frame(frame)
+    return Motion(found.rows, found.offset)
+
+
 def _element_motions(data):
-    """The `Motion` of each copy a pattern or mirror keeps, the original left out; None when they were not read."""
+    """The choices for the `Motion` of each copy a pattern or mirror keeps, the original left out: a list of lists,
+    empty when they were not read. A one-sided circular pattern places its copies by their ids, turning either way
+    (`pattern_places`), since its element transforms are not always right; the copies' bodies tell which way."""
     if _is_mirror(data):
         plane = mirror_plane(data)
-        return None if plane is None else [Motion.mirror(plane["origin"], plane["normal"])]
+        return [] if plane is None else [[Motion.mirror(plane["origin"], plane["normal"])]]
     kept = kept_elements(data)
     if kept is None:
-        return None
-    moves = [move_from_frame(e["frame"]) for e in kept if not is_identity(e["frame"])]
-    return [Motion(found.rows, found.offset) for found in moves]
+        return []
+    if "axis" in data and (not data.get("symmetric") or places.full_turn(data)):
+        choices = [places.id_frames(data, kept, sign) for sign in (1, -1)]
+        return [[_motion_of(frame) for _, frame in found] for found in choices if found is not None]
+    return [[_motion_of(e["frame"]) for e in kept if not is_identity(e["frame"])]]
 
 
 def _lands_on(motion, source, result):
@@ -85,9 +95,18 @@ def _lands_on(motion, source, result):
 def match(data):
     """A `Copy` for each body the pattern made, or None when the bodies and the copies do not pair up."""
     sources, results = data.get("source_bodies"), data.get("result_bodies")
-    motions = _element_motions(data)
-    if not sources or not isinstance(results, list) or motions is None:
+    if not sources or not isinstance(results, list):
         return None
+    for motions in _element_motions(data):
+        found = _paired(sources, results, motions)
+        if found is not None:
+            return found
+    return None
+
+
+def _paired(sources, results, motions):
+    """A `Copy` for each body in `results` that one of `motions` makes from a source, or None when they do not pair
+    up one to one. Two copies on one place, or a place no body sits on, leave a body or a copy without a pair."""
     left = [r for r in results if not any(same_body(r, s) for s in sources)]
     copies = []
     for source in sources:
@@ -283,7 +302,7 @@ def write(ctx, combine_item, group, combine, number):
                                "%s_%d_%d" % (combine_item["index"], number, place))
         if isinstance(tool, Refusal):
             return tool
-        refused = tool_refusal(tool.steps)
+        refused = tool_refusal(tool.steps) or tool_walk.unfinished(tool)
         if refused:
             return refused
         step_id = tool.ctx.id_prefix + "tool"

@@ -159,11 +159,13 @@ class OpposedArcTest(unittest.TestCase):
                 element["frame"] = frame
         return translate(capture_of(ARC, edit))
 
-    def test_the_room_runs_from_the_start_point_to_the_end_of_the_path(self):
-        # The arc is 8 pi mm long and the copies run 8.4 mm: from 0.25 they stay on it, from 0.75 they would not.
-        (pattern,) = steps_of(self.opposed(0.25).recipe, "pattern")
+    def test_the_copies_turn_the_way_of_the_path(self):
+        (pattern,) = steps_of(self.opposed(0.0).recipe, "pattern")
         self.assertEqual(pattern["polar"]["axis"], [0, 0, -1])
-        self.assertEqual(left_out(self.opposed(0.75))["index"], 5)
+
+    def test_a_start_point_part_way_along_the_arc_leaves_the_step_out(self):
+        # Fusion has been seen to put such copies off the arc.
+        self.assertEqual(left_out(self.opposed(0.25))["index"], 5)
 
 
 class PathPatternLeftOutTest(unittest.TestCase):
@@ -197,6 +199,9 @@ class PathPatternLeftOutTest(unittest.TestCase):
 
     def test_copies_that_run_against_the_way_the_path_was_read(self):
         self.assert_left_out(LINE, lambda data: data.update(flip=True))
+
+    def test_copies_flipped_against_a_round_path(self):
+        self.assert_left_out(ARC, lambda data: data.update(flip=True))
 
     def test_copies_that_do_not_turn_by_the_distance_along_the_arc(self):
         self.assert_left_out(ARC, lambda data: data.update(distance=data["distance"] * 1.01))

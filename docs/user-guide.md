@@ -33,7 +33,8 @@ Nothing is typed in Fusion.
    anyway. A line "Copied with a note" lists steps that were copied with a remark. The list comes from the steps the
    dialog already read for the body, with no extra read of the design and no size tries; the Text Commands window
    shows how long it took.
-5. Pick the design up direction, click OK and choose where to save the file.
+5. Pick the design up direction, click OK and choose where to save the file. The file name offered is the name of the
+   component that holds the body, or the name of the design for a body that is not in a component.
 6. A window then shows short sections, each starting with a `# Title` line. Sections with nothing to say are left out:
    - `# Result`: the file, what to do next, whether it is an editable copy (or one with steps left out) and how many
      parameters come along as variables. A file with several bodies has one line per body.
@@ -69,7 +70,9 @@ that use that sketch, and those steps shape bodies of their component. A paramet
 is drawn around is ticked to start with and tried like a size behind a sketch dimension: if the sketch moves with it
 and the tries can follow, it is a free size and the outline follows it; if the outline changes in a way the tries
 cannot follow, it is "not followed" with the reason; if nothing in the part moves with it, it is "not used", with the
-reason that it was tried and changes nothing in this part. A parameter of a joint, or of a move that places a
+reason that it was tried and changes nothing in this part. The export says that only when the part itself stayed the
+same at each try of that parameter. When the part changed but no copied step follows the parameter, it is "not
+followed", with the reason that it changes this part in a way the copy does not follow; the copy keeps its value now. A parameter of a joint, or of a move that places a
 component, may move the pipe against the part, so it counts for every such sketch too. Up to 8 more ticked parameters that nothing seems to tie
 to the part are tried too, after the others, since you know your design.
 
@@ -230,7 +233,7 @@ A step that picks edges or faces of a left out step is left out too, since in th
 round on the edges of a coil, for example). The add-in asks Fusion which step made the faces each later round,
 chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not
 answer, every later step that picks edges or faces is left out. A pattern or mirror of a left out step is left out
-too (a mirror of the whole body mirrors the part with the step missing instead), and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
+too (a mirror of the whole body mirrors the part with the step missing instead), and so is a Combine whose tool body cannot be copied or misses a step other than a round, chamfer, draft or emboss (the Combine is one missing step; the rest of the part is
 copied). An extrude that joins only material a left out step made (a rib on a floor that a left out Combine made)
 would float apart from the copy, and Paramability could not build the copy at all; so it is left out too, with "It
 sits on a step that was left out". The add-in checks this against its own model of the copied part and keeps the
@@ -272,7 +275,8 @@ parameters become its variables.
 
 1. Click **Export for Orca (experimental)**. It is the third button of the add-in, next to Export for Paramability
    and Export size choices.
-2. Pick the body and tick the parameters you want as variables.
+2. Pick the body and tick the parameters you want as variables. The parameter table says "In Orca", and a ticked
+   row says it becomes a variable in Orca's Design tab. Min and Max are not used.
 3. Save the file. Open it in OrcaSlicer 2.5.
 
 This export is experimental. It copies fewer kinds of steps than Export for Paramability. A step it cannot copy is

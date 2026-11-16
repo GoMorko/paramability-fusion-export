@@ -30,6 +30,7 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
 ```json
 {
   "capture": 3,
+  "addin": "0.13.0",
   "fusion": "2.0.21508",
   "design": "Cable clip",
   "up_axis": "z",
@@ -44,6 +45,11 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
   "reach": REACH
 }
 ```
+
+`addin` is the version of the add-in that read the capture (from its `.manifest`). It is optional: captures read
+before it was kept do not have it, and the replay of a saved report or package takes it from the report's `writer`
+text. The translator reads it only to tell an export of an add-in before 0.10.6 (see "Old exports" in the part on
+other components).
 
 `sketch_graphs` (section 2, "Sketch graphs") is optional, is kept in `report.json` with the rest of the capture and
 nothing reads it yet: it holds the points, curves,
@@ -322,7 +328,10 @@ curves). A borrowed sketch is read through its native object, so its numbers are
 - Per entity: `fixed` is `isFixed`; `free` is `not isFullyConstrained`; `linked` is `isLinked`; `construction` is
   `SketchCurve.isConstruction`. `reference` is `null` for own geometry, else
   `{ "source": "own" | "other" | "none", "component", "token" }` from `referencedEntity`: `own` is a source in the
-  target's component, `other` one in another component, `none` a reference with no source (not parametric).
+  target's component, `other` one in another component, `none` a reference with no source (not parametric). A
+  projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
+  component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
+  the sketch's own component sits still in the sketch, whatever the sizes (`sketch_solve.constants.own_origin`).
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
   `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.
@@ -552,8 +561,11 @@ z = 0). In the plane z = 0 with a sketch frame other than the identity, the read
 `ProfileCurve.sketchEntity`; if that cannot decide it writes `ambiguous` and the translator refuses the profile. A
 loop whose chained curves enclose no area is refused.
 
-A profile of another component's sketch (Fusion hands it over through that component's occurrence) is read from its
-`nativeObject`, so `loops` are in that sketch's own 2D frame, and it keeps `"foreign": true`. It adds:
+A profile of another component's sketch is read from its native object, so `loops` are in that sketch's own 2D frame,
+and it keeps `"foreign": true`. Fusion hands such a profile over in two ways: through that component's occurrence
+(`nativeObject` gives the native profile), or native, without an occurrence. The second way is the usual one for an
+extrude, revolve, loft or sweep made with the operation New Component: the step and its body belong to the new
+component, while its sketch stays in the component that was active (often the root). It adds:
 
 - `native_frame`: the sketch frame in its own component's coordinates;
 - `frame`: the same frame brought into the target's coordinates through the assembly (that component's `placement`,
@@ -561,7 +573,12 @@ A profile of another component's sketch (Fusion hands it over through that compo
 - `component`: `{ token, name }` of the sketch's component;
 - `placement`: like the target's placement (section 2), read for the occurrence the profile came through. Its point
   check compares `SketchPoint.worldGeometry` of up to three native sketch points with the same points made for the
-  occurrence (`SketchPoint.createForAssemblyContext`). Without a match it holds `error` and no `frame`;
+  occurrence (`SketchPoint.createForAssemblyContext`). Without a match it holds `error` and no `frame`. A profile
+  handed over native has no occurrence: a sketch of the root gets the root's own frame
+  (`{ "path": "", "frame": identity, "source": "root", "checked_points": 0 }`), and a sketch of another component
+  is placed through the one occurrence of that component (`Component.allOccurrencesByComponent`, then the same point
+  check). A component with several occurrences gives `error` (`native_sketch_placement` in
+  `lib/fusion_reader/placement.py`);
 - `sketch_params`: one `{ name, expression, reads }` per sketch dimension (`Sketch.sketchDimensions`,
   `SketchDimension.parameter`), where `reads` lists every parameter it reads, directly or through others
   (`dependencyParameters`).
@@ -635,7 +652,10 @@ against `samples`.
 ```
 
 - `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`). A new body from
-  several profiles is copied only when `bodies_after` lists one body (the profiles touch).
+  several profiles is copied only when `bodies_after` lists one body (the profiles touch). A feature made with the
+  operation New Component belongs to the new component, and Fusion reads its operation back as
+  `NewBodyFeatureOperation` (Fusion 2706): the capture of a body of that component reads `newBody`, and its profile
+  is a profile of another component's sketch handed over native (section 4).
 - `profiles`: section 4. A flat face of a body as the outline is a face record (section 4); the extrude's own
   length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
@@ -763,7 +783,8 @@ against `samples`.
   `edge_points`, `made_by`, `definition`, `built_on`; see MirrorFeature below, `read_reference.axis_with_reference`).
   An axis from a sketch line of the body's component also has `sketch_reference`, what its sketch sits on (as a
   profile's `reference`, null when it cannot be read), and `sketch_projected`, true when that sketch holds projected
-  curves or points (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
+  curves or points other than projections of its own component's origin point, axes and planes
+  (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
   out; the translators then count the axis as one that may move with every size read before the step (a record
   with `entity` and `sketch_token` counts as a sketch line whose plane and projections are unknown).
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
@@ -775,8 +796,10 @@ against `samples`.
   the part). `made_box`: `{ "min", "max" }` around the boxes of the faces the revolve made (`faces`), or null. Absent
   for a full turn; older captures have only `start_face_normal`. The measured check of the turning sense
   (`design_model/steps/revolve.py`): the caps decide, and when they do not (a quarter turn ends with the same cap
-  normal either way) the made faces must fit the box the outline sweeps one way only. For two sides `start_face_normal` is the end face of one side, which tells which side each
-  angle turns to (`back_sides`).
+  normal either way) the made faces must fit the box the outline sweeps one way only. After a join the made faces
+  can include faces of the part that the revolve merged with; then the made faces and the body after the step (the
+  item's `target_after`) must fit the body before it (`target_before`) together with the swept box. For two sides
+  `start_face_normal` is the end face of one side, which tells which side each angle turns to (`back_sides`).
 
 **HoleFeature** (`holeType`, `holeTapType`, `holeDiameter`, `tipAngle`, `counterboreDiameter`, `counterboreDepth`,
 `countersinkDiameter`, `countersinkAngle`, `position`, `direction`, `extentDefinition`, `holePositionDefinition`,
@@ -795,7 +818,7 @@ against `samples`.
   "direction": [0, 0, -1],
   "positions": [[10, 10, 10]],
   "extent": { "kind": "distance", "depth": 8.0 },
-  "side_cylinders": [{ "origin": [..], "axis": [..], "radius": 2.5 }],
+  "side_cylinders": [{ "origin": [..], "axis": [..], "radius": 2.5, "span": [0.0, 8.0] }],
   "end_points": [[10, 10, 2.0]],
   "end_face_types": ["cone"],
   "participants": [ ... ]
@@ -836,10 +859,17 @@ against `samples`.
   `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an
   entity is copied as a blind hole of the depth measured from `end_points` (flat ends only, all holes of the step at
   the same depth); the depth follows the face with `translator/faces/follow.py`.
-- `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`).
-  `end_points`: `pointOnFace` of each `endFaces` item. `end_face_types`: the geometry type of each of those faces
-  (`"plane"` or `"cone"`; `null` when the type is another one or cannot be read), one per `end_points` entry; a flat or
-  tipped bottom is decided from it, not from `tip_angle_deg`. Measured checks of direction, count and diameter.
+- `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`, and `span`:
+  `[low, high]` in mm of the face's vertices along `axis` from `origin`, or null). The far end of the cylinders on a
+  hole's axis line is where a hole through all comes out of the part (`design_model/steps/hole.py`, `through_ends`).
+  The narrowest one is the drill size of a tapped hole (Fusion drills it at the thread's minor diameter, which can be
+  wider than `diameter`). A capture without `span` gives no exit, so the thread of a tapped hole through all is left
+  out.
+  `end_points`: `pointOnFace` of each `endFaces` item that is a `Plane` whose `normal` lies along `direction`, or a
+  `Cone` whose `axis` does. Fusion also lists the helical faces of a modeled thread as end faces; they are left out.
+  A hole through all has no end face. `end_face_types`: `"plane"` or `"cone"` for each of those faces, one per
+  `end_points` entry; a flat or tipped bottom is decided from it, not from `tip_angle_deg`. Captures of earlier
+  versions kept every end face, with `null` for another type. Measured checks of direction, count and diameter.
 
 **FilletFeature** (`edgeSets`, `isRollingBallCorner`):
 
@@ -976,10 +1006,14 @@ sides, an angle of 30 degrees or more, or no measured change of volume is left o
   "direction_two": null, "quantity_two": 1, "distance_two": 0.0,
   "distance_type": "spacing",
   "symmetric_one": false, "symmetric_two": false,
-  "elements": [{ "id": 1, "suppressed": false, "frame": FRAME }, ...],
-  "suppressed_ids": []
+  "elements": [{ "id": 0, "suppressed": false, "frame": FRAME, "faces": [FACE, ...] }, ...],
+  "suppressed_ids": [],
+  "source_faces": [FACE, ...]
 }
 ```
+
+`FACE` is `{ "center": [x, y, z], "area": 94.2 }`: the centroid of a face in mm (`BRepFace.centroid`) and its area in
+mm2 (`BRepFace.area`).
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
   feature. A Combine of the target among the sources is repeated by the steps it wrote (its `toolBody` step, or its
@@ -993,10 +1027,19 @@ sides, an angle of 30 degrees or more, or no measured change of volume is left o
   copy to its source and element by the points.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
-- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
-  the identity frame; in a symmetric direction it is not the first one. The frames are in assembly space, so for a
+- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame, and `faces`: up to 8 of the faces
+  that element made, `PatternElement.faces`, null when they cannot be read). The ids start at 0 (the original) and
+  follow the order of the copies. The transform is not always right: in Fusion 2706 the transform of each copy of a
+  circular pattern after the original is one step ahead (hand check CP1). So the translators take the places of
+  one-sided circular copies from their ids and check every place against the faces
+  (`design_model/steps/pattern_places.py`, developer guide 3.21). The original is the element with the identity
+  frame; in a symmetric direction it is not the first one.
+- `source_faces` (rectangular, circular and path patterns): up to 32 faces of the original, read with the marker
+  before the item: the faces each source feature made (`Feature.faces`), the source faces of a pattern of faces, or
+  the faces of the source bodies. Null when they cannot be read, absent in older captures. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`), and the face centroids with
+  them. In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
@@ -1287,6 +1330,11 @@ are marked.
 - `points_before`, `points_after`: per body in `bodies`, its first vertex points in the body's own coordinates and
   vertex order; `points_after` is found again by token with the marker after the item and is empty for a body that
   cannot be found. The translator fits the rigid move from them.
+- `boxes_before`, `boxes_after`: only when a body in `bodies` has no vertex points (a sphere, a torus, a closed
+  revolve). Per body, its `boundingBox` as `{ "min": [x, y, z], "max": [x, y, z] }` in the body's own coordinates,
+  null for a body that has vertex points; `boxes_after` is found again by token after the item and is null for a body
+  that cannot be found. A box moves exactly with a shift and shows no turn, so the translator checks only a Move that
+  shifts against it.
 - `translateXYZ`: `translate` is the three distances in mm (`xDistance`, `yDistance`, `zDistance`; null for one that
   cannot be read), `is_design_space` from `isDesignSpace` (null when unreadable). Params paths: `translate.0`,
   `translate.1`, `translate.2`.
@@ -1299,7 +1347,9 @@ are marked.
 - `pointToPoint` carries only the points.
 
 The handler (`translator/bodies/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
-and one that does not map the measured points rigidly (a mirror or a scale). `translateXYZ`, `rotate` and `free` must
+and one that does not map the measured points rigidly (a mirror or a scale). A body with no vertex points is measured
+by its boxes: `translateXYZ`, and a `free` transform that only shifts, must move the box by their shift, and any other
+Move of such a body is refused (cause `moveUnmeasured`). `translateXYZ`, `rotate` and `free` must
 agree with the measured points, and `translateXYZ` and `rotate` write their distances and angle through the sizes. The
 other types are written as the numbers of the fit. What they follow can move with any size, so every ticked size is
 marked, and the parameters in their `params` are pinned. After the step the walk's
@@ -1708,11 +1758,11 @@ or belongs to the root is read in the root's coordinates. The reader brings it i
 of another component loses `entity`, `sketch_token` and `sketch` (the probe follows only the target's own sketch
 lines); the sketch is named in its `ref`.
 
-A step whose only foreign records are sketch outlines, planes or axes with none of that place data (`component`,
-`placement`, `ref`, `assembly`) comes from an add-in before 0.10.6, which marked the part's own sketches and planes seen
-through an occurrence as foreign. The translator leaves such a step out with the cause `oldExport` and the tip to export
-again (`design_model/refs.py`, `from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
-old.
+Old exports: add-ins before 0.10.6 marked the part's own sketches and planes seen through an occurrence as foreign.
+When the capture names such a version in `addin`, a step whose only foreign records are sketch outlines, planes or
+axes is left out with the cause `oldExport` and the tip to export again (`design_model/refs.py`, `from_old_export`).
+A capture that names no version, or a later one, is never taken for old: a missing place key does not tell the
+version. Edges and faces are never taken for old.
 
 The translator also records which other components' sizes the copy follows (`TranslateResult.follows_components`,
 `{ token, name }` each): a measured reference or a borrowed outline that moves with a size, and a sketch tied to a
@@ -1854,9 +1904,12 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
-    does not model, a plane built on such a face), the probe's measure of it decides instead
+    does not model, a face of another body than the one walked (its `body`, `follow._beyond_tool`), a plane built on
+    such a face), or when the move they give differs from the probe's measure at a try that built, the probe's
+    measure of it decides instead
     (`lib/translator/extrude/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
-    size that does not move it is not marked, and only a size it cannot follow is marked;
+    size that does not move it is not marked, and only a size it cannot follow is marked. Without a measure, a face
+    of another body marks every size the items before the step read (`design_model.reach.any_face_sizes`);
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
     along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. A side that
     reaches "to" a face from such a start keeps its end on the face: its length is the face's move less the start's.
@@ -2059,7 +2112,11 @@ the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
-B; beyond that it could not be tried" when the rows that built cover less than its range. A size that reaches a sketch
+B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
+(and volume) read the same at every try that set it alone (`Motion.body_changes`, `probe.build.body_changes`; a try on
+another sketch solution, `apart`, or past an outline limit does not count). When the body changed at such a try, it is
+dropped with "it changes this part in a way the copy does not follow" (`used` true); when no such try read the body
+(an older motion file), it gets the plain "not used by any copied step" reason without `tried`. A size that reaches a sketch
 or a measured place (`design_model.reach.probed_sizes`) and whose rows all failed to build was not measured: it is
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
@@ -2312,8 +2369,10 @@ the same way when it may move with the part (a face, or a plane built on the par
 (`design_model.reach.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
 the part's coordinates like the capture. The sizes tried for it are every size an item of the body's component reads
 before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
-(`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
-before cannot place the face without a doubt (`reach_motion.target_shift`); then those same sizes get the three
+(`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure when the steps written
+before cannot place the face without a doubt, or when the move they give differs from the measure by more than 0.001 mm
+at a try that built and set the free sizes inside their ranges, or when the measure is stuck (`reach_motion.target_shift`,
+`_agrees`); then those same sizes get the three
 answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
 | Reference | Keys | Meaning |
@@ -2383,7 +2442,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - A sketch of another component that a step borrows is requested with the optional `borrowed`: `{ "<sketch token>":
   { "path": "<fullPathName the capture recorded>" } }`. It is found by token, read native, and its place is found
   again at every state: the occurrence of its component with that path (the only one when there is no path), then the
-  placement check of section 4 (native sketch points against the same points through the occurrence). Its `frame` is
+  placement check of section 4 (native sketch points against the same points through the occurrence). A sketch of
+  the root (path empty) has the root's own frame. Its `frame` is
   brought into the target's coordinates (that place, then the inverse of the target's, read once per capture), so
   it compares with the capture profile's brought-in `frame`; it adds `native_frame` and `placement` (`{ path, source }`).
   When it cannot be read or placed, it has no key under `sketches` and `unread` (only then present) gives
@@ -2758,9 +2818,16 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 Read in the same stubs on 2026-11-16 for Path Pattern: `PathPatternFeature` (`inputEntities`, `patternEntityType`,
 `path`, `quantity`, `distance`, `startPoint`, `isFlipDirection`, `patternDistanceType`, `isSymmetric`,
 `isOrientationAlongPath`, `suppressedElementsIds`, `patternElements`), `Path` (`count`, `item`, `isClosed`),
-`PathEntity` (`entity`, `curve`, `isOpposedToEntity`), `PatternElement` (`id`, `isSuppressed`, `transform`). Not run:
-what `startPoint` counts from on an opposed path, what Fusion does with copies past an end of the path, and whether
-an element transform of a path pattern is the move of the copy from the original (hand check PP1).
+`PathEntity` (`entity`, `curve`, `isOpposedToEntity`), `PatternElement` (`id`, `isSuppressed`, `transform`). Hand
+check PP1 (Fusion 2706): on a line, copies past the end run on along the line with no warning; on an arc that starts
+at 0, the element transforms are the moves of the copies and agree with their faces; with a start point of 0.75 and
+the flip, the copies land off the arc and the transforms do not agree with the faces, so the translator leaves a
+round path pattern with a start point other than 0 or the flip out.
+
+Read in the same stubs on 2026-11-16 for the places of pattern copies: `PatternElement` (`faces`, a list of
+`BRepFace`; `transform`, documented as the identity for the first element), `Feature.faces`, `BRepBody.faces`,
+`BRepFace` (`centroid`, `area`). Hand check CP1 (Fusion 2706, circular patterns): the ids follow the order of the
+copies, the faces show where each copy is, and the transform of each copy after the original is one step ahead.
 
 Read in the same stubs on 2026-11-12 for Split Body (hand tests SB1 and SB2; exports of 0.10.5 on Fusion 2706.1.17
 confirm a split by an origin plane, by an offset plane and by a body, and that `splittingTool` gives nothing with
@@ -2790,7 +2857,8 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
 | Revolve turning sense | `start_face_normal`, `end_face_normal`, `made_box`; the Turned knob test, hand check RC1 |
 | Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; the Holes test |
-| `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; the Bin test |
+| `patternElements` includes suppressed elements | a place with no element is skipped only when a copy is suppressed (an element marked suppressed or `suppressed_ids`); else the pattern is left out (`pattern_places.listed_places`); the Bin test |
+| `PatternElement.transform` of rectangular, path and body patterns is the move of the copy | the translators check each place against the faces of the copy and refuse places that repeat or do not fill the count; hand checks PE1, PE2 and PE3 |
 | `entityToken` of a body stays the same across marker positions | a token that changes makes the translator refuse the capture; the Combine test |
 | `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | Moving the marker marks the document changed or adds undo entries | the Marker and document test |
@@ -2819,6 +2887,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | The `entityToken` of a tool body's native body equals the token in `bodies_after` of the steps that made it, and `Design.findEntityByToken` finds it with the marker just before the Combine | an unmatched token leaves the steps unread and the Combine refused naming the step; G1 |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |
 | `MoveFeature.inputEntities` (only bodies or only faces) read with the marker before the item; the same bodies found by token after it, with their vertices in the same order | `points_before` and `points_after` are fitted by the translator; a mismatch is refused; the Move hand tests B3 to B5 |
+| `BRepBody.boundingBox` (API reference: "Returns the bounding box of this body") of a moved body with no vertices moves by exactly the shift of a Move along X, Y and Z | a box that changes size or moves by another vector refuses the Move; a box that cannot be read is null and refuses it; the hand check of a sphere moved into a box (`docs/hand-checks.md`) |
 | `MoveFeature.definition` has a class per type, and the type name contains `TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition` or `TranslateAlongEntity` | an unknown name reads `other` and the Move is refused; B3 to B5 |
 | `xDistance`, `yDistance`, `zDistance` (model parameters in cm) and `isDesignSpace` of a translate move; `angle` (model parameter in radians) and `axisEntity` of a rotate move | a member that cannot be read is null, and the Move is refused; the sign and the space (component or design) come from the fit against the points; B4, B5 |
 | `ScaleFeature.inputEntities` and `point` with the marker before the item; `isUniform`, `scaleFactor`, `xScale`, `yScale`, `zScale` as model parameters without a unit; the axis factors run along the component's own axes | a member that cannot be read is null and the scale is left out; the measured box and volume check the factors and the point; SC1 |

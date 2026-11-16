@@ -12,8 +12,10 @@ made thread touches. The start and the length follow the sizes that move the cyl
 """
 from ...capture_model import gap_hints
 from ...design_model.problem import Problem
-from ...design_model.steps import thread as facts
+from ...design_model import edges, reach as reach_sizes
+from ...design_model.steps import hole as hole_facts, thread as facts
 from ...design_model.values import Quantity
+from ...geometry import vec
 from ...design_model import words as shared
 from .. import values
 from ..faces import follow
@@ -159,9 +161,30 @@ def _below(point, direction, start):
     return out
 
 
+def _through_lengths(ctx, item, data, points, direction, full):
+    """The length from each position to where its bore leaves the part (`hole.through_ends`), as Quantities, or a
+    Refusal. The lengths follow the sizes only in a plain part that is as thick wherever the holes can go
+    (`edges.even_sizes`). Elsewhere a size that moves a hole or the part around it can make the bore come out at
+    another face (under a boss, through a second wall), so the lengths are numbers and, for a thread over the whole
+    hole (`full`), those sizes are marked (`reach.hole_end_sizes`)."""
+    ends = hole_facts.through_ends(data, direction)
+    if isinstance(ends, Problem):
+        return refusal(ends)
+    if ctx.table is not None and edges.even_sizes(ctx.table, ctx.capture["items"], item, data) is None:
+        names = reach_sizes.hole_end_sizes(ctx.table, ctx.capture["items"], item, data) if full else []
+        if names:
+            ctx.doubt(names, "the thread of %s runs through the part as thick as it is now, and a size that moves the "
+                      "hole or the part around it can make the hole come out at another face"
+                      % item.get("name", "a hole"))
+        return [Quantity(abs(vec.dot(vec.sub(e, list(p)), direction))) for p, e in zip(data["positions"], ends)]
+    followed = follow.follow_points(ctx, item, ends, False, "faces")
+    ends = followed if followed is not None else ends
+    return [_length_along(direction, p, e) for p, e in zip(points, ends)]
+
+
 def hole_threads(ctx, item, data, spec, points, direction, depth, through, start):
     """The thread steps of a tapped hole, one per position, after the hole's own steps. `depth` is the hole's depth as
-    a Quantity (None for a through hole, measured from the end faces instead). `start` is where the thread starts
+    a Quantity (None for a through hole, measured to where its bore leaves the part instead, `hole.through_ends`). `start` is where the thread starts
     below each position, as a Quantity: the bottom of a counterbore or countersink (`facts.thread_mouth`), else zero.
     A Refusal when it cannot be written."""
     capped = _fit_caps(ctx, len(points))
@@ -171,14 +194,11 @@ def hole_threads(ctx, item, data, spec, points, direction, depth, through, start
     if isinstance(reach, Problem):
         return refusal(reach)
     if abs(reach.start - start.n) > 1e-6:
-        return refusal(Problem("threadSpan", shared.THREAD_HOLE_SPAN))
+        return refusal(Problem("threadSpan", shared.THREAD_HOLE_SPAN, gap_hints.THREAD_HOLE))
     if through:
-        ends = facts.measured_ends(data, len(points))
-        if isinstance(ends, Problem):
-            return refusal(ends)
-        followed = follow.follow_points(ctx, item, ends, False, "faces")
-        ends = followed if followed is not None else ends
-        sizes = [_length_along(direction, p, e) for p, e in zip(points, ends)]
+        sizes = _through_lengths(ctx, item, data, points, direction, reach.full)
+        if isinstance(sizes, Refusal):
+            return sizes
     else:
         sizes = [depth] * len(points)
     sizes = [size.plus(start.scaled(-1)) for size in sizes]

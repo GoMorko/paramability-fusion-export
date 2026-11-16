@@ -230,7 +230,7 @@ class RefusedPatternTest(unittest.TestCase):
         frame = {"x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
         count = 258
         data.update(quantity_one=count, params={}, elements=[
-            {"id": n + 1, "suppressed": False, "frame": dict(frame, origin=[20 * n, 0, 0])} for n in range(count)])
+            {"id": n, "suppressed": False, "frame": dict(frame, origin=[20 * n, 0, 0])} for n in range(count)])
         data["result_bodies"] = [{"token": "c%d" % n, "name": "C%d" % n, "points": [vec.add(p, [20 * n, 0, 0]) for p in source["points"]]}
                                  for n in range(1, count)]
         records = [{"token": r["token"], "name": r["name"]} for r in data["result_bodies"]]

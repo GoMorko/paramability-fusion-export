@@ -97,6 +97,26 @@ class EntitiesTest(unittest.TestCase):
         self.assertEqual(refs["tok_c_none"], {"source": "none", "component": "", "token": ""})
         self.assertIsNone(refs["tok_c_plain"])
 
+    def test_a_projection_of_a_components_origin_is_marked_as_one(self):
+        part = Thing(key="part2", entityToken="cmp_part2", name="Part")
+        pipe = Thing(key="pipe", entityToken="cmp_pipe", name="Pipe")
+        part.originConstructionPoint = Thing("ConstructionPoint", "op", component=part)
+        part.zConstructionAxis = Thing("ConstructionAxis", "za", component=part)
+        pipe.xYConstructionPlane = Thing("ConstructionPlane", "pxy", component=pipe)
+        sk = sketch([point("po", 0, 0, isReference=True, referencedEntity=part.originConstructionPoint),
+                     point("pc", 3, 0, isReference=True,
+                           referencedEntity=Thing("ConstructionPoint", "cp", component=part))],
+                    [line("lz", point("z0", 0, 0), point("z1", 0, 5), isReference=True,
+                          referencedEntity=part.zConstructionAxis),
+                     line("lp", point("y0", 0, 0), point("y1", 5, 0), isReference=True,
+                          referencedEntity=pipe.xYConstructionPlane)])
+        graph = read_sketch_graph(sk, SimpleNamespace(component=part))
+        refs = {r["token"]: r["reference"] for r in graph["points"] + graph["curves"]}
+        self.assertEqual(refs["tok_po"], {"source": "own", "component": "cmp_part2", "token": "tok_op", "origin": True})
+        self.assertTrue(refs["tok_lz"]["origin"])
+        self.assertEqual((refs["tok_lp"]["source"], refs["tok_lp"]["origin"]), ("other", True))
+        self.assertNotIn("origin", refs["tok_pc"])
+
     def test_an_unknown_curve_type_is_kept_as_other_with_its_name(self):
         odd = Thing("SketchNurbsFuture", "n", isConstruction=False, isFixed=False, isFullyConstrained=True,
                     isReference=False, isLinked=False)

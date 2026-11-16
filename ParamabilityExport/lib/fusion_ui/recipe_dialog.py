@@ -13,7 +13,7 @@ from .log import log
 
 from ..dialog_model import dialog_rows as rows
 from ..export_plan import time_limit
-from ..export_plan.size_offers import MAX_TICKED
+from ..export_plan.size_offers import MAX_TICKED, ORCA, PARAMABILITY
 from ..package.manifest import MAX_PARTS
 from ..fusion_reader.bodies import is_pickable_body
 
@@ -104,7 +104,7 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     show_stop(inputs, stop)
     if not orca:
         _try_options(inputs)
-    _table_and_up(command, inputs, offers, up_axis, design_unit)
+    _table_and_up(command, inputs, offers, up_axis, design_unit, ORCA if orca else PARAMABILITY)
 
 
 def _try_options(inputs):
@@ -121,11 +121,12 @@ def _try_options(inputs):
     reminder.isVisible = False
 
 
-def _table_and_up(command, inputs, offers, up_axis, design_unit):
-    """The parameter table (or the line that there are none) and the up direction."""
+def _table_and_up(command, inputs, offers, up_axis, design_unit, destination):
+    """The parameter table (or the line that there are none) and the up direction. `destination` is where the
+    numbers can be changed (`size_offers.PARAMABILITY` or `ORCA`)."""
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
-        _build_table(inputs, offers, design_unit)
+        _build_table(inputs, offers, design_unit, destination)
         details = inputs.addTextBoxCommandInput(DETAILS_ID, "", "", 2, True)
         _safely("Details tooltip", lambda: setattr(details, "tooltipDescription", rows.HINT_TOOLTIP))
         _refresh_details(inputs, offers)
@@ -137,8 +138,7 @@ def _table_and_up(command, inputs, offers, up_axis, design_unit):
     up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
     for key in ("z", "y"):
         up.listItems.add(UP_LABELS[key], key == up_axis)
-    up.tooltipDescription = (
-        "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
+    up.tooltipDescription = rows.up_tooltip(destination)
 
 
 def show_stop(inputs, summary):
@@ -166,14 +166,14 @@ def show_stop(inputs, summary):
         button.isVisible = summary["index"] is not None
 
 
-def _build_table(inputs, offers, design_unit):
+def _build_table(inputs, offers, design_unit, destination):
     keys = rows.columns()
     table = inputs.addTableCommandInput(TABLE_ID, "", len(keys), rows.column_ratio(keys))
     _safely("Table rows", lambda: setattr(table, "minimumVisibleRows", rows.MIN_TABLE_ROWS))
     _safely("Table rows", lambda: setattr(table, "maximumVisibleRows", rows.MAX_TABLE_ROWS))
     _safely("Table width", lambda: setattr(table, "isFullWidth", True))
     for col, key in enumerate(keys):
-        head = inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.header(key, design_unit), 1, True)
+        head = inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.header(key, design_unit, destination), 1, True)
         table.addCommandInput(head, 0, col)
     for index, offer in enumerate(offers):
         for col, key in enumerate(keys):

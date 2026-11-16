@@ -2,14 +2,16 @@
 
 `inputEntities` holds only bodies or only faces. The bodies are read with the timeline marker just before the item
 (`points_before`) and again just after it (`points_after`, found by token), each as the first vertex points of every
-body, so the translator can fit the move the bodies made whatever way Fusion defines it. The definition adds what
+body, so the translator can fit the move the bodies made whatever way Fusion defines it. A body with no vertices (a
+sphere, a torus) also gets its box before and after the item (`boxes_before`, `boxes_after`, null for a body with
+vertices): the box shows a shift exactly, but not a turn. The definition adds what
 the move was made from: distances for a move along the axes, an angle and an axis for a rotation, the transform for a
 free move. A member that cannot be read is null (or `other` for a type), and the translator refuses the item. The
 kinds written as measured numbers still list the parameters behind them, so the sizes those read are not lost.
 """
 from . import read_geometry as geo
 from .param_refs import Params, with_params
-from .read_bodies import points_of, with_points
+from .read_bodies import box_by_token, box_of, points_of, with_points
 from .read_reference import axis_with_reference
 
 _INPUT_KINDS = {"BRepBody": "bodies", "BRepFace": "faces"}
@@ -79,12 +81,19 @@ def move_before(feature, ctx):
         "points_before": [b["points"] for b in bodies],
         "points_after": [],
     }
+    if any(not b["points"] for b in bodies):
+        data["boxes_before"] = [None if b["points"] else box_of(e) for b, e in zip(bodies, entities)]
     data.update(_definition_data(definition, move_type, ctx))
     return with_params(data, _params(definition, move_type))
 
 
 def move_after(feature, ctx, data):
-    return {"points_after": [points_of(ctx, body.get("token")) for body in data.get("bodies") or []]}
+    bodies = data.get("bodies") or []
+    found = {"points_after": [points_of(ctx, body.get("token")) for body in bodies]}
+    if "boxes_before" in data:
+        found["boxes_after"] = [None if box is None else box_by_token(ctx, body.get("token"))
+                                for body, box in zip(bodies, data["boxes_before"])]
+    return found
 
 
 # type name -> (before, after); either may be None

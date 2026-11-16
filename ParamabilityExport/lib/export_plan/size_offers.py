@@ -13,6 +13,10 @@ from .body_scope import body_links, body_outside, scope_inputs
 
 # The most sizes one recipe holds.
 MAX_TICKED = MAX_SIZES
+# Where a ticked number can be changed after the export, as the dialog names it: in the Paramability app, or in the
+# Design tab of OrcaSlicer (Export for Orca).
+PARAMABILITY = "Paramability"
+ORCA = "Orca's Design tab"
 
 
 def limit_message(limit=MAX_TICKED):
@@ -117,8 +121,9 @@ def value_text(entry, design_unit="mm"):
     return format_number(display_from_manifest(entry.value, unit)) + (" " + unit if unit else "")
 
 
-def offers(table, params, design_unit="mm"):
-    """One dict per parameter the dialog lists, in parameter order.
+def offers(table, params, design_unit="mm", destination=PARAMABILITY):
+    """One dict per parameter the dialog lists, in parameter order. `destination` (`PARAMABILITY` or `ORCA`) is where
+    a ticked number can be changed; each offer keeps it as `destination` and its texts name it.
 
     Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does), doubt (why a size
     may give unexpected results, else ''), link (why a parameter no step reads is offered: `link_text`, else ''),
@@ -146,7 +151,7 @@ def offers(table, params, design_unit="mm"):
                   "kind": entry.kind, "value": entry.value,
                   "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None,
                   "doubt": doubtful.get(entry.name, ""), "link": link_text(table.links_of(entry.name)),
-                  "through": through_text(through.get(entry.name, ()))}
+                  "through": through_text(through.get(entry.name, ())), "destination": destination}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
             out.append({**common, "ticked": False, "enabled": False,
                         "state": "formula", "reason": "A formula. It follows the parameters it reads."})
@@ -156,7 +161,7 @@ def offers(table, params, design_unit="mm"):
             lo, hi = defaults.size_range(p, entry.kind, entry.value)
             out.append({**common, "ticked": entry.state == FREE, "enabled": True, "min": lo, "max": hi,
                         "state": "size" if entry.state == FREE else "keep",
-                        "reason": "Tick to change this number in Paramability. Untick to keep it fixed."})
+                        "reason": "Tick to change this number in %s. Untick to keep it fixed." % destination})
     return out
 
 

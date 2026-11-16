@@ -73,7 +73,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   for it. A component used several times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, and a body made in another component and moved in. A step of the
-  body that reaches into another component's edges, bodies or curved faces is left out of the copy. A step that uses a sketch of another component is copied
+  body that reaches into another component's edges, bodies or curved faces is left out of the copy. An extrude,
+  revolve or loft made with the operation New Component makes its body in the new component while its sketch stays
+  in the component that was active: the copy of that body places the sketch through the assembly. A sweep made so is
+  left out, since its path stays in the other component. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
@@ -88,14 +91,26 @@ What the copy can and cannot do, step by step. The README lists only the main li
   them past an end of the path, its range stops there. The path itself is copied as it is now, so a size that moves
   or turns the path may give unexpected results. For a straight line, only a size that turns the line or changes its
   length is marked; a size that only moves the line is not. These are left out: a path of another curve or of more than one
-  curve, copies on both sides of the start point, copies that keep their direction on a round path, and copies past
-  the end of the path. A path pattern is not copied to Orca.
+  curve, copies on both sides of the start point, copies that keep their direction on a round path, copies on a round
+  path that start part way along it or run against it (Fusion can put them off the path), and copies past the end of
+  the path. A path pattern is not copied to Orca.
+- Fusion does not always say correctly where the copies of a pattern are: in Fusion 2706 it gives the copies of a
+  circular pattern one step too far round. The add-in places the copies of a circular pattern by their order and
+  checks every copy against its faces. A pattern is left out when a copy's faces are not where Fusion says the copy
+  is, when two copies have one place, or when a place has no copy and no copy is suppressed. A circular pattern over
+  part of a circle in an export from an older add-in version has no faces to tell which way it turns, so it is left
+  out: export the design again.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move
   it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A parameter of a joint, or of a move that places a component, counts as one that may move every such place, and every sketch of the part drawn around another component, since the export cannot tell which component it places. A hole placed
   on an edge of another component, and an extrude that starts from or reaches to a curved face of one, are left out of
   the copy.
+- A flat face of another body of the part (a helper body) that an extrude starts from or reaches to follows the sizes
+  the tries measured. A face of this body that lies at the same place is never used instead. Where the tries could
+  not measure the face, the sizes that the steps before the extrude use are marked "may give unexpected results",
+  with the extrude named. When the tries saw a face or plane move in another way than the copied steps say, the copy
+  follows what the tries saw.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked
@@ -115,11 +130,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   face with Chain Faces on, extrudes that end on a curved face with Chain Faces off when the outline reaches past
   that face (the sizes that may move the face or the outline are marked when it does not), extrudes that end on a
   face whose surface could not be read, extrudes that start at a
-  distance from a face or plane when Fusion gives no start face that shows which way, extrudes with two sides that
+  distance from a face or plane when Fusion gives no start face that shows which way and the end of the extrude does
+  not show it either, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
-  does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
+  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join
+  up to a curved face when Fusion gives no end face and the part after it does not lie wholly on one side of where
+  the extrude starts, a quarter turn revolve joined to the part when its ends do not show the way and the material it
+  added lies inside the box of the part before it, a cut whose measured end lies short of its side when
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
-  plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
+  plane tilted to its face or set to follow tangent faces that are rounded, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
   along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes
   along the edge, rounds with curvature continuity, shells that grow both inward and outward, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
@@ -174,7 +193,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   with a corner point), or in a 3D path, corners too close together for the outline, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
-  sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
+  sweep that makes a new component (its path stays in another component). A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
   path), or the sweep is left out; so is a tapered one whose volume fits neither an offset nor a scaled outline. A
   twist or taper that follows a size marks the size past the values where it would reach the limits. A twist along a
   closed path turns as Fusion walks the path. A later round or chamfer on all edges of a sweep's start or end cap names
@@ -190,7 +209,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
   lofts are left out: three or more outlines, a point end, a curved face or a loop of edges that is open or not flat,
   tangent or direction
-  ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component. A round or chamfer
+  ends, rails, a centre line, a closed loft and a surface loft. A round or chamfer
   on all edges of an outline of a loft (no holes) names the loft and follows its sizes; a pick on part of an outline
   keeps its points and marks the sizes the loft reads, and a pick on its side marks every size before it.
 - A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add
@@ -201,7 +220,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   Combine keeps can serve a later Combine, which gets the tool with the steps added since. Tools made from tools are
   followed 3 levels deep. The export reads up to 120 steps and 32 tool bodies in all (a pattern of many copies counts
   as one body). The message after the export names the tool body and the step that stops it (for example "The tool
-  body Body3 cannot be copied because of its step Coil1"), so you know what to change in Fusion. A tool step that starts from or reaches to a
+  body Body3 cannot be copied because of its step Coil1"), so you know what to change in Fusion. A tool may miss only
+  rounds, chamfers, drafts and embosses: when any other step of a tool (a Move, an extrude, a cut) cannot be copied,
+  the whole Combine is left out, since a tool at the wrong place or with the wrong material would give a wrong part. A tool step that starts from or reaches to a
   face of the part follows that face where the add-in can place it, and marks the sizes it cannot follow.
 - Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted
   body must be a new body: a paste that lands on a body that already has steps is left out of the copy. A copy that sits where
@@ -212,7 +233,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   their distances and angles as sizes. The other kinds (point to point, to a position, along an entity) are written
   as the numbers Fusion measured. What they follow can move with any size, so every ticked size is marked or left
   out with the reason. A Move of faces, and a Move that mirrors or
-  scales, are left out of the copy.
+  scales, are left out of the copy. A body with no corners (a sphere, a torus, a closed revolve) is copied when a Move
+  along X, Y and Z or a free Move only shifts it; a Rotate, or any other Move that turns such a body, is left out with
+  the tip to draw the sketch of the body where the body should be.
 - Scale of bodies is copied. The factor, or the three factors of a scale that differs per axis, follow sizes. A factor
   whose formula could go under 0.001 or over 1000 keeps its number, and its sizes are marked. The point that stays in
   place keeps the place Fusion measured: when it is the origin, nothing is marked; when it is a sketch point, a
@@ -281,6 +304,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   sizes may give unexpected results.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
+- The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
+  that point from the wall of the hole, so an export made with an earlier version leaves such a hole out: export
+  again. The thread is left out, with the tip to make it cosmetic, when the thread Fusion made does not reach that
+  point (for example a hole through two walls with a thread in one wall only). The thread length follows the sizes
+  only in a plain part that is equally thick wherever the hole can go; in any other part (a boss or a step near the
+  hole) it keeps its length, and the sizes that could move the hole or the part around it are marked "may give
+  unexpected results". The Orca copy starts the thread of a
+  counterbore hole at the counterbore floor and keeps that start as a number, so a size that changes the counterbore
+  depth is followed only in part there; it leaves a tapped hole with a countersink and a modeled thread out.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
   chamfer with more than 32 edges (picked in groups), a direction or size that Fusion stored two ways, and a step that
   Fusion shows a warning on.

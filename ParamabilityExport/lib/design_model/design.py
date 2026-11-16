@@ -68,12 +68,13 @@ class Tally:
 
 class ResolvedStep:
     """One timeline item as the shared layer resolves it (see the module text). `index`, `name` and `type` are the
-    item's. `role` is None for an item resolved without a body (`resolve` with no role)."""
+    item's. `role` is None for an item resolved without a body (`resolve` with no role). `capture` tells
+    `old_export` which add-in version read the item."""
 
     __slots__ = ("index", "name", "type", "raw", "item", "role", "outside", "helper", "problems", "brought", "foreign",
                  "old_export", "why_foreign", "events", "error", "_facts")
 
-    def __init__(self, raw, item, role, brought, events, error):
+    def __init__(self, raw, item, role, brought, events, error, capture=None):
         self.index, self.name, self.type = item.get("index"), item.get("name", ""), item.get("type", "")
         self.raw, self.item, self.role = raw, item, role
         self.outside = outside_component(item)
@@ -82,7 +83,7 @@ class ResolvedStep:
         self.brought, self.events, self.error = brought, tuple(events), error
         data = data_of(brought)
         self.foreign = refs.is_foreign(data)
-        self.old_export = self.foreign and refs.from_old_export(brought)
+        self.old_export = self.foreign and refs.from_old_export(brought, capture)
         self.why_foreign = refs.why_foreign(brought) if self.foreign else None
         self._facts = _NOT_YET
 
@@ -181,7 +182,7 @@ def resolve(item, ctx, role=None, raw=None):
         brought, error = _bring_in(item, tally)
     else:
         brought, error = item, None
-    return ResolvedStep(item if raw is None else raw, item, role, brought, tally.events, error)
+    return ResolvedStep(item if raw is None else raw, item, role, brought, tally.events, error, ctx.capture)
 
 
 def as_read(item):

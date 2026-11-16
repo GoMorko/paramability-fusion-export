@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.dialog_model import dialog_rows as rows
-from lib.export_plan.size_offers import initial_table, offers
+from lib.export_plan.size_offers import ORCA, PARAMABILITY, initial_table, offers
 from lib.params import size_table
 
 
@@ -31,6 +31,19 @@ class OffersRangeTest(unittest.TestCase):
         table = size_table.build(params, ["wall"], ranges={"wall": (0.5, 9.0)})
         self.assertEqual((table.sizes["wall"]["min"], table.sizes["wall"]["max"]), (0.5, 9.0))
         self.assertEqual(table.with_fixed({"gone": "x"}).sizes["wall"]["max"], 9.0)
+
+
+class DestinationTest(unittest.TestCase):
+    def test_the_rows_of_an_export_for_orca_name_orca_not_paramability(self):
+        params = [length("wall")]
+        for destination in (PARAMABILITY, ORCA):
+            with self.subTest(destination):
+                line = offers(initial_table(params), params, destination=destination)[0]
+                texts = [line["reason"], rows.details_html(line, True), rows.header("status", "mm", destination),
+                         rows.up_tooltip(destination)]
+                other = "Orca" if destination == PARAMABILITY else "Paramability"
+                self.assertEqual(line["destination"], destination)
+                self.assertFalse([t for t in texts if other in t])
 
 
 class FormulaOfNumbersTest(unittest.TestCase):

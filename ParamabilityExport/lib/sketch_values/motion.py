@@ -214,7 +214,7 @@ class Motion:
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
                  unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None, faces=None,
-                 timed_out=None):
+                 timed_out=None, body_changes=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -235,6 +235,9 @@ class Motion:
         # Fusion names of sizes that moved a sketch and were left without a try that built when the time limit stopped
         # the tries (they are also in `untried`, and the translator gives them the time reason)
         self.timed_out = list(timed_out or [])
+        # Fusion name to True when a try that set that size alone read the body differently than at the start (its
+        # box or volume), False when every such try read it the same; a size without such a try is not listed
+        self.body_changes = dict(body_changes or {})
 
     def get(self, key):
         """`Affine`, `Terms`, `Stuck`, or None when the value did not move."""
@@ -267,6 +270,8 @@ class Motion:
             out["faces"] = dict(self.faces)
         if self.timed_out:
             out["timed_out"] = list(self.timed_out)
+        if self.body_changes:
+            out["body_changes"] = dict(self.body_changes)
         return out
 
     @classmethod
@@ -285,7 +290,8 @@ class Motion:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
                    data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
-                   data.get("body_moved"), data.get("spans"), data.get("flipped"), data.get("faces"), data.get("timed_out"))
+                   data.get("body_moved"), data.get("spans"), data.get("flipped"), data.get("faces"),
+                   data.get("timed_out"), data.get("body_changes"))
 
 
 class _Optimistic(Motion):

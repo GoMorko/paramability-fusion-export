@@ -241,8 +241,8 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
 - A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
   reason names it: "The tool body Body3 cannot be copied because of its step Thicken1. Steps of type thicken are not
   copied." The gaps inside the tool are dropped
-  with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
-  onto the part (`combine.step._writes_flat`).
+  with the failed tool. Only a gap of a step that finishes surfaces (`StepType.finishing`) stays inside a written
+  tool; such a tool is always a `toolBody` step, never written one by one onto the part (`combine.step._writes_flat`).
 
 ### What a gap needs from a step type
 

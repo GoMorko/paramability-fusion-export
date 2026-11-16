@@ -29,7 +29,7 @@ def _read_sketch(sketch, ctx):
     items = geo.collection_items(geo.safe(lambda: sketch.profiles, None))
     if len(items) > MAX_PROFILES:
         return None
-    profiles = [read_profile(p, ctx) for p in items]
+    profiles = [read_profile(p, ctx, place=False) for p in items]
     if any(p.get("space") == "ambiguous" for p in profiles):
         return None
     return {"frame": geo.frame_of(sketch.transform), "profiles": profiles}
@@ -54,10 +54,7 @@ def _read_borrowed(sketch, ctx, path_name):
     base = _read_sketch(sketch, ctx)
     if base is None:
         return None, "The sketch could not be read."
-    path = placement.find_occurrence(ctx.root, geo.safe(lambda: sketch.parentComponent, None), path_name)
-    if path is None:
-        return None, "The place of the sketch's component could not be found."
-    found = placement.sketch_placement_at(path, sketch)
+    found = placement.native_sketch_placement(ctx.root, sketch, path_name)
     if "frame" not in found:
         return None, found.get("error") or "The place of the sketch could not be read."
     moved = into_target(base["frame"], found["frame"], ctx)

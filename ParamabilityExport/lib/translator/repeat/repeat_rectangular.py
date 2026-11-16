@@ -4,10 +4,15 @@ The measured copies are placed on a grid of up to two directions. A direction th
 original becomes a forward and a backward part (`repeat/symmetric.py`), and the pattern one one-sided grid for each choice of
 a part per direction. When a count follows sizes, every copy any count can make gets its own rounds and chamfers,
 kept by a `when` on the count.
+
+The copies are placed by their element transforms. Two elements on one place, places that do not fill the counts while
+no copy is suppressed, or a copy whose faces are not where its transform puts the original's faces leave the step out
+(`design_model/steps/pattern_places.py`).
 """
 import math
 from itertools import product
 
+from ...design_model.steps import pattern_places as places
 from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, data_in_component, is_identity,
                                           is_identity_rotation, kept_elements, reach as reach_of, solve_lattice)
 from ...design_model.values import Quantity, wrapped
@@ -202,6 +207,15 @@ def _tried_places(axes, axis):
     return places_at
 
 
+def _listed(raw, data, ctx):
+    """The elements whose places must all differ: every element as Fusion listed it, or, when a direction spaces its
+    copies 0 apart (so copies sit on one another by design), the merged ones of `data`."""
+    for which in ("one", "two"):
+        if int(raw.get("quantity_" + which) or 1) > 1 and abs(float(raw.get("distance_" + which) or 0.0)) < 1e-9:
+            return data
+    return data_in_component(raw, ctx.component_frame())
+
+
 def rectangular(ctx, step, sources=None):
     """The pattern of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
     the pattern repeats."""
@@ -224,6 +238,12 @@ def rectangular(ctx, step, sources=None):
         if any(axis["symmetric"] for axis in axes):
             return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
         return Refusal(shared.PATTERN_ORIGINAL_LOST)
+    listed = _listed(step.brought_data, data, ctx)
+    found = places.grid_places(listed["elements"], [(a["dir"], a["step"]) for a in axes],
+                               math.prod(a["count"] for a in axes), data)
+    if found is not None:
+        return Refusal(found.words)
+    source = places.source_faces(data)
     placed = []
     for element in kept:
         frame = element["frame"]
@@ -232,6 +252,8 @@ def rectangular(ctx, step, sources=None):
         indexes, residual = solve_lattice(frame["origin"], [(a["dir"], a["step"]) for a in axes])
         if residual > FIT_TOL_MM:
             return Refusal(shared.PATTERN_UNEVEN_GRID)
+        if places.agrees(source, element, frame) is False:
+            return Refusal(shared.PATTERN_FACES_DISAGREE)
         placed.append((element, indexes))
 
     reach = _symmetric_reach(axes, data)

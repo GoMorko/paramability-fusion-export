@@ -232,6 +232,15 @@ class ProblemStateTests(unittest.TestCase):
         self.assertEqual(motion.spans["height"]["changed"], [[40, "Sketch2"]])
         self.assertEqual(motion.flipped, [])
 
+    def test_the_body_change_of_each_size_tried_alone_is_kept_and_a_try_on_another_solution_tells_nothing(self):
+        # The box follows the width (count, cube) and the height; the hole offset moves only the hole.
+        self.assertEqual(self.motion().body_changes, {"count": True, "cube": True, "off": False, "height": True})
+        # The lid on its other solution at a try of off and one of count: those reads do not count for off.
+        wider = dict(self.lid_flipped(off=10), box={"min": [0, 0, 0], "max": [50, 20, 20]})
+        motion = self.motion(s3=state({"off": 10}, wider), s5=state({"count": 1}, self.lid_flipped(count=1)))
+        self.assertEqual((motion.apart, motion.body_changes["off"]), ([2, 4], False))
+        self.assertEqual(Motion.from_json(motion.json()).body_changes, motion.body_changes)
+
     def test_a_read_that_shows_another_value_of_its_size_is_left_out(self):
         # The read of another row (its parameters say height 40) kept under this row of height 10.
         motion = self.motion(s8=state({"height": 10}, read_at(height=40)))

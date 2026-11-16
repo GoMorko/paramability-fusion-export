@@ -145,7 +145,7 @@ def placed_hole_pattern():
     pattern = copy.deepcopy(fixture("rpattern_row")["items"][4])
     pattern["index"] = hole["index"] + 1
     pattern["data"].update(sources=[hole["index"]], direction_one=[0, 1, 0], quantity_one=2, distance_one=20.0,
-                           elements=[{"id": n + 1, "suppressed": False, "frame": dict(UP, origin=[0, 20 * n, 0])}
+                           elements=[{"id": n, "suppressed": False, "frame": dict(UP, origin=[0, 20 * n, 0])}
                                      for n in range(2)])
     capture["items"].append(pattern)
     return capture

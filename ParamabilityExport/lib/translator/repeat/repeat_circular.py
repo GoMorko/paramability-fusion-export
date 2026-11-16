@@ -2,9 +2,16 @@
 
 A turn about an axis that sits on a face or edge of the part follows sizes (`axis_shift`). A pattern that turns copies
 to both sides of the original is written as a part turning each way (`repeat/symmetric.py`).
+
+Fusion's element transforms of a circular pattern are not always right, so the copies of a one-sided pattern are
+placed by their ids and the way they turn is read from their faces (`design_model/steps/pattern_places.py`). The
+transforms must still be turns about the axis that was read. The copies of a two-sided pattern are placed by their
+transforms, and each copy whose faces were read must sit where its place puts the original's faces.
 """
 import math
 
+from ...design_model.problem import is_problem
+from ...design_model.steps import pattern_places as places
 from ...design_model.steps.repeat import FIT_TOL_MM, data_in_component, kept_elements, reach as reach_of
 from ...design_model.values import Quantity
 from ...design_model import words as shared
@@ -43,19 +50,6 @@ def _turn_about(frame, axis):
         return None
     turned = image(v)
     return math.degrees(math.atan2(vec.dot(axis, vec.cross(v, turned)), vec.dot(v, turned)))
-
-
-def _copy_number(angle, delta, sign, count, full):
-    """Copy number k when `angle` sits at sign * k * delta (mod 360), else None."""
-    a = (sign * angle) % FULL_TURN_DEG
-    if FULL_TURN_DEG - a <= ANGLE_TOL_DEG:
-        a = 0.0
-    k = round(a / delta)
-    if abs(a - k * delta) > ANGLE_TOL_DEG:
-        return None
-    if k == count and full:
-        k = 0
-    return k if 0 <= k < count else None
 
 
 UNIT_DIRECTIONS = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
@@ -142,6 +136,10 @@ def _measured_places(setup):
         return None, "The original sits between two copies of this pattern, which is not copied yet."
     if reach_of(every, count) is None:
         return None, (shared.PATTERN_RULE)
+    if len(every) == len(setup["pattern"]["elements"]):
+        listed = places.listed_places(every, count, setup["pattern"])
+        if listed is not None:
+            return None, listed.words
     return steps, every
 
 
@@ -177,12 +175,18 @@ def _symmetric_circular(item, ctx, setup):
     the other, both from the original (`repeat/symmetric.py`). `setup` holds what `circular` has read."""
     count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
     steps, every = _measured_places(setup)
+    source = places.source_faces(setup["pattern"])
     if steps is None:
         centred = _centred_places(setup)
         if centred is None:
             return Refusal(every)
+        if places.unplaced(source, [e for e, _ in turns],
+                           [places.turn_frame(point, direction, k * delta) for k in centred]):
+            return Refusal(shared.PATTERN_FACES_DISAGREE)
         every = centred
         steps = [(None, k) for k in every]
+    elif any(places.agrees(source, e, places.turn_frame(point, direction, k * delta)) is False for e, k in steps):
+        return Refusal(shared.PATTERN_FACES_DISAGREE)
     reach = reach_of(every, count)
     back, forward = reach
     count_q, angle_q = setup["count_q"], setup["angle_q"]
@@ -269,12 +273,16 @@ def circular(ctx, step, sources=None, total_angle=None):
             "pattern": data, "solids": solids, "finishes": finishes, "axis": axis, "count": count, "delta": delta,
             "point": point, "direction": direction, "turns": turns, "count_q": count_q, "angle_q": angle_q})
 
-    sign = next((s for s in (1, -1) if all(_copy_number(t, delta, s, count, full) is not None for _, t in turns)), 0)
-    if not sign:
-        return Refusal(shared.PATTERN_UNEVEN_ROUND)
+    # Copy `id` sits `id` steps from the original; the element transforms are not always right (`pattern_places`).
+    ids = places.id_places(data, count)
+    if is_problem(ids):
+        return Refusal(ids.words)
+    sign = places.circular_sign(data, kept, point, direction, delta)
+    if is_problem(sign):
+        return Refusal(sign.words)
     if sign < 0:
         direction = vec.scale(direction, -1)
-    by_place = {_copy_number(t, delta, sign, count, full): element for element, t in turns}
+    by_place = {element["id"]: element for element in kept}
     skip = _skip_places(by_place, count)
 
     moved = axis_shift(ctx, item, axis, direction)

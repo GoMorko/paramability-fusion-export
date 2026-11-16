@@ -33,7 +33,7 @@ def centred(*later):
 
 def row(index, sources, count, step, kind="spacing", params=None, symmetric=True, name="Pattern1"):
     """A rectangular pattern along x with `count` copies spread to both sides of the original."""
-    elements = [{"id": n + 1, "suppressed": False, "frame": dict(FLAT, origin=[k * step, 0, 0])}
+    elements = [{"id": n, "suppressed": False, "frame": dict(FLAT, origin=[k * step, 0, 0])}
                 for n, k in enumerate(places_of(count))]
     distance = step if kind == "spacing" else step * max(count // 2, 1)
     return copy_item(index, name, "RectangularPatternFeature", {
@@ -323,7 +323,7 @@ class SymmetricSizedTest(unittest.TestCase):
 
 
 def circular(index, count, total, degrees, symmetric=True, params=None):
-    elements = [{"id": n + 1, "suppressed": False, "frame": turned_copy([6, 6, 0], a, True)}
+    elements = [{"id": n, "suppressed": False, "frame": turned_copy([6, 6, 0], a, True)}
                 for n, a in enumerate(degrees)]
     return copy_item(index, "C-Pattern1", "CircularPatternFeature", {
         "entity_type": "features", "sources": [2], "axis": {"point": [6, 6, 0], "dir": [0, 0, 1]}, "quantity": count,

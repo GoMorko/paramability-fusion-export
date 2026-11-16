@@ -28,6 +28,7 @@ sys.path.insert(0, ROOT)
 from lib import translator  # noqa: E402
 from lib.orca_recipe.feature import FIELDS  # noqa: E402
 from lib.orca_recipe.recipe import serialize  # noqa: E402
+from lib.package.naming import addin_of_writer  # noqa: E402
 from lib.params import size_table  # noqa: E402
 from lib.sketch_values.motion import Motion  # noqa: E402
 from scripts.orca_live_check import table_for  # noqa: E402
@@ -121,9 +122,19 @@ def orca(capture, table):
 
 
 def read_capture(path):
+    """(the file, its capture). The capture of a report gets the add-in version its writer text names, as a capture of
+    the current reader holds it (`addin`)."""
     with open(path, encoding="utf-8") as f:
         found = json.load(f)
-    return found, (found["capture"] if isinstance(found.get("capture"), dict) else found)
+    if not isinstance(found.get("capture"), dict):
+        return found, found
+    return found, with_addin(found["capture"], found.get("writer"))
+
+
+def with_addin(capture, writer):
+    """`capture` with `addin` from the writer text of its report, when it names none itself."""
+    version = addin_of_writer(writer)
+    return dict(capture, addin=version) if version and not capture.get("addin") else capture
 
 
 def fixture_modes(path):

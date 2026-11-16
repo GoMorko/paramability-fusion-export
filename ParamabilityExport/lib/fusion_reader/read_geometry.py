@@ -305,6 +305,17 @@ def surface_kind(face):
     return name if name in ("Plane", "Cylinder", "Cone") else "other"
 
 
+def face_vertices(face):
+    """The points of the vertices of a BRepFace (`vertices`, each vertex's `geometry`)."""
+    return [point(v.geometry) for v in collection_items(face.vertices)]
+
+
+def axial_span(origin, axis, points):
+    """[low, high] of the points along the unit `axis` from `origin`, or None when there are none."""
+    along = [sum((p[i] - origin[i]) * axis[i] for i in range(3)) for p in points]
+    return [round(min(along), 6) + 0.0, round(max(along), 6) + 0.0] if along else None
+
+
 def point_at(curve, fraction):
     """Point3D at a fraction (0..1) of the parameter range of a curve or edge, or None."""
     try:

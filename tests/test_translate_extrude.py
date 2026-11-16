@@ -93,7 +93,21 @@ class PlacementTest(unittest.TestCase):
         result = variant("extrude_start_offset", lambda d: d.update(
             start={"kind": "fromEntity", "plane": plane}, end_offset=8.0, params=held))
         self.assertEqual(left_out(result)["index"], 3)
-        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.EXTRUDE_END_FACE]])
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.EXTRUDE_START_OFFSET]])
+
+    def test_a_start_at_a_distance_from_a_face_is_placed_by_the_end_cap_when_only_one_start_reaches_it(self):
+        # A join merges its start cap into the part, so Fusion gives no start face. The sketch is at z 10 and the face
+        # at z 14: of the starts 12 and 16 and the ways up and down, only the start 12 going down 4 mm ends on the
+        # measured end cap at z 8 (-2 from the sketch).
+        plane = {"point": [0, 0, 14], "normal": [0, 0, -1]}
+        held = {"start.offset": {"name": "d9", "expression": "2 mm", "value": 2.0}}
+        result = variant("extrude_start_offset", lambda d: d.update(
+            start={"kind": "fromEntity", "plane": plane}, end_offset=-2.0, end_normal=[0.0, 0.0, 1.0],
+            start_offset=None, params=held))
+        self.assertIsNone(left_out(result))
+        step = result.recipe["features"][-1]
+        self.assertEqual((step["sketch"]["on"]["origin"], step["sketch"]["on"]["normal"], step["distance"]),
+                         ([0.0, 0.0, 12.0], [0.0, 0.0, -1.0], 4.0))
 
     def test_two_sides_to_planes_on_one_side_refuse(self):
         def to(height):
@@ -209,7 +223,8 @@ class ExtentTest(unittest.TestCase):
 
     def test_through_all_join_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))
-        self.assertIn("only copied for cuts", left_out(result)["reason"])
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.THROUGH_ADDS]])
 
     def test_through_all_without_a_measured_part_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(target_box_before=None))

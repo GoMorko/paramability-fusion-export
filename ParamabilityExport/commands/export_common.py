@@ -23,8 +23,12 @@ _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def writer_for(app):
-    return writer_text(
-        addin_version(_manifest_path()), design_info.fusion_version(app))
+    return writer_text(addin_release(), design_info.fusion_version(app))
+
+
+def addin_release():
+    """The version of this add-in, from its .manifest file ("unknown" when it cannot be read)."""
+    return addin_version(_manifest_path())
 
 
 def _manifest_path():

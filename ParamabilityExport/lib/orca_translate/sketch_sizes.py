@@ -101,17 +101,13 @@ def _drawn_reason(ctx, item, made, piece, profile):
 
 
 def projection_doubts(ctx, item, profile, outline):
-    """Mark every size read before the step when a corner or centre of the outline is placed by geometry projected
-    into its sketch (`SketchFormulas.follows_projection`): the capture does not tell which sizes move that geometry,
-    and the copy writes it where it is now."""
+    """Mark every size read before the sketch (`reach.projection_sizes`) when a corner or centre of the outline is
+    placed by geometry projected into its sketch (`SketchFormulas.follows_projection`): the capture does not tell
+    which sizes move that geometry, and the copy writes it where it is now."""
     formulas = sketch_formulas(ctx, profile) if outline is not None else None
     if formulas is None or not formulas.follows_projection(outline):
         return
-    items = ctx.capture.get("items") or []
-    # The sketch takes its projections where it sits in the timeline, so the steps before it may move them.
-    sketch = [i for i in items if i.get("type") == "Sketch" and i.get("name") == profile.get("sketch")
-              and isinstance(i.get("index"), int) and i["index"] < item.get("index", 0)]
-    ctx.doubt(reach.any_face_sizes(ctx.table, items, sketch[-1] if sketch else item),
+    ctx.doubt(reach.projection_sizes(ctx.table, ctx.capture.get("items") or [], item, profile.get("sketch") or ""),
               "%s: its outline is placed by geometry projected into %s, and Orca keeps that geometry where it is now"
               % (_label(item), profile.get("sketch") or "its sketch"))
 

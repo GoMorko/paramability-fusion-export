@@ -24,7 +24,8 @@ learning only.
 1. The add-in reads the steps of the body in the Fusion timeline: sketches, extrudes, holes, fillets and more.
 2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
    moves, and how much.
-3. It sets all parameters back to their values. Your design does not change.
+3. It sets all parameters back to their values. Your design does not change. A parameter that no copied step uses
+   is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
    Fusion made it.
 5. Paramability builds the part from the steps and compares it with the STEP shape.
@@ -33,9 +34,13 @@ The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the
 For some steps the add-in measures the shape that Fusion made, for example the radius of a round set by chord
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
 A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
+Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
+tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
 Scale of a body is copied only when the body measured after it has the size and volume that its factors give. A Press
 Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
+The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
+pattern out when the two do not agree.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).
