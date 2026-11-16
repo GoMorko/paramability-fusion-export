@@ -104,11 +104,6 @@ class RevolveTest(unittest.TestCase):
         missing = variant("revolve_symmetric", lambda i: i["data"].update(start_face_normal=None))
         self.assertIsNone(missing.recipe)
 
-    def test_two_sides_refuse(self):
-        result = translate_fixture("revolve_two_sides")
-        self.assertIsNone(result.recipe)
-        self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "RevolveFeature"))
-
     def test_cut_start_face_points_along_the_travel(self):
         result = translate_fixture("revolve_cut_quarter")
         step = result.recipe["features"][1]

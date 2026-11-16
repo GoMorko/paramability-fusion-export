@@ -354,3 +354,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     part thicker at some places, and `Tilt` moves the copies. On the copy without the boss, the thread reason names
     `Plate` only. Export the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same
     pattern reason. Afterwards the design is as before.
+36. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
+    plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
+    about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with
+    angle one 90 deg (the start face then fits both sides). Third design: a 60 x 60 x 30 mm box centred on the Z axis,
+    then the same sketch with a second rectangle 25 to 28 mm away from the Z axis, both revolved Two Sides with
+    `Ahead` and `Back` as an intersect.
+    Export: export the first body with `Ahead` and `Back` ticked. Both are sizes. In Paramability the ring segment
+    matches the Fusion body; set `Back` to 80: the body grows only on the side of angle two, as in Fusion. The second
+    design leaves the revolve out with the tip "Make two revolves, one to each side of the sketch." The third copy
+    matches the Fusion body (the box keeps both ring segments). Export the first body for Orca: it matches, and
+    `Ahead` and `Back` keep their numbers with the reason "turns to two sides". Afterwards the design is as before.

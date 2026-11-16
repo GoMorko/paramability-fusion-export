@@ -4,7 +4,9 @@ Each outline becomes a sketch of its lines and arcs, plus a construction line al
 Revolve names (`revolve_axis_entity`), so the axis may sit anywhere in the sketch plane. Orca turns by the right hand
 rule about that line; Fusion does not say which way it turned, so the measured start face decides (its outward normal
 points against the turn for new material, along it for a cut). `revolve_angle` follows the angle's parameter. A
-symmetric turn starts half the angle back: the sketch plane is turned there, so its angle keeps its number.
+symmetric turn starts half the angle back: the sketch plane is turned there, so its angle keeps its number. A turn to
+two sides by two angles starts the angle of one side back (the start face tells which, `design_model.steps.revolve`)
+and turns by the sum of the two; both angles keep their numbers.
 
 Orca needs the axis in the sketch plane, an outline on one side of it and no holes in the outline; anything else is
 left out with the reason. A cut that removes nothing stops Orca's rebuild, so a cut that misses the copied part is
@@ -19,6 +21,7 @@ from ..orca_recipe.sketch import SketchEntity
 from . import causes, kept_refs
 from ..design_model.values import Quantity
 from ..design_model import words as shared
+from ..design_model.steps.revolve import back_sides
 from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
 from .sketch_sizes import profile_sizes, projection_doubts
@@ -46,12 +49,27 @@ def _profile_problem(profile):
     return None
 
 
+def _two_angles(ctx, item, extent):
+    """`(Quantity of the whole turn, the two angles)` of a turn to two sides, or a Skip. A whole turn has no angles."""
+    pair = [extent.get(key) for key in ("angle_one_deg", "angle_two_deg")]
+    if not all(isinstance(a, (int, float)) and a > 0 for a in pair) or sum(pair) > FULL_TURN_DEG + 1e-9:
+        return Skip(shared.REVOLVE_ANGLE)
+    for path, angle in zip(("extent.angle_one_deg", "extent.angle_two_deg"), pair):
+        value = ctx.quantity(item, path, angle, "angle")
+        if value.text is not None:
+            ctx.doubt(value.reads, "%s turns to two sides of its sketch, so its angles keep their numbers in Orca"
+                      % label(item))
+    if sum(pair) >= FULL_TURN_DEG - 1e-9:
+        return Quantity(FULL_TURN_DEG), None
+    return Quantity(float(sum(pair))), (float(pair[0]), float(pair[1]))
+
+
 def _angle(ctx, item, extent):
-    """`(Quantity of the angle, symmetric)` or a Skip."""
+    """`(Quantity of the angle, sides)` or a Skip. `sides` is None for a turn from the sketch, "symmetric" for a turn
+    to both sides by one angle, or the two angles of a turn to two sides."""
     kind = (extent or {}).get("kind")
     if kind == "twoSidesAngle":
-        return Skip("Revolves turned to both sides by two angles are not copied to Orca yet.",
-                    causes.REVOLVE_TWO_ANGLES)
+        return _two_angles(ctx, item, extent)
     if kind != "angle" or not isinstance(extent.get("angle_deg"), (int, float)):
         return Skip(shared.REVOLVE_ANGLE_KIND)
     angle = abs(float(extent["angle_deg"]))
@@ -67,15 +85,16 @@ def _angle(ctx, item, extent):
         ctx.doubt(value.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
                   % label(item))
         value = Quantity(angle)
-    return value, symmetric
+    return value, ("symmetric" if symmetric else None)
 
 
 def _points(curves):
     return [p for c in curves for p in polyline(c)]
 
 
-def _sense(data, operation, frame, outer, point, direction):
-    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way, or a Skip."""
+def _travel_turn(data, operation, frame, outer, point, direction):
+    """`(travel, turn)`: the measured direction the material leaves the start face in, and the direction the outline
+    moves in at the start of a right hand turn about `direction`; or a Skip."""
     normal = data.get("start_face_normal")
     if not isinstance(normal, (list, tuple)) or vec.length(normal) < 1e-9:
         return Skip(shared.REVOLVE_TURN_UNREAD)
@@ -86,10 +105,33 @@ def _sense(data, operation, frame, outer, point, direction):
     radial = vec.sub(v, vec.scale(direction, vec.dot(v, direction)))
     if vec.length(radial) < 1e-9:
         return Skip(shared.REVOLVE_ON_AXIS)
-    side = vec.dot(travel, vec.cross(direction, vec.unit(radial)))
+    return travel, vec.cross(direction, vec.unit(radial))
+
+
+def _sense(data, operation, frame, outer, point, direction):
+    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way, or a Skip."""
+    found = _travel_turn(data, operation, frame, outer, point, direction)
+    if isinstance(found, Skip):
+        return found
+    travel, turn = found
+    side = vec.dot(travel, turn)
     if abs(side) < 1e-6:
         return Skip(shared.REVOLVE_TURN_UNREAD)
     return 1.0 if side > 0 else -1.0
+
+
+def _back(data, operation, frame, outer, point, direction, angles):
+    """Degrees a turn to two sides starts back from the sketch by the right hand rule about `direction`, or a Skip."""
+    found = _travel_turn(data, operation, frame, outer, point, direction)
+    if isinstance(found, Skip):
+        return found
+    sides = back_sides(found[0], found[1], direction, angles[0], angles[1])
+    if not sides:
+        return Skip("The turn of this two sided revolve does not match its measured start face.")
+    if len(sides) > 1 and abs(angles[0] - angles[1]) > 1e-9:
+        return Skip("The start face of this two sided revolve does not tell which side each angle turns to.",
+                    gap_hints.REVOLVE_SIDES)
+    return angles[sides[0] - 1]
 
 
 def _turned_frame(frame, point, direction, degrees):
@@ -128,7 +170,7 @@ def revolve(ctx, step):
     found = _angle(ctx, item, data.get("extent"))
     if isinstance(found, Skip):
         return found
-    angle, symmetric = found
+    angle, sides = found
     outline = outlines_of(profile)
     if outline is None:
         return Skip("The outline of this revolve could not be read.")
@@ -149,13 +191,19 @@ def revolve(ctx, step):
     if entities is None:
         return Skip("The outline of this revolve has a curve the Orca copy cannot draw yet (it draws lines, arcs, "
                         "circles and splines Fusion gives exactly).")
-    sense = 1.0
-    if angle.n < FULL_TURN_DEG:
+    sense, start = 1.0, 0.0
+    if isinstance(sides, tuple):
+        back = _back(data, operation, frame, outline.outer, point, direction, sides)
+        if isinstance(back, Skip):
+            return back
+        start = -back
+    elif angle.n < FULL_TURN_DEG:
         sense = _sense(data, operation, frame, outline.outer, point, direction)
         if isinstance(sense, Skip):
             return sense
+        if sides == "symmetric":
+            start = -angle.n / 2.0
     turn_axis = vec.scale(direction, sense)
-    start = -angle.n / 2.0 if symmetric else 0.0
     tool = Turned(frame, [outline.outer], point, turn_axis, angle.n, start)
     if operation in ("cut", "intersect") and not ctx.solid.meets(tool):
         gap = bool(ctx.left_out)

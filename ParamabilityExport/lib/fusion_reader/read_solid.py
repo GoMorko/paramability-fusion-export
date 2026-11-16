@@ -399,7 +399,9 @@ def revolve_before(feature, ctx):
         "extent": _revolve_extent(feature.extentDefinition),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "start_face_normal": None,
-    }, Params().add("extent.angle_deg", lambda: feature.extentDefinition.angle, "angle").found)
+    }, Params().add("extent.angle_deg", lambda: feature.extentDefinition.angle, "angle")
+       .add("extent.angle_one_deg", lambda: feature.extentDefinition.angleOne, "angle")
+       .add("extent.angle_two_deg", lambda: feature.extentDefinition.angleTwo, "angle").found)
 
 
 def revolve_after(feature, ctx, data):
