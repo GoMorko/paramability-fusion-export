@@ -1,11 +1,11 @@
 """The destination-neutral reading of patterns and mirrors: the copies Fusion kept and where they sit.
 
 An element frame is the transform of one copy from the original (`origin` and the three axes). Fusion gives it in
-assembly space; `in_component` (`data_in_component` for the data alone) carries the frames into the frame of the
-component the steps are written in, and drops copies that sit exactly on an earlier one. `read_in_component` does
+assembly space; `data_in_component` carries the frames in the data of a pattern into the frame of the component the
+steps are written in, and drops copies that sit exactly on an earlier one. `read_in_component` does
 the same for the copies a probe state read. `solve_lattice` gives the grid index of a copy, `reach` the steps a
 symmetric direction runs each way, and `mirror_plane` the plane of a mirror. `repeated_items` gives the timeline
-items a pattern or a mirror of features repeats. What a copy does about a size, and how a copy is written, stay with
+items a pattern or a mirror repeats. What a copy does about a size, and how a copy is written, stay with
 the destination.
 """
 from ...capture_model import step_kinds
@@ -70,18 +70,10 @@ def repeated_items(item):
     return (data.get("sources") if isinstance(data, dict) else None) or []
 
 
-def in_component(item, place, merge=False):
-    """`item` with its element frames in the frame of the component the walk builds in (`place`, component to
-    assembly, or None). With `merge`, copies that sit exactly on an earlier one are dropped (a direction with a
-    distance of zero makes such copies). The item itself when it has no elements."""
-    data = item.get("data") or {}
-    carried = data_in_component(data, place, merge)
-    return item if carried is data else dict(item, data=carried)
-
-
 def data_in_component(data, place, merge=False):
-    """The data of a pattern with its element frames carried as `in_component` carries them. The data itself when it
-    has no elements."""
+    """The data of a pattern with its element frames in the frame of the component the walk builds in (`place`,
+    component to assembly, or None). With `merge`, copies that sit exactly on an earlier one are dropped (a direction
+    with a distance of zero makes such copies). The data itself when it has no elements."""
     elements = data.get("elements")
     if not elements:
         return data
