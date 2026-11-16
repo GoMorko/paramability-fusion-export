@@ -84,6 +84,7 @@ or if an error occurs.
 | --- | --- |
 | `docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
 | `docs/limits.md` | What the copy can and cannot do, step by step |
+| `docs/feature-support.md` | Which Fusion actions each export copies, and what could be copied later |
 | `docs/development.md` | Code layout and tests |
 | `docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
 | `docs/capture-format.md`, `docs/expressions.md`, `docs/recipe-gaps.md` | File formats and how formulas are copied |
