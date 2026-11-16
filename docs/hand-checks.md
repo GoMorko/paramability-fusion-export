@@ -205,11 +205,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     through hole with a modeled M5 thread. Then make a Hole whose extent is "To" an inner floor (a second box body
     or a stepped pocket), and one up to a body.
     Export: each tapped hole copies as a hole at the minor diameter plus an internal `thread` step. In `report.json`
-    the hole item must hold `thread` (the July 2025 API stub has no tap type, thread or thread depth member on
-    `HoleFeature`, so first find where Fusion keeps them: `feature.thread`, `feature.threadInfo` or the hole itself;
-    until this check passes a tapped hole with a modeled thread may stay a gap) with `pitch`, `major_diameter`, `minor_diameter`, `right_hand`, `full_length`
-    and for the 5 mm one `depth` 5.0. If those members are missing, note where Fusion keeps them (on `feature.thread`
-    or on the hole). Check also what `sideFaces` holds for a modeled thread (the bore cylinder, or only the helical
+    the hole item must hold `thread` (read from `HoleFeature.tappedHoleInfo` and the hidden thread feature
+    `HoleFeature.thread`, Fusion September 2025 and later) with `pitch`, `major_diameter`, `minor_diameter`,
+    `right_hand`, `full_length`, for the 5 mm one `depth` 5.0 and `offset` 0, and `made_span` starting near 0 and
+    ending near the thread length. Fusion 2706 gave `full_length` false for tapped holes made with the default
+    settings, also through all: note the thread length Fusion shows in the Hole dialog, and check that `depth` is that
+    length and that the copy's thread is as long. Check also what `sideFaces` holds for a modeled thread (the bore cylinder, or only the helical
     faces); the copy cuts the bore at the minor diameter from the thread info. The holes up to a face and a body copy
     as blind holes of the measured depth, and when the floor follows a parameter the hole depth follows it. A hole up to a
     face that ends in a drill point is left out with a reason.
@@ -354,3 +355,32 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     part thicker at some places, and `Tilt` moves the copies. On the copy without the boss, the thread reason names
     `Plate` only. Export the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same
     pattern reason. Afterwards the design is as before.
+36. RC1, revolves whose start face is gone, and a symmetric revolve. On the XY plane make a 40 x 20 x 10 mm box with
+    its corner at the origin. Sketch on its front face (y = 0) a 5 by 8 mm rectangle from x = 10 to 15 whose top side
+    lies on the top front edge (z = 2 to 10). Revolve it about that top front edge by 90 degrees away from the box
+    (toward -Y), Join. In a second design, sketch on the XZ plane a 10 by 15 mm rectangle from x = 20 to 30, z = 0 to
+    15, and revolve it about the Z axis, Direction Symmetric, angle 60 degrees (user parameter `Sweep`). Make a third
+    design like the second with 200 degrees.
+    Export: Export for Orca each body. In `report.json` the first revolve has `start_face_normal` null,
+    `end_face_normal` [0, 0, 1] and a `made_box` of about x 10 to 15, y -8 to 0, z 2 to 10; it is copied, and the
+    volume in Orca equals Fusion's (8251.3 mm3). The second is copied as a turn of 120 degrees (Fusion's angle is the
+    turn to each side) with `Sweep` a fixed number; the volume equals Fusion's (7853.98 mm3). The third is a closed
+    ring (23561.94 mm3).
+
+37. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
+    high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular
+    pattern of the hole about the Z axis: Type Full, quantity 6. In a second design: Type Angle, total angle 120
+    degrees, quantity 3.
+    Export: Export for Orca. In `report.json` note `elements` of the pattern: each `id` and the turn of its `frame`
+    about Z (atan2 of x[1] and x[0]). Fusion 2706 gave ids 0 to 5 with turns 0, 120, 180, 240, 300 and 0 (no copy
+    at 60), and 0, 120 and 180 for the second, so both patterns were left out as not spread evenly. Note the turns
+    Fusion gives, and whether the holes in Fusion sit at 0, 60, 120 and so on: they decide how the reader must read
+    `PatternElement.transform`.
+
+38. SK1, what a sketch on a face says it sits on. Make a 30 x 20 x 10 mm box (user parameter `Height` for the 10 mm).
+    Sketch a 6 mm circle on its top face and extrude it 5 mm up (Join). Sketch a point on the top face and drill a
+    simple 3 mm hole there from that one point.
+    Export: Export for Orca with `Height` ticked. In `report.json` note whether the boss profile has `reference`
+    (Fusion 2706 gave none, `Sketch.referencePlane` was null) and whether the hole has `sketch`, `point_tokens` and
+    `reference`. `Height` follows partly with the reason that the boss sketch sits on a plane or face that moves with
+    it. If Fusion gives the face, `reference` is `{ "kind": "face" }`.

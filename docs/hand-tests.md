@@ -21,8 +21,9 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6, RV1 to RV5 and 
       user parameter `Height` = 10 mm. Sketch on the front face (y = 0): a 5 by 8 mm rectangle with its top side on the
       top front edge of the box. Revolve it 90 degrees about that top front edge, as a join.
       Export: tick `Height`, export for Paramability and for Orca. The revolve `axis` has `entity_type: "BRepEdge"`
-      and `edge_points`. Both results mark `Height` with a reason that Revolve1 turns about an edge that may move with
-      it.
+      and `edge_points`. The join merges the revolve's start face into the box, so `start_face_normal` is null; the
+      revolve is copied from `end_face_normal` and `made_box` (hand check RC1). Both results mark `Height` with a
+      reason that Revolve1 turns about an edge that may move with it.
 - [ ] RV3, construction geometry on points, edges and a path. A 40 by 20 by 10 mm box with its corner at the
       origin, a cylinder boss of 10 mm diameter and 5 mm height centred at (30, 10) on the top face, and a simple
       hole of 3 mm diameter, 3 mm deep, at (10, 10) on the top face. Make: an axis Through Edge (the top back edge,
@@ -448,7 +449,7 @@ builds agrees with the Fusion part.
 - [ ] **Plate**: a sketched rectangle with a pocket, two through holes and an L shaped boss. Saves as a recipe and
       matches. Put two features in a timeline group to check that groups are walked.
 - [ ] **Tilted sketch**: a boss on a sketch on an angled construction plane, offset from the origin. Matches.
-- [ ] **Turned knob**: a full revolve, a 90 degree revolve cut, a symmetric 120 degree revolve. Matches.
+- [ ] **Turned knob**: a full revolve, a 90 degree revolve cut, a symmetric revolve of 60 degrees (to each side, so 120 in all). Matches.
 - [ ] **Extrude directions**: a flipped one sided extrude, a two sided extrude, a symmetric extrude with "full
       length" on and off, a 5 degree taper, a cut "through all" one way, a join "to" a parallel face. Matches.
 - [ ] **Holes**: a blind hole with a 118 degree tip, the same with a flat drill point, a through counterbore, a
@@ -1326,10 +1327,14 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       point, `HoleX` from the origin along X and on the X axis, then a simple 6 mm hole through all at that point.
       Expect: `HoleX` follows the Orca variable. In Orca set `HoleX` to 30: the hole moves 10 mm further out, as it
       does in Fusion. `Height` follows "but not everywhere": the hole's sketch sits on the top face, which `Height`
-      moves. In `report.json` the hole has `reference` with kind `face`.
+      moves. In `report.json` the hole has `sketch` and `point_tokens` (a hole on one point has a
+      `SketchPointHolePositionDefinition`). Fusion 2706 gives no `reference` for a sketch on a face (hand check SK1);
+      the sketch then counts as one on a face, so `Width` and `Depth` also follow "but not everywhere".
 - [ ] OR10, tapped holes. To OR2 add a tapped M6 hole through the part with "Modeled" on, one 15 mm deep with
-      "Modeled" on, and one with it off. Expect: the through hole is a hole, an Orca thread and two shallow wider
-      holes (one at each face); the blind one a hole, a thread and one wider hole at the top; the note says the
+      "Modeled" on, and one with it off. Fusion 2706 makes the thread of a tapped hole over part of its length by
+      default (`full_length` false, `depth` the thread length): note the length the Hole dialog shows. Expect: the
+      through hole is a hole, an Orca thread and two shallow wider holes (one at each face) when its thread is full
+      length, else one at the top; the blind one a hole, a thread and one wider hole at the top; the note says the
       thread stays half a turn inside its ends and the hole is a little wider for that half turn; the third a plain
       hole at the drill size. Orca builds the body without an error. In OrcaSlicer, slice it and look at the layers at
       each face: the hole opens to the full thread size there, with no ring at the small size. Note any thread left
@@ -1981,7 +1986,8 @@ read the capture in `report.json`.
   place on the face while the face moves along its normal (the copy moves the hole centre by the face's offset); the
   extrude length to a face of another component is the face's distance from the sketch plane, so it follows the
   face's offset one to one.
-- `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
+- `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry` (one point:
+  `SketchPointHolePositionDefinition.sketchPoint`), `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`.
 - `ThreadFeature.isModeled`, `isRightHanded`, `isFullLength`, `threadLength`, `threadOffset`, `threadInfo` and its
@@ -1989,9 +1995,10 @@ read the capture in `report.json`.
   `minorDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
   and `faces` after the step (the made thread faces: their `vertices` give `made_span`). These names match the Fusion API
   stub (July 2025); every member is optional in the reader. Hand check TD1 in `docs/hand-checks.md` lists what to look for.
-- Tapped hole thread (hand check 12, TD2): the July 2025 API stub has no `holeTapType`, `thread`, `threadInfo` or
-  `threadDepth` on `HoleFeature`, so where Fusion keeps the tap type and the thread of a tapped hole is not proven. The
-  reader tries `feature.thread`, `feature.threadInfo` and the hole itself; a hole whose members are not found stays a gap.
+- Tapped hole thread (hand check TD2): Fusion (September 2025 and later) keeps the tap type in
+  `HoleFeature.holeTapType`, the thread numbers in `HoleFeature.tappedHoleInfo` (a `ThreadInfo`) and the length in the
+  hidden thread feature `HoleFeature.thread` (`threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `faces`).
+  The July 2025 stub has none of these. A hole whose members are not found stays a gap.
   Also `ToEntityExtentDefinition.entity`.
 - `CombineFeature.toolBodies` of a body in another component, in the capture of the exported body's component
   (`tool_identity`, `fusion_reader/placement.py`): the proxy's `assemblyContext.fullPathName`, `nativeObject.entityToken` (must equal the

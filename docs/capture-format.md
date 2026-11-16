@@ -223,7 +223,7 @@ Each item that is not a sketch, of any component, has `sketch_inputs` when it ta
 sketches: `[{ token, name }]` of each `parentSketch` of its `profile` and `profiles` (a profile, a sketch text or an
 ObjectCollection of them; a planar face adds nothing), of the `PathEntity.entity` items of its `path` and
 `guideRail`, of the `LoftSection.entity` of its `loftSections`, and of the sketch points of a hole
-(`holePositionDefinition.sketchPoints`). It is read with the marker before the item and reads no geometry. The key
+(`holePositionDefinition.sketchPoints`, or `sketchPoint` for one point). It is read with the marker before the item and reads no geometry. The key
 is left out when nothing is found.
 
 Each user parameter has `dependents`: one record per model parameter that reads it, directly or through other
@@ -714,7 +714,8 @@ against `samples`.
   body the item made or split off (refused); without it the driver compares `bodies_after` with the bodies the item's
   data names (`participants`, `tools`, `target`).
 
-**RevolveFeature** (`operation`, `profile`, `axis`, `isProjectAxis`, `extentDefinition`, `startFaces`):
+**RevolveFeature** (`operation`, `profile`, `axis`, `isProjectAxis`, `extentDefinition`, `startFaces`, `endFaces`,
+`faces`):
 
 ```json
 {
@@ -724,7 +725,9 @@ against `samples`.
   "project_axis": false,
   "extent": { "kind": "angle", "angle_deg": 360, "symmetric": false },
   "participants": [ ... ],
-  "start_face_normal": null
+  "start_face_normal": null,
+  "end_face_normal": null,
+  "made_box": null
 }
 ```
 
@@ -741,9 +744,15 @@ against `samples`.
   out; the translators then count the axis as one that may move with every size read before the step (a record
   with `entity` and `sketch_token` counts as a sketch line whose plane and projections are unknown).
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
-  `{ "kind": "twoSidesAngle", "angle_one_deg", "angle_two_deg" }`, `{ "kind": "other", "type" }`.
-- `start_face_normal`: outward normal of `startFaces[0]` at its `pointOnFace` (surface evaluator), or null for a
-  full turn. The measured check of the turning sense.
+  `{ "kind": "twoSidesAngle", "angle_one_deg", "angle_two_deg" }`, `{ "kind": "other", "type" }`. For a symmetric
+  revolve `angle_deg` is the turn to each side (`RevolveFeatures.setAngleExtent`): the whole turn is twice it, and 180
+  degrees or more to each side closes the ring.
+- `start_face_normal`, `end_face_normal`: outward normal of `startFaces[0]` and of `endFaces[0]` at its `pointOnFace`
+  (surface evaluator), or null when Fusion gives no such face (a full turn, a cap that a join merged into a face of
+  the part). `made_box`: `{ "min", "max" }` around the boxes of the faces the revolve made (`faces`), or null. Absent
+  for a full turn; older captures have only `start_face_normal`. The measured check of the turning sense
+  (`design_model/steps/revolve.py`): the caps decide, and when they do not (a quarter turn ends with the same cap
+  normal either way) the made faces must fit the box the outline sweeps one way only.
 
 **HoleFeature** (`holeType`, `holeTapType`, `holeDiameter`, `tipAngle`, `counterboreDiameter`, `counterboreDepth`,
 `countersinkDiameter`, `countersinkAngle`, `position`, `direction`, `extentDefinition`, `holePositionDefinition`,
@@ -772,13 +781,18 @@ against `samples`.
 - `hole_type`: `simple`, `counterbore`, `countersink`. `tap_type`: `simple`, `clearance`, `tapped`,
   `taperTapped`. `thread_modeled`: `thread.isModeled` for a tapped hole, else null.
 - `thread`: for a tapped hole, the thread info (the keys of `ThreadFeature` below: `thread_type`, `designation`,
-  `thread_class`, `internal`, `right_hand`, `pitch`, `major_diameter`, `minor_diameter`, `angle_deg`) plus
-  `full_length` (bool or null) and `depth` (mm, how deep the thread runs, or null); every key is null when it cannot be
-  read. Null for a hole that is not tapped. `params["thread.depth"]` holds the depth parameter. A modeled thread is
-  copied as a hole at the minor diameter plus an internal `thread` step for each position.
+  `thread_class`, `internal`, `right_hand`, `pitch`, `major_diameter`, `minor_diameter`, `angle_deg`) from
+  `HoleFeature.tappedHoleInfo` and the hidden thread feature `HoleFeature.thread` (its `threadInfo` and
+  `isRightHanded`), plus `full_length` (`thread.isFullLength`, bool or null), `depth` (`thread.threadLength` in mm,
+  how deep the thread runs when it is not full length, or null) and `offset` (`thread.threadOffset` in mm, or null);
+  every key is null when it cannot be read. With a modeled thread, `made_span` (read after the hole): how deep below
+  the mouth of the first hole the vertices of the thread's faces (`thread.faces`) reach along `direction`, `[low,
+  high]` in mm, or null. Null for a hole that is not tapped. `params["thread.depth"]` holds the length parameter. A
+  modeled thread is copied as a hole at the minor diameter plus an internal `thread` step for each position when its
+  faces start at the mouth and, for a thread over part of the hole, end at `depth`.
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
-- `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item (`worldGeometry`), else
-  `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets
+- `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item, or the one
+  `SketchPointHolePositionDefinition.sketchPoint` (`worldGeometry`), else `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets
   `position_refs` (one measured reference per point, slot `positions.<n>`) and no `sketch_token`, `sketch` or
   `point_tokens`, so the size probe leaves the sketch alone. When a point cannot be brought in, the hole is marked
   `foreign`. A hole placed on a face, plane or edge of another component (the `planarEntity`, `edge`, `face` and similar
@@ -789,7 +803,8 @@ against `samples`.
   that sketch (`Sketch.transform`, the keys of a profile's `frame`), so a point's sketch coordinates can be told from
   its position; absent when it cannot be read. The Orca output uses it to let hole centres follow sizes.
   `reference` (optional): what that sketch sits on, the same record as a profile's `reference`
-  (`Sketch.referencePlane`); absent when Fusion does not give it. The Orca output marks the sizes that may move it.
+  (`Sketch.referencePlane`); absent when Fusion does not give it (Fusion 2706 gives none for some sketches on a face).
+  The Orca output marks the sizes that may move it; a hole sketch without it counts as one on a face of the part.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity", ... }` with the record of the face or body the hole goes up to (`entity_type`, `plane`, `face_point`,
   `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an
@@ -1236,13 +1251,14 @@ order (empty when one cannot be read, since a gap would shift the order).
   `threadInfo` members, except `right_hand` (on the feature). Lengths in mm; each is null when it cannot be read.
   `angle_deg` is null when the API gives none: the profile name then decides (metric and Unified are 60 degrees).
 - `full_length` (`isFullLength`), `length` (`threadLength`) and `offset` (`threadOffset`); `params` has the length and
-  offset parameters.
+  offset parameters. Fusion uses the length and the offset only for a thread that is not full length, and may give
+  none for a full length one; a full length thread needs neither.
 - `faces`: one entry per `inputCylindricalFaces` item (`inputCylindricalFace` when the collection is missing). A cylinder gives `origin`, `axis`, `radius`, `span` (the end vertices'
   distance along the axis from `origin`), `face_point` and `outward` (true when its normal points away from the axis:
   a bolt; false for a hole wall); another surface only `surface` and `face_point`. A face of another component is
   `foreign`.
 - `made_span` (after the step): the same span for the faces the thread made; it tells which end a thread over part of the
-  length starts at.
+  length starts at, and the faces of a full length thread must reach both ends.
 
 The translator writes a recipe `thread` for a metric or Unified thread with a pitch of 0.2 to 10 mm, at most 100 turns
 in all and 8 threads, and leaves other profiles, tapered threads and a thread inside a tool body out as gaps
@@ -2623,7 +2639,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | A flipped one sided extrude stores a negative distance | `end_offset`; the Extrude directions test |
 | Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude/taper.py`; the Extrude directions test |
 | `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
-| Revolve turning sense | `start_face_normal`; the Turned knob test |
+| Revolve turning sense | `start_face_normal`, `end_face_normal`, `made_box`; the Turned knob test, hand check RC1 |
 | Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; the Holes test |
 | `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; the Bin test |
 | `entityToken` of a body stays the same across marker positions | a token that changes makes the translator refuse the capture; the Combine test |
