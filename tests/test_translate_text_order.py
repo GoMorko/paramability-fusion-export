@@ -9,7 +9,7 @@ from tests.translator_helpers import load_capture, steps_of
 
 from lib.translator import translate
 from lib.translator.extrude.order import touching_order
-from lib.translator.extrude.side import SidePlan
+from lib.translator.extrude.side import RecipeSide
 
 LID = "emboss_lid_outline"
 EMBOSS = 3
@@ -95,7 +95,7 @@ def _plain_order(units):
 class SearchTest(unittest.TestCase):
     def test_the_order_matches_the_plain_search_on_random_layouts(self):
         rng = random.Random(3)
-        sides = [SidePlan("oneSide", 1, 2.0, 0.0), SidePlan("oneSide", -1, 2.0, 0.0)]
+        sides = [RecipeSide("oneSide", 1, 2.0, 0.0), RecipeSide("oneSide", -1, 2.0, 0.0)]
         for _ in range(60):
             boxes = [(rng.randint(0, 12), rng.randint(0, 12), rng.randint(1, 4), rng.randint(1, 4))
                      for _ in range(rng.randint(2, 9))]

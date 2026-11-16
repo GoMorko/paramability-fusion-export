@@ -1,172 +1,84 @@
-"""The sides of an extrude: the direction of each, how it ends and its length."""
-import math
-
+"""The sides of an extrude as the recipe writes them. The shared reader (`design_model/steps/extrude.py`) gives how
+each side ends, which way it goes and how long it is; this module turns each side into a `RecipeSide`:
+its extent, its length and taper as values that follow sizes, and the recipe's own limits (no taper on a cut through
+all both ways, no two sided intersect, a taper under `MAX_TAPER_DEG`)."""
 from ...capture_model import gap_hints
+from ...design_model.problem import is_problem
+from ...design_model.steps import extrude as dm
 from ...geometry import vec
 from .. import values
 from ..result import Refusal
-from .common import LENGTH_TOL, SIGN_TOL, UNREADABLE, parallel, sign_of
 from .reach import distance_quantity, keep_reaches_positive, reach_quantity
-from .side import SidePlan
+from .side import RecipeSide
 from .taper import taper_degrees, taper_quantity
 
 
-def _fits(sign, rel_end, reach, other):
-    """True when a face at `rel_end` can lie in an extrude that goes `reach` along `sign` and `other` the other way."""
-    limit = reach if sign_of(rel_end) == sign else other
-    return abs(rel_end) <= limit + LENGTH_TOL
-
-
-def _choose_sign(ctx, geometric, rel_end, reach=None, other=None):
-    """Direction (+1 along the sketch normal, -1 against it): the measured end face wins over the stored sign.
-
-    A two sided extrude passes `reach` (this side) and `other` (the other side): its end faces lie on both sides, so
-    the measured face turns the direction only when it fits the turned extrude and not the stored one."""
-    if rel_end is None or abs(rel_end) < SIGN_TOL:
-        return geometric
-    measured = sign_of(rel_end)
-    if measured != geometric and reach is not None and other is not None and (
-            _fits(geometric, rel_end, reach, other) or not _fits(-geometric, rel_end, reach, other)):
-        return geometric
-    if measured != geometric:
-        ctx.note("Fusion stored the extrude direction two ways; the measured end of the extrude was used.")
-    return measured
-
-
-def _reach_of(side):
-    """How far a side of a two sided extrude can reach from the sketch plane, or None when that is not known here."""
-    kind = (side or {}).get("kind")
-    if kind == "distance" and isinstance(side.get("distance"), (int, float)):
-        return abs(float(side["distance"]))
-    return math.inf if kind in ("throughAll", "all") else None
-
-
-def _is_through(side):
-    return side is not None and side.get("kind") in ("throughAll", "all")
+def _from_problem(found):
+    return Refusal(found.words, cause=found.cause)
 
 
 def _through_both(ctx, item, sides):
-    """The plan of a cut through all both ways, or a Refusal when a side is tapered or its taper cannot be read.
-    `sides` holds each side with the parameter path of its taper, which is pinned: a taper of zero cannot follow a
-    size. A side recorded without a taper (older exports) has none."""
-    for side, path in sides:
-        taper = side.get("taper_deg", 0.0)
-        if taper is None:
-            return Refusal(UNREADABLE)
-        if taper:
+    """The plan of a cut through all both ways, or a Refusal when a side is tapered. The taper of each side is
+    pinned: a taper of zero cannot follow a size."""
+    for side in sides:
+        if side.taper:
             return Refusal("A tapered cut through all both ways is not copied yet.", cause=gap_hints.TAPER_CUT_BOTH)
-        values.pin(ctx, item, path, "a taper of zero cannot follow it")
-    return [SidePlan("through", 1, None, 0.0)]
+        values.pin(ctx, item, side.taper_path, "a taper of zero cannot follow it")
+    return [RecipeSide("through", 1, None, 0.0, read=sides[0])]
+
+
+def _recipe_side(ctx, item, data, side, z, plane_q, shift_q):
+    """The `RecipeSide` of one side with a distance, through all or up to a face or plane, or a Refusal."""
+    taper = taper_degrees(side.taper)
+    if isinstance(taper, Refusal):
+        return taper
+    if side.kind == dm.THROUGH:
+        return RecipeSide("through-one", side.sign, None, taper,
+                        taper_q=taper_quantity(ctx, item, side.taper_path, taper), adjusts=True, read=side)
+    taper_q = taper_quantity(ctx, item, side.taper_path, taper)
+    if side.kind == dm.DISTANCE:
+        given = (data.get(side.which) or {}).get("quantity")
+        return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, read=side,
+                        q=given or distance_quantity(ctx, item, side.path, side.value))
+    values.pin(ctx, item, side.offset_path, "it sets how far %s reaches" % item.get("name", "a step"))
+    return RecipeSide("oneSide", side.sign, side.length.n, taper, taper_q=taper_q, adjusts=True, reaches=True,
+                    read=side, q=reach_quantity(ctx, item, side.which, side.reach.record, z, side.reach.distance,
+                                                side.offset, plane_q, shift_q))
 
 
 def plan_sides(item, data, frame, shift_q, combine, ctx, plane_q):
-    """The sides to extrude, as `SidePlan` records; or a Refusal.
+    """The sides to extrude, as `RecipeSide` records; or a Refusal.
 
-    `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
-    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end. One
-    that carries `quantity` (a `Quantity`) writes that for its distance instead of a parameter's.
+    `shift_q` is where the extrude starts along the sketch normal (`reach.start_shift`) and `plane_q` the move of the
+    sketch plane. A distance side that carries `quantity` (a `Quantity`, from a step written again as an extrude)
+    writes that for its distance instead of a parameter's.
     """
-    extent_type = data.get("extent_type", "one")
-    if extent_type not in ("one", "two", "symmetric"):
-        return Refusal("This extrude sets its length in a way that is not copied yet.")
-    shift = shift_q.n
-    rel_end = data.get("end_offset")
-    if rel_end is not None:
-        rel_end = rel_end - shift
+    read = dm.read_sides(data, frame, shift_q.n)
+    if is_problem(read):
+        return _from_problem(read)
+    first = read[0]
+    if first.kind == dm.THROUGH_BOTH:
+        return _through_both(ctx, item, read)
+    if first.kind == dm.SYMMETRIC:
+        taper = taper_degrees(first.taper)
+        if isinstance(taper, Refusal):
+            return taper
+        half = distance_quantity(ctx, item, first.path, first.value)
+        return [RecipeSide("symmetric", 1, first.length.n, taper,
+                         taper_q=taper_quantity(ctx, item, first.taper_path, taper),
+                         q=half.scaled(first.scale) if first.scale != 1.0 else half, read=first)]
+    if len(read) == 2 and combine == "intersect":
+        return Refusal("Two sided intersect extrudes are not copied yet.")
     z = vec.unit(frame["z"])
-    origin = vec.add(frame["origin"], vec.scale(z, shift))
+    out = []
+    for side in read:
+        entry = _recipe_side(ctx, item, data, side, z, plane_q, shift_q)
+        if isinstance(entry, Refusal):
+            return entry
+        out.append(entry)
+    if any(side.turned for side in read):
+        ctx.note("Fusion stored the extrude direction two ways; the measured end of the extrude was used.")
+    keep_reaches_positive(ctx, item, out)
+    return out
 
-    def one_side(side, which, forced_sign=None, measured=True, other=None):
-        kind = (side or {}).get("kind")
-        taper = taper_degrees(side.get("taper_deg", 0.0)) if side else 0.0
-        if isinstance(taper, Refusal):
-            return taper
-        taper_q = None
-        if kind in ("distance", "toEntity"):
-            taper_q = taper_quantity(ctx, item, which + ".taper_deg", taper)
-        end = rel_end if measured else None
-        if kind == "distance":
-            raw = float(side["distance"])
-            if abs(raw) <= 0:
-                return Refusal("This extrude has no length.")
-            sign = forced_sign if forced_sign is not None else side.get("direction")
-            if sign is None:
-                sign = _choose_sign(ctx, sign_of(raw), end, abs(raw), other)
-            return SidePlan("oneSide", sign, abs(raw), taper, taper_q=taper_q,
-                            q=side.get("quantity") or distance_quantity(ctx, item, which + ".distance", raw))
-        if kind in ("throughAll", "all"):
-            positive = side.get("positive", True)
-            if positive is None:
-                return Refusal(UNREADABLE)
-            sign = forced_sign if forced_sign is not None else _choose_sign(
-                ctx, 1 if positive else -1, end, math.inf, other)
-            return SidePlan("through-one", sign, None, taper,
-                            taper_q=taper_quantity(ctx, item, which + ".taper_deg", taper), adjusts=True)
-        if kind == "toEntity":
-            plane = side.get("plane")
-            if not plane:
-                return Refusal("This extrude ends on a surface that is not flat, which is not copied yet.",
-                               cause=gap_hints.EXTRUDE_END_FACE)
-            if not parallel(plane["normal"], z):
-                return Refusal("This extrude ends on a tilted surface, which is not copied yet.",
-                               cause=gap_hints.EXTRUDE_END_FACE)
-            reach = vec.dot(vec.sub(plane["point"], origin), z)
-            if abs(reach) < SIGN_TOL:
-                return Refusal("This extrude ends on the surface it starts from.")
-            sign = forced_sign if forced_sign is not None else _choose_sign(
-                ctx, sign_of(reach), end, abs(reach), other)
-            offset = side.get("offset", 0.0)
-            if offset is None:
-                return Refusal(UNREADABLE)
-            values.pin(ctx, item, which + ".offset", "it sets how far %s reaches" % item.get("name", "a step"))
-            distance = abs(reach) + float(offset)
-            if not distance > 0:
-                return Refusal("This extrude has no length.")
-            return SidePlan("oneSide", sign, distance, taper, taper_q=taper_q, adjusts=True, reaches=True,
-                            q=reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q))
-        return Refusal("This way of setting the extrude length is not copied yet.")
 
-    if extent_type == "symmetric":
-        side = data.get("side_one")
-        if _is_through(side):
-            return _through_both(ctx, item, [(side, "symmetric.taper_deg")])
-        sym = data.get("symmetric")
-        if not sym:
-            return Refusal("This extrude has no readable length.")
-        taper = taper_degrees(sym.get("taper_deg", 0.0))
-        if isinstance(taper, Refusal):
-            return taper
-        full_length = sym.get("full_length", False)
-        if full_length is None:
-            return Refusal(UNREADABLE)
-        factor = 1.0 if full_length else 2.0
-        full = float(sym["distance"]) * factor
-        if not abs(full) > 0:
-            return Refusal("This extrude has no length.")
-        half = distance_quantity(ctx, item, "symmetric.distance", float(sym["distance"]))
-        return [SidePlan("symmetric", 1, abs(full), taper,
-                         taper_q=taper_quantity(ctx, item, "symmetric.taper_deg", taper),
-                         q=half.scaled(factor) if factor != 1.0 else half)]
-
-    if extent_type == "two":
-        one, two = data.get("side_one"), data.get("side_two")
-        if one is None or two is None:
-            return Refusal("This extrude has no readable length.")
-        if _is_through(one) and _is_through(two):
-            return _through_both(ctx, item, [(one, "side_one.taper_deg"), (two, "side_two.taper_deg")])
-        if combine == "intersect":
-            return Refusal("Two sided intersect extrudes are not copied yet.")
-        first = one_side(one, "side_one", other=_reach_of(two))
-        if isinstance(first, Refusal):
-            return first
-        second = one_side(two, "side_two", forced_sign=-first.sign, measured=False)
-        if isinstance(second, Refusal):
-            return second
-        keep_reaches_positive(ctx, item, [first, second])
-        return [first, second]
-
-    side = one_side(data.get("side_one"), "side_one")
-    if isinstance(side, Refusal):
-        return side
-    keep_reaches_positive(ctx, item, [side])
-    return [side]

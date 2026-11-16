@@ -1674,9 +1674,11 @@ one folder per family of steps.
   `geometry.rigid`), `placement.py` (sketch frames to recipe placements), `ref_motion.py` (how places of other
   components move, from the motion file; what is known without it is in `design_model/refs.py`).
 - Handler folders:
-  - `extrude/`: `step.py` holds `handle`. Also `plan.py`, `side.py` (`SidePlan`: the plan of one side), `reach.py`,
-    `reach_motion.py` (a face or plane placed by the probe's measure), `taper.py`, `through.py`, `through_taper.py`,
-    `material.py`, `checks.py`, `built.py`, `order.py`, `common.py`, and `emboss.py` (the Emboss handler).
+  - `extrude/`: `step.py` holds `handle`. Also `plan.py` (the recipe sides from the sides of the shared reader,
+    `design_model/steps/extrude.py`), `side.py` (`RecipeSide`: one side as the recipe writes it), `reach.py` (the
+    start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
+    probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
+    measured checks of the shared reader), `built.py`, `order.py`, `common.py`, and `emboss.py` (the Emboss handler).
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -1849,8 +1851,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   step. The recipe translator turns a `Problem` into a `Refusal` with the same sentence and cause. The Orca output turns
   it into a `Skip` (the cause `refused` when `cause` is None). `is_problem(found)` tells a record from a problem.
 - `steps/`: one reader for each kind of timeline step. A reader gives facts that any output needs. It has no value, no
-  range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. The readers for holes and
-  threads are here. The other kinds follow.
+  range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. There are readers for
+  extrudes, holes and threads, patterns, mirrors, moves and splits, rounds and chamfers, sweeps and lofts.
   - `steps/thread.py`: the thread of a ThreadFeature and the thread of a tapped hole. `spec_of` gives the `Spec` (pitch,
     major and minor diameter, hand) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
     degree form (cause `threadProfile`), for a number that is missing and for a thread that has no usable depth. A
@@ -1875,6 +1877,42 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     `orca_translate/holes.py` and `threads.py`.
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
+- `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
+  (`orca_translate/steps._sides`) read the same sides. Each output then applies its own limits.
+  - `start_of(data, frame)` gives a `Start`. The kind is the sketch plane, an offset, or a flat face or plane
+    (`Target`). `shift` is the signed distance along the sketch normal from the sketch plane to the start. A start on
+    a face that is not flat, on a tilted face, on a curved face of another component, or at a distance from a face
+    gives a `Problem`. The reader does not read in which direction Fusion measures that distance, so it does not
+    guess.
+  - `read_sides(data, frame, shift)` gives one `SidePlan` for each side, or a `Problem`. A `SidePlan` has the kind
+    (`DISTANCE`, `REACH`, `THROUGH`, `THROUGH_BOTH`, `SYMMETRIC`), the capture field of the side (`which`, which is
+    also the start of its parameter paths), the direction (`sign`), the length as a `Quantity` of the number, Fusion's
+    taper in degrees, the face or plane of a `REACH` side and Fusion's offset past it, the measured end face, the
+    direction that Fusion stored, and the number that Fusion stores for the length (`value`, `scale`). Each output
+    makes the length follow the sizes with its own rules.
+  - The direction of one side: the measured end face (`end_offset`) wins over the direction that Fusion stored,
+    because Fusion can store the direction in two ways. An end face nearer than 0.001 mm to the start does not show a
+    direction. A side that has `direction` (a step that the translator writes again as an extrude) goes in that
+    direction. A side to a face or plane goes toward the face or plane, and the measured end face does not turn it.
+    The legacy "all" extent stores no direction. When no end face was measured, its direction is a `Problem`.
+  - The direction of two sides: side two goes against side one. A face or plane of side one or side two sets the
+    direction. If both sides go to faces or planes on the same side of the sketch, the result is a `Problem`. Else the
+    stored direction of side one stays, and the measured end face turns it only when the face fits the turned sides
+    and does not fit the stored sides. Example: side one is 30 mm up and side two is 10 mm down. A face 8 mm down
+    fits side two, so the direction stays. A face 20 mm down fits only side one turned down, so the direction turns.
+  - The taper of a side that goes to a face is in its parameter only (`<which>.taper_deg`). Without the parameter,
+    the measured side walls must show no taper. Without walls, the end face must have the area of the outline. Else
+    the taper cannot be read.
+  - `end_check(sides)` gives an `EndCheck`: the measured end face is at the end of a side (`AT_END`), on the way of
+    a side but nearer than its end (`SHORT`), or at another place (`ELSEWHERE`). For two sides, the reader compares
+    the face with the side on the same side of the sketch as the face. For a symmetric extrude, it compares the face
+    with half the length. Each output decides what a `SHORT` face of a cut means. A side of a cut that goes out of
+    the part makes no end face, and Fusion then measures a wall that the cut went through. The recipe output accepts
+    the face when a side of the cut passes the whole part (`target_box_before`). The Orca output accepts the face when
+    no material is past the face on its side in the part that it built, or when a side passes the whole part.
+  - `taper_problem`, `leans_problem` and `walls_confirm` compare the taper of the sides with the measured side walls
+    (`side_leans`) or, for one outline, with the area of the end face. `volume_problem` compares the volume of an
+    extrude of text or spline outlines with the outline area times the length. Both outputs use these checks.
 - `tool_chains.py`: the tool bodies of a Combine. This came from `translator/combine/tool_walk.py` (`chain_of`,
   `lineage_chain`, `unseen_change`, `name_of`), `translator/combine/step.py` (the frame part of `tool_move`) and
   `capture_model/tool_items.py` (`component_frame`). The walk of the recipe and the Orca output both read it:

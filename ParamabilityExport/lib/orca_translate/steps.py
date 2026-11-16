@@ -3,13 +3,15 @@ reason the step is left out of the copy.
 
 Extrude: one side, symmetric and two sides; new body, join, cut and intersect; a distance, an end on a face or
 plane, or through all for a cut or intersect (a join through all ends where the part ends, which no Orca length
-follows). A start offset or a start on a face or plane moves the sketch plane. A taper is a Blind extrude's
+follows). The shared reader (`design_model/steps/extrude.py`) gives where the extrude starts and, per side, how it
+ends, its direction and its length, and the checks against what Fusion measured: the end face (`_end_gap`), the side
+walls (`extents.taper_measured`) and the volume of spline outlines. A start offset or a start on a face or plane moves the sketch plane. A taper is a Blind extrude's
 `taper_deg`, two Blind halves for symmetric and two sided extrudes (`extents` has these rules). Orca's "through all"
 goes both ways from the sketch, so a one way through all becomes Orca's through all only when the part lies on that
 side of the sketch; otherwise a long blind cut.
 A cut or intersect that does not meet the part the copy built (`solid.Solid`) is left out: Orca stops the whole
-rebuild on a cut that removes nothing. A one way cut through all has no measured end, so it goes to the side where its
-outline meets that part when Fusion's stored direction meets none (`toward_material`).
+rebuild on a cut that removes nothing. A one way cut through all whose end Fusion did not measure goes to the side
+where its outline meets that part when Fusion's stored direction meets none (`toward_material`).
 
 An outline of straight lines whose corners follow sizes is built from plane cuts (`outline_cuts`, `_cut_built`)
 instead of drawn, when the extrude has one side without taper.
@@ -22,6 +24,8 @@ import math
 
 from ..capture_model import gap_hints
 from ..design_model import reach, roles
+from ..design_model.problem import is_problem
+from ..design_model.steps import extrude as dm
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
@@ -78,17 +82,6 @@ class _Side:
         return (distance.scaled(-1.0), Quantity(0.0)) if self.flip else (Quantity(0.0), distance)
 
 
-def _sign(value):
-    return 1 if value > 0 else -1
-
-
-def _direction(raw, end_offset, shift):
-    """The travel along the sketch normal: the measured end face wins over the stored sign."""
-    if end_offset is not None and abs(end_offset - shift) > SIDE_TOL:
-        return _sign(end_offset - shift)
-    return _sign(raw)
-
-
 def behind(box, origin, normal, sign):
     """True when part of `box` lies behind the sketch plane (against `sign` along `normal`). An unknown box is taken
     to lie in front."""
@@ -101,31 +94,6 @@ def behind(box, origin, normal, sign):
                 if sign * vec.dot(vec.sub([x, y, z], origin), normal) < -SIDE_TOL:
                     return True
     return False
-
-
-def _length(ctx, item, side, which, origin, z, sign=None):
-    """`(sign, length Quantity)` of a side with a distance or one that reaches to a face or plane, or a Skip. `sign`
-    sets the direction of a second side."""
-    if side.get("kind") == "toEntity":
-        return extents.reach(ctx, item, which, side, origin, z, sign)
-    if side.get("kind") != "distance":
-        return Skip("A two sided extrude is copied only when both sides have a distance or end on a face or plane.",
-                    gap_hints.EXTRUDE_END_FACE)
-    raw = float(side["distance"])
-    if raw == 0:
-        return Skip("This extrude has no length.")
-    return sign if sign is not None else _sign(raw), ctx.quantity(item, which + ".distance", raw).magnitude()
-
-
-def _measured_side(ctx, data, frame, end_offset, sides, operation):
-    """A Skip when the measured end face of a two sided extrude is not where the side on its side of the sketch puts
-    it, else None. `sides` are the `(length Quantity, way, taper)` of both sides; each side is checked against the end
-    on its own side only, never against the end of the other side."""
-    if abs(end_offset) <= SIDE_TOL:
-        return Skip("The measured end of this extrude does not match its length, so it is not copied.")
-    length, way, taper = next(side for side in sides if side[1] == _sign(end_offset))
-    return extents.measured_gap(data, 0.0, length.n, way, operation,
-                                _holds(ctx, data, frame, 0.0, way, taper))
 
 
 def _holds(ctx, data, frame, shift, sign, taper):
@@ -158,134 +126,110 @@ def _past(box, origin, normal, sign, length):
     return length > max(sign * vec.dot(vec.sub(c, origin), vec.unit(normal)) for c in corners) + SIDE_TOL
 
 
+def _length(ctx, item, side, z):
+    """The length of a side with a distance or one that reaches to a face or plane, as a Quantity."""
+    if side.kind == dm.REACH:
+        return extents.reach(ctx, item, side, z)
+    return ctx.quantity(item, side.path, side.value).magnitude()
+
+
+def _end_gap(ctx, data, frame, shift, read, operation):
+    """A Skip when the measured end face is not where the sides put it (`dm.end_check`), else None.
+
+    A side of a cut that leaves the part before its end makes no end face of its own: the face Fusion measures is then
+    a wall the cut went through, nearer than the end. A nearer face is accepted where the cut leaves the part:
+    `holds(low, high)` (`_holds`) must find no material inside the cut's outlines past the face on its side, or (for
+    two sides) a side must end past the whole Fusion part. A face at no side's end, or past it, is not accepted."""
+    found = dm.end_check(read)
+    if found is None or found.fact == dm.AT_END:
+        return None
+    if found.fact == dm.SHORT and operation == "cut":
+        near = max(0.0, found.at) + SIDE_TOL
+        holds = _holds(ctx, data, frame, shift, found.way, found.side.taper)
+        if not holds(*((near, found.length) if found.way > 0 else (-found.length, -near))):
+            return None
+        origin = vec.add(frame["origin"], vec.scale(vec.unit(frame["z"]), shift))
+        box = data.get("target_box_before")
+        if len(read) == 2 and any(_past(box, origin, frame["z"], side.sign, side.length.n)
+                                  for side in read if side.length is not None):
+            return None
+    return Skip("The measured end of this extrude does not match its length, so it is not copied.")
+
+
 def _sides(ctx, item, data, frame, shift):
-    """The `_Side`s of an extrude (one, or two blind ones for a tapered extrude to both sides), or a Skip. A one way
-    cut or intersect through all with no measured end goes to the side where its outlines meet the part the copy
-    built (`toward_material`)."""
+    """The `_Side`s of an extrude (one, or two blind ones for a tapered extrude to both sides), or a Skip. The shared
+    reader (`dm.read_sides`) gives how each side ends, its direction and its length; this function keeps to what Orca
+    can build. A one way cut or intersect through all whose end Fusion did not measure goes to the side where its
+    outlines meet the part the copy built (`toward_material`)."""
     kind = data.get("extent_type", "one")
-    end_offset = data.get("end_offset")
     z = vec.unit(frame["z"])
     origin = vec.add(frame["origin"], vec.scale(z, shift))
-    before = data.get("target_box_before")
     operation = data.get("operation")
+    one, two = data.get("side_one"), data.get("side_two")
 
     def through(side):
         return (side or {}).get("kind") in ("throughAll", "all")
 
-    def untapered(*sides):
-        tapers = [(side or {}).get("taper_deg", 0.0) for side in sides]
-        if any(t is None for t in tapers):
-            return Skip(_UNREAD)
-        if any(tapers):
-            return Skip(_TAPER_THROUGH, causes.TAPER_EXTENT)
-        return None
-
     # A join or new body through all ends where Fusion's part ends, which moves with the sizes; Orca's through all
     # and a long blind extrude would add material far past it.
-    if operation not in ("cut", "intersect") and (
-            through(data.get("side_one")) or (kind == "two" and through(data.get("side_two")))):
+    if operation not in ("cut", "intersect") and (through(one) or (kind == "two" and through(two))):
         return Skip(_THROUGH_ADDS, causes.THROUGH_ALL_ADDS)
+    if kind == "two" and one and two and not (through(one) and through(two)) and shift:
+        return Skip("A two sided extrude that starts away from its sketch is not copied yet.")
 
-    if kind == "symmetric":
-        side = data.get("side_one")
-        if through(side):
-            return untapered(side) or [_Side(ExtrudeEnd.THROUGH_ALL)]
-        sym = data.get("symmetric")
-        if not sym or not isinstance(sym.get("distance"), (int, float)):
-            return Skip("This extrude has no readable length.")
-        taper = sym.get("taper_deg", 0.0)
-        if taper is None or sym.get("full_length") is None:
-            return Skip(_UNREAD)
-        q = ctx.quantity(item, "symmetric.distance", float(sym["distance"])).magnitude()
-        full, half = (q, q.scaled(0.5)) if sym["full_length"] else (q.scaled(2.0), q)
-        if taper:
-            return [_Side(ExtrudeEnd.BLIND, flip=flip, distance=half, taper=taper, taper_path="symmetric.taper_deg")
+    read = dm.read_sides(data, frame, shift)
+    if is_problem(read):
+        return extents.skip_of(read)
+    first = read[0]
+    if first.kind == dm.THROUGH_BOTH:
+        if any(side.taper for side in read):
+            return Skip(_TAPER_THROUGH, causes.TAPER_EXTENT)
+        return [_Side(ExtrudeEnd.THROUGH_ALL)]
+
+    if first.kind == dm.SYMMETRIC:
+        q = ctx.quantity(item, first.path, first.value).magnitude()
+        full, half = (q, q.scaled(0.5)) if first.scale == 1.0 else (q.scaled(2.0), q)
+        gap = _end_gap(ctx, data, frame, shift, read, operation)
+        if gap is not None:
+            return gap
+        if first.taper:
+            return [_Side(ExtrudeEnd.BLIND, flip=flip, distance=half, taper=first.taper, taper_path=first.taper_path)
                     for flip in (False, True)]
         return [_Side(ExtrudeEnd.SYMMETRIC, distance=full)]
 
-    one, two = data.get("side_one"), data.get("side_two")
-    if kind == "two":
-        if not one or not two:
-            return Skip("This extrude has no readable length.")
-        if through(one) and through(two):
-            return untapered(one, two) or [_Side(ExtrudeEnd.THROUGH_ALL)]
-        if shift:
-            return Skip("A two sided extrude that starts away from its sketch is not copied yet.")
-        first = _length(ctx, item, one, "side_one", origin, z)
-        if isinstance(first, Skip):
-            return first
-        sign, first = first
-        if one.get("kind") == "distance" and two.get("kind") == "distance" and end_offset is not None \
-                and abs(end_offset) > SIDE_TOL and _sign(end_offset) != sign \
-                and abs(abs(end_offset) - first.n) <= SIDE_TOL \
-                and abs(abs(end_offset) - abs(float(two["distance"]))) > SIDE_TOL:
-            sign = -sign
-        second = _length(ctx, item, two, "side_two", origin, z, -sign)
-        if isinstance(second, Skip):
-            return second
-        second = second[1]
-        tapers = (extents.taper_of(data, one, "side_one"), extents.taper_of(data, two, "side_two"))
-        if None in tapers:
-            return Skip(_UNREAD)
-        if "toEntity" in (one.get("kind"), two.get("kind")) and end_offset is not None:
-            problem = _measured_side(ctx, data, frame, end_offset,
-                                     ((first, sign, tapers[0]), (second, -sign, tapers[1])), operation)
-            if problem:
-                return problem
-        if any(tapers):
-            if operation == "intersect":
-                return Skip("A tapered intersect to both sides is not copied to Orca yet.", causes.TAPER_EXTENT)
-            return [_Side(ExtrudeEnd.BLIND, flip=(sign < 0) == (n == 0), distance=length, taper=taper,
-                          taper_path=path)
-                    for n, (length, taper, path) in enumerate(((first, tapers[0], "side_one.taper_deg"),
-                                                               (second, tapers[1], "side_two.taper_deg")))]
-        if sign < 0:
-            first, second = second, first
-        return [_Side(ExtrudeEnd.TWO_SIDED, distance=first, distance2=second)]
-
-    if not one:
-        return Skip("This extrude has no readable length.")
-    if through(one):
-        refused = untapered(one)
-        if refused:
-            return refused
-        if one.get("kind") == "all":
-            return [_Side(ExtrudeEnd.THROUGH_ALL)]
-        sign = 1 if one.get("positive", True) else -1
-        if end_offset is not None and abs(end_offset - shift) > SIDE_TOL:
-            sign = _sign(end_offset - shift)
-        elif operation in ("cut", "intersect"):
-            sign = toward_material(ctx, item, _extrude_tools(data.get("profiles") or [], shift), sign)
-        if not behind(before, origin, frame["z"], sign):
-            return [_Side(ExtrudeEnd.THROUGH_ALL)]
-        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=Quantity(LONG), through=True)]
-    taper = extents.taper_of(data, one, "side_one")
-    if taper is None:
-        return Skip(_UNREAD)
-    if one.get("kind") == "distance":
-        found = _length(ctx, item, one, "side_one", origin, z)
-        if isinstance(found, Skip):
-            return found
-        sign = _direction(float(one["distance"]), end_offset, shift)
-        if (data.get("start") or {}).get("kind") == "fromEntity":
-            gap = extents.measured_gap(data, shift, found[1].n, sign, operation,
-                                       _holds(ctx, data, frame, shift, sign, taper))
-            if gap is not None:
-                return gap
-        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=found[1], taper=taper,
-                      taper_path="side_one.taper_deg")]
-    if one.get("kind") == "toEntity":
-        found = extents.reach(ctx, item, "side_one", one, origin, z)
-        if isinstance(found, Skip):
-            return found
-        sign, length = found
-        gap = extents.measured_gap(data, shift, length.n, sign, operation,
-                                   _holds(ctx, data, frame, shift, sign, taper))
+    if len(read) == 2:
+        if any(side.kind == dm.THROUGH for side in read):
+            return Skip("A two sided extrude is copied only when both sides have a distance or end on a face or plane.",
+                        gap_hints.EXTRUDE_END_FACE)
+        lengths = [_length(ctx, item, side, z) for side in read]
+        gap = _end_gap(ctx, data, frame, shift, read, operation)
         if gap is not None:
             return gap
-        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=length, taper=taper,
-                      taper_path="side_one.taper_deg")]
-    return Skip("This way of setting the extrude length is not copied yet.")
+        if any(side.taper for side in read):
+            if operation == "intersect":
+                return Skip("A tapered intersect to both sides is not copied to Orca yet.", causes.TAPER_EXTENT)
+            return [_Side(ExtrudeEnd.BLIND, flip=side.sign < 0, distance=length, taper=side.taper,
+                          taper_path=side.taper_path) for side, length in zip(read, lengths)]
+        if first.sign < 0:
+            lengths.reverse()
+        return [_Side(ExtrudeEnd.TWO_SIDED, distance=lengths[0], distance2=lengths[1])]
+
+    if first.kind == dm.THROUGH:
+        if first.taper:
+            return Skip(_TAPER_THROUGH, causes.TAPER_EXTENT)
+        sign = first.sign
+        measured = first.measured is not None and abs(first.measured) > dm.LENGTH_TOL
+        if not measured and operation in ("cut", "intersect"):
+            sign = toward_material(ctx, item, _extrude_tools(data.get("profiles") or [], shift), sign)
+        if not behind(data.get("target_box_before"), origin, frame["z"], sign):
+            return [_Side(ExtrudeEnd.THROUGH_ALL)]
+        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=Quantity(LONG), through=True)]
+    length = _length(ctx, item, first, z)
+    gap = _end_gap(ctx, data, frame, shift, read, operation)
+    if gap is not None:
+        return gap
+    return [_Side(ExtrudeEnd.BLIND, flip=first.sign < 0, distance=length, taper=first.taper,
+                  taper_path=first.taper_path)]
 
 
 def _reach(sign):
@@ -432,6 +376,9 @@ def extrude(ctx, item):
     refused = extents.taper_measured(data, sides, len(profiles))
     if refused is not None:
         return refused
+    found = dm.volume_problem(data, dm.read_sides(data, frame, shift), operation, profiles, False)
+    if found is not None:
+        return Skip(found.words)
     start = data.get("start") or {}
     moved = ctx.quantity(item, "start.offset", shift).reads if start.get("kind") == "offset" else ()
 

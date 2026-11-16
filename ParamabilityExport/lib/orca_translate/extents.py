@@ -1,5 +1,7 @@
 """Extrude extents of the Orca copy beyond a plain distance: an end on a face or plane ("To"), a start on a face or
-plane ("From"), and a taper. `steps.extrude` asks these; each answer is a value to write or a `Skip`.
+plane ("From"), and a taper. `steps.extrude` asks these; each answer is a value to write or a `Skip`. The shared
+reader (`design_model/steps/extrude.py`) reads the start, the sides and the planes; this module makes them follow sizes
+where Orca can, and words the reader's problems for the Orca copy (`skip_of`).
 
 Orca's Extrude ends at a distance (blind, symmetric, two sides) or goes through all. Its "up to face" names a face by
 Orca's own numbering of the body it rebuilt, which the copy cannot know, so a face or plane becomes a distance:
@@ -10,7 +12,7 @@ Orca's own numbering of the body it rebuilt, which the copy cannot know, so a fa
   follows what it is built on: an origin plane stays, an offset plane moves with its own distance and with its base,
   and a face follows the end of a copied extrude it lies on (`solid.Prism.ends`). Sizes that may move the plane in any
   other way leave the length a number, and those sizes are marked.
-- From a face or plane (`start_shift`): the sketch plane is moved to that plane. Orca cannot move a sketch plane with
+- From a face or plane (`start`): the sketch plane is moved to that plane. Orca cannot move a sketch plane with
   a variable, so the shift is a number and the sizes that move the face are marked.
 - Limits (`guard`): Orca variables have no ranges, and past some values Orca builds these extrudes wrong without an
   error: a "To" length at zero or below extrudes the other way, and a taper that shrinks a side of its outline to
@@ -32,11 +34,9 @@ from ..geometry import vec
 from ..geometry.footprint import arc_span, is_full, polyline
 from ..orca_recipe.enums import SketchShape
 from ..params.expressions.text import format_number
-from ..translator.extrude.checks import check_taper
-from ..translator.extrude.common import COMBINE, parallel
-from ..translator.extrude.side import SidePlan
-from ..translator.extrude.taper import FUSION_TAPER_SIGN
 from ..design_model.reach import construction_sizes, offset_param, on_part, reach_sizes
+from ..design_model.problem import is_problem
+from ..design_model.steps import extrude as dm
 from . import causes, limits
 from ..design_model.values import Quantity
 from .skip import Skip
@@ -44,7 +44,7 @@ from .solid import Prism
 
 # A plane this close to where the extrude starts (mm) gives it no length.
 _SIGN_TOL = 1e-9
-# Two measured distances (mm) that agree within this are the same.
+# A point this near (mm) to a shape lies on it.
 _LENGTH_TOL = 1e-3
 # A plane offset this close (mm) to its measured distance from its base has that sign.
 _OFFSET_TOL = 1e-5
@@ -224,120 +224,59 @@ def _touches(shape, point):
 
 # ---- From and To --------------------------------------------------------------------------------------------------
 
-def _flat_target(record, z, what):
-    """The plane of a face or plane an extrude starts from or reaches to, or a Skip."""
-    if record.get("foreign"):
-        return Skip("This extrude %s a curved face of another component, or one whose place could not be read, "
-                    "which is not copied to Orca." % what, gap_hints.OTHER_COMPONENT)
-    plane = record.get("plane")
-    if not isinstance(plane, dict) or not plane.get("point") or not plane.get("normal"):
-        return Skip("This extrude %s a surface that is not flat, which is not copied to Orca." % what,
-                    gap_hints.EXTRUDE_END_FACE)
-    if not parallel(plane["normal"], z):
-        return Skip("This extrude %s a tilted surface, which is not copied to Orca." % what,
-                    gap_hints.EXTRUDE_END_FACE)
-    return plane
+# The Orca texts of the shared reader's problems that name what the copy leaves out: `what` is "starts from" or
+# "reaches to".
+_ORCA_WORDS = {
+    dm.FOREIGN: ("This extrude %s a curved face of another component, or one whose place could not be read, which is "
+                 "not copied to Orca.", gap_hints.OTHER_COMPONENT),
+    dm.NOT_FLAT: ("This extrude %s a surface that is not flat, which is not copied to Orca.", gap_hints.EXTRUDE_END_FACE),
+    dm.TILTED: ("This extrude %s a tilted surface, which is not copied to Orca.", gap_hints.EXTRUDE_END_FACE),
+    dm.ON_START: ("This extrude ends on the plane it starts from.", gap_hints.REFUSED),
+    dm.SAME_SIDE: ("Both sides of this extrude end on the same side of its sketch, which is not copied to Orca.",
+                   gap_hints.EXTRUDE_END_FACE),
+    dm.START_OFFSET: ("This extrude starts at a distance from a face or plane, which is not copied to Orca yet.",
+                      gap_hints.EXTRUDE_END_FACE),
+    dm.START_KIND: ("This extrude starts in a way that is not copied to Orca yet.", gap_hints.REFUSED),
+    dm.EXTENT_KIND: ("This way of setting the extrude length is not copied yet.", gap_hints.REFUSED),
+    dm.UNREADABLE: (_UNREAD, gap_hints.REFUSED),
+}
 
 
-def start_shift(ctx, item, start, frame):
-    """How far along the sketch normal (mm) an extrude that starts from a face or plane starts from its sketch, or a
-    Skip. The sizes that move that face or plane are marked: Orca keeps the sketch plane in place."""
-    z = vec.unit(frame["z"])
-    plane = _flat_target(start, z, "starts from")
-    if isinstance(plane, Skip):
-        return plane
-    held = ((item.get("data") or {}).get("params") or {}).get("start.offset")
-    if isinstance(held, dict) and abs(float(held.get("value") or 0.0)) > _SIGN_TOL:
-        return Skip("This extrude starts at a distance from a face or plane, which is not copied to Orca yet.",
-                    gap_hints.EXTRUDE_END_FACE)
-    move = plane_move(ctx, item, start, z, "starts from")
-    if move is not None and move.text is not None:
-        ctx.doubt(move.reads, "%s starts from a face or plane that moves with it, and Orca cannot move a sketch plane "
-                  "with a variable" % _label(item))
-    return vec.dot(vec.sub(plane["point"], frame["origin"]), z)
+def skip_of(found, what="reaches to"):
+    """The Skip of a `Problem` of the shared extrude reader (`design_model.steps.extrude`). `what` says what the
+    extrude does with a face or plane the problem is about ("starts from", "reaches to")."""
+    words, cause = _ORCA_WORDS.get(found.code, (found.words, found.cause or gap_hints.REFUSED))
+    return Skip(words % what if "%s" in words else words, cause)
 
 
 def start(ctx, item, data, frame):
-    """How far along the sketch normal (mm) the extrude starts from its sketch plane, or a Skip."""
-    start = data.get("start") or {"kind": "profilePlane"}
-    kind = start.get("kind")
-    if kind in (None, "profilePlane"):
-        return 0.0
-    if kind == "offset":
-        shift = float(start.get("offset") or 0.0)
-        if shift:
-            ctx.doubt(ctx.quantity(item, "start.offset", shift).reads,
-                      "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))
-        return shift
-    if kind == "fromEntity":
-        return start_shift(ctx, item, start, frame)
-    return Skip("This extrude starts in a way that is not copied to Orca yet.")
+    """How far along the sketch normal (mm) the extrude starts from its sketch plane (`dm.start_of`), or a Skip. The
+    sizes that move a start offset, or the face or plane it starts from, are marked: Orca keeps the sketch plane in
+    place."""
+    found = dm.start_of(data, frame)
+    if is_problem(found):
+        return skip_of(found, "starts from")
+    if found.kind == dm.OFFSET and found.shift:
+        ctx.doubt(ctx.quantity(item, found.path, found.shift).reads,
+                  "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))
+    if found.kind == dm.FACE:
+        move = plane_move(ctx, item, found.target.record, vec.unit(frame["z"]), "starts from")
+        if move is not None and move.text is not None:
+            ctx.doubt(move.reads, "%s starts from a face or plane that moves with it, and Orca cannot move a sketch "
+                      "plane with a variable" % _label(item))
+    return found.shift
 
 
-def taper_of(data, side, which):
-    """Fusion's taper of a side in degrees: from the side, else from its parameter (a side that reaches to a face
-    keeps it there); None when it cannot be read. Without an angle anywhere, the measured walls and end face must show
-    no taper."""
-    if "taper_deg" in (side or {}):
-        return side["taper_deg"]
-    held = (data.get("params") or {}).get(which + ".taper_deg")
-    if isinstance(held, dict):
-        return float(held.get("value") or 0.0)
-    leans = data.get("side_leans")
-    if isinstance(leans, list) and any(isinstance(n, (int, float)) and abs(n) > 1e-4 for n in leans):
-        return None
-    start, end = data.get("profile_area"), data.get("end_area")
-    if isinstance(start, (int, float)) and isinstance(end, (int, float)) and abs(end - start) > 1e-6 * abs(start):
-        return None
-    return 0.0
-
-
-def reach(ctx, item, which, side, origin, z, sign=None):
-    """`(sign, length)` of the side `which` ("side_one", "side_two") that reaches to a face or plane: the direction
-    along the unit sketch normal `z` and the length from `origin` (where the extrude starts) as a Quantity that follows
-    the plane where the copy can; or a Skip. A side whose direction is set by the other side passes `sign`."""
-    plane = _flat_target(side, z, "reaches to")
-    if isinstance(plane, Skip):
-        return plane
-    to = vec.dot(vec.sub(plane["point"], origin), z)
-    if abs(to) < _SIGN_TOL:
-        return Skip("This extrude ends on the plane it starts from.")
-    found = 1 if to > 0 else -1
-    if sign is not None and found != sign:
-        return Skip("Both sides of this extrude end on the same side of its sketch, which is not copied to Orca.",
-                    gap_hints.EXTRUDE_END_FACE)
-    if side.get("offset") is None:
-        return Skip(_UNREAD)
-    offset = ctx.quantity(item, which + ".offset", float(side["offset"]))
-    if not abs(to) + offset.n > 0:
-        return Skip("This extrude has no length.")
-    move = plane_move(ctx, item, side, z, "reaches to")
-    length = Quantity(abs(to)).plus(offset)
+def reach(ctx, item, side, z):
+    """The length of a side that reaches to a face or plane (a `dm.SidePlan` of kind REACH) as a `Reach` that follows
+    the plane where the copy can: the measured distance from where the extrude starts to the plane along the unit
+    sketch normal `z`, plus Fusion's offset."""
+    offset = ctx.quantity(item, side.offset_path, side.offset)
+    move = plane_move(ctx, item, side.reach.record, z, "reaches to")
+    length = Quantity(abs(side.reach.distance)).plus(offset)
     if move is not None:
-        length = length.plus(move.scaled(found))
-    return found, Reach(length.n, length.text, length.reads)
-
-
-def measured_gap(data, shift, length, sign, operation, holds=None):
-    """A Skip when the measured end face of a one sided extrude (or of the side of a two sided one that it lies on)
-    is not where `length` (mm, from the start at `shift` along `sign`) puts it, else None.
-
-    A cut that leaves the part before its end makes no end face of its own: the face Fusion measures is then a wall it
-    cut through, nearer than `length`. A nearer face is accepted only where the cut leaves the part there:
-    `holds(low, high)` tells whether the part may have material inside the cut's outlines between two heights from
-    the start (negative heights against the normal), and it must find none past the measured face. Without `holds`,
-    and for a cut that ends inside material, the measured face must lie at `length`."""
-    end = data.get("end_offset")
-    if end is None:
-        return None
-    measured = (end - shift) * sign
-    if abs(measured - length) <= _LENGTH_TOL:
-        return None
-    if operation == "cut" and measured < length and holds is not None:
-        near = max(0.0, measured) + _LENGTH_TOL
-        if not holds(*((near, length) if sign > 0 else (-length, -near))):
-            return None
-    return Skip("The measured end of this extrude does not match its length, so it is not copied.")
+        length = length.plus(move.scaled(side.sign))
+    return Reach(length.n, length.text, length.reads)
 
 
 # ---- limits -------------------------------------------------------------------------------------------------------
@@ -415,13 +354,13 @@ def taper(ctx, item, path, deg, flip, outline, length):
 def taper_measured(data, sides, outlines):
     """A Skip when the tapers of an extrude's sides (`steps._Side`: `taper` in Fusion's degrees, `flip`) disagree
     with the walls Fusion measured (`side_leans`, else the end face area of one outline), or cannot be checked; else
-    None. The same check as for a recipe (`translator.extrude.checks.check_taper`)."""
+    None. The same check as for a recipe (`design_model.steps.extrude.taper_problem`)."""
     if not any(side.taper for side in sides):
         return None
-    plan = [SidePlan("oneSide", -1 if side.flip else 1, side.distance.n, FUSION_TAPER_SIGN * side.taper)
+    plan = [dm.SidePlan(dm.DISTANCE, "", -1 if side.flip else 1, Quantity(side.distance.n), side.taper)
             for side in sides]
-    refusal = check_taper(plan, data, COMBINE.get(data.get("operation"), "add"), outlines)
-    return Skip(refusal.reason) if refusal is not None else None
+    found = dm.taper_problem(plan, data, data.get("operation"), outlines)
+    return Skip(found.words) if found is not None else None
 
 
 def _ends(curve):

@@ -64,7 +64,7 @@ def handle(item, ctx):
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
     first_frame = profiles[0]["frame"]
-    shift_q = start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
+    shift_q = start_shift(data, first_frame, ctx, item, plane_q)
     if isinstance(shift_q, Refusal):
         return shift_q
     shift = shift_q.n
@@ -75,9 +75,9 @@ def handle(item, ctx):
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
     # A cut through all may turn to the side its outlines meet the part on: the taper check reads that side's walls.
     cut_toward_material(ctx, plan, data, profiles, shift, combine)
-    for check in (check_measured_length(plan, data, shift, start, z0, combine),
-                  check_taper(plan, data, combine, picked),
-                  volume_refusal(data, plan, combine, sources, thin)):
+    for check in (check_measured_length(plan, data, start, z0, combine),
+                  check_taper(plan, data, operation, picked),
+                  volume_refusal(data, plan, operation, sources, thin)):
         if check:
             return check
     thin_step = thin_wall_step(ctx, item, data, wall, profiles[0]) if thin else None

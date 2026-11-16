@@ -12,6 +12,7 @@ from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, t
 
 from tests.test_translate_start_from_face import as_extrude
 
+from lib.capture_model import gap_hints
 from lib.translator import extrude, translate
 from lib.translator.result import StepResult
 
@@ -82,6 +83,22 @@ class PlacementTest(unittest.TestCase):
         plane = {"point": [0, 0, 14], "normal": [0.3, 0, 0.954]}
         result = variant("extrude_start_offset", lambda d: d.update(start={"kind": "fromEntity", "plane": plane}))
         self.assertIsNotNone(left_out(result))
+        self.assertEqual(left_out(result)["index"], 3)
+
+    def test_start_at_a_distance_from_a_plane_refuses(self):
+        # Which way Fusion measures the offset from the plane is not read, so the start cannot be placed.
+        plane = {"point": [0, 0, 14], "normal": [0, 0, -1]}
+        held = {"start.offset": {"name": "d9", "expression": "2 mm", "value": 2.0}}
+        result = variant("extrude_start_offset", lambda d: d.update(
+            start={"kind": "fromEntity", "plane": plane}, end_offset=8.0, params=held))
+        self.assertEqual(left_out(result)["index"], 3)
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.EXTRUDE_END_FACE]])
+
+    def test_two_sides_to_planes_on_one_side_refuse(self):
+        def to(height):
+            return {"kind": "toEntity", "offset": 0.0, "plane": {"point": [0, 0, height], "normal": [0, 0, 1]}}
+        result = variant("extrude_to_plane", lambda d: d.update(extent_type="two", side_one=to(12.0),
+                                                               side_two=to(16.0)))
         self.assertEqual(left_out(result)["index"], 3)
 
 
@@ -254,11 +271,25 @@ class MeasuredLengthTest(unittest.TestCase):
         wrong = variant("extrude_symmetric_half", lambda d: d.update(end_offset=10.0))
         self.assertIsNone(wrong.recipe)
 
-    def test_two_sided_end_face_must_belong_to_side_one(self):
+    def test_two_sided_end_face_must_lie_at_the_end_of_a_side(self):
         swapped = variant("extrude_two_sides", lambda d: d.update(end_offset=4.0))
         self.assertIsNone(swapped.recipe)
         ok = variant("extrude_two_sides", lambda d: d.update(end_offset=-6.0))
         self.assertEqual(ok.recipe["features"][0]["sketch"]["on"]["normal"], [0, 0, -1])
+
+    def test_two_sided_end_face_at_the_end_of_side_two_keeps_the_stored_direction(self):
+        ok = variant("extrude_two_sides", lambda d: d.update(end_offset=-4.0))
+        self.assertEqual(ok.recipe["features"][0]["sketch"]["on"]["normal"], [0, 0, 1])
+
+    def test_a_nearer_face_of_a_two_sided_cut_needs_a_side_that_passes_the_part(self):
+        def cut(reach):
+            return lambda d: d.update(extent_type="two", end_offset=-4.0, target_box_before={
+                "min": [-reach, 0.0, 0.0], "max": [reach, 20.0, 10.0]},
+                side_one={"kind": "distance", "distance": 60.0, "taper_deg": 0.0},
+                side_two={"kind": "distance", "distance": 10.0, "taper_deg": 0.0})
+        # Side one passes the part, so a face on side two may be a wall the cut went through.
+        self.assertEqual(len(under_test(variant("extrude_cut_through_one", cut(40.0)), 3)), 2)
+        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", cut(80.0)), 3))
 
     def test_a_two_sided_cut_turns_only_for_a_face_that_the_stored_direction_cannot_reach(self):
         def cut(end):

@@ -30,12 +30,13 @@ package may import only packages above it in this list (not every one of them). 
   a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
   at; `problem.py` the answer of a reader that cannot read, place or build the design (`Problem`: a code, plain words
   and a gap cause; each output turns it into its own refusal); `values.py` the one value type, `Quantity` (a number
-  and, when sizes move it, a formula), with `Sized` (the written form) and the helpers that work on them; `tool_chains.py` the tool bodies of a Combine (which items build
-  one, through splits and in another component, where a tool of another component sits, and the frame of the
+  and, when sizes move it, a formula), with `Sized` (the written form) and the helpers that work on them; `tool_chains.py` the tool bodies of a Combine (which items build one, through splits and in another component, where a tool of another component sits, and the frame of the
   component a walk builds in); `paths/` the
   sweep path planner (`planner.plan`: the chain, its kind, the recipe path forms and the app's limits as problems; the
   caps and the spline fit come from the output in `PathOptions`); `steps/` holds one reader per kind of step:
-  `steps/hole.py` and `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
+  `steps/extrude.py` (where an extrude starts, how each side ends, its direction
+  and length, and the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
+  `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
   ThreadFeature), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
   a symmetric direction, the plane of a mirror), `steps/move.py` (the rigid move fitted from the corners of a body),
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:

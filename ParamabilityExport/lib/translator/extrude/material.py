@@ -1,10 +1,9 @@
 """The side of the part that a cut through all goes to, found from where the outlines meet material."""
-from dataclasses import replace
-
 from ..faces import follow
+from ...design_model.steps.extrude import walls_confirm
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
-from .checks import check_leans
+from .checks import facts_of
 from .common import SAMPLE_INSET
 
 
@@ -58,15 +57,16 @@ def _sample_heights(reach):
 def cut_toward_material(ctx, plan, data, profiles, shift, combine):
     """A cut through all to one side with no measured end face cuts on the side where its outlines meet the part:
     Fusion's stored direction is used only when both sides, or neither, hold material there, or when the measured
-    walls of a tapered cut lean the way that direction gives and not the other (they show where Fusion cut)."""
+    walls of a tapered cut lean the way that direction gives and not the other (they show where Fusion cut). Only an
+    extrude of one side turns: turning one side of two would send both the same way."""
     box = data.get("target_box_before")
-    if combine != "cut" or data.get("end_offset") is not None or not box:
+    if combine != "cut" or data.get("end_offset") is not None or not box or len(plan) != 1:
         return
     reach = vec.length(vec.sub(box["max"], box["min"])) + 1.0
     for entry in plan:
         if entry.extent != "through-one":
             continue
-        if _walls_confirm(entry, data, combine):
+        if walls_confirm(facts_of([entry])[0], data.get("side_leans"), "cut"):
             continue
         ahead = _meets_material(ctx, profiles, shift, entry.sign, reach)
         behind = _meets_material(ctx, profiles, shift, -entry.sign, reach)
@@ -75,11 +75,3 @@ def cut_toward_material(ctx, plan, data, profiles, shift, combine):
             ctx.note("Fusion stored the cut direction toward a side without material; the side the cut goes through "
                      "was used.")
 
-
-def _walls_confirm(entry, data, combine):
-    """True when the measured side walls of a tapered side lean as its direction gives, and not as the other one."""
-    leans = data.get("side_leans")
-    if not entry.taper or not isinstance(leans, list) or not leans:
-        return False
-    turned = replace(entry, sign=-entry.sign)
-    return check_leans([entry], leans, combine) is None and check_leans([turned], leans, combine) is not None
