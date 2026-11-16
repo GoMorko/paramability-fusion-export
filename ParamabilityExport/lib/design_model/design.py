@@ -102,6 +102,11 @@ class ResolvedStep:
         return data_of(self.item)
 
     @property
+    def raw_data(self):
+        """The data of `raw`, the item as the capture holds it, {} when it has none."""
+        return data_of(self.raw)
+
+    @property
     def brought_data(self):
         """The data of `brought`, {} when it has none: the data a handler copies the step from."""
         return data_of(self.brought)

@@ -34,7 +34,8 @@ package may import only packages above it in this list (not every one of them). 
   pieces of a split; `loops.py` the loop writer (sketch curves to recipe loops, or a `Problem`) that the translator writes with and the
   probe measures through, so a measured value is the value the translator writes; `tried_ranges.py` the range cuts
   where the size probe saw the design not rebuild, change a followed outline or come apart (`built_ranges`);
-  `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
+  `step_links.py` the measured references of the steps and the items that may place an occurrence, which it hands as plain
+  values to the geometry links of `params` (`reach`, `reference_links`, `outside`); `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
   both outputs word alike); `reach.py` which sizes may move a sketch, a plane, a face or
   a joint; `edges.py` an edge or a face of the part matched to the straight extrude that made it (which sizes may
   turn a pattern direction taken from it, and which may change the thickness a hole goes through);
@@ -106,7 +107,9 @@ of an output (`Refusal`, `Skip`, `Context`) and imports no output, and which mod
 take the data of a step from the item itself (`RAW_STEP_DATA`). That list may only shrink: a module that reads the
 facts of `design_model` instead leaves it, and a new module must not join it. The pattern that takes a module off
 the list (the handler gets the resolved step, other items go in through `as_read`) is in `docs/developer-guide.md`
-under `design.py` in 2.2; `orca_translate` follows it. `tests/test_interfaces.py` checks that the Fusion
+under `design.py` in 2.2; `orca_translate`, `probe` and `export_plan` follow it. A module that reads every item of
+a capture (not a walk) reads each item's data through `as_read`; `geometry` and `params`, below the shared layer, get
+the data or plain values from their caller (`design_model/step_links.py` reads the step facts the geometry links need). `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in
 `design_edit/store.py` and `export_plan/pipeline/port.py`) with the declared parameters, that both probes have every
 member declared for a probe (in `export_plan/probe_flow/interface.py`), that both translation contexts have every member

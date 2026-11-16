@@ -5,7 +5,8 @@ For tool steps written one by one, the capture can hold the volume of the export
 change bigger than the sum of the step volumes shows a tool the steps do not reproduce. The sum is an upper bound
 (overlapping steps count twice), so this catches a missing or too small tool, never a too big one. A tool whose
 volume cannot be worked out exactly (revolve, taper, thin wall, curves other than lines, arcs and circles) skips the
-check.
+check. These checks take the data of the steps (`step_volume`, `exceeds`); the caller reads it through the shared
+layer (`design_model.design`).
 
 For a tool built in a step of its own, the reader measured each tool body (`volume`), so the change is compared with
 those volumes (`exceeds_tools`).
@@ -87,10 +88,9 @@ def _length(data):
     return None
 
 
-def step_volume(item):
-    """Volume in mm3 of the body a plain extrude item fills, or None (also for any item that is not an extrude: only
-    an extrude has an `extent_type`)."""
-    data = item.get("data") or {}
+def step_volume(data):
+    """Volume in mm3 of the body a plain extrude fills, from the data of the step, or None (also for the data of any
+    step that is not an extrude: only an extrude has an `extent_type`)."""
     if data.get("thin") or not data.get("profiles"):
         return None
     length = _length(data)
@@ -105,24 +105,24 @@ def step_volume(item):
     return area * length
 
 
-def tool_volume(items):
-    """Summed volume of the tool items, or None when any of them cannot be worked out."""
+def tool_volume(tools):
+    """Summed volume of the tool steps (the data of each), or None when any of them cannot be worked out."""
     total = 0.0
-    for item in items:
-        found = step_volume(item)
+    for data in tools:
+        found = step_volume(data)
         if found is None:
             return None
         total += found
     return total
 
 
-def exceeds(data, items):
-    """True when the Combine changed the body by more than the tool items can fill. False when the capture holds no
-    volumes or a tool volume cannot be worked out."""
+def exceeds(data, tools):
+    """True when the Combine (`data`, the data of the step) changed the body by more than the tool steps (`tools`, the
+    data of each) can fill. False when the capture holds no volumes or a tool volume cannot be worked out."""
     before, after = data.get("volume_before"), data.get("volume_after")
     if before is None or after is None:
         return False
-    filled = tool_volume(items)
+    filled = tool_volume(tools)
     if filled is None:
         return False
     change = abs(after - before)

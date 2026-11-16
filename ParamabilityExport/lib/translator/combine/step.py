@@ -265,7 +265,8 @@ def write_tools(ctx, item, data, combine):
 
     flat = not patterns and all(_writes_flat(tool) for tool, _ in found) and (
         combine != "intersect" or (len(found) == 1 and len(found[0][0].entries) == 1))
-    if flat and combine != "intersect" and exceeds(data, [other for tool, _ in found for other in tool.chain]):
+    if flat and combine != "intersect" and exceeds(data, [design.as_read(other).data for tool, _ in found
+                                                          for other in tool.chain]):
         return Refusal("This combine changes the part by more than the steps of its tool body fill, so the tool "
                        "cannot be copied exactly.")
     if not flat and exceeds_tools(combine, data):

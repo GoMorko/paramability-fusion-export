@@ -56,10 +56,6 @@ PRIVATE_REACHES_IN_TESTS = {
 # (`fusion_reader`) and the capture model (`capture_model`) read it on purpose. This list may only shrink: a module
 # that moves to the facts of `design_model` leaves it, and no module joins it.
 RAW_STEP_DATA = {
-    "export_plan/body_scope.py", "export_plan/marker_roll.py", "export_plan/probe_flow/borrowed_view.py",
-    "geometry/combine_volume.py",
-    "params/geometry_links.py",
-    "probe/plan/covered.py", "probe/plan/request.py",
     "translator/faces/floating.py", "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py",
     "translator/hole/step.py", "translator/hole/thread.py", "translator/repeat/body_copies.py",
     "translator/repeat/repeat_circular.py", "translator/repeat/repeat_lattice.py",

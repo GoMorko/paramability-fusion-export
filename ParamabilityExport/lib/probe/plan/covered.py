@@ -61,7 +61,7 @@ def scan(capture):
     components (`helper_of`), that carry a profile, a hole or a revolve axis."""
     out = Scan()
     for step in design.read(capture):
-        item, data = step.raw, design.data_of(step.raw)
+        item, data = step.raw, step.raw_data
         if item.get("suppressed") or (step.outside and not step.helper) or step.has(design.UNREAD):
             continue
         spec = step_type(item.get("type"))

@@ -552,7 +552,7 @@ def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantit
 
     `ranges` maps a Fusion name to the (min, max) the person typed; a ticked size without one gets its default range.
     `max_sizes` caps the named sizes (free and derived); past it a derived formula is written out where it is read.
-    `links` are the geometry links of the body (`params.geometry_links.reach`).
+    `links` are the geometry links of the body (`design_model.step_links.reach`).
     """
     return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params, ranges, max_sizes, links)
 
