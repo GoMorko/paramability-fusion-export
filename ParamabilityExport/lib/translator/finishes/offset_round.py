@@ -8,6 +8,7 @@ follows a size is checked over the size range the same way (`clear_over_range`).
 """
 import math
 
+from ...capture_model import gap_hints
 from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import arc_span, curve_distance, is_full, polyline
@@ -145,20 +146,25 @@ def _measured(ring, face, radius, after):
 
 def refusal(face, distance, after):
     """The Refusal for a round face the recipe cannot move by `distance`, or None. `after` holds the cylinders Fusion
-    left after the step (`rounds_after`)."""
+    left after the step (`rounds_after`). Each refusal has the cause of a curved face that is not copied."""
+    reason = _reason(face, distance, after)
+    return None if reason is None else Refusal(reason, cause=gap_hints.OFFSET_CURVED)
+
+
+def _reason(face, distance, after):
     ring, limits = ring_limits(face)
     if ring is None:
-        return Refusal(limits)
+        return limits
     if face.get("meets_offset"):
-        return Refusal(MEETS)
+        return MEETS
     radius = ring.moved_radius(distance)
     if radius <= CLEAR_MM:
-        return Refusal(CLOSES)
+        return CLOSES
     low, high = limits
     if not (low + CLEAR_MM < min(face["radius"], radius) and max(face["radius"], radius) < high - CLEAR_MM):
-        return Refusal(RUNS_INTO)
+        return RUNS_INTO
     if not _measured(ring, face, radius, after):
-        return Refusal(NOT_MEASURED)
+        return NOT_MEASURED
     return None
 
 

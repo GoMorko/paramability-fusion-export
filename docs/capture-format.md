@@ -1380,7 +1380,7 @@ in all and 8 threads, and leaves other profiles, tapered threads and a thread in
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
 `distance`; `faces` after it. When no face is readable before the item, `faces` holds the faces of `feature.faces`
 read after it: a flat face moved back by `distance`, a cylinder as `{ "kind": "round", "token": "..." }` without
-geometry, any other face as `{ "kind": "other", "type": ... }`; the translator copies only flat faces read this way):
+geometry, any other face as `{ "kind": "other", "type": ... }`; so the translator leaves the step out instead of moving only its flat faces):
 
 ```json
 {

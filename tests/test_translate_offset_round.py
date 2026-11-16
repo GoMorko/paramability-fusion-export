@@ -6,6 +6,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_sized import TRAY, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
+from lib.capture_model import gap_hints
 from lib.translator import translate
 from lib.translator.finishes import offset_round
 
@@ -104,7 +105,9 @@ class RoundOffsetTest(unittest.TestCase):
                  offset_round.MEETS: round_face(6, False, meets_offset=True)}
         for reason, face in cases.items():
             with self.subTest(reason):
-                self.assertEqual(left_out(translate(tube_with_offset(-0.2, face, 6.2)))["reason"], reason)
+                result = translate(tube_with_offset(-0.2, face, 6.2))
+                self.assertEqual(left_out(result)["reason"], reason)
+                self.assertEqual(result.gaps[0]["hint"], gap_hints.HINTS[gap_hints.OFFSET_CURVED])
 
     def test_a_distance_that_follows_a_size_stays_a_number_where_the_ring_could_reach_another_edge(self):
         # wall_mm is 2 mm and may go from 1 to 4 mm. The bore (radius 6) grown by wall_mm reaches the outside (radius

@@ -2043,7 +2043,7 @@ read the capture in `report.json`.
 - `OffsetFacesFeature.inputFaces` with the marker just before the item: a Python list of `BRepFace` in newer Fusion
   versions (a collection in older ones). When it gives no faces, `OffsetFacesFeature.faces` with the marker after the
   item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
-  is moved back by `distance` and copied.
+  is moved back by `distance` and copied, and any curved face listed there leaves the step out.
 - `OffsetFacesFeature` on a cylinder face: `Cylinder.origin`, `axis` and `radius`; `BRepFace.loops` of a whole
   cylinder (two loops of one `Circle3D` edge each, no seam edge); `Circle3D.center`, `normal` and `radius`;
   `BRepEdge.faces` across an end circle; and `OffsetFacesFeature.faces` after the item, which must list the moved

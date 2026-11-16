@@ -7,7 +7,9 @@ circle and the face across that edge, with the outline of that face when it is f
 and the cylinders the feature left, so the translator can check which way and how far the faces moved.
 
 The moved faces come from `inputFaces` (a list in newer Fusion versions, a collection in older ones). When Fusion
-gives none before the item, they are read after it from the faces the feature made, moved back by the distance.
+gives none before the item, they are read after it from the faces the feature made: a flat face moved back by the
+distance, a cylinder as a round face without geometry, any other face as { kind: other, type }, so the step is not
+copied without them.
 """
 import math
 

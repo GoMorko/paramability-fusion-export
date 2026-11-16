@@ -1155,6 +1155,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
 | `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
+| `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
@@ -4178,6 +4179,9 @@ condition before the step is written:
 5. The new radius stays above zero.
 6. Fusion left a cylinder on the same axis with the new radius (`rounds_after`). This checks the sign rule on the real
    part. If no such cylinder is found, the step is left out.
+
+When one of these conditions is false, the whole step is left out with the cause `offsetCurved`, also when the step
+moves flat faces too.
 
 The pick point of a round face is on the face, halfway between its two ends. It is on the side of the point that
 Fusion gave for the face (`pointOnFace`).

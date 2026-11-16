@@ -8,6 +8,7 @@ needs recipe version 17 (finishes/offset_round.py). Other curved faces and moves
 """
 import math
 
+from ...capture_model import gap_hints
 from ..faces import follow
 from ...design_model.values import Quantity, number
 from ...geometry import vec
@@ -41,7 +42,7 @@ def _face_refusal(face, distance, after, rounds_after):
     if offset_round.is_round(face):
         return offset_round.refusal(face, distance, rounds_after)
     if face.get("kind") == "other" or "loops" not in face:
-        return Refusal("Offsets of curved faces are not copied yet.")
+        return Refusal("Offsets of curved faces are not copied yet.", cause=gap_hints.OFFSET_CURVED)
     if not _moved_as_read(face, distance, after):
         return Refusal("The offset of this step could not be measured, so it is not copied.")
     return None

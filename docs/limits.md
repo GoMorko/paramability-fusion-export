@@ -128,7 +128,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   faces) of a curved face other than a whole round face (a pin, a boss or a bore that goes all the way round between
   two flat ends square to its axis; part of a circle, an end on a slope or with a round or chamfer, a round face that
   also moves a face next to it, and one whose new radius would reach another edge of its end faces, at the current
-  sizes or anywhere in the size range of its distance, are left out or keep the distance as a number; the end faces
+  sizes or anywhere in the size range of its distance, are left out or keep the distance as a number; the whole step is left out, also when it moves flat faces too, so the copy never moves only part of what Fusion moved; the end faces
   are checked as exported, so when other sizes move an edge near the ring, Paramability may refuse the move at those
   sizes), and every
   step type not listed above. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
