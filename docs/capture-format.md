@@ -913,7 +913,7 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
   the identity frame; in a symmetric direction it is not the first one. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`design_model/steps/repeat.py`, `in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every

@@ -86,8 +86,8 @@ the two against each other.
 ## 3. The handler
 
 ```python
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     if data.get("kind") == "other":
         return Refusal("This emboss works in a way that is not copied.")
     out = StepResult()
@@ -95,8 +95,21 @@ def handle(item, ctx):
     return out
 ```
 
-A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result.py`). Register it under the capture
+A handler is `handle(ctx, step) -> StepResult | Refusal` (`lib/translator/result.py`). Register it under the capture
 type in `lib/translator/handlers.py` (`"EmbossFeature": emboss.handle`); the walk looks handlers up there.
+
+- `step` is the resolved step of the item (`design_model.design.ResolvedStep`). Read the item from `step.brought` and
+  its data from `step.brought_data`, with the geometry of other components already brought in. When the type has a
+  shared reader with facts, read `step.facts` and do not call the reader again. Never read `item["data"]` or
+  `item.get("data")`: `tests/test_boundary.py` fails on it. See "Handlers read the resolved step" in
+  `docs/developer-guide.md` (2.2).
+- Give the data, or the part of it that a helper needs, to the helpers. A helper does not read the data from the item.
+- Read another item (a source, a Combine) through `design.as_read(item)`, its parameters through
+  `design.params_of(item)`. To write the step as another kind, give the other handler
+  `design.as_read(dict(item, data=new_data))`, as `extrude/emboss.py` does.
+- A fact that the handler needs from the data and that the shared layer does not give yet goes into `design_model`,
+  in words that do not name an output. The policy (limits, refusals, gaps) stays in the handler.
+- Name a recipe step that the handler writes `recipe_step`, so that `step` stays the resolved step.
 
 - `StepResult`: the recipe steps the item writes, in order. `out.add(step, placers=..., picks=..., repeatable=...)`
   writes one step; `StepResult.of(steps)` makes a result of plain steps. An empty result means the item makes no step
