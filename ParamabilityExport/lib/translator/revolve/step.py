@@ -1,10 +1,11 @@
 """Revolve feature handler (RevolveFeature): sketch profiles turned about an axis in their sketch plane.
 
 The recipe kernel turns by the right hand rule about the axis direction. Fusion does not say which way it turned, so
-the measured outward normal of the start face decides whether the axis direction is kept or negated. The start face
-bounds the new material for a new body, join or intersect, so its outward normal points against the travel. After a
-cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
-start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
+the measured outward normals of the caps decide whether the axis direction is kept or negated
+(`design_model.steps.revolve.sense`). Fusion's angle of a symmetric revolve is the turn to each side: the copy turns
+twice the angle from the angle back, a turn of 180 degrees or more to each side closes the ring, and the measured caps
+must sit where that puts them. Two sided revolves are refused: their start face is the end of one side, which does
+not name the side. With the probe's motion file the outline, its plane
 and an axis from a sketch line follow sizes (sketch/sketch_motion.py). An axis of another component follows the sizes the
 probe measured it move with (ref_motion.py). Any other axis of the part is written as measured, and the sizes that may
 move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw values (`axis.raw`) or
@@ -18,6 +19,7 @@ from ...geometry import vec
 from ...package.numbers import round9
 
 from ...design_model import refs
+from ...design_model.steps import revolve as revolve_facts
 from ...design_model import words as shared
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
@@ -96,57 +98,39 @@ def _turn_direction(frame, outer, point2, dir2, dir3):
     return vec.unit(vec.cross(dir3, radial))
 
 
-def _travel_from_normal(data, combine):
-    """Measured travel direction at the start of the turn, or a Refusal."""
-    normal = data.get("start_face_normal")
-    if not normal:
-        return Refusal(shared.REVOLVE_TURN_UNREAD)
-    return vec.scale(vec.unit(normal), 1.0 if combine == "cut" else -1.0)
-
-
-def _sense(data, combine, frame, outer, point2, dir2, dir3):
+def _sense(data, combine, frame, outer, point2, dir2, dir3, point3, angle):
     """+1 when the captured axis direction turns the way Fusion did, -1 when it must be negated, or a Refusal."""
-    travel = _travel_from_normal(data, combine)
-    if isinstance(travel, Refusal):
-        return travel
     turn = _turn_direction(frame, outer, point2, dir2, dir3)
     if isinstance(turn, Refusal):
         return turn
-    side = vec.dot(travel, turn)
-    if abs(side) < 1e-6:
-        return Refusal(shared.REVOLVE_TURN_UNREAD)
-    return 1 if side > 0 else -1
+    points = [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _loop_points(outer)]
+    found = revolve_facts.sense(data, turn, dir3, angle, combine == "cut", points, point3)
+    return Refusal(shared.REVOLVE_TURN_UNREAD) if found is None else int(found)
 
 
 def _symmetric_ok(data, combine, frame, outer, point2, dir2, dir3, angle):
-    """True when the measured start face sits half the angle before the profile (either way round), else a Refusal.
-
-    Catches an angle that Fusion stores as the half turn instead of the whole one.
-    """
-    travel = _travel_from_normal(data, combine)
-    if isinstance(travel, Refusal):
-        return travel
+    """True when the measured caps sit half the whole turn `angle` before and after the profile, else a Refusal."""
     turn = _turn_direction(frame, outer, point2, dir2, dir3)
     if isinstance(turn, Refusal):
         return turn
-    half = angle / 2.0
-    for sense in (1.0, -1.0):
-        expected = vec.rotate(vec.scale(turn, sense), dir3, -sense * half)
-        if vec.length(vec.sub(expected, travel)) < 1e-3:
-            return True
-    return Refusal("The turn of this symmetric revolve does not match its measured start face.")
+    fits = revolve_facts.symmetric_ok(data, turn, dir3, angle / 2.0, combine == "cut")
+    if fits is None:
+        return Refusal(shared.REVOLVE_TURN_UNREAD)
+    return True if fits else Refusal(shared.REVOLVE_SYMMETRIC_CAPS)
 
 
 def _angles(extent):
-    """(kind, angle) with kind full, part or symmetric; or a Refusal."""
+    """(kind, angle) with kind full, part or symmetric and the whole turn in degrees; or a Refusal."""
     kind = (extent or {}).get("kind")
     if kind == "angle":
         angle = float(extent["angle_deg"])
         if not angle > 0 or angle > FULL_TURN_DEG + 1e-9:
             return Refusal(shared.REVOLVE_ANGLE)
-        if angle >= FULL_TURN_DEG - 1e-9:
+        symmetric = bool(extent.get("symmetric"))
+        total, full = revolve_facts.total_turn(angle, symmetric)
+        if full:
             return "full", FULL_TURN_DEG
-        return ("symmetric" if extent.get("symmetric") else "part"), angle
+        return ("symmetric" if symmetric else "part"), total
     if kind == "twoSidesAngle":
         return Refusal("Revolves turned to both sides are not copied yet.")
     return Refusal(shared.REVOLVE_ANGLE_KIND)
@@ -285,7 +269,7 @@ def handle(ctx, step):
     profile, (outer, _), (point2, dir2, point3, dir3), _ = built[0]
     sign = 1
     if mode == "part":
-        sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3)
+        sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3, point3, angle)
         if isinstance(sign, Refusal):
             return sign
     elif mode == "symmetric":

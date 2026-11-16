@@ -402,21 +402,37 @@ def revolve_before(feature, ctx):
     }, Params().add("extent.angle_deg", lambda: feature.extentDefinition.angle, "angle").found)
 
 
-def revolve_after(feature, ctx, data):
-    """start_face_normal: the normal of the first start face at a point on it; null for a full turn."""
-    extent = data.get("extent") or {}
-    if extent.get("kind") == "angle" and extent.get("angle_deg", 0) >= _FULL_TURN_DEG:
-        return {}
-    faces = geo.collection_items(geo.safe(lambda: feature.startFaces, None))
-    if not faces:
-        return {}
-
+def _cap_normal(faces):
+    """The outward normal of the first of `faces` at a point on it, or None."""
     def normal():
         face = faces[0]
         ok, n = face.evaluator.getNormalAtPoint(face.pointOnFace)
         return geo.unit_vector(n) if ok else None
 
-    return {"start_face_normal": geo.safe(normal, None)}
+    return geo.safe(normal, None) if faces else None
+
+
+def _faces_box(faces):
+    """{ min, max } in mm around the boxes of `faces`, or None when one cannot be read."""
+    boxes = [geo.safe(lambda: geo.box_of(face), None) for face in faces]
+    if not boxes or any(box is None for box in boxes):
+        return None
+    return {"min": [min(box["min"][i] for box in boxes) for i in range(3)],
+            "max": [max(box["max"][i] for box in boxes) for i in range(3)]}
+
+
+def revolve_after(feature, ctx, data):
+    """The measured caps of a revolve that is not a full turn: `start_face_normal` and `end_face_normal`, the outward
+    normals of the first start and end face (null when Fusion gives none, as when a join merged the cap into a face
+    of the part), and `made_box`, the box around the faces the revolve made."""
+    extent = data.get("extent") or {}
+    if extent.get("kind") == "angle" and extent.get("angle_deg", 0) >= _FULL_TURN_DEG:
+        return {}
+    def faces(name):
+        return [geo.native_input(f, ctx) for f in geo.collection_items(geo.safe(lambda: getattr(feature, name), None))]
+
+    return {"start_face_normal": _cap_normal(faces("startFaces")), "end_face_normal": _cap_normal(faces("endFaces")),
+            "made_box": _faces_box(faces("faces"))}
 
 
 def _cylinder(face):

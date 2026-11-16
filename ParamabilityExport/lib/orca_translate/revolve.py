@@ -2,9 +2,10 @@
 
 Each outline becomes a sketch of its lines and arcs, plus a construction line along the turning axis that the
 Revolve names (`revolve_axis_entity`), so the axis may sit anywhere in the sketch plane. Orca turns by the right hand
-rule about that line; Fusion does not say which way it turned, so the measured start face decides (its outward normal
-points against the turn for new material, along it for a cut). `revolve_angle` follows the angle's parameter. A
-symmetric turn starts half the angle back: the sketch plane is turned there, so its angle keeps its number.
+rule about that line; Fusion does not say which way it turned, so the measured caps decide (`steps.revolve.sense`).
+`revolve_angle` follows the angle's parameter. Fusion's angle of a symmetric revolve is the turn to each side: the copy
+turns twice the angle from the angle back, the sketch plane is turned there, so its angle keeps its number, and the
+measured caps must sit where that puts them. A symmetric turn of 180 degrees or more to each side closes the ring.
 
 Orca needs the axis in the sketch plane, an outline on one side of it and no holes in the outline; anything else is
 left out with the reason. A cut that removes nothing stops Orca's rebuild, so a cut that misses the copied part is
@@ -12,6 +13,7 @@ left out (`solid.Turned` is the shape the check uses).
 """
 from ..capture_model import gap_hints
 from ..design_model import reach
+from ..design_model.steps import revolve as revolve_facts
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
@@ -57,16 +59,19 @@ def _angle(ctx, item, extent):
     angle = abs(float(extent["angle_deg"]))
     if not 0 < angle <= FULL_TURN_DEG + 1e-9:
         return Skip(shared.REVOLVE_ANGLE)
-    value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
-    if angle >= FULL_TURN_DEG - 1e-9:
-        if value.text is not None:
-            ctx.doubt(value.reads, "%s turns a full circle only while its angle is 360" % label(item))
-        return Quantity(FULL_TURN_DEG), False
     symmetric = bool(extent.get("symmetric"))
+    total, full = revolve_facts.total_turn(angle, symmetric)
+    value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
+    if full:
+        if value.text is not None:
+            ctx.doubt(value.reads, "%s turns a full circle only while its angle is %s" % (
+                label(item), "180 or more" if symmetric else "360"))
+        return Quantity(FULL_TURN_DEG), False
     if symmetric and value.text is not None:
         ctx.doubt(value.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
                   % label(item))
-        value = Quantity(angle)
+    if symmetric:
+        value = Quantity(total)
     return value, symmetric
 
 
@@ -74,22 +79,32 @@ def _points(curves):
     return [p for c in curves for p in polyline(c)]
 
 
-def _sense(data, operation, frame, outer, point, direction):
-    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way, or a Skip."""
-    normal = data.get("start_face_normal")
-    if not isinstance(normal, (list, tuple)) or vec.length(normal) < 1e-9:
-        return Skip(shared.REVOLVE_TURN_UNREAD)
-    travel = vec.scale(vec.unit(normal), 1.0 if operation == "cut" else -1.0)
+def _turn(frame, outer, point, direction):
+    """The unit way the outline moves at its sketch plane on a right hand turn about `direction`, or a Skip."""
     flat = _points(outer)
     centre = [sum(p[0] for p in flat) / len(flat), sum(p[1] for p in flat) / len(flat)]
     v = vec.sub(vec.frame_apply(frame, [centre[0], centre[1], 0.0]), point)
     radial = vec.sub(v, vec.scale(direction, vec.dot(v, direction)))
     if vec.length(radial) < 1e-9:
         return Skip(shared.REVOLVE_ON_AXIS)
-    side = vec.dot(travel, vec.cross(direction, vec.unit(radial)))
-    if abs(side) < 1e-6:
-        return Skip(shared.REVOLVE_TURN_UNREAD)
-    return 1.0 if side > 0 else -1.0
+    return vec.unit(vec.cross(direction, vec.unit(radial)))
+
+
+def _sense(data, operation, frame, outer, point, direction, angle, symmetric):
+    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way (a symmetric turn keeps
+    +1 once its caps fit), or a Skip."""
+    turn = _turn(frame, outer, point, direction)
+    if isinstance(turn, Skip):
+        return turn
+    cut = operation == "cut"
+    if symmetric:
+        fits = revolve_facts.symmetric_ok(data, turn, direction, angle / 2.0, cut)
+        if fits is None:
+            return Skip(shared.REVOLVE_TURN_UNREAD)
+        return 1.0 if fits else Skip(shared.REVOLVE_SYMMETRIC_CAPS)
+    points = [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _points(outer)]
+    found = revolve_facts.sense(data, turn, direction, angle, cut, points, point)
+    return Skip(shared.REVOLVE_TURN_UNREAD) if found is None else found
 
 
 def _turned_frame(frame, point, direction, degrees):
@@ -151,7 +166,7 @@ def revolve(ctx, step):
                         "circles and splines Fusion gives exactly).")
     sense = 1.0
     if angle.n < FULL_TURN_DEG:
-        sense = _sense(data, operation, frame, outline.outer, point, direction)
+        sense = _sense(data, operation, frame, outline.outer, point, direction, angle.n, symmetric)
         if isinstance(sense, Skip):
             return sense
     turn_axis = vec.scale(direction, sense)

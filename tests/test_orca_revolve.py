@@ -72,6 +72,34 @@ class RevolveTest(unittest.TestCase):
         # The sketch plane is turned 60 degrees back about the axis, so its normal leaves +Z.
         self.assertAlmostEqual(abs(sketch.plane.normal[2]), 0.5)
 
+    def test_a_turn_of_half_a_circle_to_each_side_closes_the_ring(self):
+        # Fusion's angle of a symmetric revolve is the turn to each side; 2 x 200 degrees leaves no start face.
+        capture = fixture("revolve_symmetric")
+        capture["items"][-1]["data"].update(extent={"kind": "angle", "angle_deg": 200, "symmetric": True},
+                                            start_face_normal=None)
+        result = translate(capture)
+        made, sketch = revolve_of(result)
+        self.assertEqual((made.revolve_angle, result.left_out), (360.0, []))
+        self.assertAlmostEqual(abs(sketch.plane.normal[2]), 1.0)
+
+    def test_the_made_faces_tell_the_turn_when_the_start_face_is_gone(self):
+        # A join can merge the start face into a face of the part. A quarter turn about +Y ends with its end face
+        # looking toward -X either way round, so the box of the faces the revolve made decides.
+        for z, expected in ((-10, [0.0, 1.0, 0.0]), (10, [0.0, -1.0, 0.0])):
+            capture = fixture("revolve_quarter")
+            capture["items"][-1]["data"].update(start_face_normal=None, end_face_normal=[-1, 0, 0], made_box={
+                "min": [0, 0, min(z, 0)], "max": [10, 20, max(z, 0)]})
+            direction = axis_of(*revolve_of(translate(capture)))[1]
+            self.assertEqual([round(v, 9) for v in direction], expected)
+        capture = fixture("revolve_quarter")
+        capture["items"][-1]["data"].update(start_face_normal=None, end_face_normal=[-1, 0, 0])
+        self.assertEqual(len(translate(capture).left_out), 1)
+
+    def test_caps_that_do_not_fit_the_turn_leave_the_revolve_out(self):
+        capture = fixture("revolve_quarter")
+        capture["items"][-1]["data"].update(end_face_normal=[1, 0, 0])
+        self.assertEqual([g["index"] for g in translate(capture).left_out], [capture["items"][-1]["index"]])
+
     def test_sizes_that_move_the_sketch_plane_are_marked(self):
         capture = fixture("revolve_quarter")
         on_offset_plane(capture, capture["items"][-1]["data"]["profiles"][0])

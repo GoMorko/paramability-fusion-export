@@ -576,6 +576,19 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(data["extent"], {"kind": "angle", "angle_deg": 90.0, "symmetric": True})
         self.assertEqual(data["start_face_normal"], [0, 0, -1])
 
+    def test_a_merged_start_face_leaves_the_end_face_and_the_made_box(self):
+        def box(low, high):
+            return Obj("fusion::BRepFace", boundingBox=Obj(minPoint=P(*low), maxPoint=P(*high)))
+
+        end = Obj("fusion::BRepFace", pointOnFace=P(0, 0, 1),
+                  evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=0.0, y=0.0, z=1.0))))
+        data = self.read(None, Obj("fusion::AngleExtentDefinition", angle=param(math.pi / 2), isSymmetric=False),
+                         start_faces=None, endFaces=Coll([end]),
+                         faces=Coll([box((10, -8, 2), (15, 0, 10)), box((10, -8, 10), (15, 0, 10))]))
+        self.assertIsNone(data["start_face_normal"])
+        self.assertEqual(data["end_face_normal"], [0, 0, 1])
+        self.assertEqual(data["made_box"], {"min": [10, -8, 2], "max": [15, 0, 10]})
+
     def test_axis_sources_two_sides_and_unknown(self):
         cyl = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder", origin=P(1, 2, 3), axis=Obj(x=0, y=0, z=2.0)))
         con = Obj("fusion::ConstructionAxis", geometry=Obj("core::InfiniteLine3D", origin=P(0, 0, 4),
