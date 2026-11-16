@@ -1787,7 +1787,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   another component" in 3.3). `bring_in` writes them in the `borrowed_movers` key (`MOVERS`) of the profile that it
   brings in.
 - `steps/`: one reader per kind of step, as facts. `steps/repeat.py`: the copies a pattern kept (`kept_elements`), their
-  frames in the frame of the part (`in_component`, `read_in_component`), the grid index of a copy (`solve_lattice`),
+  frames in the frame of the part (`in_component` for an item, `data_in_component` for the data alone,
+  `read_in_component` for a probe read), the grid index of a copy (`solve_lattice`),
   the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
   (`mirror_plane`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
@@ -1817,14 +1818,44 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     walk calls `replay` where it brings the step in, inside the recording or the checkpoint of the step. This makes
     sure that the doubts and notes of a step count only when the walk copies the step. `error` is an exception that the bring in
     raised. `replay` raises it again, at the same point where the bring in raised it before.
+  - `brought_data`: the data of `brought`. It is an empty dict when the item has no data. A handler copies the step
+    from this data.
   - `facts`: the facts that a shared step reader reads from the data of the step alone (`FACT_READERS`). The step
     kind table says which reader applies to a type (`StepType.facts` in `capture_model/step_kinds.py`). The sets of
-    a round or a chamfer step (`steps/finish.py`) are such facts. The Orca output reads them when it measures a
-    round or a chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers
-    still call the step readers themselves. A handler also runs on items that no walk resolved: the sources of a
-    pattern, the steps of a tool body that are written on the part, and items that a handler writes again.
+    a round or a chamfer step (`steps/finish.py`) are such facts. The Orca handlers of a round and of a chamfer
+    (`finishes.fillet`, `finishes.chamfer`) read them. The Orca output also reads them when it measures a round or a
+    chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers of the
+    recipe output still call the step readers themselves.
   `resolve(item, ctx, role)` gives the `ResolvedStep` of one item. The Orca output uses it for each step of a tool
   body (`tools.build`), without a role.
+  `as_read(item)` gives a `ResolvedStep` of an item as the capture holds it. It has no role, it brings in nothing,
+  and it has no events. Use it for an item that no walk resolves, but that a handler reads or copies. Examples are a
+  source of a pattern, a Combine among the sources, and an item that a handler writes again as a step of another
+  kind (a straight sweep that the Orca output writes as an extrude). A test that calls a handler directly also gives
+  it `as_read(item)`.
+  `params_of(item)` gives the model parameters that Fusion keeps for the values of an item (`data.params`), by the
+  path of each value in the data. Each parameter has its name, its expression and its value. It is an empty dict when
+  the item has none. The Orca output reads a value that can follow sizes through it (`Context.quantity`).
+
+  Handlers read the resolved step. The rule is for each module above the shared layer that reads a timeline step:
+
+  1. The walk gives the handler the `ResolvedStep` of the step: `handler(ctx, step)`. The walk does not give the
+     item.
+  2. The handler reads the item from `step.brought` and the data from `step.brought_data`. When the step kind has a
+     shared reader with facts, the handler reads `step.facts`. The handler does not call the reader again.
+  3. The handler gives the data, or the facts, to the shared step readers (`design_model/steps/`) and to its own
+     helpers. A helper does not read the data from the item again.
+  4. When the handler must read another item (a source of a pattern, for example), it reads that item through
+     `as_read(item)`. When it writes a step again as a step of another kind, it gives `as_read(new item)` to the
+     other handler.
+  5. A fact that the output needs and that the shared layer does not give yet goes into the shared layer, as a fact
+     that does not name an output. An example is `steps/repeat.py`, `data_in_component`: the copies of a pattern in
+     the frame of the component, from the data alone. The policy of the output (the limits, the checks of the part,
+     the choice to leave a step out) stays in the output.
+
+  `tests/test_boundary.py` keeps the list of the modules that still take the data of a step from the item
+  (`RAW_STEP_DATA`). A module that follows the rule above leaves that list. The modules of `orca_translate` follow the
+  rule. The modules of `translator`, `probe` and `export_plan` do not follow it yet.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. The walk of the recipe and the walk of the Orca output both read them:
   - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,

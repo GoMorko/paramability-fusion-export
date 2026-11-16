@@ -30,7 +30,7 @@ from ..design_model import words as shared
 from . import causes
 from .solid import INTERSECT, HalfSpace
 from .steps import Skip
-from .tools import Pass, boolean, build, data_of, feature, label
+from .tools import Pass, boolean, build, feature, label
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.
 SIDE_TOL_MM = 0.01
@@ -81,8 +81,8 @@ def _used_later(ctx, item, parent, piece):
     return None
 
 
-def split(ctx, item):
-    data = data_of(item)
+def split(ctx, step):
+    item, data = step.brought, step.brought_data
     tool = data.get("tool")
     if not isinstance(tool, dict):
         return Skip(shared.SPLIT_TOOL_UNREAD)
@@ -154,8 +154,8 @@ def _turns_like(rows, offset, point, axis, degrees):
     return True
 
 
-def move(ctx, item):
-    data = data_of(item)
+def move(ctx, step):
+    item, data = step.brought, step.brought_data
     if data.get("input_kind") != "bodies":
         return Skip("A Move of faces is not copied to Orca yet.")
     bodies = data.get("bodies") or []

@@ -283,9 +283,9 @@ def _misses(ctx):
 
 # ---- ThreadFeature ---------------------------------------------------------------------------------------------
 
-def thread(ctx, item):
+def thread(ctx, step):
     """The Orca thread of a ThreadFeature, nothing for a cosmetic one, or a Skip."""
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    item, data = step.brought, step.brought_data
     if not data.get("modeled"):
         return []
     what = item.get("name") or "a thread"

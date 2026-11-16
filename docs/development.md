@@ -23,7 +23,9 @@ package may import only packages above it in this list (not every one of them). 
 - `design_model`: the shared layer both translators read: facts about the design that every output needs and doubts
   about sizes, never a refusal. `design.py` reads the design as the walks read it (`read`: one resolved step per
   timeline item with its role, what about it cannot be read, the step with the geometry of other components brought
-  in and the doubts that waits for the walk to replay, and the facts of its kind); `recorder.py` declares what it asks
+  in and the doubts that waits for the walk to replay, and the facts of its kind; a handler takes the resolved step and
+  reads its step only through it, `brought`, `brought_data` and `facts`, and an item that no walk resolves through
+  `as_read`; `params_of` gives the model parameters behind the values of an item); `recorder.py` declares what it asks
   of a translation; `refs.py` holds the planes,
   faces, axes and points of other components (which records a step can use, which sizes may move them, the doubt when
   the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
@@ -51,7 +53,7 @@ package may import only packages above it in this list (not every one of them). 
 - `results`: the shape of a verdict and of the record of a step left out, for both translators and the dialogs (`verdicts.py`, `left_out.py`). It holds shapes and the words of a verdict kind, not facts about the design.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. It still reads the translator for what the recipe writes (`sketch/loops.profile_loops` and its `Refusal`, and `ranges.kept_ranges`); everything else it reads is in `design_model`.
-- `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
+- `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. Each handler takes the resolved step of `design_model.design` (`handler(ctx, step)`) and reads no step data from an item itself. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).
 - `fusion_reader`: reads the design with `adsk` into a capture.
@@ -97,7 +99,9 @@ reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fu
 that no module imports an underscore name from another module, that the shared layer (`design_model`) uses no name
 of an output (`Refusal`, `Skip`, `Context`) and imports no output, and which modules above the shared layer still
 take the data of a step from the item itself (`RAW_STEP_DATA`). That list may only shrink: a module that reads the
-facts of `design_model` instead leaves it, and a new module must not join it. `tests/test_interfaces.py` checks that the Fusion
+facts of `design_model` instead leaves it, and a new module must not join it. The pattern that takes a module off
+the list (the handler gets the resolved step, other items go in through `as_read`) is in `docs/developer-guide.md`
+under `design.py` in 2.2; `orca_translate` follows it. `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in
 `design_edit/store.py` and `export_plan/pipeline/port.py`) with the declared parameters, that both probes have every
 member declared for a probe (in `export_plan/probe_flow/interface.py`), that both translation contexts have every member

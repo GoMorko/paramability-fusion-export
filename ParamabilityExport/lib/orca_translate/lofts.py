@@ -37,7 +37,7 @@ from ..design_model import words as shared
 from .sketches import circle_of, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, ahead, box_of, traced
-from .tools import OPERATIONS, data_of, feature, label
+from .tools import OPERATIONS, feature, label
 
 _SOLID_MODES = {"newBody": ADD, "join": ADD, "cut": CUT, "intersect": INTERSECT}
 # Normals closer than this (the sine of their angle) are parallel; points closer than this (mm) to a plane are on it.
@@ -309,9 +309,9 @@ def _same_normal(made, normal, place):
     plane.y_axis = tuple(-c for c in plane.y_axis)
 
 
-def loft(ctx, item):
+def loft(ctx, step):
     """The Orca features of a loft, or a Skip."""
-    data = data_of(item)
+    item, data = step.brought, step.brought_data
     refused = _refusal(data)
     if refused is not None:
         return refused

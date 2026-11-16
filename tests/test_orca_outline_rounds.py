@@ -10,6 +10,7 @@ from tests import orca_outline as shapes
 from tests.orca_extents import UP, extrude, profile, rect, side, sketch_item
 from tests.translator_helpers import load_capture
 
+from lib.design_model.design import as_read
 from lib.orca_recipe.enums import EntityType, FaceGroup, FeatureType
 from lib.orca_translate import FIXED, VARIABLE, causes, finishes, steps, translate
 from lib.orca_translate.context import Context
@@ -274,12 +275,12 @@ class RollbackTest(unittest.TestCase):
         capture = shapes.plate([(shapes.PLATE_SIDES, 2.0)])
         ctx = Context(capture, None, Placement(capture))
         extrude_item, fillet = capture["items"][1], capture["items"][2]
-        written = steps.extrude(ctx, extrude_item)
+        written = steps.extrude(ctx, as_read(extrude_item))
         ctx.written[1], ctx.shapes[1] = written, list(ctx.solid.pieces)
         sketch = written[0]
         before = (copy.deepcopy(sketch.entities), sketch.shape, ctx.solid.pieces[0])
         mark = ctx.checkpoint()
-        self.assertEqual(finishes.fillet(ctx, fillet), [sketch])
+        self.assertEqual(finishes.fillet(ctx, as_read(fillet)), [sketch])
         self.assertEqual(len(sketch.entities), 8)
         ctx.rollback(mark)
         self.assertEqual((sketch.entities, sketch.shape, ctx.solid.pieces[0]), before)

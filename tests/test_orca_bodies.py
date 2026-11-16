@@ -77,9 +77,9 @@ class SplitTest(unittest.TestCase):
         seen = []
         extrude = orca_walk.HANDLERS["ExtrudeFeature"]
 
-        def spy(ctx, item):
-            seen.append(item["data"]["target_box_before"])
-            return extrude(ctx, item)
+        def spy(ctx, step):
+            seen.append(step.brought_data["target_box_before"])
+            return extrude(ctx, step)
 
         with mock.patch.dict(orca_walk.HANDLERS, {"ExtrudeFeature": spy}):
             result = translate(capture)

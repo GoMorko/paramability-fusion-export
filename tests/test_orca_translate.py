@@ -224,8 +224,8 @@ class ExtrudeTest(unittest.TestCase):
         walk = sys.modules["lib.orca_translate.translate"]
         real = walk.HANDLERS["ExtrudeFeature"]
 
-        def writes_then_skips(ctx, item):
-            real(ctx, item)
+        def writes_then_skips(ctx, step):
+            real(ctx, step)
             ctx.notes.append("written before the skip")
             ctx.doubt(["cube_mm"], "doubted before the skip")
             return Skip("left out after writing")
@@ -243,8 +243,8 @@ class ExtrudeTest(unittest.TestCase):
         walk = sys.modules["lib.orca_translate.translate"]
         real = walk.HANDLERS["HoleFeature"]
 
-        def writes_then_fails(ctx, item):
-            real(ctx, item)
+        def writes_then_fails(ctx, step):
+            real(ctx, step)
             return 1 / 0
 
         capture = box_capture()

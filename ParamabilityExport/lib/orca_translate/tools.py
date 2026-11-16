@@ -50,11 +50,6 @@ def label(item):
     return item.get("name") or "the step"
 
 
-def data_of(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def feature(kind, name, **values):
     """A new feature with the fields Orca sets on every feature it makes."""
     return CadFeature(type=kind, name=name, thread_major_nominal=True, pattern_inclusive=True, **values)
@@ -156,12 +151,11 @@ def build(ctx, record, anchor):
             start = len(body.solid.pieces)
             if why is None:
                 design.replay(step, ctx)
-                brought = step.brought
-                made = _handlers()[item["type"]](ctx, brought)
+                made = _handlers()[item["type"]](ctx, step)
                 if isinstance(made, Skip):
                     why = (made.reason.rstrip("."), made.cause)
                 elif made and not isinstance(made, Pass):
-                    other_components.mark_refs(ctx, brought)
+                    other_components.mark_refs(ctx, step.brought)
             if why is not None:
                 return Skip("The tool body %s cannot be copied, because its step %s is left out: %s." % (
                     name, label(item), _lower(why[0])), why[1])

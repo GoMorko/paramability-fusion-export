@@ -3,7 +3,8 @@
 The walk keeps the steps that build the exported body: sketches, construction geometry and steps of other bodies are
 passed by, and every other step of the body is copied by its handler (`HANDLERS`, gathered from `steps`, `holes` and
 the other step modules) or left out with a reason. A left out step changes the shape Orca builds, so the result lists
-it; later steps are still copied.
+it; later steps are still copied. A handler takes the step's `design_model.design.ResolvedStep` and reads the step
+through it (`brought`, `brought_data`, `facts`).
 
 The variables are the sizes of the size table (the parameters ticked in the dialog, and the formulas over them) that
 a bound field reads. Each ticked parameter ends in one of: it follows a variable everywhere it is used ("variable"),
@@ -151,10 +152,9 @@ def _walk(ctx):
         earlier = {id(f) for f in ctx.features}
         try:
             design.replay(step, ctx)
-            brought = step.brought
-            made = handler(ctx, brought)
+            made = handler(ctx, step)
             if made and not isinstance(made, (Skip, Pass)):
-                other_components.mark_refs(ctx, brought)
+                other_components.mark_refs(ctx, step.brought)
         except Exception as error:  # an error in one step's copy leaves that step out, never the whole output
             ctx.rollback(mark)
             leave_out(step, _INTERNAL, causes.INTERNAL_ERROR, error)

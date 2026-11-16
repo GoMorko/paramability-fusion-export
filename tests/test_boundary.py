@@ -62,10 +62,6 @@ PRIVATE_REACHES_IN_TESTS = {
 RAW_STEP_DATA = {
     "export_plan/body_scope.py", "export_plan/marker_roll.py", "export_plan/probe_flow/borrowed_view.py",
     "geometry/combine_volume.py",
-    "orca_translate/bodies.py", "orca_translate/combine.py", "orca_translate/context.py",
-    "orca_translate/finishes.py", "orca_translate/holes.py", "orca_translate/lofts.py", "orca_translate/repeat.py",
-    "orca_translate/revolve.py", "orca_translate/steps.py", "orca_translate/sweeps.py", "orca_translate/threads.py",
-    "orca_translate/tools.py",
     "params/geometry_links.py",
     "probe/plan/covered.py", "probe/plan/request.py",
     "translator/audit.py", "translator/bodies/move.py", "translator/bodies/paste.py", "translator/bodies/split.py",

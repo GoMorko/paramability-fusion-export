@@ -44,11 +44,6 @@ _MODES = {"join": BooleanMode.ADD, "cut": BooleanMode.CUT, "intersect": BooleanM
 _SOLID_MODES = {"newBody": ADD, "join": ADD, "cut": CUT, "intersect": INTERSECT}
 
 
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def _label(item):
     return item.get("name") or "the step"
 
@@ -321,9 +316,9 @@ def _frame_at(frame, shift):
     return dict(frame, origin=vec.add(frame["origin"], vec.scale(vec.unit(frame["z"]), shift)))
 
 
-def extrude(ctx, item):
-    """The Orca features of an extrude, or a Skip."""
-    data = _data(item)
+def extrude(ctx, step):
+    """The Orca features of an extrude (`step`, a `design.ResolvedStep`), or a Skip."""
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Skip("This extrude makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
