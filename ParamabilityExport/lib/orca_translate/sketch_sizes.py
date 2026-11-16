@@ -86,7 +86,7 @@ def _drawn_reason(ctx, item, made, piece, profile):
     """Why an outline written with numbers does not follow the sizes that move it: its own notes, else a plain
     reason by what the outline is."""
     if made.notes:
-        return "; ".join(note.rstrip(".") for note in made.notes)
+        return "; ".join(dict.fromkeys(note.rstrip(".") for note in made.notes))
     name = made.feature.name if made.feature is not None else "%s outline" % _label(item)
     if sketch_formulas(ctx, profile) is None:
         why = "the export does not tell how the dimensions of %s place its lines" % (profile.get("sketch") or

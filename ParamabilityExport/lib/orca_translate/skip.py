@@ -4,11 +4,14 @@ from ..capture_model import gap_hints
 
 
 class Skip:
-    """A step left out of the copy: `reason` is one plain sentence, `cause` a `gap_hints` cause."""
+    """A step left out of the copy: `reason` is one plain sentence, `cause` a `gap_hints` cause. `stop` is the
+    `design_model.words.ToolStop` when the reason says a tool body cannot be built, so a tool of a tool can name the
+    step that really stops it."""
 
-    def __init__(self, reason, cause=gap_hints.REFUSED):
+    def __init__(self, reason, cause=gap_hints.REFUSED, stop=None):
         self.reason = reason
         self.cause = cause
+        self.stop = stop
 
     @classmethod
     def of(cls, problem):

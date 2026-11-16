@@ -12,6 +12,7 @@ from tests import orca_corners as corners
 from tests import orca_outline as shapes
 from tests.orca_cuts import ELL, TRAPEZOID, WINDOW, Section, Shape
 
+from lib.design_model.design import as_read
 from lib.orca_recipe.enums import BooleanMode, FaceGroup, FeatureType
 from lib.orca_translate import VARIABLE, causes, corner_hosts, corner_tools, finishes, steps, translate
 from lib.orca_translate.context import Context
@@ -277,10 +278,10 @@ class LeftOutTest(unittest.TestCase):
     def test_a_round_on_an_outline_no_longer_in_the_copy(self):
         capture = corners.rounded_outline(ELL, corners.ELL_STEPS)
         ctx = Context(capture, table_for(capture), Placement(capture))
-        ctx.written[1] = steps.extrude(ctx, capture["items"][1])
+        ctx.written[1] = steps.extrude(ctx, as_read(capture["items"][1]))
         ctx.shapes[1] = list(ctx.solid.pieces)
         ctx.cut_built.clear()
-        made = finishes.fillet(ctx, capture["items"][2])
+        made = finishes.fillet(ctx, as_read(capture["items"][2]))
         self.assertEqual(made.cause, causes.CORNER_CHANGED)
         self.assertEqual(ctx.corner_hosts, {})
 
@@ -309,7 +310,7 @@ class RollbackTest(unittest.TestCase):
         for item in capture["items"][:upto]:
             if item["type"] == "ExtrudeFeature":
                 start = len(ctx.solid.pieces)
-                ctx.written[item["index"]] = steps.extrude(ctx, item)
+                ctx.written[item["index"]] = steps.extrude(ctx, as_read(item))
                 ctx.shapes[item["index"]] = ctx.solid.pieces[start:]
         return ctx
 
@@ -319,7 +320,7 @@ class RollbackTest(unittest.TestCase):
         hosts = {maker: [(h, list(h.specs), h.count) for h in found] for maker, found in ctx.corner_hosts.items()}
         held = {index: list(found) for index, found in ctx.corner_steps.items()}
         mark = ctx.checkpoint()
-        made = finishes.fillet(ctx, item)
+        made = finishes.fillet(ctx, as_read(item))
         self.assertNotIsInstance(made, Skip)
         self.assertNotEqual(ctx.features, before)
         ctx.rollback(mark)
@@ -338,7 +339,7 @@ class RollbackTest(unittest.TestCase):
         capture = corners.rounded_block([("Fillet1", False, [0, 1], 2.0, None), ("Fillet2", False, [2, 3], 3.0,
                                                                                   None)])
         ctx = self._context(capture, 4)
-        self.assertNotIsInstance(finishes.fillet(ctx, capture["items"][4]), Skip)
+        self.assertNotIsInstance(finishes.fillet(ctx, as_read(capture["items"][4])), Skip)
         self.assert_taken_back(ctx, capture["items"][5])
 
 

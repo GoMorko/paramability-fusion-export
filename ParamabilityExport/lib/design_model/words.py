@@ -246,3 +246,39 @@ SPLIT_INSIDE_TOOL = "The copy could not tell which pieces of this split lie insi
 SPLIT_TOOL_UNREAD = "What this split cuts with was not read."
 TOOL_NESTED_ELSEWHERE = ("The tool body %s is taken by a Combine inside a tool body of another component, which is "
                          "not copied.")
+
+
+# A tool body that cannot be copied because one of its steps cannot.
+def sentence(text):
+    """`text` as a sentence of its own: with a full stop when it has no end mark."""
+    text = (text or "").strip()
+    return text if not text or text[-1] in ".!?" else text + "."
+
+
+class ToolStop:
+    """Why a tool body cannot be copied: one step of it cannot, and `why` says why in plain words.
+
+    tool: the name of the tool body. step: the name of the step that stops it, or "" when it has none. why: the reason
+    of that step. inside: the name of the tool body that holds that step when it is a tool of a tool, else None. When
+    the stopped step is itself a Combine whose own tool cannot be built, `through` makes the stop name the step that
+    really stops, once."""
+
+    def __init__(self, tool, step, why, inside=None):
+        self.tool, self.step, self.why, self.inside = tool, step or "", sentence(why), inside
+
+    @classmethod
+    def through(cls, tool, step, why, inner=None):
+        """The stop of `tool` at `step` with the reason `why`. `inner` is the `ToolStop` of that step when the step
+        stops for the same fact one level down: then the step that stops `inner` is named and not `step`."""
+        if inner is None:
+            return cls(tool, step, why)
+        return cls(tool, inner.step, inner.why, inner.inside or inner.tool)
+
+    @property
+    def reason(self):
+        if self.inside:
+            where = "the step %s in the tool body %s" % (self.step, self.inside) if self.step \
+                else "a step in the tool body %s" % self.inside
+        else:
+            where = "its step %s" % self.step if self.step else "one of its steps"
+        return ("The tool body %s cannot be copied because of %s. %s" % (self.tool, where, self.why)).rstrip()

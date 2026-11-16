@@ -50,11 +50,6 @@ def label(item):
     return item.get("name") or "the step"
 
 
-def data_of(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def feature(kind, name, **values):
     """A new feature with the fields Orca sets on every feature it makes."""
     return CadFeature(type=kind, name=name, thread_major_nominal=True, pattern_inclusive=True, **values)
@@ -66,25 +61,27 @@ def _handlers():
 
 
 def _why(step, owner):
-    """The reason the resolved step `step` (`design.ResolvedStep`) that builds a tool cannot be copied, or None.
-    `owner` is the token of the other component whose tool body the step builds ("" for the part's component): such a
-    step must have been read in that component's coordinates (`helper_of`)."""
+    """`(reason, cause)` for the resolved step `step` (`design.ResolvedStep`) that builds a tool when it cannot be
+    copied (the reason is a sentence), else None. `owner` is the token of the other component whose tool body the
+    step builds ("" for the part's component): such a step must have been read in that component's coordinates
+    (`helper_of`)."""
     item = step.item
     if owner and not item.get("helper_of"):
-        return "it could not be read from Fusion", gap_hints.REFUSED
+        return shared.STEP_UNREAD, gap_hints.REFUSED
     if owner and tool_chains.sketch_by_name_only(item):
-        return "its sketch is named only by its name, which a sketch of the part may share", gap_hints.REFUSED
+        return "The sketch of this step is named only by its name, which a sketch of the part may share.", \
+            gap_hints.REFUSED
     if owner and lineage.is_split(item):
         # The split rules look for later steps that use its other pieces in the part's component only.
-        return "a split in a tool body of another component is not copied to Orca yet", gap_hints.OTHER_COMPONENT
+        return "A split in a tool body of another component is not copied to Orca yet.", gap_hints.OTHER_COMPONENT
     if not owner and (item.get("helper_of") or outside_component(item)):
-        return "it is in another component", gap_hints.OTHER_COMPONENT
+        return "This step is in another component, which is not copied.", gap_hints.OTHER_COMPONENT
     if step.has(design.FAILS):
-        return "it does not build in Fusion", gap_hints.REFUSED
+        return shared.STEP_FAILS, gap_hints.REFUSED
     if step.has(design.UNREAD) or item.get("helper_unread"):
-        return "it could not be read from Fusion", gap_hints.REFUSED
+        return shared.STEP_UNREAD, gap_hints.REFUSED
     if _handlers().get(item.get("type")) is None:
-        return "steps of type %s are not copied to Orca yet" % type_words(item.get("type") or ""), \
+        return "Steps of type %s are not copied to Orca yet." % type_words(item.get("type") or ""), \
             gap_hints.UNSUPPORTED
     return None
 
@@ -137,8 +134,7 @@ def build(ctx, record, anchor):
                              exported)
     if found.unseen is not None:
         item, why = found.unseen
-        return Skip("The tool body %s cannot be copied, because of the step %s: %s." % (
-            name, label(item), _lower(why.rstrip("."))), _UNSEEN_CAUSES.get(why))
+        return _stopped(name, item, why, _UNSEEN_CAUSES.get(why))
     if found.links:
         return Skip("The tool body %s is a piece of a split body, which is not copied to Orca yet." % name,
                     gap_hints.UNSUPPORTED)
@@ -152,19 +148,17 @@ def build(ctx, record, anchor):
                 if found.owner else item
             step = design.resolve(seen, ctx)
             why = _why(step, found.owner)
-            made = None
+            made = inner = None
             start = len(body.solid.pieces)
             if why is None:
                 design.replay(step, ctx)
-                brought = step.brought
-                made = _handlers()[item["type"]](ctx, brought)
+                made = _handlers()[item["type"]](ctx, step)
                 if isinstance(made, Skip):
-                    why = (made.reason.rstrip("."), made.cause)
+                    why, inner = (made.reason, made.cause), made.stop
                 elif made and not isinstance(made, Pass):
-                    other_components.mark_refs(ctx, brought)
+                    other_components.mark_refs(ctx, step.brought)
             if why is not None:
-                return Skip("The tool body %s cannot be copied, because its step %s is left out: %s." % (
-                    name, label(item), _lower(why[0])), why[1])
+                return _stopped(name, item, why[0], why[1], inner)
             if not isinstance(made, Pass):
                 ctx.written[item["index"]] = list(made)
                 ctx.shapes[item["index"]] = body.solid.pieces[start:]
@@ -194,9 +188,11 @@ def _carry(ctx, body, move, name):
     body.solid.moved([list(row) for row in move.rows], list(move.offset))
 
 
-def _lower(text):
-    """A reason that goes on inside a sentence: its first word in lower case, unless it is a name (Orca)."""
-    return text[:1].lower() + text[1:] if text[1:2].islower() and not text.startswith("Orca") else text
+def _stopped(name, item, why, cause, inner=None):
+    """The Skip of the tool body `name` that the step `item` stops, for the reason `why` (a sentence) and its `cause`.
+    `inner` is the `ToolStop` of that step when it is a Combine whose own tool cannot be built."""
+    stop = shared.ToolStop.through(name, item.get("name"), why, inner)
+    return Skip(stop.reason, cause, stop)
 
 
 def mark_copied(ctx, indexes, note):

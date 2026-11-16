@@ -4,7 +4,8 @@ Start from what is known (the origin, fixed entities, projected entities as cons
 driving dimensions that match the drawing) and apply local rules until nothing changes:
 
 - line directions: horizontal and vertical fix them, perpendicular and angle dimensions turn a known one, two known
-  ends give one (`DirFixed`, `DirLink`, `_directions_from_points`);
+  ends (in the extended reading also a known gap between the ends) give one (`DirFixed`, `DirLink`,
+  `_directions_from_points`);
 - linear relations between slots (`slots`): one with a single unknown gives it; one with two unknowns and constant
   factors joins them into a group (so a rectangle's sides share their x and y); two with the same two unknowns give
   both (two lines crossing);
@@ -25,7 +26,7 @@ from .directions import Dir, from_points, matches
 from .graph import GraphError, load
 from .outcome import BLOCKED, CONFLICT, FREE, NO_RULE, REFUSED, UNREAD, Assumption, Solution, Usage, Value
 from .setup import Setup, default_settings, input_name  # noqa: F401 (input_name and default_settings are public here)
-from .slots import Rel, radius, slot_text, x, y
+from .slots import Lin, Rel, radius, slot_text, x, y
 
 TOLERANCE = 1e-6
 _MATH_ERRORS = (ExprDomainError, ZeroDivisionError, OverflowError, ValueError)
@@ -285,13 +286,29 @@ class _Solver(Setup, Crossings):
             a, b = self.g.curves[line].points
             coords = [self.slots.known(s) for s in (x(a), y(a), x(b), y(b))]
             if any(c is None for c in coords):
-                continue
+                if not self.extended:
+                    continue
+                coords = self._gap_of_ends(a, b)
+                if coords is None:
+                    continue
             d = from_points(*coords)
             if not matches(d, self.dirs.base(line), self._at_base):
                 d = d.reversed()
             self._set_direction(line, [d], "the ends of line %d" % line)
             progress = True
         return progress
+
+    def _gap_of_ends(self, a, b):
+        """`(0, 0, dx, dy)` when the gap from point `a` to point `b` is known on both axes although the points are
+        not (their coordinates share groups, as the corners of a rectangle do), else None. The gap gives the line's
+        direction: the diagonal of a centre rectangle, which a point on both diagonals then places."""
+        gap = []
+        for axis in (x, y):
+            unknown, const = self.slots.reduce(Lin({axis(b): 1.0, axis(a): -1.0}))
+            if unknown:
+                return None
+            gap.append(const)
+        return num(0.0), num(0.0), gap[0], gap[1]
 
     def _build_deferred(self):
         progress = False

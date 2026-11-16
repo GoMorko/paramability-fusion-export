@@ -142,7 +142,10 @@ handler names the cause with its `Refusal(..., cause=...)`; a step type with no 
 (`StepType.gap_cause`); a step that reaches into another component, a step that picks faces of a gap and a refusal
 that names the gaps it depends on (a pattern of a gap) get theirs in the walk. A Combine left out because a step of
 its tool body cannot be copied gets the cause of that step (`tool_walk.cannot_copy`, from the tool walk's
-`TranslateResult.refusal_cause`), so a tool built with a thicken gets the thicken's hint. A refusal without a cause and
+`TranslateResult.refusal_cause`), so a tool built with a thicken gets the thicken's hint. The reason of that gap names
+the tool body and the step that stops it, then gives the reason of the step ("The tool body Body3 cannot be copied
+because of its step Thicken1. Steps of type thicken are not copied."). When the step is a Combine whose own tool cannot
+be built, the reason names the step that really stops it, once. A refusal without a cause and
 a step type without one have no hint. The wording follows the app's user guide page "Steps that do not copy yet" (chapter
 "Designing in Fusion (experimental)"): when they disagree, the guide is right and the hint changes.
 `tests/test_gap_hints.py` checks that every cause the translator gives has a hint and every hint is given.

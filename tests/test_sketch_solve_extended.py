@@ -9,7 +9,7 @@ from unittest import mock
 from tests import context  # noqa: F401
 from tests.derived_fixtures import box_capture
 from tests.fakes import FakePort
-from tests.sketch_solve_helpers import L, P, SolvedCase, Sketch, cos, sin
+from tests.sketch_solve_helpers import L, P, SolvedCase, Sketch, cos, rectangle, sin
 from tests.test_pipeline import export
 
 from lib.probe import derived
@@ -76,6 +76,44 @@ class DistanceBetweenLinesTest(SolvedCase, unittest.TestCase):
         env = {"d3": 47.0}
         self.assertAlmostEqual(out.directions[leg].expr.value(env) % 360.0, 47.0, places=9)
         self.assertAlmostEqual(out.directions[other].expr.value(env) % 360.0, 47.0, places=9)
+
+
+def _centre_rectangle(width=12.0, height=7.0, at=(4.0, 2.5), sized=True):
+    """A rectangle of four lines with two construction diagonals and a centre point on both diagonals (two
+    coincident constraints, no midpoint), the centre placed `at` by two dimensions from the origin. Without `sized`
+    the rectangle has no width dimension. Returns the record and the corner ids."""
+    s = Sketch()
+    cx, cy = at
+    hw, hh = width / 2.0, height / 2.0
+    corners = [s.point(cx - hw, cy - hh), s.point(cx + hw, cy - hh), s.point(cx + hw, cy + hh),
+               s.point(cx - hw, cy + hh)]
+    centre = s.point(cx, cy)
+    lines = rectangle(s, corners)
+    for a, b in ((0, 2), (1, 3)):
+        diagonal = s.line(corners[a], corners[b], construction=True)
+        s.con("coincident", P(centre), L(diagonal))
+    if sized:
+        s.dim("linear", [L(lines[0])], width, "d1", "horizontal")
+    s.dim("linear", [L(lines[1])], height, "d2", "vertical")
+    s.dim("linear", [P(0), P(centre)], cx, "d3", "horizontal")
+    s.dim("linear", [P(0), P(centre)], cy, "d4", "vertical")
+    return s.record(), corners
+
+
+class CentreOnDiagonalsTest(SolvedCase, unittest.TestCase):
+    def test_the_extended_reading_places_the_corners_about_the_centre(self):
+        record, corners = _centre_rectangle()
+        self.assertFalse(solve_sketch(record).points[corners[0]][0].derived)
+        out = solve_sketch(record, extended=True)
+        self.assertEqual(out.outcome, DERIVED)
+        settings = [{"d1": 20.0, "d2": 3.0, "d3": -5.0, "d4": 1.0}, {"d1": 5.0, "d2": 11.0, "d3": 8.0, "d4": 0.0}]
+        self.assert_point(out, corners[0], lambda e: (e["d3"] - e["d1"] / 2, e["d4"] - e["d2"] / 2), settings)
+        self.assert_point(out, corners[2], lambda e: (e["d3"] + e["d1"] / 2, e["d4"] + e["d2"] / 2), settings)
+
+    def test_a_side_without_a_dimension_leaves_the_corners_open(self):
+        record, corners = _centre_rectangle(sized=False)
+        out = solve_sketch(record, extended=True)
+        self.assertFalse(any(v.derived for c in corners for v in out.points[c]))
 
 
 class RoundedDrawingTest(unittest.TestCase):

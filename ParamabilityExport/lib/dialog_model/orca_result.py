@@ -34,7 +34,7 @@ def _line(text):
 def parameter_line(entry):
     """One line for a ticked parameter: the variable it follows and where, or why it stayed fixed."""
     name = entry["name"]
-    reasons = "; ".join(r.rstrip(".") for r in entry.get("reasons") or [])
+    reasons = "; ".join(dict.fromkeys(r.rstrip(".") for r in entry.get("reasons") or []))
     where = ", ".join(entry.get("follows") or [])
     outcome = entry.get("outcome")
     if outcome == "variable":

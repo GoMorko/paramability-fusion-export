@@ -11,13 +11,19 @@ copies it:
   body of a Combine (`helper_of`);
 - `problems`: what about the item cannot be read (`UNREAD`, `FAILS`, `BODIES_UNREAD`), each a `problem.Problem`;
 - `brought`: the item with the geometry of other components that it can use as its own brought in
-  (`borrowed.bring_in`, then `refs.bring_in`), and `foreign`, `old_export`, `why_foreign` about what stays foreign;
+  (`borrowed.bring_in`, then `refs.bring_in`), `brought_data` its data, and `foreign`, `old_export`, `why_foreign`
+  about what stays foreign;
 - `facts`: what the shared reader of the step's kind (`step_kinds.StepType.facts`) reads from the brought in data
-  alone (`FACT_READERS`), else None. A handler reads its step's facts from its own reader call, since a handler also
-  runs on items that no walk resolved (the sources of a pattern, the steps of a tool body);
+  alone (`FACT_READERS`), else None;
 - `events`: the doubts, notes, followed components and unknown movers that bringing in recorded. They are not on any translation
   yet: a walk that copies the step replays them (`replay`) where it brings the step in, so a step that is left out
   keeps none of them. `error` is the exception that bringing in raised, if any; `replay` raises it again.
+
+A handler of an output takes the `ResolvedStep` of its step and reads the step through it: `brought` for the item,
+`brought_data` for its data, `facts` for what the shared reader of its kind gives, and `params_of` for the model
+parameters behind a value. An item that no walk resolves but that a handler reads or copies (a source of a pattern, a
+Combine among them, an item a handler writes again as another kind of step) goes in as `as_read(item)`: the item as
+it is, nothing brought in.
 
 These are facts only. Each output decides from them whether a step is copied, left out or stops the copy, and words
 its own answer. Pure: it reads capture dicts only.
@@ -95,6 +101,11 @@ class ResolvedStep:
         """The data of the item as the walk reads it, {} when it has none."""
         return data_of(self.item)
 
+    @property
+    def brought_data(self):
+        """The data of `brought`, {} when it has none: the data a handler copies the step from."""
+        return data_of(self.brought)
+
     def problem(self, code):
         """The `Problem` of `code` the item has, else None."""
         return next((p for p in self.problems if p.code == code), None)
@@ -107,6 +118,12 @@ def data_of(item):
     """The data dict of an item, {} when it has none."""
     data = item.get("data")
     return data if isinstance(data, dict) else {}
+
+
+def params_of(item):
+    """The model parameters that Fusion keeps for the values of an item (`data.params`): by the path of each value in
+    the data, `{name, expression, value}`. {} when it has none."""
+    return data_of(item).get("params") or {}
 
 
 def _problem_codes(item):
@@ -140,6 +157,13 @@ def resolve(item, ctx, role=None, raw=None):
     else:
         brought, error = item, None
     return ResolvedStep(item if raw is None else raw, item, role, brought, tally.events, error)
+
+
+def as_read(item):
+    """`item` as a `ResolvedStep` as the capture holds it: no role, nothing brought in, no events. For an item that a
+    translator reads but does not copy as a step (a source of a pattern, a Combine among them), and for a handler that
+    a test calls on an item."""
+    return ResolvedStep(item, item, None, item, (), None)
 
 
 def read(capture, table=None, motion=None, chain=None, cache=None):

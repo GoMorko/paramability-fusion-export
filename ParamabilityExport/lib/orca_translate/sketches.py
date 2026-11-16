@@ -18,6 +18,7 @@ from ..design_model.dimension_sizes import dimension_formulas, leaf_values, movi
 from ..orca_recipe.enums import EntityType, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..orca_recipe.sketch import SketchEntity
+from ..sketch_solve import outcome
 from ..sketch_solve.constants import constants_of
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.expr import ExprDomainError
@@ -28,6 +29,23 @@ from . import splines
 DISTANCE_KEEPS_PARALLEL = False
 UNCONFIRMED = ("%s: the copy takes two lines that only a distance dimension ties to stay parallel when sizes change, "
                "which is not confirmed in Fusion yet")
+
+# Why the copy cannot work out a value of a sketch, by the solver's code (`sketch_solve.outcome`), in plain words.
+_OPEN = {
+    outcome.NO_RULE: "the copy cannot work out %s from the dimensions and constraints of the sketch",
+    outcome.FREE: "%s can move freely, as the sketch is not fully constrained in Fusion",
+    outcome.BLOCKED: "%s rests on a constraint or dimension the copy does not read yet",
+    outcome.REFUSED: "a dimension that sets %s does not match the drawing",
+    outcome.CONFLICT: "the dimensions and constraints of the sketch do not give one clear place for %s",
+    outcome.UNREAD: "the export could not read %s in full",
+}
+
+
+def open_reason(value, what):
+    """Why a solver value (`sketch_solve.outcome.Value`) that has no formula keeps its number, in plain words about
+    `what` ("its corners", "its radius")."""
+    return _OPEN.get(getattr(value, "code", None), "the copy cannot work out %s") % what
+
 
 # Two sketch points closer than this (mm) are one point.
 POINT_TOL = 1e-4
@@ -236,7 +254,7 @@ class SketchFormulas:
             elif leaf is not None:
                 mapping[name] = leaf.value
             else:
-                self.why = "the sketch formula reads %s, which is unknown" % name
+                self.why = "the copy does not know a value the sketch reads"
                 return None
         return expr.substitute(mapping)
 
@@ -252,12 +270,11 @@ class SketchFormulas:
         """`(x, y)` leaf formulas of the graph point at `xy`, or None with `why` set."""
         pid = self._line_point(xy)
         if pid is None:
-            self.why = "its corners are not in the sketch record"
+            self.why = "the export did not read its corners from the sketch"
             return None
         pair = self.solution.points.get(pid)
         if pair is None or not all(v.derived for v in pair):
-            reason = next((v.reason for v in pair or () if not v.derived), "") if pair else ""
-            self.why = "its points have no formula%s" % (" (%s)" % reason if reason else "")
+            self.why = open_reason(next((v for v in pair or () if not v.derived), None), "its corners")
             return None
         return pair[0].expr, pair[1].expr
 
@@ -278,7 +295,7 @@ class SketchFormulas:
                 return None
             along = (q[0] - p[0]) * (b[0] - a[0]) + (q[1] - p[1]) * (b[1] - a[1])
             return found.expr if along > 0 else found.expr + 180.0
-        self.why = "a side of the outline is not a line of the sketch record"
+        self.why = "the export did not read a side of the outline as a line of the sketch"
         return None
 
     def follows_projection(self, outline):
@@ -342,11 +359,11 @@ class SketchFormulas:
                 found = self.solution.radii.get(c["id"])
                 pair = self.solution.points.get(pid)
                 if found is None or not found.derived:
-                    self.why = "its radius has no formula%s" % (" (%s)" % found.reason if found else "")
+                    self.why = open_reason(found, "its radius")
                     return None
                 ok = pair is not None and all(v.derived for v in pair)
                 return (pair[0].expr if ok else None), (pair[1].expr if ok else None), found.expr
-        self.why = "the circle is not in the sketch record"
+        self.why = "the export did not read the circle from the sketch"
         return None
 
     def sized(self, expr, value):

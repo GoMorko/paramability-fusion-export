@@ -142,9 +142,10 @@ def _solid(name):
     from lib.orca_translate.context import Context
     from lib.orca_translate.place import Placement
     from lib.orca_translate.steps import extrude
+    from lib.design_model.design import as_read
     capture = load_capture(name)
     ctx = Context(capture, None, Placement(capture))
-    extrude(ctx, capture["items"][1])
+    extrude(ctx, as_read(capture["items"][1]))
     return ctx.solid
 
 

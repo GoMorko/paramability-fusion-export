@@ -311,3 +311,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `end_normal` is parallel to X when Fusion lists one (an end cap at -18.5 mm, `end_area` about the slot area
     inside the wall), else a rib wall with a normal across X and a small area. Either way the cut is copied in both
     outputs; write down which face Fusion listed first and whether `endFaces` held a cap at all.
+32. OR4, a rectangle centred by its diagonals, for Export for Orca. Add user parameters `Width` 40 mm and `Depth`
+    30 mm. On the XY plane draw a 2 point rectangle, two construction lines from corner to opposite corner, and a
+    sketch point; make the point coincident with both construction lines (no midpoint constraint) and with the
+    origin. Give the sides the dimensions `Width` and `Depth`, and extrude it 10 mm.
+    Export: Export for Orca with `Width` and `Depth` ticked. Both follow their Orca variable ("Extrude1 sketch width"
+    and "Extrude1 sketch height"), with no "keeps its numbers" reason. In Orca set Width to 60: the box stays centred
+    on the origin and is 60 mm wide, as in Fusion.

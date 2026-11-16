@@ -22,7 +22,7 @@ from ..design_model.values import Quantity
 from .skip import Skip
 from .solid import CUT, Prism
 from .steps import LONG, behind, misses_reason, toward_material
-from .tools import data_of, label
+from .tools import label
 
 
 def _perpendicular(n):
@@ -31,9 +31,9 @@ def _perpendicular(n):
     return vec.unit(vec.cross(helper, n))
 
 
-def hole(ctx, item):
+def hole(ctx, step):
     """The Orca hole features of a hole step (one per position, and a thread after each tapped one), or a Skip."""
-    data = data_of(item)
+    item, data = step.brought, step.brought_data
     if not ctx.has_body:
         return Skip("The part this hole is drilled into is not in the copy.", gap_hints.AFTER_GAP)
     found = hole_facts.kind_of(data)

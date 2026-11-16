@@ -45,12 +45,14 @@ The modules of `lib/orca_translate/`:
   reads: what each step is for the body (a sketch, an assembly item, a step of another component, a step of the body
   or of another body) and the body before and after it (`design_model.roles`), what about it cannot be read (the
   step, its bodies, or a step in error in Fusion), and the step with the geometry of other components brought in. A
-  left out round or chamfer is measured from the sets in the resolved step (`facts`).
+  left out round or chamfer is measured from the sets in the resolved step (`facts`). Each handler gets the resolved
+  step (`handler(ctx, step)`) and reads its step only through it (see "Handlers read the resolved step" in
+  `docs/developer-guide.md`).
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
   (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
   that follows sizes is a `design_model.values.Quantity`, the same type the recipe translator uses: `Context.quantity`
-  reads it from the capture, and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
+  reads it from the model parameters of the step (`design_model.design.params_of`), and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
   writes it into the field.
 - `other_components.py`: geometry of other components (see "Other components" below).
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
@@ -435,9 +437,10 @@ not judged to meet material where Orca removes nothing.
   intersect inside a tool takes its rule (`every` or `any`) from the tool's own volume, and is left out when the tool
   was not measured. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
   the tool that cannot be copied leaves the whole step out, naming the tool and that step, and nothing of it is
-  written. The reason reads "The tool body X cannot be copied, because its step Y is left out: <reason of the
-  step>." (for a step that the chain of the tool cannot see: "..., because of the step Y: ..."), with no reason in
-  parentheses inside another. While a tool body is built, the reasons of its steps name the tool and not the part
+  written. The reason reads "The tool body X cannot be copied because of its step Y. <reason of the
+  step>", the same two sentences as in the recipe (`design_model.words.ToolStop`). When Y is a Combine whose own tool
+  cannot be built, the reason names the step that really stops it once, and its tool body: "... because of the step Z
+  in the tool body W. <reason of Z>". While a tool body is built, the reasons of its steps name the tool and not the part
   (`Context.body_words`: "the part", or "the tool body X"), for example the rounds and chamfers (`finishes`) and a
   cut that meets nothing (`steps.misses_reason`). A pattern whose tool cannot be built gives "This pattern cannot be
   copied." and then the reason of the tool. Those steps were passed by as building another body; once copied into a tool their verdict says so.
@@ -573,7 +576,10 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - A feature value (an extrude length, a hole size) follows when its model parameter's expression translates to a
   formula of the sizes (`SizeTable.translate`, the same as for a recipe) and Orca can write that formula
   (`formulas.to_orca`: `+ - * /`, brackets, `pi`, `sqrt abs sin cos tan min max`; `pow` of a whole power up to 4 is
-  written as a product; choices, comparisons, `round`, `mod` and the rest are not).
+  written as a product; choices, comparisons, `round`, `mod` and the rest are not). The reason says in plain words
+  what Orca cannot do ("Orca formulas cannot round a number up" for `ceil`, `formulas._CANNOT`).
+- The reasons of a parameter are listed once each: a reason that two notes of one outline give alike, or that two
+  steps give alike, is shown once (`sketch_sizes._drawn_reason`, `orca_result.parameter_line`).
 - A rectangle's `width` and `height` and a circle's `radius` follow when the capture holds the graph of the sketch
   (`capture.sketch_graphs`): `sketch_solve` works out each corner as a formula of the sketch's dimensions, each
   dimension is a formula of the sizes (`design_model.dimension_sizes.dimension_formulas`), and a side is the difference of
@@ -661,7 +667,17 @@ against Orca 2.5.1 (`CadDocument::apply_feature` Cut and Transform, `apply_boole
     the shorter line, in radians). A capture rounds each coordinate to a millionth of a mm, so a 120 degree angle
     between lines 3 mm long measures 59.9999986 degrees, which the default reading refuses. The slack is at most
     0.001 radians (`checks.MAX_SLACK`), so a very short line does not widen the test;
-  - each line gets its direction as an angle formula (`Solution.directions`).
+  - each line gets its direction as an angle formula (`Solution.directions`);
+  - a line whose two ends are not known yet takes its direction from the gap between its ends when that gap is known
+    on both axes (`_Solver._gap_of_ends`): the corners of a rectangle share their coordinates, so the gap of each
+    diagonal is known from the width and the height. A centre point that lies on both diagonals (two coincident
+    constraints, as some centre rectangles are drawn, without a midpoint constraint) then places the rectangle:
+    "Extrude1 sketch keeps its numbers: the copy cannot work out its corners from the dimensions and constraints of
+    the sketch" no longer comes for such a rectangle.
+- When the solver gives no formula for a corner, a radius or a hole centre, the reason on the parameter's line says
+  why in plain words, by the solver's code (`sketches.open_reason`): no rule reaches it, the sketch is not fully
+  constrained, it rests on a constraint or dimension the copy does not read yet, a dimension does not match the
+  drawing, the rules do not agree, or the sketch could not be read.
 - The formula check. The corner formulas must give the drawn corners now (within 0.00001 mm), each side must run along
   its direction formula, the half-plane formula must give the outline in every cell of the lines through its sides
   (`halfplanes.check`: a point between each two neighbouring rays at each crossing of the lines), and Orca must be able

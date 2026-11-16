@@ -224,8 +224,8 @@ class ExtrudeTest(unittest.TestCase):
         walk = sys.modules["lib.orca_translate.translate"]
         real = walk.HANDLERS["ExtrudeFeature"]
 
-        def writes_then_skips(ctx, item):
-            real(ctx, item)
+        def writes_then_skips(ctx, step):
+            real(ctx, step)
             ctx.notes.append("written before the skip")
             ctx.doubt(["cube_mm"], "doubted before the skip")
             return Skip("left out after writing")
@@ -243,8 +243,8 @@ class ExtrudeTest(unittest.TestCase):
         walk = sys.modules["lib.orca_translate.translate"]
         real = walk.HANDLERS["HoleFeature"]
 
-        def writes_then_fails(ctx, item):
-            real(ctx, item)
+        def writes_then_fails(ctx, step):
+            real(ctx, step)
             return 1 / 0
 
         capture = box_capture()
@@ -383,6 +383,18 @@ class VariableTest(unittest.TestCase):
         self.assertEqual(result.recipe.features[0].expr, {})
         found = {p["name"]: p["outcome"] for p in result.parameters}
         self.assertEqual((found["depth_mm"], found["cube_mm"], found["height_mm"]), (FIXED, FIXED, VARIABLE))
+
+    def test_a_rectangle_that_nothing_places_keeps_its_numbers_and_tells_each_reason_once(self):
+        capture = hole_on_origin(box_capture())
+        graph = capture["sketch_graphs"][0]
+        graph["constraints"] = [c for c in graph["constraints"] if c["type"] != "midpoint"]
+        result = translate(capture, table_of(capture, BOX_TICKED))
+        self.assertEqual(result.recipe.features[0].expr, {})
+        found = {p["name"]: p for p in result.parameters}
+        self.assertEqual(found["depth_mm"]["outcome"], FIXED)
+        for reason in found["depth_mm"]["reasons"]:
+            parts = reason.rstrip(".").split("; ")
+            self.assertEqual(len(parts), len(set(parts)), reason)
 
     def test_a_plate_with_a_hole_drills_the_hole_where_its_sizes_put_it(self):
         capture = plate_with_hole()

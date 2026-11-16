@@ -31,7 +31,7 @@ import dataclasses
 import math
 
 from ..capture_model import gap_hints
-from ..design_model import reach
+from ..design_model import design, reach
 from ..design_model.paths import curves as path_curves, planner
 from ..design_model.paths.checks import bend_problem, outline_reach, overlap_problem, reach_problem
 from ..design_model.paths.curves import tangents
@@ -47,7 +47,7 @@ from ..design_model import words as shared
 from .sketches import entities_of, graph_for, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, Prism, Solid, Turned
-from .tools import OPERATIONS, data_of, feature, label
+from .tools import OPERATIONS, feature, label
 
 _SOLID_MODES = {"newBody": ADD, "join": ADD, "cut": CUT, "intersect": INTERSECT}
 _COMBINE = {"newBody": "new", "join": "add", "cut": "remove", "intersect": "intersect"}
@@ -105,9 +105,9 @@ def _path_problem(path):
     return None
 
 
-def sweep(ctx, item):
+def sweep(ctx, step):
     """The Orca features of a sweep, or a Skip."""
-    data = data_of(item)
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Skip("This sweep makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
@@ -202,7 +202,7 @@ def _as_extrude(ctx, item, data, profiles, found):
                "extent_type": "one", "side_one": {"kind": "distance", "distance": length, "taper_deg": 0.0},
                "thin": False, "end_offset": length, "target_box_before": data.get("target_box_before"),
                "participants": data.get("participants") or [], "params": {}}
-    return steps.extrude(ctx, dict(item, data=extrude))
+    return steps.extrude(ctx, design.as_read(dict(item, data=extrude)))
 
 
 # ---- one arc or a full circle: a revolve -----------------------------------------------------------------------
@@ -220,7 +220,7 @@ def _as_revolve(ctx, item, data, profiles, found):
         turned = {"operation": step, "profiles": [profile], "axis": dict(found.axis),
                   "extent": {"kind": "angle", "angle_deg": found.angle_deg}, "start_face_normal": start,
                   "params": {}}
-        made = revolve.revolve(ctx, dict(item, data=turned))
+        made = revolve.revolve(ctx, design.as_read(dict(item, data=turned)))
         if isinstance(made, Skip):
             ctx.rollback(mark)
             return made

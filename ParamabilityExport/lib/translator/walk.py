@@ -236,6 +236,7 @@ def walk_items(ctx, result):
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
             if outcome.stops:
+                result.refusal_stop = outcome.stop
                 return refuse(item, outcome.reason, cause=outcome.cause)
             if outcome.over_gap_cap:
                 result.over_gap_cap = True
@@ -244,6 +245,8 @@ def walk_items(ctx, result):
                     result.items[-1]["tool_steps"] = outcome.tool_steps
                 return False
             if not leave_out(item, outcome.reason, outcome.depends_on, cause=gap_hints.refusal_cause(outcome)):
+                if (result.refusal or {}).get("reason") == outcome.reason:
+                    result.refusal_stop = outcome.stop
                 return False
             return None
         if floating.floats(ctx, outcome):

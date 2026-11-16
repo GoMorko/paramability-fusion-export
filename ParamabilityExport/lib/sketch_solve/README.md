@@ -25,7 +25,9 @@ solution = solve_sketch(record, settings=None, constants=(), tol=1e-6, extended=
   the default, so their output does not change with it (`tests/test_sketch_solve_extended.py`). It reads a driving
   distance dimension between two lines as keeping them parallel, tests angle dimensions and the parallel lines of a
   distance dimension within what the rounding of the drawing allows for the lines' lengths
-  (`checks.turn_slack`, at most `checks.MAX_SLACK` radians), and fills `directions`.
+  (`checks.turn_slack`, at most `checks.MAX_SLACK` radians), fills `directions`, and gives a line its direction
+  from the gap between its ends when that gap is known on both axes although the ends are not (the diagonals of a
+  rectangle, so a centre point on both diagonals places it).
 - `distance_parallel`: with `extended`, False leaves out the rule that a distance dimension keeps its two lines
   parallel. The Orca copy solves a sketch both ways to find the formulas that rest on that rule (hand test OR18).
 

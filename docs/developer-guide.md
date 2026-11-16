@@ -1612,7 +1612,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
 | `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
-| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. |
+| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
@@ -1691,7 +1691,8 @@ alphabetical order by module.
 - `stop_warning.py`: the early warning under the body picker (`summarize`, `summarize_many`) and the texts after the
   export (`saved_message`, `status_text`). `left_out_preview.py`: the steps that the copy will probably leave out, as the
   dialog lists them before the export (`Found`, `find` for the recipe, `find_orca` for the Orca copy, `lines`, see 1.2).
-  `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`).
+  `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`). When two
+  reasons of a parameter have the same text, the line of the parameter shows that text one time only.
 - `dialog_rows.py`: the texts and the checks of the rows of the parameter table. `result_rows.py`: what the result
   window shows. `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
   text.
@@ -1787,7 +1788,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   another component" in 3.3). `bring_in` writes them in the `borrowed_movers` key (`MOVERS`) of the profile that it
   brings in.
 - `steps/`: one reader per kind of step, as facts. `steps/repeat.py`: the copies a pattern kept (`kept_elements`), their
-  frames in the frame of the part (`in_component`, `read_in_component`), the grid index of a copy (`solve_lattice`),
+  frames in the frame of the part (`in_component` for an item, `data_in_component` for the data alone,
+  `read_in_component` for a probe read), the grid index of a copy (`solve_lattice`),
   the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
   (`mirror_plane`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
@@ -1817,14 +1819,44 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     walk calls `replay` where it brings the step in, inside the recording or the checkpoint of the step. This makes
     sure that the doubts and notes of a step count only when the walk copies the step. `error` is an exception that the bring in
     raised. `replay` raises it again, at the same point where the bring in raised it before.
+  - `brought_data`: the data of `brought`. It is an empty dict when the item has no data. A handler copies the step
+    from this data.
   - `facts`: the facts that a shared step reader reads from the data of the step alone (`FACT_READERS`). The step
     kind table says which reader applies to a type (`StepType.facts` in `capture_model/step_kinds.py`). The sets of
-    a round or a chamfer step (`steps/finish.py`) are such facts. The Orca output reads them when it measures a
-    round or a chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers
-    still call the step readers themselves. A handler also runs on items that no walk resolved: the sources of a
-    pattern, the steps of a tool body that are written on the part, and items that a handler writes again.
+    a round or a chamfer step (`steps/finish.py`) are such facts. The Orca handlers of a round and of a chamfer
+    (`finishes.fillet`, `finishes.chamfer`) read them. The Orca output also reads them when it measures a round or a
+    chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers of the
+    recipe output still call the step readers themselves.
   `resolve(item, ctx, role)` gives the `ResolvedStep` of one item. The Orca output uses it for each step of a tool
   body (`tools.build`), without a role.
+  `as_read(item)` gives a `ResolvedStep` of an item as the capture holds it. It has no role, it brings in nothing,
+  and it has no events. Use it for an item that no walk resolves, but that a handler reads or copies. Examples are a
+  source of a pattern, a Combine among the sources, and an item that a handler writes again as a step of another
+  kind (a straight sweep that the Orca output writes as an extrude). A test that calls a handler directly also gives
+  it `as_read(item)`.
+  `params_of(item)` gives the model parameters that Fusion keeps for the values of an item (`data.params`), by the
+  path of each value in the data. Each parameter has its name, its expression and its value. It is an empty dict when
+  the item has none. The Orca output reads a value that can follow sizes through it (`Context.quantity`).
+
+  Handlers read the resolved step. The rule is for each module above the shared layer that reads a timeline step:
+
+  1. The walk gives the handler the `ResolvedStep` of the step: `handler(ctx, step)`. The walk does not give the
+     item.
+  2. The handler reads the item from `step.brought` and the data from `step.brought_data`. When the step kind has a
+     shared reader with facts, the handler reads `step.facts`. The handler does not call the reader again.
+  3. The handler gives the data, or the facts, to the shared step readers (`design_model/steps/`) and to its own
+     helpers. A helper does not read the data from the item again.
+  4. When the handler must read another item (a source of a pattern, for example), it reads that item through
+     `as_read(item)`. When it writes a step again as a step of another kind, it gives `as_read(new item)` to the
+     other handler.
+  5. A fact that the output needs and that the shared layer does not give yet goes into the shared layer, as a fact
+     that does not name an output. An example is `steps/repeat.py`, `data_in_component`: the copies of a pattern in
+     the frame of the component, from the data alone. The policy of the output (the limits, the checks of the part,
+     the choice to leave a step out) stays in the output.
+
+  `tests/test_boundary.py` keeps the list of the modules that still take the data of a step from the item
+  (`RAW_STEP_DATA`). A module that follows the rule above leaves that list. The modules of `orca_translate` follow the
+  rule. The modules of `translator`, `probe` and `export_plan` do not follow it yet.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. The walk of the recipe and the walk of the Orca output both read them:
   - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,
@@ -1901,7 +1933,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `words.py`: the sentences that both outputs give for the same fact: the noun of a reference, "may move with it", the
   note of a borrowed outline, the reasons of `why_foreign`, the problems of the readers of extrudes, holes, threads and
   sweeps, and the refusals that the two translators word the same (patterns, mirrors, splits, revolves, lofts, sweeps,
-  rounds and chamfers). The words of the problems of sweep paths are in `paths/words.py`. A sentence in these files
+  rounds and chamfers), and the sentence of a tool body that cannot be copied because one of its steps cannot
+  (`ToolStop`, 3.5). The words of the problems of sweep paths are in `paths/words.py`. A sentence in these files
   says what the design has and that it is not copied. It does not name an output (no "Orca", no "Paramability"), and
   it does not say "yet", since the layer cannot promise that a later version copies it. So each sentence reads right
   in the recipe and in the Orca copy, and the Orca output shows the sentence of a `Problem` as it is (`Skip.of`). A
@@ -2745,12 +2778,19 @@ part's frame with the tool's place in the assembly (`tool_move`, with the move o
 moves the tool's component follows when the probe measured it, else it is marked ("puts its tool at the place of Rod
 that turns with it").
 
-A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool: "The tool
-body Body3 cannot be copied: Thicken1 (thicken): ...".
+A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool. It is
+two sentences: the first names the tool body and the step the way the timeline shows them, the second is the reason of
+that step, as it is: "The tool body Body3 cannot be copied because of its step Thicken1. Steps of type thicken are not
+copied." No kind word follows the step name, and the reason of the step is not joined into the first sentence, so it
+keeps its own capital letter and full stop.
 
-The Orca output gives the same fact in other words: "The tool body Body3 cannot be copied, because its step Thicken1
-is left out: ...". The reason of the step follows the colon. It is not put in parentheses, so a reason that has
-parentheses of its own stays easy to read. The handlers of the Orca output name the body that they work on with
+Both outputs give this sentence from one place, `design_model.words.ToolStop`, so the recipe and the Orca copy say the
+same. A tool built from another tool can stop for a step of the inner tool. Then the sentence names that step once and
+the tool body that holds it: "The tool body Body2 cannot be copied because of the step Thicken1 in the tool body
+Body3. Steps of type thicken are not copied." It does not name the Combine steps in between. To do this, a `Refusal`
+(recipe) and a `Skip` (Orca) that say a tool body cannot be built carry the `ToolStop` as `stop`, and the Combine
+that meets such a step passes it to `ToolStop.through`. The recipe walk keeps it in `TranslateResult.refusal_stop`
+beside `refusal_cause`. The cause of the inner step goes on as before, so the hint stays right. The handlers of the Orca output name the body that they work on with
 `Context.body_words`. On the part, this is "the part". While the Orca output builds a tool body, this is "the tool
 body Body3". So the reason of a round, a chamfer or a cut in a tool body names the tool body and not the part (see
 `docs/orca-output.md`).

@@ -23,7 +23,7 @@ from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
 from .sketch_sizes import profile_sizes, projection_doubts
 from .steps import Skip
-from .tools import OPERATIONS, data_of, feature, label
+from .tools import OPERATIONS, feature, label
 
 FULL_TURN_DEG = 360.0
 # How far (mm) the axis may sit off the sketch plane, and how far it may lean out of it, and still count as in it.
@@ -100,8 +100,8 @@ def _turned_frame(frame, point, direction, degrees):
             "z": vec.rotate(frame["z"], direction, degrees)}
 
 
-def revolve(ctx, item):
-    data = data_of(item)
+def revolve(ctx, step):
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Skip("This revolve makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
