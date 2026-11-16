@@ -12,20 +12,23 @@ construction geometry built on any of those. `reference_of` describes one such e
   descriptions of the entities that definition names.
 
 Every key is optional: a member Fusion does not give is left out, and the translator reads a missing key as unknown.
-Entities of another component are left out of `built_on`.
+An entity of another component stands in `built_on` as `{ "foreign": true }`. Construction geometry without
+`built_on` (none could be read, or the chain is deeper than `_DEPTH`) counts as built on the part.
 """
 from . import read_geometry as geo
 from .placement import ORIGIN_MEMBERS
+from .read_sketch import sketch_place
 from .read_solid import axis_of, axis_record, construction_token
 
 # How deep built_on goes (a plane built on a plane built on a face).
 _DEPTH = 3
 
-# Members of the definitions of construction planes and axes that hold the entities they are built on.
+# Members of the definitions of construction planes and axes (`ConstructionPlane...Definition`,
+# `ConstructionAxis...Definition` in the API reference) that hold the entities they are built on.
 _BUILT_ON_MEMBERS = (
-    "planarEntity", "planarEntityOne", "planarEntityTwo", "linearEntity", "tangentFace", "referencePlane",
-    "edgeOne", "edgeTwo", "pointOne", "pointTwo", "pointThree", "point", "path",
-    "circularFace", "edge", "face", "planeOne", "planeTwo", "entity",
+    "planarEntity", "planarEntityOne", "planarEntityTwo", "linearEntity", "linearEntityOne", "linearEntityTwo",
+    "tangentFace", "circularFace", "face", "edgeEntity", "pathEntity",
+    "point", "pointEntity", "pointEntityOne", "pointEntityTwo", "pointEntityThree",
 )
 
 
@@ -37,7 +40,8 @@ def _is_origin(entity, name, ctx):
 
 
 def _built_on(entity, ctx, depth):
-    """Descriptions of the entities a construction plane or axis is defined from (own component only)."""
+    """Descriptions of the entities a construction plane or axis is defined from; one of another component is
+    `{ "foreign": true }`."""
     definition = geo.safe(lambda: entity.definition, None)
     found = []
     for member in _BUILT_ON_MEMBERS:
@@ -45,8 +49,7 @@ def _built_on(entity, ctx, depth):
         if source is None:
             continue
         source = geo.native_input(source, ctx)
-        if not geo.foreign(source, ctx):
-            found.append(reference_of(source, ctx, depth - 1))
+        found.append({"foreign": True} if geo.foreign(source, ctx) else reference_of(source, ctx, depth - 1))
     return found
 
 
@@ -124,9 +127,16 @@ def add_reference(record, entity, ctx):
 
 
 def axis_with_reference(entity, ctx):
-    """`read_solid.axis_record` of an axis entity (pattern axis, rotate axis), with what it is (`add_reference`) when
-    the axis could be read."""
+    """`read_solid.axis_record` of an axis entity (revolve axis, pattern axis, rotate axis), with what it is
+    (`add_reference`) when the axis could be read. A sketch line of the target's component also gets
+    `sketch_reference` and `sketch_projected`, what its sketch sits on and whether it holds projections
+    (`read_sketch.sketch_place`)."""
     record = axis_record(entity, ctx)
     if isinstance(record, dict) and "dir" in record:
-        add_reference(record, geo.native_input(entity, ctx), ctx)
+        native = geo.native_input(entity, ctx)
+        add_reference(record, native, ctx)
+        if record.get("entity_type") == "SketchLine" and not record.get("foreign") and not record.get("assembly"):
+            place = sketch_place(geo.safe(lambda: native.parentSketch, None), ctx)
+            record.setdefault("sketch_reference", place["reference"])
+            record.setdefault("sketch_projected", place["projected"])
     return record

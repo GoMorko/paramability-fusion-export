@@ -8,8 +8,35 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
+except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6 and RV1 to RV4, which are described here.
 
+- [ ] RV1, a revolve about a line of another sketch. Sketch1 on the XZ plane: a 10 by 30 mm rectangle, its left side
+      20 mm from the origin. Sketch2 on the XZ plane: a vertical construction line whose distance from the origin is
+      the user parameter `AxisAt` = 5 mm. Revolve the rectangle of Sketch1 a full turn about the line of Sketch2.
+      Export: tick `AxisAt`, export for Paramability and for Orca. In `report.json` the revolve `axis` has
+      `entity_type: "SketchLine"`, `sketch: "Sketch2"`, `sketch_reference` with `origin: true` and
+      `sketch_projected: false`. The Orca result marks `AxisAt` ("Revolve1 turns about a sketch line that may move
+      with it"), never "not used".
+- [ ] RV2, a revolve about an edge of the part. A box from a 40 by 20 mm rectangle on the XY plane, extruded by the
+      user parameter `Height` = 10 mm. Sketch on the front face (y = 0): a 5 by 8 mm rectangle with its top side on the
+      top front edge of the box. Revolve it 90 degrees about that top front edge, as a join.
+      Export: tick `Height`, export for Paramability and for Orca. The revolve `axis` has `entity_type: "BRepEdge"`
+      and `edge_points`. Both results mark `Height` with a reason that Revolve1 turns about an edge that may move with
+      it.
+- [ ] RV3, construction geometry on points, edges and a path. On a 40 by 20 by 10 mm box make: an axis Through Edge
+      (a top edge), an axis Through Two Points (two top corners), a plane Through Three Points (three top corners), a
+      plane Through Two Edges (two parallel top edges), a plane Along Path (a top edge, at half its length) and a
+      plane Tangent at Point (on a cylinder boss). Use each axis for a circular pattern of a small hole and each plane
+      for a mirror of that hole. In another component make a box and a plane Offset from its top face; mirror the
+      hole across that plane.
+      Export: in `report.json` each `axis` and `plane` has `definition` and a `built_on` list that names the picked
+      entities (`BRepEdge`, `BRepVertex`, `BRepFace`), never an empty list; the plane of the other component's face has
+      `{ "foreign": true }` in `built_on`. Note any definition whose `built_on` is missing.
+- [ ] RV4, a pattern along a sketch line on a face with a projection. A box from a 40 by 20 mm rectangle extruded by
+      the user parameter `Height` = 10 mm. Sketch2 on the top face: project the front top edge, draw a line on it.
+      A hole at a corner, then a rectangular pattern of 3 holes along the line of Sketch2.
+      Export: tick `Height`, export for Paramability and for Orca. `direction_one_sketch` has `reference` with
+      `kind: "face"` and `projected: true`. Both results mark `Height` ("spreads copies along a sketch line").
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
       with the projection link on, once with it off, so the sketch may hold a reference Fusion gives no source for). After the Cup steps,
@@ -1779,16 +1806,16 @@ These were written from the API reference and never run:
   - `Component.xYConstructionPlane`, `xZConstructionPlane`, `yZConstructionPlane`, `xConstructionAxis`,
     `yConstructionAxis`, `zConstructionAxis` equal (`==`) to the plane or axis the feature uses: the record then says
     `origin: true` and nothing more. If the comparison is false, an origin plane is read as construction geometry with
-    no `built_on`, which the translator treats as parameters only, so it still stays where it is.
+    no `built_on`, which the translators count as built on the part: the sizes read before the step are marked.
   - `ConstructionPlane.timelineObject.index` (`made_by`) and `ConstructionPlane.definition` (type name:
     `ConstructionPlaneOffsetDefinition`, `...MidplaneDefinition` and so on; the translator follows only names that
     hold `offset` or `midplane`). The same two members on `ConstructionAxis`.
   - The members of those definitions that name what they are built on, tried one by one and each guarded:
-    `planarEntity`, `planarEntityOne`, `planarEntityTwo`, `linearEntity`, `tangentFace`, `referencePlane`, `edgeOne`,
-    `edgeTwo`, `pointOne`, `pointTwo`, `pointThree`, `point`, `path`, `circularFace`, `edge`, `face`, `planeOne`,
-    `planeTwo`, `entity`. Written from memory of the reference: print `built_on` of an offset plane (one face) and a
-    midplane (two faces); a plane whose definition members are not found has no `built_on` and is treated as
-    parameters only.
+    `planarEntity`, `planarEntityOne`, `planarEntityTwo`, `linearEntity`, `linearEntityOne`, `linearEntityTwo`,
+    `tangentFace`, `circularFace`, `face`, `edgeEntity`, `pathEntity`, `point`, `pointEntity`, `pointEntityOne`,
+    `pointEntityTwo`, `pointEntityThree`. Checked against the API stubs Fusion installs (RV3): print `built_on` of an
+    offset plane (one face), a midplane (two faces), an axis through an edge and a plane through three points; a plane
+    whose definition members are not found has no `built_on` and counts as built on the part.
   - `BRepFace.pointOnFace` and `BRepFace.geometry` (type name `Plane` or `Cylinder`) of the mirror face or the pattern
     axis face; `BRepEdge` points through `edge_record`.
 - Geometry links (`lib/fusion_reader/read_links.py`, `dependents` in `parameters.py`), K10 and K11. Read in the

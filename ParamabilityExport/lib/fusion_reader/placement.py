@@ -273,7 +273,7 @@ ORIGIN_MEMBERS = {
 }
 # Keys of an axis record that name a sketch line of the target's own sketch. The size probe follows the line natively,
 # so a line of another component must not carry them.
-_OWN_SKETCH_KEYS = ("entity", "sketch_token", "sketch")
+_OWN_SKETCH_KEYS = ("entity", "sketch_token", "sketch", "sketch_reference", "sketch_projected")
 
 
 def owner_component(entity):

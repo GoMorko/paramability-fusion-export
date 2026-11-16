@@ -646,10 +646,16 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   place is marked with a reason ("Split1 cuts along a plane that may move with it, and the copy cannot follow
   that"), so it never reads as "not used" or as following everywhere (`kept_refs.mark`, `kept_refs.mark_faces`).
   Which sizes may move a place is a fact of the shared layer (`design_model.reach.reference_sizes`): the sizes behind
-  a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
-  construction geometry built on the part, every size read before the step. For a direction of a rectangular pattern
-  taken from an edge or axis of the part, the same (the `own` place of the capture). For a direction taken from a
-  sketch line, the sizes of that sketch. A part is plain before a step when every step of its component before it
+  a construction plane or axis and behind what it is built on, and, for a face, an edge or construction geometry
+  built on the part, every size read before the step. For a line of a sketch (a revolve axis, a pattern axis), the
+  sizes of that sketch and those that may move its plane, and every size read before the sketch when the sketch
+  holds projections or may hold them (`reach.sketch_line_sizes`). Unknown counts as "may move": a record that does
+  not say what it is (an older capture), and construction geometry that does not say what it is built on or is built
+  on another component, may move with every size read before the step. The axis of a sweep path arc (`fixed`) is no
+  place of its own: the path's sizes are marked. For a direction of a rectangular pattern taken from an edge or axis
+  of the part, the same (the `own` place of the capture). For a direction taken from a sketch line, the same as for a
+  line of a sketch. A direction whose source is unknown (an `unknown` place, or no place and no sketch in an older
+  capture) may turn with every size read before the step. A part is plain before a step when every step of its component before it
   is a straight extrude (no taper, each side a distance, its end caps measured), a simple hole through all (round
   faces and edges only), a sketch or construction geometry (`design_model.edges`). Any other step (a revolve, a loft,
   a sweep, a pattern, a round, a move) may make an edge or face where an extrude's would lie. In a plain part, an
@@ -666,8 +672,7 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   only the sizes of the extrudes' lengths and sketch planes are marked, and for several extrudes their start offsets
   too (`edges.through_sizes`). The sizes that place the hole then keep following. The sizes that may move the plane
   of the holes are marked by the hole itself. The mark is made after the centres are placed, so it does not hold the
-  hole's own centre. An origin plane or axis gives no size. A record of an older capture that does not say
-  what it is gives no size either, as in the recipe output. A place of another component is marked by
+  hole's own centre. An origin plane or axis gives no size. A place of another component is marked by
   `other_components.mark_refs`. A marked size counts as held for a later hole centre (`Context.held`).
 - Each ticked parameter ends as "follows the Orca variable" (everywhere it is used), "follows ... but not everywhere"
   (with the reasons), "stays a fixed number in Orca" (with the reasons) or "not used by the copy". Two kinds of size

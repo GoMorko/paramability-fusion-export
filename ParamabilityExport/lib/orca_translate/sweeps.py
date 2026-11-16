@@ -220,7 +220,8 @@ def _as_revolve(ctx, item, data, profiles, found):
         step = "join" if n and operation == "newBody" else operation
         # The start face's outward normal points against the turn for new material and along it for a cut.
         start = vec.scale(found.direction, 1.0 if step == "cut" else -1.0)
-        turned = {"operation": step, "profiles": [profile], "axis": dict(found.axis),
+        # The axis is the centre of the path arc: `_mark_path` marks the sizes that move the path.
+        turned = {"operation": step, "profiles": [profile], "axis": dict(found.axis, fixed=True),
                   "extent": {"kind": "angle", "angle_deg": found.angle_deg}, "start_face_normal": start,
                   "params": {}}
         made = revolve.revolve(ctx, design.as_read(dict(item, data=turned)))

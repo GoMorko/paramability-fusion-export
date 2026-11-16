@@ -13,7 +13,7 @@ from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_face import face_outline
 from .read_solid import operation_of
-from .read_sketch import dense_samples, read_curve, read_outlines, sketch_reference
+from .read_sketch import dense_samples, holds_projection, read_curve, read_outlines, sketch_reference
 
 MAX_PATH_ENTITIES = 256
 MAX_SECTIONS = 64
@@ -169,7 +169,8 @@ def path_record(path, ctx):
     check sees them, each with `body` (the body it lies on) when Fusion gives it. Sketch curves also carry `entity`,
     the token of the curve. `truncated` is true when the path has more than MAX_PATH_ENTITIES entities (only the
     first are read). For a sketch path, `reference` is what the sketch sits on (as on a profile; null when unreadable) and
-    `projected` is true when the sketch holds projected curves (null when unreadable)."""
+    `projected` is true when the sketch holds projected curves or points (`read_sketch.holds_projection`, null when
+    unreadable)."""
     if path is None:
         return None
     items = _listed(lambda: path, MAX_PATH_ENTITIES + 1)
@@ -203,8 +204,7 @@ def path_record(path, ctx):
             record["sketch_token"] = token
         record["frame"] = geo.safe(lambda: geo.frame_of(sketch.transform), None)
         record["reference"] = geo.safe(lambda: sketch_reference(sketch, ctx), None)
-        record["projected"] = geo.safe(lambda: any(
-            bool(c.isReference) for c in geo.collection_items(sketch.sketchCurves)), None)
+        record["projected"] = holds_projection(sketch)
     if any(c.get("foreign") for c in curves):
         record["foreign"] = True
     return record

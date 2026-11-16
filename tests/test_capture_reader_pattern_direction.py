@@ -1,6 +1,7 @@
 """A rectangular pattern whose direction comes from an axis or edge of another component."""
 import json
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeOccurrence, apply_matrix, turn_z
@@ -8,6 +9,7 @@ from tests.test_capture_reader import Coll, Obj, P
 from tests.test_capture_reader_component import Tray, param_value, read
 
 from lib.design_model import step_links
+from lib.fusion_reader import read_geometry
 
 LID_PLACE = turn_z(90, (110, 50, 32))
 
@@ -73,6 +75,19 @@ class ForeignDirectionTest(unittest.TestCase):
         self.assertFalse(place.get("assembly") or place.get("foreign"))
         self.assertEqual(step_links.item_refs({"index": 1, "data": data}), [])
         self.assertNotIn("direction_two_place", data)
+
+    def test_a_direction_whose_owner_cannot_be_told_is_unknown_not_own(self):
+        own = Obj("fusion::ConstructionAxis", entityToken="own", parentComponent=self.tray.component,
+                  geometry=line((0, 0, 0), (0, 1, 0)))
+        real = read_geometry.foreign
+
+        def foreign(entity, ctx):
+            if entity is own:
+                raise RuntimeError("no component")
+            return real(entity, ctx)
+        with mock.patch.object(read_geometry, "foreign", side_effect=foreign):
+            data = self.pattern(directionOneEntity=own)
+        self.assertEqual((data["direction_one"], data["direction_one_place"]), ([0.0, 1.0, 0.0], {"unknown": True}))
 
 
 if __name__ == "__main__":

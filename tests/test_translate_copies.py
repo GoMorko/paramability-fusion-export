@@ -42,7 +42,7 @@ def _grid(index, sources, spacing, count=2, params=None):
         "entity_type": "features", "sources": sources, "direction_one": [1, 0, 0], "quantity_one": count,
         "distance_one": spacing, "direction_two": None, "quantity_two": 1, "distance_two": 0.0,
         "distance_type": "spacing", "symmetric_one": False, "symmetric_two": False, "elements": elements,
-        "params": params or {}})
+        "direction_one_place": {"origin": True, "own": True}, "params": params or {}})
 
 
 def edges_set(kind, points, **values):
@@ -108,8 +108,8 @@ class PickOnCopyTest(unittest.TestCase):
 
     def test_an_edge_on_a_mirror_copy_is_mirrored_with_its_formula(self):
         mirror = copy_item(3, "Mirror1", "MirrorFeature", {
-            "entity_type": "features", "sources": [2], "plane": {"point": [30, 0, 0], "normal": [1, 0, 0]},
-            "combine": False})
+            "entity_type": "features", "sources": [2],
+            "plane": {"point": [30, 0, 0], "normal": [1, 0, 0], "origin": True}, "combine": False})
         fillet = copy_item(4, "Fillet1", "FilletFeature", {
             "sets": [edges_set("constant", [[52, 8, 15]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(mirror, fillet))
@@ -227,12 +227,12 @@ class MovedReferenceTest(unittest.TestCase):
         self.assertEqual((loose_names(result), origin), (["wall_mm"], [6, 6, POST_TOP]))
         self.assertIn("Mirror1", result.loose[0]["reason"])
 
-    def test_an_origin_plane_and_an_unread_plane_stay_where_they_are(self):
-        for label, plane in (("origin", {"point": [30, 0, 0], "normal": [1, 0, 0], "origin": True}),
-                             ("older capture", {"point": [30, 0, 0], "normal": [1, 0, 0]})):
-            with self.subTest(label):
-                result, origin = self.mirrored_plane(plane)
-                self.assertEqual(((result.fixed, result.loose), origin), (([], []), [30, 0, 0]))
+    def test_an_origin_plane_stays_and_an_unread_plane_marks_the_sizes_read_before(self):
+        result, origin = self.mirrored_plane({"point": [30, 0, 0], "normal": [1, 0, 0], "origin": True})
+        self.assertEqual(((result.fixed, result.loose), origin), (([], []), [30, 0, 0]))
+        # An older capture does not say what the plane is: it may move with every size read before the mirror.
+        result, origin = self.mirrored_plane({"point": [30, 0, 0], "normal": [1, 0, 0]})
+        self.assertEqual((loose_names(result), origin), (["wall_mm"], [30, 0, 0]))
 
     def test_a_construction_plane_built_on_a_moving_face(self):
         built = {"point": [6, 6, POST_TOP + 5], "normal": [0, 0, 1], "token": "cp1", "entity_type": "ConstructionPlane",

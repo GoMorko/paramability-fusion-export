@@ -94,16 +94,23 @@ class FeatureTokensTest(unittest.TestCase):
                                  extentDefinition=Obj("fusion::AngleExtentDefinition", angle=Obj(value=6.28),
                                                       isSymmetric=False)))
 
-    def test_revolve_axis_from_a_sketch_line_names_the_line_and_sketch(self):
-        axis = Obj("fusion::SketchLine", worldGeometry=line((0, 0, 0), (0, 3, 0)), entityToken="ln1",
-                   parentSketch=sketch())
+    def test_revolve_axis_from_a_sketch_line_names_the_line_its_sketch_and_where_that_sits(self):
+        plane = Obj("fusion::ConstructionPlane", entityToken="cp1")
+        projected = Obj("fusion::SketchLine", isReference=True)
+        sk = Obj("fusion::Sketch", name="Sketch1", transform=matrix(), entityToken="sk1", referencePlane=plane,
+                 sketchCurves=Coll([projected]), sketchPoints=Coll([]))
+        axis = Obj("fusion::SketchLine", worldGeometry=line((0, 0, 0), (0, 3, 0)), entityToken="ln1", parentSketch=sk)
         found = self.revolve(axis)["axis"]
-        self.assertEqual((found["entity"], found["sketch_token"], found["sketch"]), ("ln1", "sk1", "Sketch1"))
+        self.assertEqual((found["entity"], found["sketch_token"], found["sketch"], found["entity_type"]),
+                         ("ln1", "sk1", "Sketch1", "SketchLine"))
+        self.assertEqual((found["sketch_reference"], found["sketch_projected"]),
+                         ({"kind": "constructionPlane", "token": "cp1"}, True))
 
-    def test_revolve_axis_from_a_construction_axis_has_a_token(self):
+    def test_revolve_axis_from_a_construction_axis_says_what_it_is(self):
         axis = Obj("fusion::ConstructionAxis", entityToken="ax1",
                    geometry=Obj("core::InfiniteLine3D", origin=P(0, 0, 4), direction=Obj(x=1.0, y=0.0, z=0.0)))
-        self.assertEqual(self.revolve(axis)["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0], "token": "ax1"})
+        self.assertEqual(self.revolve(axis)["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0], "token": "ax1",
+                                                      "entity_type": "ConstructionAxis"})
 
     def test_a_revolve_axis_that_cannot_be_used_records_what_it_is(self):
         curved = Obj("fusion::BRepEdge", geometry=Obj("core::Arc3D"))
@@ -131,5 +138,19 @@ class FeatureTokensTest(unittest.TestCase):
         data = read_item(feature("RectangularPatternFeature", "R", inputEntities=Coll([]),
                                  directionOneEntity=direction, quantityOne=Obj(value=3),
                                  distanceOne=Obj(value=2.0), patternElements=Coll([])))
-        self.assertEqual(data["direction_one_sketch"], {"sketch_token": "sk7", "sketch": "Sketch1"})
+        # The sketch's plane and projections could not be read: null, which counts as "may move".
+        self.assertEqual(data["direction_one_sketch"], {"sketch_token": "sk7", "sketch": "Sketch1", "reference": None,
+                                                        "projected": None})
         self.assertNotIn("direction_two_sketch", data)
+
+
+class ProjectionTest(unittest.TestCase):
+    def test_a_sketch_holds_projections_when_a_curve_or_a_point_other_than_its_origin_is_projected(self):
+        origin = Obj("fusion::SketchPoint", entityToken="o", isReference=True)
+
+        def holds(curves=(), points=()):
+            return read_sketch.holds_projection(Obj("fusion::Sketch", originPoint=origin, sketchCurves=Coll(curves),
+                                                    sketchPoints=Coll([origin] + list(points))))
+        own, projected = Obj(isReference=False), Obj(isReference=True)
+        self.assertEqual((holds([own], [own]), holds([projected]), holds([own], [projected])), (False, True, True))
+        self.assertIsNone(read_sketch.holds_projection(Obj("fusion::Sketch")))

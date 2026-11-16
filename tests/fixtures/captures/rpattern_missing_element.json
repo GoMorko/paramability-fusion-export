@@ -419,7 +419,15 @@
             }
           }
         ],
-        "suppressed_ids": []
+        "suppressed_ids": [],
+        "direction_one_place": {
+          "origin": true,
+          "own": true
+        },
+        "direction_two_place": {
+          "origin": true,
+          "own": true
+        }
       }
     }
   ]

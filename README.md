@@ -30,6 +30,9 @@ learning only.
 5. Paramability builds the part from the steps and compares it with the STEP shape.
 
 The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the step out and tells you why.
+Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
+across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
+what a place is, it marks every size that the steps before it use (`docs/limits.md`).
 Paramability then shows the original shape and a list of the missing steps.
 
 ## Install

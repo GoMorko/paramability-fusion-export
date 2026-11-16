@@ -2027,16 +2027,26 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
     construction plane or axis and behind the construction geometry that it is built on. A record without a token
-    stands for all construction geometry of its kind. For a face, an edge, a sketch curve, or construction geometry
-    built on the part, the sizes also include every size that an earlier step reads (for construction geometry: a
-    step before the geometry was made). An origin plane or axis gives no size. A record of another component gives no
-    size here, because its sizes come from its measured reference (`refs.mark_all`). A record that does not say what
-    it is (an older capture) gives no size. The Orca output marks the sizes of each such place that it writes as
-    numbers (`orca_translate/kept_refs.py`).
+    stands for all construction geometry of its kind. For a face, an edge, or construction geometry built on the
+    part, the sizes also include every size that an earlier step reads (for construction geometry: a step before the
+    geometry was made). For a line of a sketch, `sketch_line_sizes` gives the sizes. These are the sizes of that
+    sketch and the sizes that can move the plane of that sketch. When the sketch holds projections, or when the
+    capture does not tell, they also include every size that a step before the sketch reads. Projected geometry of
+    the part moves with those sizes. An origin plane or axis gives no size. A record of another component gives no
+    size here, because its sizes come from its measured reference (`refs.mark_all`). A place that the step works out
+    from another record (`fixed`, the axis of a sweep path arc) gives no size, because the step marks the sizes of
+    that record. Unknown counts as "can move". A record that does not say what it is (an older capture) gives every
+    size that an earlier step reads. The Orca output marks the sizes of each such place that it writes as numbers
+    (`orca_translate/kept_refs.py`). The recipe output does this for a revolve axis that the probe does not follow
+    (`ref_motion.check_own_axis`) and for a mirror plane or pattern axis that it cannot follow
+    (`follow.place_plane`).
   - The direction of a rectangular pattern. `direction_sizes` gives the sizes that can turn it. For a direction
     taken from an edge, an axis or a face of the part (the `own` place that the reader writes), these are the sizes
-    of `reference_sizes`. For a direction taken from a sketch line, these are the sizes of that sketch. A direction
-    of another component gives no size here. `direction_kind` gives the Fusion type of the entity, for the reason.
+    of `reference_sizes`. For a direction taken from a sketch line, these are the sizes of `sketch_line_sizes`. A
+    direction of another component gives no size here. The source of a direction can be unknown: the place is
+    `unknown` (the reader could not tell the component), or an older capture gives no place and no sketch. When the
+    pattern uses that direction (more than one copy along it), `direction_sizes` gives every size that an earlier step
+    reads. `direction_kind` gives the Fusion type of the entity, for the reason.
     Both outputs write the direction as a number, so both mark these sizes. They read them through
     `edges.direction_sizes` (see `edges.py` below): the recipe output in `ref_motion.check_own_direction` (not in the
     first translation of an export), the Orca output in `repeat._mark_directions`.
@@ -2729,6 +2739,33 @@ Example. `Lift = 12 mm`. A plane is offset from the XY plane by `Lift`. A sketch
 - Any other plane built on the part (at an angle, through an edge, tangent, along a path) cannot be followed from its
   definition. The probe then reads the plane at every row (`reach.moving_reaches`, `extrude/reach_motion.py`, `target_shift`) and the
   translator writes its measured move as a formula. Only a size the probe could not follow is marked.
+- The reader reads the members of the plane or axis definition that name what it is built on (`_BUILT_ON_MEMBERS`
+  in `read_reference.py`). Each name comes from the `ConstructionPlane...Definition` and
+  `ConstructionAxis...Definition` objects of the API reference. An entity of another component goes into `built_on`
+  as `{ "foreign": true }`.
+- Sometimes the reader cannot tell what a plane is built on. The definition can be unreadable, or the chain can be
+  deeper than three levels. Then the plane has no `built_on`. `reach.on_part` counts such a plane as built on the
+  part. It also counts a plane with a `{ "foreign": true }` entry as built on the part. The export does not measure
+  how those bases move, so the sizes are marked. This rule prevents a wrong copy: a plane that moves in Fusion, but
+  stays where it is in the copy.
+
+#### A turning axis
+
+A revolve, a circular pattern and a Move turn about an axis. The reader records what the axis is
+(`read_reference.axis_with_reference`): an origin axis, a construction axis, an edge, a face or a sketch line.
+
+Example. `AxisAt = 5 mm`. Sketch2 has a vertical line at `AxisAt` from the origin. A revolve turns a rectangle of
+Sketch1 about that line.
+
+- The record of the axis has `entity_type: "SketchLine"`, the name of Sketch2, `sketch_reference` (what Sketch2 sits
+  on) and `sketch_projected` (true when Sketch2 holds projected geometry).
+- The probe follows the line in Sketch2, so the recipe writes the axis point as a formula of `AxisAt`.
+- The Orca output writes the axis as numbers. `reach.reference_sizes` gives `AxisAt`, so the Orca result marks it.
+- For an axis on an edge, a face or a construction axis, the probe does not follow the axis. Both outputs write it as
+  numbers and mark the sizes that can move it (`ref_motion.check_own_axis` in the recipe output, `kept_refs.mark` in
+  the Orca output).
+- An axis record of an older capture does not say what it is. Both outputs then mark every size that an earlier
+  step reads.
 
 #### A face used as an outline
 
@@ -2995,6 +3032,8 @@ looks at those bodies and not at every body of the component (`_writes_flat`).
   refused as a source.
 - A mirror plane that sits on a face or edge of the part follows sizes (`follow.place_plane`). When the plane moves by
   `d`, the copies move by `2 * d`.
+- A mirror plane record that does not say what it is (an older capture) stays where it was measured. The sizes that
+  can move it (`reach.reference_sizes`: every size that an earlier step reads) are marked.
 - A mirror of the whole body repeats every earlier step when that gives the body joined with its image
   (`repeat_mirror_reach.py`). When it does not (a round, chamfer, shell or Move among the steps, a gap, a cut across the
   plane, a body on both sides), everything written so far is gathered into one `toolBody` step, and the mirror repeats

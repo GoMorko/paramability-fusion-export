@@ -553,6 +553,10 @@
             "expression": "pitch_mm",
             "value": 20.0
           }
+        },
+        "direction_one_place": {
+          "origin": true,
+          "own": true
         }
       }
     },
