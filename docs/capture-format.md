@@ -938,7 +938,7 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   `read_reference.reference_of` (`origin`, or `entity_type` with `edge_points`, `face_point`, `token`, `made_by`,
   `definition` and `built_on` as far as Fusion gives them). It holds no `ref`, so it is no measured reference. A
   direction whose entity cannot be described has no place, as in older captures. The translators read it through
-  `design_model.reach.direction_sizes`: the sizes that may turn the direction are marked, since both write the
+  `design_model.edges.direction_sizes`: the sizes that may turn the direction are marked, since both write the
   direction as a number.
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,

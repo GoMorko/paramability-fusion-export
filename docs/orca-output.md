@@ -644,13 +644,17 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   Which sizes may move a place is a fact of the shared layer (`design_model.reach.reference_sizes`): the sizes behind
   a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
   construction geometry built on the part, every size read before the step. For a direction of a rectangular pattern
-  taken from an edge or axis of the part, the same (`reach.direction_sizes`, the `own` place of the capture). For a
-  direction taken from a sketch line, the sizes of that sketch. For a thread, every size read before the step
-  (`reach.any_face_sizes`). The thread of a tapped hole through all runs the part's thickness now: every size read
-  before the hole is marked ("Hole1: its thread runs through the part as thick as it is now, and Orca keeps that
-  length"), except the sizes that only the hole's own sketch reads, when that sketch comes just before the hole
-  (`reach.hole_end_sizes`, `threads.mark_through_length`). Those sizes place the hole centres, which follow them,
-  and they change no face. The mark is made after the centres are placed, so it does not hold the hole's own
+  taken from an edge or axis of the part, the same (the `own` place of the capture). For a direction taken from a
+  sketch line, the sizes of that sketch. An edge or face that lies where a straight extrude made it (a side edge
+  along its axis, an edge over a fixed line of its outline, an end face or a side face) turns only with that
+  extrude's sketch plane (`design_model.edges.direction_sizes`), so a pattern along an edge of a plain box marks no
+  box size. For a thread, every size read before the step (`reach.any_face_sizes`). The thread of a tapped hole
+  through all runs the part's thickness now ("Hole1: its thread runs through the part as thick as it is now, and Orca
+  keeps that length", `threads.mark_through_length`). When each hole goes from one end face of a one sided straight
+  extrude to the other, only the sizes of that extrude's length are marked (`edges.through_sizes`); else every size
+  read before the hole, except the sizes that only the hole's own sketch reads when that sketch comes just before the
+  hole (`reach.hole_end_sizes`). Those sizes place the hole centres, which follow them, and they change no face.
+  The mark is made after the centres are placed, so it does not hold the hole's own
   centre. An origin plane or axis gives no size. A record of an older capture that does not say
   what it is gives no size either, as in the recipe output. A place of another component is marked by
   `other_components.mark_refs`. A marked size counts as held for a later hole centre (`Context.held`).

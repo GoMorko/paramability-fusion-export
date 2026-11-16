@@ -969,7 +969,8 @@ Fusion item made it.
 sits in `capture_model`, below the translator, the probe and the Fusion reader, so all of them read the same table.
 Each entry says, for one Fusion type: the words used in messages ("rectangular pattern"), the role (modeling, sketch,
 assembly), the reader module (in `lib/fusion_reader`), the sketch records the probe follows, and some flags
-(`makes_bodies`, `moves_bodies`, `splits_bodies`, `splits_faces`, `reaches_bodies`, `pattern`, `repeats_sources`).
+(`makes_bodies`, `moves_bodies`, `turns_faces`, `splits_bodies`, `splits_faces`, `reaches_bodies`, `pattern`,
+`repeats_sources`).
 `repeats_sources` marks the pattern and mirror types; `finishes/finish.py` uses it to see whether a later step repeats
 the edges of a round or a chamfer. A type with no handler has `unsupported` (the plain reason) and, when the reason has
 a tip for the person, `gap_cause`. `facts` names the shared step reader that reads facts of the type from its data
@@ -1976,14 +1977,33 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     taken from an edge, an axis or a face of the part (the `own` place that the reader writes), these are the sizes
     of `reference_sizes`. For a direction taken from a sketch line, these are the sizes of that sketch. A direction
     of another component gives no size here. `direction_kind` gives the Fusion type of the entity, for the reason.
-    Both outputs write the direction as a number, so both mark these sizes: the recipe output in
-    `ref_motion.check_own_direction` (not in the first translation of an export), the Orca output in
-    `repeat._mark_directions`.
+    Both outputs write the direction as a number, so both mark these sizes. They read them through
+    `edges.direction_sizes` (see `edges.py` below): the recipe output in `ref_motion.check_own_direction` (not in the
+    first translation of an export), the Orca output in `repeat._mark_directions`.
   - The faces where a hole goes in and comes out. `hole_end_sizes` gives every size that an earlier step reads,
     except the sizes that only the sketch of the hole reads. These sizes only place the hole centres. The function
     leaves them out only when the sketch is the item just before the hole. If an item is between them, that item can
     project the sketch into a face of the part, so the function leaves out no size. The Orca output marks these sizes
-    for the thread of a tapped hole through all, because the thread length is the thickness of the part now.
+    for the thread of a tapped hole through all, because the thread length is the thickness of the part now. It
+    reads them through `edges.through_sizes` (see `edges.py` below).
+- `edges.py`: edges and faces of the part, matched to the straight extrude that made them. An extrude is straight
+  when it starts on its sketch plane or at an offset from it, has no taper, and each side ends at a distance. The
+  match is by the place of the edge or the face now:
+  - A side edge along the axis of the extrude. Its middle point lies over a corner of the outline.
+  - An edge across the axis. Its middle point lies over a line of the outline, and it runs along that line.
+  - An end face across the axis. Its point lies inside the outline.
+  - A side face. Its point lies over a line of the outline, and its normal is square to that line.
+  A side edge and an end face turn only with the sketch plane of the extrude (`reach.placement_sizes`). An edge
+  across the axis and a side face also turn with their line. The line does not turn when the sketch solver (the
+  default reading, `sketch_solve`) gives its two ends a gap of zero across or along, or a constant gap. Otherwise
+  the line can turn, and the general sizes stay. A step between the extrude and the pattern voids the match when it
+  moves bodies, when it can turn faces (`StepType.turns_faces`: a draft, a scale, a replace face, a delete face), or
+  when the step kind table does not know it. Without a match, `direction_sizes` gives `reach.direction_sizes`. When
+  several extrudes match, it gives the sizes of all of them.
+  `through_sizes` gives the sizes that can change the thickness of the part where a hole goes through. When each
+  hole goes in at one end face of a one sided straight extrude and comes out at the other end face, these are the
+  sizes of the length of that extrude. The far end face counts only when the measured end face (`end_offset`) lies
+  one length from the start. Otherwise `through_sizes` gives `reach.hole_end_sizes`.
   - The sizes that a step reads. `step_sizes` gives the sizes behind the values of one step and behind the sketches it
     uses (the sketch graphs and the dimensions of an outline brought in from another component included).
     `profile_sizes` gives the sizes that move the sketch of one outline. An outline of another component gives none:

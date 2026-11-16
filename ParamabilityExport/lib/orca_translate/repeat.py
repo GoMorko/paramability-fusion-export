@@ -31,7 +31,7 @@ from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
 from . import causes, kept_refs
-from ..design_model import design, reach
+from ..design_model import design, edges, reach
 from ..design_model.steps.repeat import (FIT_TOL_MM, data_in_component, is_identity, is_identity_rotation,
                                         mirror_plane, reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
@@ -289,11 +289,11 @@ def _directions(item, data):
 
 def _mark_directions(ctx, item, directions):
     """Mark the sizes that may turn each direction taken from the part (an edge, an axis, a sketch line,
-    `reach.direction_sizes`): Orca keeps the direction it has now."""
+    `edges.direction_sizes`): Orca keeps the direction it has now."""
     if ctx.table is None:
         return
     for which, *_ in directions:
-        names = reach.direction_sizes(ctx.table, ctx.capture.get("items") or [], item, which)
+        names = edges.direction_sizes(ctx.table, ctx.capture, item, which)
         if names:
             noun = reach.direction_kind(item, which)
             ctx.doubt(names, shared.kept_in_place(shared.ref_phrase(item, {"type": noun, "own": True},

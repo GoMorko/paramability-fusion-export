@@ -1,9 +1,10 @@
 """Planes, axes and faces of the part that an Orca step writes as numbers: every size that may move one is marked,
 never unused or following (`orca_translate/kept_refs.py`, `design_model.reach.reference_sizes`)."""
+import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.orca_sized import fixture, sized, split_by_plane, table_of
+from tests.orca_sized import fixture, placed_hole_pattern, sized, split_by_plane, table_of
 from tests.probe_helpers import model, user
 from tests.test_orca_holes import BOX_TICKED, box_hole, run
 from tests.test_orca_threads import rod
@@ -83,6 +84,24 @@ class KeptPlaceTest(unittest.TestCase):
         recipe = translator.translate(capture, size_table=table_of(capture))
         self.assertEqual([size["name"] for size in recipe.loose], ["plate_h"])
 
+    def test_a_pattern_along_an_edge_of_a_plain_box_leaves_the_box_sizes_as_they_were_in_both_outputs(self):
+        def outcomes(capture):
+            table = table_of(capture, BOX_TICKED)
+            orca = {p["name"]: (p["outcome"], p["reasons"]) for p in translate(capture, table).parameters}
+            recipe = translator.translate(capture, size_table=table)
+            return orca, recipe.loose, recipe.fixed
+        plain = placed_hole_pattern()
+        # The hole's sketch sits on the XY plane, so no size moves its plane.
+        next(i for i in plain["items"] if i["type"] == "HoleFeature")["data"]["reference"] = {
+            "kind": "constructionPlane", "origin": True}
+        along = copy.deepcopy(plain)
+        # The pattern runs along y, as the box's bottom edge at x = 40 does.
+        along["items"][-1]["data"]["direction_one_place"] = {"own": True, "entity_type": "BRepEdge",
+                                                             "edge_points": [[40, 0, 0]]}
+        found = outcomes(along)
+        self.assertEqual(found, outcomes(plain))
+        self.assertEqual({found[0][n][0] for n in ("cube_mm", "depth_mm", "height_mm")}, {VARIABLE})
+
     def test_a_tapped_hole_through_all_marks_what_moves_its_ends_but_not_its_own_place(self):
         plain = {p["name"]: p for p in run(box_hole(), BOX_TICKED).parameters}
         capture = box_hole()
@@ -98,6 +117,8 @@ class KeptPlaceTest(unittest.TestCase):
         # The plate's height moves the face the hole comes out at: one reason more than for a plain hole.
         self.assertEqual(len(found["height_mm"]["reasons"]), len(plain["height_mm"]["reasons"]) + 1)
         self.assertEqual(found["height_mm"]["outcome"], PARTLY)
+        # The hole runs from one end face of the box to the other: the box's width moves neither.
+        self.assertEqual(found["cube_mm"]["reasons"], plain["cube_mm"]["reasons"])
 
 
 if __name__ == "__main__":

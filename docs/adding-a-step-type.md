@@ -256,7 +256,8 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
 - Plain data in millimetres and degrees, in the component's coordinates (the gap file gives `toRecipe` to turn them).
   The file keeps at most 48 KiB of `data` per gap: free curve `samples` and extra loops are cut first, so avoid
   writing more than the step needs.
-- `makes_bodies` and `moves_bodies` on the table entry when the type makes or moves bodies, as for a copied step.
+- `makes_bodies` and `moves_bodies` on the table entry when the type makes or moves bodies, as for a copied step,
+  and `turns_faces` when it can tilt or reshape faces an earlier step made (`design_model/edges.py`).
 
 ## 4. What protects a new handler
 

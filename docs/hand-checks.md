@@ -341,11 +341,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     60 mm long on the X axis and the left side on the Y axis, and give the angle at (60, 0) between the bottom side
     and the slanted side the dimension `14 deg + Tilt`. Extrude it `Plate` up. On the top face draw a 3 by 3 mm
     square centred at (20, 5) and extrude it 3 mm up (join). Make a rectangular pattern of that boss along the
-    slanted top edge: 3 copies, 8 mm apart, towards the Y axis. Then sketch a point at (8, 20) on the top face and
+    slanted top edge: 3 copies, 8 mm apart, towards the Y axis. Make a second rectangular pattern of the same boss
+    along the bottom edge on the X axis: 2 copies, 10 mm apart. Then sketch a point at (8, 20) on the top face and
     add a tapped M5 hole there, through all, with "Modeled" on.
     Export: Export for Orca with `Tilt` and `Plate` ticked. `Tilt` stays a number, with the reason "RectangularPattern1
     spreads copies along an edge that may move with it, and the copy cannot follow that". `Plate` follows partly,
     with the reason "Hole1: its thread runs through the part as thick as it is now, and Orca keeps that length". In
-    `report.json` the pattern's data has `direction_one_place` with `own: true` and `entity_type` `BRepEdge`. Export
+    `report.json` the pattern's data has `direction_one_place` with `own: true` and `entity_type` `BRepEdge`. The
+    second pattern gives no reason to any size: its edge lies on the horizontal bottom line of the triangle. The
+    thread reason names `Plate` only. Export
     the same body to Paramability with `Tilt` ticked: `Tilt` is a loose size with the same pattern reason. Afterwards
     the design is as before.

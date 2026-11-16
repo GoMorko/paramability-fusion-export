@@ -60,6 +60,8 @@ class StepType:
     makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
       expected, so the walk of one body does not refuse them.
     moves_bodies: it carries the bodies its data names to another place.
+    turns_faces: it may turn faces or edges of a body that an earlier step made (a draft tilts them, a scale or a
+      replace face reshapes them), so an edge seen now may lie otherwise at other sizes (`design_model/edges.py`).
     splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (capture_model/lineage.py).
     reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
       a split), so the capture walk measures the target around it also when it lives in another component.
@@ -82,6 +84,7 @@ class StepType:
     splits_faces: bool = False
     makes_bodies: bool = False
     moves_bodies: bool = False
+    turns_faces: bool = False
     splits_bodies: bool = False
     reaches_bodies: bool = False
     pattern: str = None
@@ -132,7 +135,7 @@ STEP_TYPES = (
     StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS, facts=ROUND_SETS),
     StepType("ChamferFeature", "chamfer", reader="read_finish", finishing=FINISHING_ALWAYS, facts=CHAMFER_SETS),
     StepType("ShellFeature", "shell", reader="read_finish"),
-    StepType("DraftFeature", "draft", reader="read_finish", finishing=FINISHING_ALWAYS),
+    StepType("DraftFeature", "draft", reader="read_finish", finishing=FINISHING_ALWAYS, turns_faces=True),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset"),
     StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat", makes_bodies=True,
              pattern="rectangular", repeats_sources=True),
@@ -141,7 +144,7 @@ STEP_TYPES = (
     StepType("MirrorFeature", "mirror", reader="read_repeat", makes_bodies=True, repeats_sources=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
     StepType("DeleteFaceFeature", "delete face", unsupported="Steps of type delete face are not copied.",
-             gap_cause=gap_hints.DELETE_FACE),
+             gap_cause=gap_hints.DELETE_FACE, turns_faces=True),
     StepType("ThickenFeature", "thicken", unsupported="Steps of type thicken are not copied.",
              gap_cause=gap_hints.SURFACE),
     StepType("StitchFeature", "stitch", unsupported="Steps of type stitch are not copied.",
@@ -149,9 +152,9 @@ STEP_TYPES = (
     StepType("BoundaryFillFeature", "boundary fill", unsupported="Boundary Fill is not copied.",
              gap_cause=gap_hints.BOUNDARY_FILL),
     StepType("ScaleFeature", "scale", unsupported="Scaling a body is not copied.", gap_cause=gap_hints.SCALE,
-             reaches_bodies=True),
+             reaches_bodies=True, turns_faces=True),
     StepType("ReplaceFaceFeature", "replace face", unsupported="Replace Face is not copied.",
-             gap_cause=gap_hints.REPLACE_FACE, reaches_bodies=True),
+             gap_cause=gap_hints.REPLACE_FACE, reaches_bodies=True, turns_faces=True),
     StepType("RibFeature", "rib", unsupported="Rib is not copied.", gap_cause=gap_hints.RIB_WEB,
              reaches_bodies=True),
     StepType("WebFeature", "web", unsupported="Web is not copied.", gap_cause=gap_hints.RIB_WEB,
