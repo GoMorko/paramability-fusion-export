@@ -324,3 +324,84 @@ def bar_along_s_spline(width=4.0, height=1.5):
     rectangle that flipped at the turning point would stand `width` high there."""
     return _along_spline("Bar", rect(-width / 2, -height / 2, width / 2, height / 2), width * height, width / 2,
                          height / 2, S_SPLINE)
+
+
+# Two half loops that close a 40 by 20 track: from (40, 0) out to the right and back to (40, 20), and from (0, 20) out
+# to the left and back to (0, 0), each leaving and meeting its lines smoothly.
+RIGHT_END = {"degree": 3, "knots": [0, 0, 0, 0, 1, 1, 1, 1], "poles": [(40.0, 0.0), (52.0, 0.0), (52.0, 20.0),
+                                                                     (40.0, 20.0)]}
+LEFT_END = {"degree": 3, "knots": [0, 0, 0, 0, 1, 1, 1, 1], "poles": [(0.0, 20.0), (-12.0, 20.0), (-12.0, 0.0),
+                                                                    (0.0, 0.0)]}
+
+
+def _grown_box(points, across, up):
+    """The box of a closed or open chain of `points` (2D, dense) grown by `across` square to it and `up` along z."""
+    grown = []
+    for a, b in zip(points, points[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        size = math.hypot(dx, dy)
+        if size < 1e-12:
+            continue
+        for p in (a, b):
+            grown += [(p[0] - dy / size * across, p[1] + dx / size * across),
+                      (p[0] + dy / size * across, p[1] - dx / size * across)]
+    return ((min(p[0] for p in grown), min(p[1] for p in grown), -up),
+            (max(p[0] for p in grown), max(p[1] for p in grown), up))
+
+
+def ring_along_splines(radius=1.5):
+    """A circle of `radius` on the middle of the bottom line swept once round the closed track of two lines and the
+    splines `RIGHT_END` and `LEFT_END`. The outline's centre runs on the path, so the volume is the area times the
+    path length."""
+    outline = dict(profile("Sketch1", dict(ACROSS_X, origin=[20.0, 0.0, 0.0]), circle(radius)), space="sketch")
+    curves = [_line((0.0, 0.0, 0.0), (40.0, 0.0, 0.0), "p0"), _spline_path_curve(RIGHT_END, "p1"),
+              _line((40.0, 20.0, 0.0), (0.0, 20.0, 0.0), "p2"), _spline_path_curve(LEFT_END, "p3")]
+    path = dict(path_record(curves), closed=True)
+    items = [sketch_item(0, "Sketch1"), sketch_item(1, "Path"),
+             sweep(2, "Ring", [outline], path, areas=[math.pi * radius ** 2])]
+    dense = ([(0.0, 0.0), (40.0, 0.0)] + spline_bend_points(RIGHT_END) + [(0.0, 20.0)]
+             + spline_bend_points(LEFT_END))
+    length = sum(math.dist(a, b) for a, b in zip(dense, dense[1:]))
+    return capture(items, _grown_box(dense, radius, radius), math.pi * radius ** 2 * length)
+
+
+def block_and_spline_pipe(operation, radius=2.0):
+    """The wire of `pipe_along_spline` with a block first: for "cut" a block from (-10, -10, -5) to (60, 30, 5) that
+    holds the whole pipe, which the sweep cuts out; for "join" a 10 mm block behind the pipe's start (x -10 to 0,
+    y and z -5 to 5), which the pipe joins."""
+    out = pipe_along_spline(radius)
+    if operation == "cut":
+        low, high = (-10.0, -10.0, -5.0), (60.0, 30.0, 5.0)
+    else:
+        low, high = (-10.0, -5.0, -5.0), (0.0, 5.0, 5.0)
+    block = extrude(0, "Block", [profile("Block sketch", dict(UP, origin=[0.0, 0.0, low[2]]),
+                                         rect(low[0], low[1], high[0], high[1]))],
+                    side_one={"kind": "distance", "distance": high[2] - low[2], "taper_deg": 0.0},
+                    end_offset=high[2] - low[2], target_box_before=None)
+    block_volume = (high[0] - low[0]) * (high[1] - low[1]) * (high[2] - low[2])
+    pipe = out["items"][2]
+    pipe["index"] = 3
+    pipe["data"].update(operation=operation, participants=[dict(B1)],
+                        target_box_before={"min": list(low), "max": list(high)})
+    out["items"] = [block, sketch_item(1, "Sketch1"), sketch_item(2, "Path"), pipe]
+    box = out["target"]["box"]
+    if operation == "cut":
+        out["target"]["box"] = {"min": list(low), "max": list(high)}
+        out["target"]["volume_mm3"] = round(block_volume - out["target"]["volume_mm3"], 4)
+    else:
+        box["min"] = [min(a, b) for a, b in zip(box["min"], low)]
+        box["max"] = [max(a, b) for a, b in zip(box["max"], high)]
+        out["target"]["volume_mm3"] = round(block_volume + out["target"]["volume_mm3"], 4)
+    return out
+
+
+def sized_spline_pipe(wire=4.0, run=20.0):
+    """`pipe_along_spline` with the circle's diameter set by `wire` (its sketch graph) and the first line's length by
+    `run`, a dimension of the path sketch."""
+    out = pipe_along_spline(wire / 2.0)
+    out["parameters"] = {"user": [user("wire", "%g mm" % wire, wire), user("run", "%g mm" % run, run)],
+                         "model": [model("d_wire", "wire", wire, sketch="Sketch1"),
+                                   model("d_run", "run", run, sketch="Path")]}
+    out["sketch_graphs"] = [circle_graph(wire / 2.0, "wire", "Sketch1", "s1")]
+    out["items"][2]["data"]["profiles"][0]["sketch_token"] = "s1"
+    return out

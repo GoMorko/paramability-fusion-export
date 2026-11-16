@@ -118,7 +118,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Revolve of one outline without holes, the axis in its sketch plane: a full turn, an angle, an angle to both sides | sketch entities with a construction line on the axis (`revolve_axis_entity`), Revolve | `revolve_angle` (not for both sides) |
 | Sweep along a straight path | Extrude of the outline, as long as the path | the outline's sizes |
 | Sweep along one arc or a full circle | Revolve of the outline about the arc's axis | no |
-| Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed, one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
+| Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed (a closed path without splines), one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
@@ -526,7 +526,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - Left out: a twist or a taper (cause `sweepShape`), an outline kept in one direction along a bend (`sweepShape`), a
   path out of one plane (`sweepPath`), a spline Orca cannot draw exactly (`sweepPath`: a body edge or a curve read
   without its definition, one of the splines left out below, or a spline the planner cut open where a closed path
-  meets the outline), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
+  meets the outline), a closed path that holds a spline (`sweepPath`: live, Orca 2.5.1 crashed in OCCT's
+  `BRepFill_Pipe::MakeShape` while it built a closed track of two lines and two splines), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
   where Fusion's mitred wire has 384, and 202 for a closed square path against 439), holes along a bent path
   (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
   known, a path in another component and the outlines of
@@ -562,7 +563,10 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   block at its start, turning each way (277.4 both, the block showing the turn). Sweeps along a spline: a round
   wire of radius 2 along a line and a two piece spline with uneven knots (660.2 against 660.2471, drawn either way
   round), and a 4 by 1.5 bar along a line and a three piece S spline with a turning point (479.9 against 479.9041,
-  the box 1.5 high, so the bar does not flip at the turning point), each with the capture's box.
+  the box 1.5 high, so the bar does not flip at the turning point), each with the capture's box. The same wire cut
+  out of a block that holds it (27339.8 against 27339.7529) and joined to a block at its start (1660.2 against
+  1660.2471), and with its diameter set by `wire` (660.2, then 1485.6 with `wire` 6 against 1485.56); the first
+  line's length `run`, a dimension of the path sketch, is marked and keeps its number.
 
 ### Which parameters follow
 

@@ -289,6 +289,24 @@ class SplinePathTest(unittest.TestCase):
                 capture["items"] += [sw.sketch_item(3, "Pin sketch"), pin]
                 self.assertEqual(left_causes(capture), [] if cut else [causes.MISSES_PART])
 
+    def test_a_spline_sweep_cuts_or_joins_an_existing_body(self):
+        for operation, mode in (("cut", BooleanMode.CUT), ("join", BooleanMode.ADD)):
+            with self.subTest(operation):
+                result = run(sw.block_and_spline_pipe(operation))
+                self.assertEqual(result.left_out, [])
+                self.assertEqual(result.recipe.features[-1].type, FeatureType.SWEEP)
+                self.assertEqual(result.recipe.features[-1].mode, mode)
+
+    def test_the_outline_follows_its_size_and_the_path_keeps_its_numbers(self):
+        result = run(sw.sized_spline_pipe())
+        wire, path = outcome(result, "wire"), outcome(result, "run")
+        self.assertEqual((wire["outcome"], path["outcome"]), (VARIABLE, FIXED))
+        self.assertTrue(path["reasons"])
+        # The wire may grow close to twice the radius of the spline's tightest bend, never past it.
+        bend = sweep_splines.tightest([sw.spline_curve(sw.BEND_SPLINE)])
+        self.assertLessEqual(limit_of(wire).high, 2.0 * bend)
+        self.assertGreater(limit_of(wire).high, 0.9 * 2.0 * bend)
+
     def test_the_tightest_bend_is_read_along_the_exact_curve(self):
         # The parabola y = x * x as a quadratic Bezier: its tightest bend, at the vertex, has a radius of one half.
         parabola = {"kind": "other", "nurbs": {"degree": 2, "knots": [0, 0, 0, 1, 1, 1],
@@ -307,6 +325,7 @@ class SplinePathTest(unittest.TestCase):
         bent = sw.spline_curve(dict(sw.BEND_SPLINE, poles=spline["flat"]["nurbs"]["poles"]))
         spline.update(samples=[p + [0.0] for p in bent["samples"]], flat=bent)
         cases = (("no definition", unread, causes.SWEEP_PATH), ("weights that differ", weighted, causes.SWEEP_PATH),
+                 ("a closed path", sw.ring_along_splines(), causes.SWEEP_PATH),
                  ("a corner where the spline meets the line", cornered, gap_hints.SHARP_CORNER))
         for name, capture, cause in cases:
             with self.subTest(name):

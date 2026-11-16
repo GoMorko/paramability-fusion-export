@@ -19,7 +19,8 @@ crossing, the outline clear of the tightest bend and of the other parts of the p
 
 Left out: a twist or a taper, an outline kept in one direction along a path that turns, guide rails and surfaces, part
 of a path, a path that bends out of one plane, a free curve Orca cannot draw exactly (one without its exact
-definition, as a body edge, one `splines` refuses, or a spline the planner cut open inside), sharp corners, an
+definition, as a body edge, one `splines` refuses, or a spline the planner cut open inside), a closed path that
+holds a spline (live, Orca crashed while it built one), sharp corners, an
 outline with holes along a bent path, an outline that is not square to the path where it starts, and a new body
 whose measured volume or end face does not match the outline and path (`design_model.steps.sweep`).
 
@@ -67,6 +68,9 @@ _KEEPS_DIRECTION = ("Orca's sweep turns the outline with its path and cannot kee
 _NOT_FLAT = "Orca's copy of a sweep takes a path in one plane only, so this sweep is left out."
 _FREE_CURVE = ("The path of this sweep has a free curve (a spline) the Orca copy cannot draw exactly, so it is "
                "left out.")
+# Live with Orca 2.5.1, a closed path wire that holds a spline crashed Orca while it built the sweep.
+_CLOSED_FREE_CURVE = ("The path of this sweep is a closed loop with a free curve (a spline), which the Orca copy cannot "
+                      "build yet, so it is left out.")
 _SHARP = "The path of this sweep has a sharp corner, which the Orca copy does not build the way Fusion does."
 _HOLES = "Orca's sweep cannot carry an outline with holes along a bent path, so this sweep is left out."
 _NOT_SQUARE = "The outline of this sweep is not square to its path, which the Orca copy cannot build the same way."
@@ -148,6 +152,8 @@ def sweep(ctx, item):
         return Skip(_NOT_FLAT, causes.SWEEP_PATH)
     if any(c.get("kind") == "other" and not c.get("nurbs3d") for c in found.curves):
         return Skip(_FREE_CURVE, causes.SWEEP_PATH)
+    if found.closed and any(c.get("kind") == "other" for c in found.curves):
+        return Skip(_CLOSED_FREE_CURVE, causes.SWEEP_PATH)
     if data["orientation"] == "parallel" and found.kind != "line":
         return Skip(_KEEPS_DIRECTION, causes.SWEEP_SHAPE)
     if vec.length(vec.cross(found.direction, vec.unit(frame["z"]))) > _SQUARE:
@@ -272,8 +278,8 @@ def carried(frame, loops, found):
         if curve["kind"] == "other":
             corners = [vec.frame_apply(frame, list(p) + [0.0]) for c in loops[0] for p in polyline(c)]
             reach = outline_reach(corners, found.start, normal)
-            shape.add(ADD, sweep_splines.chain(curve, lambda d, at: (placed(d, at), loops), reach,
-                                               number == 0 and not found.closed, number == last and not found.closed))
+            shape.add(ADD, sweep_splines.chain(curve, lambda d, at: (placed(d, at), loops), reach, number == 0,
+                                               number == last))
             continue
         here = placed(start, curve["start"])
         if curve["kind"] == "line":

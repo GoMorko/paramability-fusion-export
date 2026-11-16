@@ -1483,10 +1483,17 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       diameter `Wire` centred on the origin and sweep it along the whole path as a new body. Make a second body the
       same way, with the path drawn the other way round (the spline from (72, 0) first, then the line back to the
       origin). Make a third body with a fit point spline through (20, 0), (30, 5) and (40, 20) mm that is not tangent
-      to its 20 mm line.
-      Export: each body for Orca with `Wire` ticked. Expect: the first two copied as one Orca sweep each, the path
-      sketch a line and B-spline pieces starting at the outline, `Wire` follows and the path sizes stay numbers; the
-      third under "Left out" (sharp corner). Each Orca body has the box and volume Fusion measures (Inspect >
+      to its 20 mm line. Make a fourth: a 70 by 40 by 10 mm block from (-10, -10, -5) to (60, 30, 5), then the
+      first sweep again as a cut of it; and a fifth: a 10 by 10 by 10 mm block from (-10, -5, -5) to (0, 5, 5), then
+      the first sweep again as a join to it. Make a sixth: on the XY plane a closed track of a 40 mm line from the
+      origin, a control point spline through (52, 0) and (52, 20) to (40, 20), a line back to (0, 20) and a control
+      point spline through (-12, 20) and (-12, 0) to the origin; sweep a 3 mm circle on the middle of the first line
+      once round it. Give the first line of the path its length as a dimension `Run` = 20 mm.
+      Export: each body for Orca with `Wire` and `Run` ticked. Expect: the first two, the fourth and the fifth copied
+      as one Orca sweep each (the fourth and fifth after their block extrude), the path sketch a line and B-spline
+      pieces starting at the outline, `Wire` follows with a limit, and `Run` stays a number with the reason "Orca
+      cannot tie the path of a sweep to a variable"; the third under "Left out" (sharp corner); the sixth under
+      "Left out" (a closed loop with a free curve). Each Orca body has the box and volume Fusion measures (Inspect >
       Properties); set `Wire` to 6 in both and compare again. Send `report.json` when a spline path is left out with
       "cannot draw exactly": its path curve must hold `flat` with `nurbs`.
 
