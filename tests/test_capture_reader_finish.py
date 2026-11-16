@@ -332,6 +332,29 @@ class CircularPatternTest(unittest.TestCase):
         self.assertEqual(data["axis"], {"point": [0, 0, 0], "dir": [1.0, 0.0, 0.0], "entity_type": "BRepEdge",
                                         "edge_points": [[5, 0, 0]]})
 
+    def test_a_construction_axis_says_what_its_definition_is_built_on(self):
+        straight = edge("e1", 5)
+        straight.geometry = Obj("core::Line3D", startPoint=P(0, 0, 0), endPoint=P(10, 0, 0))
+        corner = Obj("fusion::BRepVertex", entityToken="v1")
+        other = Obj("fusion::BRepFace", entityToken="f8", parentComponent=Obj(entityToken="lid"))
+        cases = (("ConstructionAxisEdgeDefinition", {"edgeEntity": straight}, ["BRepEdge"]),
+                 ("ConstructionAxisTwoPointDefinition", {"pointEntityOne": corner, "pointEntityTwo": corner},
+                  ["BRepVertex", "BRepVertex"]),
+                 ("ConstructionAxisNormalToFaceAtPointDefinition", {"face": other, "pointEntity": corner},
+                  [None, "BRepVertex"]))
+        for name, members, kinds in cases:
+            with self.subTest(name):
+                axis = Obj("fusion::ConstructionAxis", entityToken="ax1", definition=Obj("fusion::" + name, **members),
+                           geometry=Obj(origin=P(5, 5, 0), direction=Obj(x=0.0, y=0.0, z=1.0)))
+                data = read_pattern("CircularPatternFeature", [element(1, (0, 0, 0))],
+                                    inputEntities=Coll([source_feature(1)]), axis=axis, quantity=param(3.0),
+                                    totalAngle=param(2 * 3.141592653589793))
+                built = data["axis"]["built_on"]
+                self.assertEqual([entry.get("entity_type") for entry in built], kinds)
+                # An entity of another component is no place of the part, and not left out either.
+                self.assertEqual([entry for entry in built if "entity_type" not in entry],
+                                 [{"foreign": True}] * kinds.count(None))
+
     def test_unreadable_axis_is_marked_other(self):
         data = read_pattern("CircularPatternFeature", [], inputEntities=Coll([source_feature(1)]),
                             quantity=param(3.0), totalAngle=param(1.0))
@@ -369,6 +392,24 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual((plane["token"], plane["made_by"], plane["definition"]),
                          ("cp1", 2, "ConstructionPlaneOffsetDefinition"))
         self.assertEqual(plane["built_on"], [{"entity_type": "BRepFace", "face_point": [0, 1, 2], "surface": "Plane"}])
+
+    def test_a_construction_plane_through_points_edges_or_a_path_says_what_it_is_built_on(self):
+        corner = Obj("fusion::BRepVertex", entityToken="v1")
+        straight = edge("e1", 5)
+        cases = (("ConstructionPlaneThreePointsDefinition",
+                  {"pointEntityOne": corner, "pointEntityTwo": corner, "pointEntityThree": corner}, ["BRepVertex"] * 3),
+                 ("ConstructionPlaneTwoEdgesDefinition", {"linearEntityOne": straight, "linearEntityTwo": straight},
+                  ["BRepEdge"] * 2),
+                 ("ConstructionPlaneDistanceOnPathDefinition", {"pathEntity": straight}, ["BRepEdge"]),
+                 ("ConstructionPlaneTangentAtPointDefinition", {"tangentFace": face("f1"), "pointEntity": corner},
+                  ["BRepFace", "BRepVertex"]))
+        for name, members, kinds in cases:
+            with self.subTest(name):
+                built = Obj("fusion::ConstructionPlane", entityToken="cp1", definition=Obj("fusion::" + name, **members),
+                            geometry=plane_geometry((0, 0, 15), (0, 0, 1)))
+                data = read_data(feature("MirrorFeature", "Mirror1", inputEntities=Coll([source_feature(1)]),
+                                         patternEntityType="FeaturesPatternEntityType", mirrorPlane=built))
+                self.assertEqual(sorted(entry["entity_type"] for entry in data["plane"]["built_on"]), sorted(kinds))
 
     def test_an_origin_plane_says_only_that_it_is_one(self):
         origin = Obj("fusion::ConstructionPlane", entityToken="xy", geometry=plane_geometry((0, 0, 0), (0, 0, 1)))

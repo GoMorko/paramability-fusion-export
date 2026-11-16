@@ -181,6 +181,20 @@ def check_own_direction(ctx, item, which, what):
         ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": noun, "own": True}, what)))
 
 
+def check_own_axis(ctx, item, axis, what):
+    """Marks the sizes that may move a turning axis of the part itself that the copy writes as numbers: any own axis
+    the probe does not follow as a line of a sketch (an edge, a face, a construction axis, one the capture does not
+    describe; `reach.reference_sizes`). An axis of another component, one the probe follows, and one worked out from
+    another record of the step (`fixed`) mark nothing here. The first translation of an export marks nothing."""
+    if (ctx.table is None or getattr(ctx.motion, "optimistic", False) or not isinstance(axis, dict)
+            or axis.get("assembly") or (axis.get("entity") and axis.get("sketch_token"))):
+        return
+    names = reach.reference_sizes(ctx.table, ctx.capture.get("items") or [], item, axis)
+    if names:
+        noun = axis.get("entity_type") or "ConstructionAxis"
+        ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": noun, "own": True}, what)))
+
+
 def hole_moves(ctx, item, data, what="is placed on"):
     """One `[x, y, z]` move (Quantities) per hole position: the move of the sketch point or the vertex a position
     sits on, or of the flat face or plane the hole is placed on along its normal. A place that cannot be matched to

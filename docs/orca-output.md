@@ -642,10 +642,16 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   place is marked with a reason ("Split1 cuts along a plane that may move with it, and the copy cannot follow
   that"), so it never reads as "not used" or as following everywhere (`kept_refs.mark`, `kept_refs.mark_faces`).
   Which sizes may move a place is a fact of the shared layer (`design_model.reach.reference_sizes`): the sizes behind
-  a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
-  construction geometry built on the part, every size read before the step. For a direction of a rectangular pattern
-  taken from an edge or axis of the part, the same (the `own` place of the capture). For a direction taken from a
-  sketch line, the sizes of that sketch. An edge or face that lies where a straight extrude made it (a side edge
+  a construction plane or axis and behind what it is built on, and, for a face, an edge or construction geometry
+  built on the part, every size read before the step. For a line of a sketch (a revolve axis, a pattern axis), the
+  sizes of that sketch and those that may move its plane, and every size read before the sketch when the sketch
+  holds projections or may hold them (`reach.sketch_line_sizes`). Unknown counts as "may move": a record that does
+  not say what it is (an older capture), and construction geometry that does not say what it is built on or is built
+  on another component, may move with every size read before the step. The axis of a sweep path arc (`fixed`) is no
+  place of its own: the path's sizes are marked. For a direction of a rectangular pattern taken from an edge or axis
+  of the part, the same (the `own` place of the capture). For a direction taken from a sketch line, the same as for a
+  line of a sketch. A direction whose source is unknown (an `unknown` place, or no place and no sketch in an older
+  capture) may turn with every size read before the step. An edge or face that lies where a straight extrude made it (a side edge
   along its axis, an edge over a fixed line of its outline, an end face or a side face) turns only with that
   extrude's sketch plane (`design_model.edges.direction_sizes`), so a pattern along an edge of a plain box marks no
   box size. For a thread, every size read before the step (`reach.any_face_sizes`). The thread of a tapped hole

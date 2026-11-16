@@ -909,6 +909,10 @@
       "expression": "hole_pitch_mm",
       "value": 24.0
      }
+    },
+    "direction_one_place": {
+     "origin": true,
+     "own": true
     }
    }
   },

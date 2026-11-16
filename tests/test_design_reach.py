@@ -107,8 +107,13 @@ class OffsetPlaneTest(unittest.TestCase):
         self.assertTrue(reach.on_part(plane("p1", [plane("p0", [FACE])])))
         self.assertFalse(reach.on_part(ORIGIN_PLANE))
         self.assertFalse(reach.on_part(plane("p1", [ORIGIN_PLANE])))
-        self.assertFalse(reach.on_part(plane("p1", [])))
         self.assertFalse(reach.on_part(dict(FACE, foreign=True)))
+
+    def test_a_plane_whose_base_is_unknown_counts_as_on_the_part(self):
+        # Nothing read, a chain deeper than the reader goes, or an entity of another component in the chain.
+        self.assertTrue(reach.on_part(plane("p1", [])))
+        self.assertTrue(reach.on_part({"entity_type": "ConstructionPlane", "token": "p1", "definition": "Offset"}))
+        self.assertTrue(reach.on_part(plane("p1", [ORIGIN_PLANE, {"foreign": True}])))
 
     def test_the_offset_planes_a_step_places_are_followed_through_a_chain(self):
         found = sized_table(self.models)
@@ -222,8 +227,9 @@ class ReferenceSizesTest(unittest.TestCase):
         self.assertEqual(self.sizes(plane("p1", [ORIGIN_PLANE])), ["w_mm"])
         axis = {"entity_type": "ConstructionAxis", "token": "a1", "built_on": [plane("p1", [ORIGIN_PLANE])]}
         self.assertEqual(self.sizes(axis), ["w_mm", "h_mm"])
-        # A record of an older capture: its token alone tells it is construction geometry.
-        self.assertEqual(self.sizes({"point": [0, 0, 0], "dir": [0, 0, 1], "token": "a1"}), ["h_mm"])
+        # A record of an older capture: its token tells it is construction geometry, but not what it is built on.
+        self.assertEqual(self.sizes({"point": [0, 0, 0], "dir": [0, 0, 1], "token": "a1"}),
+                         ["h_mm", "gap_mm", "t_mm"])
 
     def test_part_geometry_may_move_with_every_size_read_before(self):
         self.assertEqual(self.sizes(FACE), ["gap_mm", "t_mm"])
@@ -231,9 +237,33 @@ class ReferenceSizesTest(unittest.TestCase):
         # Construction geometry built on the part: the sizes read before it was made, and its own.
         self.assertEqual(self.sizes(plane("p1", [FACE], made_by=1)), ["w_mm", "gap_mm"])
 
-    def test_an_origin_another_component_or_an_undescribed_record_names_no_size(self):
+    def test_a_record_that_does_not_say_what_it_is_may_move_with_every_size_read_before(self):
+        self.assertEqual(self.sizes({"point": [0, 0, 0], "normal": [1, 0, 0]}), ["gap_mm", "t_mm"])
+
+    def test_a_sketch_line_names_its_sketch_and_what_moves_its_plane(self):
+        table = sized_table([model("d1", "w_mm", 10, sketch="Guide"),
+                             model("d2", "h_mm", 20, kind="constructionPlane", token="p1")])
+        timeline = [step(0, "Base", reads=["gap_mm"]), dict(step(1, "Guide", kind="Sketch"), data={}),
+                    step(2, "Rib", reads=["t_mm"]), step(3, "Revolve1")]
+        on_plane = plane("p1", [ORIGIN_PLANE], kind="constructionPlane")
+
+        def sizes(**line):
+            record = dict({"entity_type": "SketchLine", "sketch": "Guide", "sketch_reference": on_plane,
+                           "sketch_projected": False}, **line)
+            return reach.reference_sizes(table, timeline, timeline[3], record)
+        self.assertEqual(sizes(), ["w_mm", "h_mm"])
+        self.assertEqual(sizes(sketch_reference={"kind": "face"}), ["w_mm", "gap_mm"])
+        # Projections, or none known: every size read before the sketch may move projected geometry.
+        for projected in (True, None):
+            self.assertEqual(sizes(sketch_projected=projected), ["w_mm", "h_mm", "gap_mm"])
+        # An older capture names the line and its sketch only.
+        self.assertEqual(reach.reference_sizes(table, timeline, timeline[3], {
+            "point": [0, 0, 0], "dir": [0, 1, 0], "entity": "l1", "sketch_token": "s1", "sketch": "Guide"}),
+            ["w_mm", "gap_mm"])
+
+    def test_an_origin_another_component_or_a_place_of_another_record_names_no_size(self):
         for record in (ORIGIN_PLANE, {"origin": True}, dict(FACE, assembly=True), dict(FACE, foreign=True),
-                       {"point": [0, 0, 0], "normal": [1, 0, 0]}, None):
+                       {"point": [0, 0, 0], "dir": [0, 0, 1], "fixed": True}, None):
             self.assertEqual(self.sizes(record), [], record)
         self.assertEqual(reach.reference_sizes(None, self.timeline, self.timeline[2], FACE), [])
 
@@ -251,14 +281,26 @@ class DirectionAndHoleEndTest(unittest.TestCase):
 
     def test_a_direction_of_the_part_its_sketch_line_or_another_component(self):
         timeline = [step(0, "Base", reads=["gap_mm"])]
-        own = {"own": True, "entity_type": "ConstructionAxis", "token": "a1"}
+        own = {"own": True, "entity_type": "ConstructionAxis", "token": "a1", "built_on": [{"origin": True}]}
+        guide = {"sketch": "Guide", "reference": {"kind": "constructionPlane", "origin": True}, "projected": False}
         cases = ((self.pattern(direction_one_place=own), ["w_mm"], "ConstructionAxis"),
                  (self.pattern(direction_one_place={"own": True, "entity_type": "BRepEdge"}), ["gap_mm"], "BRepEdge"),
-                 (self.pattern(direction_one_sketch={"sketch": "Guide"}), ["t_mm"], "SketchLine"),
+                 (self.pattern(direction_one_sketch=guide), ["t_mm"], "SketchLine"),
+                 (self.pattern(direction_one_sketch=dict(guide, reference={"kind": "face"})), ["gap_mm", "t_mm"],
+                  "SketchLine"),
                  (self.pattern(direction_one_place={"assembly": True, "ref": {}}), [], None))
         for item, names, kind in cases:
             self.assertEqual(reach.direction_sizes(self.table, timeline + [item], item, "one"), names, item)
             self.assertEqual(reach.direction_kind(item, "one"), kind)
+
+    def test_a_direction_whose_source_is_unknown_may_turn_with_every_size_read_before(self):
+        timeline = [step(0, "Base", reads=["gap_mm"])]
+        used = {"direction_one": [1, 0, 0], "quantity_one": 3}
+        for item in (self.pattern(direction_one_place={"unknown": True}, **used), self.pattern(**used)):
+            self.assertEqual(reach.direction_sizes(self.table, timeline + [item], item, "one"), ["gap_mm"], item)
+        # A direction with one copy along it places nothing.
+        unused = self.pattern(direction_one=[1, 0, 0], quantity_one=1)
+        self.assertEqual(reach.direction_sizes(self.table, timeline + [unused], unused, "one"), [])
 
     def test_the_sizes_only_the_hole_sketch_reads_are_left_out_when_it_comes_just_before_the_hole(self):
         base = step(0, "Base", reads=["gap_mm"])

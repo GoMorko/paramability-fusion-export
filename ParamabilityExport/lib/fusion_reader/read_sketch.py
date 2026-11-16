@@ -411,6 +411,25 @@ def sketch_reference(sketch, ctx):
     return describe_plane(record, entity, ctx)
 
 
+def holds_projection(sketch):
+    """True when the sketch holds projected (reference) curves or points (`SketchEntity.isReference`), its own origin
+    point left out; None when that cannot be read. Geometry of the part projected into a sketch moves with the sizes
+    that move the part."""
+    def read():
+        origin = geo.safe(lambda: sketch.originPoint, None)
+        if any(bool(curve.isReference) for curve in geo.sequence_items(sketch.sketchCurves)):
+            return True
+        return any(bool(point.isReference) and not geo.same_entity(point, origin)
+                   for point in geo.sequence_items(sketch.sketchPoints))
+    return geo.safe(read, None)
+
+
+def sketch_place(sketch, ctx):
+    """{ reference, projected } of the sketch a step takes a line from (a revolve axis, a pattern direction): what it
+    sits on (`sketch_reference`, null when it cannot be read) and whether it holds projections (`holds_projection`)."""
+    return {"reference": geo.safe(lambda: sketch_reference(sketch, ctx), None), "projected": holds_projection(sketch)}
+
+
 def _curve_record(profile_curve, space):
     """The curve dict, with `entity`: the token of the sketch curve it came from (same across recomputes)."""
     record = read_curve(profile_curve.geometry, space)

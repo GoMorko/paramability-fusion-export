@@ -733,6 +733,13 @@ against `samples`.
   "other", "type" }` with the entity type, plus `geometry` (the curve or surface type) for an edge or face, or `error`
   when reading the revolve axis raised. The translator's refusal says which of these the axis is. An axis from a sketch line also has `entity` (the line's token), `sketch_token` and `sketch` (the
   sketch's token and name); one from a construction axis has `token`. Circular pattern axes are read the same way.
+- The axis also says what it is, with the keys of a mirror plane record (`entity_type`, `origin`, `face_point`,
+  `edge_points`, `made_by`, `definition`, `built_on`; see MirrorFeature below, `read_reference.axis_with_reference`).
+  An axis from a sketch line of the body's component also has `sketch_reference`, what its sketch sits on (as a
+  profile's `reference`, null when it cannot be read), and `sketch_projected`, true when that sketch holds projected
+  curves or points (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
+  out; the translators then count the axis as one that may move with every size read before the step (a record
+  with `entity` and `sketch_token` counts as a sketch line whose plane and projections are unknown).
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
   `{ "kind": "twoSidesAngle", "angle_one_deg", "angle_two_deg" }`, `{ "kind": "other", "type" }`.
 - `start_face_normal`: outward normal of `startFaces[0]` at its `pointOnFace` (surface evaluator), or null for a
@@ -925,8 +932,12 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   Fusion exports: with an even count the extra copy sits ahead of the original, along `direction_*` (counts 4 and 6 by
   spacing, 8 by extent). A direction whose distance is 0 (Fusion keeps a quantity of 3 in an unused second direction)
   makes copies on top of one another; the translator ignores that direction and merges such copies.
-- `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch" }` when that direction is a
-  sketch line, so the sketch is known to feed a pattern.
+- `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch", "reference", "projected" }`
+  when that direction is a sketch line, so the sketch is known to feed a pattern. `reference` is what the sketch sits
+  on (as a profile's `reference`) and `projected` is true when the sketch holds projected curves or points; each is
+  null when it cannot be read (`read_sketch.sketch_place`). Older captures have only `sketch_token` and `sketch`. The
+  translators mark the sizes of the sketch and those that may move its plane; when `projected` is not false, or the
+  reference is null or missing, also every size read before the sketch.
 - `direction_one_place`, `direction_two_place` (optional): a direction taken from an axis, edge or face of another
   component. The entity is seen in the root's coordinates, so its direction is turned into the target's
   (`direction_one` holds the result) and the place is `{ "assembly": true, "dir": [..], "ref": REF }` (slot
@@ -937,9 +948,11 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   line, which `direction_*_sketch` names) gets the place `{ "own": true, ...what it is }`: the description of
   `read_reference.reference_of` (`origin`, or `entity_type` with `edge_points`, `face_point`, `token`, `made_by`,
   `definition` and `built_on` as far as Fusion gives them). It holds no `ref`, so it is no measured reference. A
-  direction whose entity cannot be described has no place, as in older captures. The translators read it through
-  `design_model.edges.direction_sizes`: the sizes that may turn the direction are marked, since both write the
-  direction as a number.
+  direction whose entity cannot be described has no place, as in older captures. When the reader cannot tell whether
+  the entity belongs to the target's component (the check raised), the place is `{ "unknown": true }`. The
+  translators read it through `design_model.edges.direction_sizes`: the sizes that may turn the direction are marked,
+  since both write the direction as a number. A direction the pattern uses (more than one copy along it) with an
+  `unknown` place, or with neither a place nor a sketch, may turn with every size read before the step.
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,
 `suppressedElementsIds`):
@@ -957,21 +970,29 @@ circle the copies are the ordinary full circle.
 { "entity_type": "features", "sources": [4], "plane": PLANE, "combine": false, "target_box_before": { "min": [..], "max": [..] } }
 ```
 
-The mirror `plane` and the circular pattern `axis` also say what they are, so the translator can tell whether sizes move
-them (`lib/fusion_reader/read_reference.py`). All keys below are optional and are added next to the plane or axis keys
+The mirror `plane`, the circular pattern `axis` and the revolve `axis` also say what they are, so the translator can
+tell whether sizes move them (`lib/fusion_reader/read_reference.py`). All keys below are optional and are added next to the plane or axis keys
 (`point`, `normal` or `dir`, `token`); a record of another component gets none.
 
 - `origin`: true for an origin plane or axis of the component. Nothing else is read then; it never moves.
-- `entity_type`: the type name of the picked entity (`BRepFace`, `BRepEdge`, `ConstructionPlane`, `ConstructionAxis`).
+- `entity_type`: the type name of the picked entity (`BRepFace`, `BRepEdge`, `ConstructionPlane`, `ConstructionAxis`,
+  `SketchLine`).
 - `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge; `body` (`{ token, name }`),
   the body either lies on, left out when Fusion does not give it.
 - Construction geometry also has `token`, `made_by` (the timeline index of the feature that made it), `definition` (the
   type name of how it is defined) and `built_on`, a list of the same descriptions for the entities that definition
-  names (own component only, up to three levels deep).
+  names (up to three levels deep). The definition members read are those of the `ConstructionPlane...Definition` and
+  `ConstructionAxis...Definition` objects of the API: `planarEntity`, `planarEntityOne`, `planarEntityTwo`,
+  `linearEntity`, `linearEntityOne`, `linearEntityTwo`, `tangentFace`, `circularFace`, `face`, `edgeEntity`,
+  `pathEntity`, `point`, `pointEntity`, `pointEntityOne`, `pointEntityTwo`, `pointEntityThree`. An entity of another
+  component is `{ "foreign": true }` in `built_on` (older captures leave it out).
 
-A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured. The same
-keys describe a construction plane a sketch sits on and one an extrude starts from or reaches to (section 4 and TARGET);
-there a plane without them (an older capture) marks the sizes that may move it.
+A reader that cannot read one of these leaves it out. The translators read a missing key as unknown, and unknown counts
+as "may move": a plane or axis record without `origin` or `entity_type` may move with every size read before the step,
+and construction geometry without `built_on` (none could be read, or the chain is deeper than three levels), or with a
+`{ "foreign": true }` entry in it, counts as built on the part. The same keys describe a construction plane a sketch
+sits on and one an extrude starts from or reaches to (section 4 and TARGET); there a plane without them (an older
+capture) marks the sizes that may move it.
 
 `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
 for extrudes).
@@ -1446,8 +1467,8 @@ PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and c
   (an entity that is neither, or one that cannot be read). `closed` is `Path.isClosed`. `truncated` is true when the
   path has more than 256 entities: only the first 256 are read, and the sweep is not copied.
 - `reference`: what the path sketch sits on, as on a profile record (`{ kind, token }` from `Sketch.referencePlane`,
-  null when it cannot be read); `projected` is true when the sketch holds projected (reference) curves, null when
-  that cannot be read. The translator marks the sizes that move such a plane, face or projection.
+  null when it cannot be read); `projected` is true when the sketch holds projected (reference) curves or points
+  other than its origin point (`read_sketch.holds_projection`), null when that cannot be read. The translator marks the sizes that move such a plane, face or projection.
 - `curves`: every `PathEntity` in path order, with the geometry in the target component's coordinates: `line`
   (`start`, `end`), `arc` (`start`, `end`, `mid`, `center`, `normal`, `radius`), `circle` (`center`, `normal`,
   `radius`) or `other` (`type` and dense 3D `samples`, as for a free profile curve, with `truncated` when the sampling

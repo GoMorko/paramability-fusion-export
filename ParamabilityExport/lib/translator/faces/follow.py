@@ -25,7 +25,7 @@ two steps cross is placed on both walls (faces/crossings.py).
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
-from ...design_model.reach import offset_param, on_part
+from ...design_model.reach import offset_param, on_part, reference_sizes
 from ..sketch import sketch_motion
 from . import crossings, picks, shells
 from .copy_counts import stays_at_least
@@ -424,8 +424,9 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
     measured place (its number is zero), not the distance from some base. `ref` is the capture's plane or axis record.
     An axis moves by its offset in each coordinate direction; the part of it along the axis is harmless.
 
-    An origin plane or axis, or a record that says nothing about what it is (an older capture), stays. A face is
-    placed like the face an extrude reaches to (`target_shift`). `what` words the reason.
+    An origin plane or axis stays. A face is placed like the face an extrude reaches to (`target_shift`). A sketch
+    line, or a record that does not say what it is (an older capture), stays where it was measured, and the sizes that
+    may move it (`reach.reference_sizes`) are marked. `what` words the reason.
     """
     zero = Quantity(0.0)
     if ref.get("assembly"):
@@ -460,6 +461,11 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
                       % (_name(item), what))
             return None
         return _edge_shift(ctx, item, ref["edge_points"], direction, what)
-    if kind in ("ConstructionPlane", "ConstructionAxis") and on_part(ref):
-        return _built_shift(ctx, item, ref, direction, what)
-    return zero
+    if kind in ("ConstructionPlane", "ConstructionAxis"):
+        return _built_shift(ctx, item, ref, direction, what) if on_part(ref) else zero
+    names = reference_sizes(ctx.table, ctx.capture.get("items") or [], item, ref)
+    if not names:
+        return zero
+    ctx.doubt(names, "%s %s %s that may move with it, and the copy cannot follow that" % (
+        _name(item), what, "a sketch line" if kind == "SketchLine" else "a place"))
+    return None

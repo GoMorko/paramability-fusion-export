@@ -564,7 +564,7 @@ class RevolveTest(unittest.TestCase):
     def test_full_turn_has_no_start_normal(self):
         data = self.read(None, Obj("fusion::AngleExtentDefinition", angle=param(2 * math.pi), isSymmetric=False),
                          start_faces=Coll([Obj(pointOnFace=P(0, 0))]))
-        self.assertEqual(data["axis"], {"point": [0, 0, 0], "dir": [0, 1, 0]})
+        self.assertEqual((data["axis"]["point"], data["axis"]["dir"]), ([0, 0, 0], [0, 1, 0]))
         self.assertEqual(data["extent"], {"kind": "angle", "angle_deg": 360.0, "symmetric": False})
         self.assertIsNone(data["start_face_normal"])
 
@@ -582,9 +582,10 @@ class RevolveTest(unittest.TestCase):
                                                            direction=Obj(x=1.0, y=0.0, z=0.0)))
         two = Obj("fusion::TwoSidesAngleExtentDefinition", angleOne=param(math.radians(30)),
                   angleTwo=param(math.radians(60)))
-        self.assertEqual(self.read(cyl, two)["axis"], {"point": [1, 2, 3], "dir": [0, 0, 1]})
+        self.assertEqual(self.read(cyl, two)["axis"], {"point": [1, 2, 3], "dir": [0, 0, 1], "entity_type": "BRepFace",
+                                                       "surface": "Cylinder"})
         data = self.read(con, two)
-        self.assertEqual(data["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0]})
+        self.assertEqual(data["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0], "entity_type": "ConstructionAxis"})
         self.assertEqual(data["extent"], {"kind": "twoSidesAngle", "angle_one_deg": 30.0, "angle_two_deg": 60.0})
         odd = self.read(Obj("fusion::Vertex"), Obj("fusion::NewExtentDefinition"))
         self.assertEqual(odd["axis"], {"kind": "other", "type": "Vertex"})

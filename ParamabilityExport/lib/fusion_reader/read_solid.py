@@ -359,13 +359,16 @@ def axis_record(entity, ctx, slot="axis"):
 
 
 def revolve_axis(feature, ctx):
-    """`axis_record` of a revolve's axis. One that cannot be read is `{ kind: "other" }` with the entity `type` and the
+    """`axis_record` of a revolve's axis with what it is (`read_reference.axis_with_reference`), so the translators
+    can tell which sizes may move it. One that cannot be read is `{ kind: "other" }` with the entity `type` and the
     `error`, so the reason can say what the axis is."""
+    from .read_reference import axis_with_reference  # read_reference imports this module
+
     entity = geo.safe(lambda: feature.axis, None)
     if entity is None:
         return {"kind": "other", "type": "none", "error": "Fusion gave no axis"}
     try:
-        return axis_record(entity, ctx)
+        return axis_with_reference(entity, ctx)
     except Exception as exc:
         return {"kind": "other", "type": geo.type_name(entity), "error": ("%s: %s" % (type(exc).__name__, exc))[:200]}
 

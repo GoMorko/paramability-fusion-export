@@ -16,6 +16,7 @@ from .param_refs import Params, with_params
 from .read_bodies import result_bodies, with_points
 from .read_finish import strict_items
 from .read_reference import add_reference, axis_with_reference, reference_of
+from .read_sketch import sketch_place
 
 _ENTITY_TYPES = [
     ("feature", "features"),
@@ -77,9 +78,13 @@ def direction_of(entity):
 
 
 def _direction_entity(feature, entity_name, ctx):
-    """The entity a rectangular pattern direction is taken from when it belongs to another component, else None."""
+    """`(entity, foreign)` of the entity a rectangular pattern direction is taken from: `foreign` is True when it
+    belongs to another component, False when it is the target's or there is none, and None when that cannot be
+    told."""
     entity = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
-    return entity if entity is not None and geo.safe(lambda: geo.foreign(entity, ctx), False) else None
+    if entity is None:
+        return None, False
+    return entity, geo.safe(lambda: bool(geo.foreign(entity, ctx)), None)
 
 
 def _foreign_direction(entity, ctx, slot):
@@ -115,7 +120,8 @@ def _own_direction(feature, entity_name, ctx):
 
 
 def _direction_sketch(feature, entity_name, ctx):
-    """{ sketch_token, sketch } of the sketch line a pattern direction is taken from, else None."""
+    """{ sketch_token, sketch, reference, projected } of the sketch line a pattern direction is taken from
+    (`read_sketch.sketch_place`), else None."""
     line = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
     if geo.type_name(line) != "SketchLine":
         return None
@@ -124,7 +130,10 @@ def _direction_sketch(feature, entity_name, ctx):
         value = geo.safe(read, "")
         if value:
             found[key] = value
-    return found or None
+    if not found:
+        return None
+    found.update(sketch_place(geo.safe(lambda: line.parentSketch, None), ctx))
+    return found
 
 
 def _number(parameter, default):
@@ -152,14 +161,17 @@ def rectangular_before(feature, ctx):
     places, found = {}, {}
     for which, vector_name, entity_name in (("one", "directionOne", "directionOneEntity"),
                                             ("two", "directionTwo", "directionTwoEntity")):
-        entity = _direction_entity(feature, entity_name, ctx)
-        if entity is not None:
+        entity, foreign = _direction_entity(feature, entity_name, ctx)
+        if foreign:
             found[which], places[which] = _foreign_direction(entity, ctx, "direction_" + which)
-        else:
-            found[which] = _direction_member(feature, vector_name, entity_name, ctx)
-            own = _own_direction(feature, entity_name, ctx) if found[which] is not None else None
-            if own is not None:
-                places[which] = own
+            continue
+        found[which] = _direction_member(feature, vector_name, entity_name, ctx)
+        if found[which] is None:
+            continue
+        # A direction whose owner cannot be told is no place of the part: every size may turn it.
+        own = _own_direction(feature, entity_name, ctx) if foreign is False else {"unknown": True}
+        if own is not None:
+            places[which] = own
     direction_two = found["two"]
     data.update({
         "direction_one": found["one"],

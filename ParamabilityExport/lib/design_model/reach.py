@@ -11,8 +11,8 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
   component `borrowed_plane_sizes`): the sizes behind its construction plane and, for a plane on a face or on
   geometry built on the part, every size an earlier step reads;
 - a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`), and any
-  other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`), and what may
-  turn the direction of a rectangular pattern (`direction_sizes`);
+  other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`, for a sketch line
+  `sketch_line_sizes`), and what may turn the direction of a rectangular pattern (`direction_sizes`);
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
 - the sizes a step reads (`step_sizes`, `item_reads`) and the sizes the probe has to try (`probed_sizes`,
@@ -320,11 +320,16 @@ def construction_fixes(table, item):
 def on_part(ref):
     """True when a plane or axis description sits on geometry of the part (a face, an edge, a sketch) or on
     construction geometry built on such, at any depth. Origin planes and axes, geometry of another component, and
-    construction geometry made from parameters alone do not."""
+    construction geometry built on origin geometry alone do not. Construction geometry that does not say what it is
+    built on (none could be read, or the chain is deeper than the reader goes) counts as on the part, and so does an
+    entry of `built_on` of another component or of an unknown kind: their moves are not measured."""
     if ref.get("origin") or ref.get("foreign"):
         return False
     if ref.get("entity_type") in _CONSTRUCTION:
-        return any(on_part(entry) for entry in ref.get("built_on") or ())
+        built = ref.get("built_on")
+        if not built:
+            return True
+        return any(not isinstance(entry, dict) or entry.get("foreign") or on_part(entry) for entry in built)
     return True
 
 
@@ -347,7 +352,7 @@ def _plane_on_part(reference, frame):
     if reference.get("origin"):
         return False
     if "definition" in reference or "built_on" in reference:
-        return any(on_part(entry) for entry in reference.get("built_on") or ())
+        return on_part(dict(reference, entity_type="ConstructionPlane"))
     return not _looks_like_origin(frame)
 
 
@@ -505,17 +510,48 @@ def reach_sizes(table, timeline, item, record):
     return [name for name in table.ticked if name in names]
 
 
+def _record_kind(record):
+    """The Fusion type a place record stands for: its `entity_type`, else `SketchLine` for a record that names a line
+    of a sketch (`entity`, `sketch_token`), a construction plane or axis for one with a token and a place (an older
+    capture), else None."""
+    if record.get("entity_type"):
+        return record["entity_type"]
+    if record.get("entity") and record.get("sketch_token"):
+        return "SketchLine"
+    if record.get("token") and ("normal" in record or "dir" in record):
+        return "ConstructionAxis" if "dir" in record else "ConstructionPlane"
+    return None
+
+
+def sketch_line_sizes(table, timeline, item, sketch, reference, projected):
+    """Fusion names of the ticked sizes that may move or turn a line of the sketch named `sketch` that the step `item`
+    uses as a place (a turning axis, a pattern direction), as a set: the sizes of that sketch and those that may move
+    the plane it sits on (`reference`, as for a profile, `placement_sizes`; a reference that was not read counts as a
+    face of the part). A sketch that holds projections, or may (`projected` not false), also takes every size read
+    before it: projected geometry of the part moves with them."""
+    names = set(sketch_sizes(table, sketch))
+    on = reference if isinstance(reference, dict) else {"kind": "other"}
+    names |= set(placement_sizes(table, timeline, {"sketch": sketch, "reference": on}, item.get("index")))
+    if projected is not False:
+        bound = _sketch_item(timeline, sketch, item.get("index"))
+        names |= _reads_before(table, timeline, item.get("index") if bound is None else bound)
+    return names
+
+
 def reference_sizes(table, timeline, item, record):
     """Fusion names of the ticked sizes that may move a plane, axis or face of the body's component that the step
     `item` uses as a place (a split plane, a mirror plane, a turning axis, the face a thread is cut on), in table order:
     - the sizes behind the construction planes and axes of `record` and of what it is built on (a record without a
       token stands for every one of its kind);
-    - for a face, an edge, a sketch curve or construction geometry built on the part (`on_part`), also every size an
-      item of the body's component reads before the step (for construction geometry, before it was made).
+    - for a line of a sketch, those of `sketch_line_sizes`;
+    - for a face, an edge, construction geometry built on the part (`on_part`) and a record that does not say what it
+      is, also every size an item of the body's component reads before the step (for construction geometry, before
+      it was made).
     Empty for an origin plane or axis, for a record of another component (`assembly`, `foreign`: its sizes come from
-    its measured reference, `refs.mark_all`) and for a record that does not say what it is (an older capture)."""
+    its measured reference, `refs.mark_all`) and for a place worked out from another record of the step (`fixed`, the
+    axis of a sweep path arc: the step marks the sizes of that record)."""
     if (table is None or not isinstance(record, dict) or record.get("origin") or record.get("assembly")
-            or record.get("foreign")):
+            or record.get("foreign") or record.get("fixed")):
         return []
     names = set()
     pending = [record]
@@ -523,15 +559,15 @@ def reference_sizes(table, timeline, item, record):
         entry = pending.pop()
         if not isinstance(entry, dict) or entry.get("origin"):
             continue
-        kind = _CONSTRUCTION.get(entry.get("entity_type"))
-        if kind is None and not entry.get("entity_type") and entry.get("token") and ("normal" in entry
-                                                                                     or "dir" in entry):
-            kind = "constructionAxis" if "dir" in entry else "constructionPlane"
+        kind = _CONSTRUCTION.get(_record_kind(entry))
         if kind is not None:
             names |= set(construction_sizes(table, kind, entry.get("token") or ""))
             pending.extend(entry.get("built_on") or ())
-    entity = record.get("entity_type")
-    if entity and (entity not in _CONSTRUCTION or on_part(record)):
+    entity = _record_kind(record)
+    if entity == "SketchLine" and record.get("sketch"):
+        names |= sketch_line_sizes(table, timeline, item, record["sketch"], record.get("sketch_reference"),
+                                   record.get("sketch_projected"))
+    elif entity not in _CONSTRUCTION or on_part(dict(record, entity_type=entity)):
         bound = item.get("index")
         if entity in _CONSTRUCTION and isinstance(record.get("made_by"), int):
             bound = record["made_by"] if bound is None else min(bound, record["made_by"])
@@ -539,20 +575,40 @@ def reference_sizes(table, timeline, item, record):
     return [name for name in table.ticked if name in names]
 
 
+def _direction_used(data, which):
+    """True when the rectangular pattern data `data` places copies along the direction `which`: it has the direction
+    and more than one copy along it."""
+    direction = data.get("direction_%s" % which)
+    count = data.get("quantity_%s" % which)
+    return (isinstance(direction, (list, tuple)) and any(direction)
+            and (not isinstance(count, (int, float)) or count > 1))
+
+
 def direction_sizes(table, timeline, item, which):
     """Fusion names of the ticked sizes that may turn the direction `which` ("one" or "two") of the rectangular
     pattern `item`, in table order: for a direction taken from an edge, axis or face of the body's component
     (`direction_<which>_place` with `own`), the sizes that may move it (`reference_sizes`); for one taken from a
-    sketch line (`direction_<which>_sketch`), the sizes of that sketch. Empty for a direction of another component
-    (its measured reference says what moves it) and for one the capture does not describe."""
+    sketch line (`direction_<which>_sketch`), those of `sketch_line_sizes`. Empty for a direction of another component
+    (its measured reference says what moves it). A direction the pattern uses whose source is unknown (the place says
+    `unknown`, or the capture names neither a place nor a sketch) may turn with every size an item of the body's
+    component reads before the step."""
     if table is None:
         return []
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     place = data.get("direction_%s_place" % which)
+    source = data.get("direction_%s_sketch" % which)
     if isinstance(place, dict) and place.get("own"):
         return reference_sizes(table, timeline, item, place)
-    source = data.get("direction_%s_sketch" % which)
-    return sketch_sizes(table, source.get("sketch") or "") if isinstance(source, dict) else []
+    if isinstance(place, dict) and (place.get("assembly") or place.get("foreign")):
+        return []
+    if not isinstance(place, dict) and isinstance(source, dict) and source.get("sketch"):
+        names = sketch_line_sizes(table, timeline, item, source["sketch"], source.get("reference"),
+                                  source.get("projected"))
+    elif isinstance(place, dict) or _direction_used(data, which):
+        names = _reads_before(table, timeline, item.get("index"))
+    else:
+        return []
+    return [name for name in table.ticked if name in names]
 
 
 def direction_kind(item, which):

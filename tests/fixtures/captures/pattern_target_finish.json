@@ -468,6 +468,10 @@
             "expression": "pitch_mm",
             "value": 8.0
           }
+        },
+        "direction_one_place": {
+          "origin": true,
+          "own": true
         }
       }
     },

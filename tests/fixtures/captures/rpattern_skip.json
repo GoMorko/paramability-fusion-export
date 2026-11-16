@@ -447,7 +447,15 @@
         ],
         "suppressed_ids": [
           6
-        ]
+        ],
+        "direction_one_place": {
+          "origin": true,
+          "own": true
+        },
+        "direction_two_place": {
+          "origin": true,
+          "own": true
+        }
       }
     }
   ]

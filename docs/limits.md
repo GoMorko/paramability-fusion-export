@@ -32,6 +32,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
   read) leaves the revolve out of the copy; the reason says which of these it is.
+- A revolve or pattern axis, a mirror or split plane, or a pattern direction of the part that the copy keeps where it
+  is now (an edge, a face, a construction axis or plane, a line of a sketch) is not moved by the sizes. Each size
+  that may move it is marked "may give unexpected results" with the step named. When the export cannot tell what such
+  a place is, or what a construction plane or axis is built on (for example in a file from an older add-in), every
+  size that the steps before it use is marked.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks

@@ -529,6 +529,10 @@
       "expression": "plate_w_mm / 4",
       "value": 10.0
      }
+    },
+    "direction_one_place": {
+     "origin": true,
+     "own": true
     }
    }
   }

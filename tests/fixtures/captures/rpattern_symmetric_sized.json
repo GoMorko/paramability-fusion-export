@@ -700,6 +700,10 @@
             "expression": "ceil(_CeramicMedium__Cube_width_mm / 5)",
             "value": 4.0
           }
+        },
+        "direction_one_place": {
+          "origin": true,
+          "own": true
         }
       }
     },
