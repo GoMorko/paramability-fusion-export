@@ -5,10 +5,11 @@ the measured outward normal of the start face decides whether the axis direction
 bounds the new material for a new body, join or intersect, so its outward normal points against the travel. After a
 cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
 start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
-and an axis from a sketch line follow sizes (sketch/sketch_motion.py). An axis of another component follows the sizes the
-probe measured it move with (ref_motion.py). Any other axis of the part is written as measured, and the sizes that may
-move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw values (`axis.raw`) or
-the angle (`extent.quantity`) gives them as they are.
+and an axis from a sketch line follow sizes (sketch/sketch_motion.py); for a line of another sketch than the outline's,
+the sizes that may move it and were not tried are marked (`ref_motion.check_own_axis`). An axis of another component
+follows the sizes the probe measured it move with (ref_motion.py). Any other axis of the part is written as measured,
+and the sizes that may move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's
+raw values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are.
 """
 import math
 
@@ -319,5 +320,5 @@ def handle(ctx, step):
         if mode != "full":
             recipe_step["angleDeg"] = angle_value.json()
         steps.append(recipe_step)
-    ref_motion.check_own_axis(ctx, item, axis, "turns about")
+    ref_motion.check_own_axis(ctx, item, axis, "turns about", {p.get("sketch") for p, _, _, _ in built})
     return StepResult.of(steps)

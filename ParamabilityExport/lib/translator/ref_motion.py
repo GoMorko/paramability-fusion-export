@@ -181,18 +181,38 @@ def check_own_direction(ctx, item, which, what):
         ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": noun, "own": True}, what)))
 
 
-def check_own_axis(ctx, item, axis, what):
+def check_own_axis(ctx, item, axis, what, sketches=()):
     """Marks the sizes that may move a turning axis of the part itself that the copy writes as numbers: any own axis
-    the probe does not follow as a line of a sketch (an edge, a face, a construction axis, one the capture does not
-    describe; `reach.reference_sizes`). An axis of another component, one the probe follows, and one worked out from
-    another record of the step (`fixed`) mark nothing here. The first translation of an export marks nothing."""
+    that is not a line of a sketch (an edge, a face, a construction axis, one the capture does not describe;
+    `reach.reference_sizes`), and for a line of a sketch the sizes the probe did not follow (`_check_axis_line`). An
+    axis of another component and one worked out from another record of the step (`fixed`) mark nothing here. The
+    first translation of an export marks nothing. `sketches` are the names of the sketches of the step's outlines."""
     if (ctx.table is None or getattr(ctx.motion, "optimistic", False) or not isinstance(axis, dict)
-            or axis.get("assembly") or (axis.get("entity") and axis.get("sketch_token"))):
+            or axis.get("assembly")):
+        return
+    if axis.get("entity") and axis.get("sketch_token"):
+        _check_axis_line(ctx, item, axis, what, sketches)
         return
     names = reach.reference_sizes(ctx.table, ctx.capture.get("items") or [], item, axis)
     if names:
         noun = axis.get("entity_type") or "ConstructionAxis"
         ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": noun, "own": True}, what)))
+
+
+def _check_axis_line(ctx, item, axis, what, sketches):
+    """Marks the sizes that may move or turn a turning axis on a line of a sketch of the part (`reach.reference_sizes`,
+    `reach.sketch_line_sizes`: that sketch's sizes, what moves its plane, and what moves geometry projected into it)
+    and that the probe did not try with that sketch measured; with no motion file, all of them. The probe reads the
+    line at every try, so a size it tried is followed (`sketch_motion.axis_point`). A line in the sketch of one of the
+    outlines (`sketches`) moves with that outline, whose plane and sizes are marked there."""
+    sketch = axis.get("sketch") or ""
+    if sketch and sketch in sketches:
+        return
+    names = reach.reference_sizes(ctx.table, ctx.capture.get("items") or [], item, axis)
+    if ctx.motion is not None:
+        names = [name for name in names if not sketch_motion.tried(ctx.motion, sketch, name)]
+    if names:
+        ctx.doubt(names, words.kept_in_place(words.ref_phrase(item, {"type": "SketchLine", "own": True}, what)))
 
 
 def hole_moves(ctx, item, data, what="is placed on"):
