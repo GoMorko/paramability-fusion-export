@@ -1482,8 +1482,9 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       it 10 mm. Make a construction plane offset from the YZ plane by `cut_at` and Split Body the plate with it. Make
       a construction plane offset from the XZ plane by `mirror_at`; on the top face draw a 5 by 5 mm square at
       (5, 2) and extrude it 5 mm up (join), then mirror that boss across the plane (a mirror of features). Make a
-      construction plane offset from the YZ plane by `turn_at`, a construction axis where it meets the XY plane, and
-      a circular pattern of the boss about that axis, 2 copies over 180 degrees.
+      construction plane offset from the YZ plane by `turn_at`, a construction plane offset from the XZ plane by
+      10 mm, a construction axis where the two planes meet (upright, at x = `turn_at`, y = 10), and a circular
+      pattern of the boss about that axis, 2 copies over 180 degrees (the copy stands at x 10 to 15, y 13 to 18).
       Export the piece from x 0 to 25 for Orca with all three parameters ticked.
       Expect: the split, the mirror and the pattern are copied. `cut_at`, `mirror_at` and `turn_at` each stay a
       number, with the reasons "Split1 cuts along a plane that may move with it", "Mirror1 mirrors across a plane
