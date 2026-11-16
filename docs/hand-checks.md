@@ -275,3 +275,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `volume_before` and `volume_after` (its own `intersect_model` is read on Body1 and does not count). The Orca copy
     cuts the shape that Fusion cuts (compare it with the Fusion part from above), and the result lists no step left
     out. If `body_states` is missing, the Cut is left out with the reason that the intersect rule is not known.
+
+28. EX1, extrude sides that the measured end face checks. Model a 40 x 40 x 20 mm box with its base on the XY plane.
+    On a sketch on the XZ plane at the box's middle (y = 20) draw a 10 mm circle at x = 20, z = 10 and cut it with
+    Extrude, Two Sides: side one 30 mm (past the box), side two 10 mm (it ends inside the box). Add a second box with
+    a construction plane offset 30 mm above the XY plane, and extrude a 10 mm square up to that plane with a taper of
+    5 degrees. Add a third extrude that starts From the top face of the first box with an offset of 2 mm.
+    Export: tick no size. In `report.json`, note `end_offset` of the two sided cut (a face of side two at 10 mm or
+    one at another place), and note `params["side_one.taper_deg"]` of the extrude to the plane. The two sided cut is
+    copied with side one along the stored direction. The tapered extrude to the plane is copied with its taper and
+    ends on the plane. The extrude from the face with an offset is left out with "This extrude starts at a distance
+    from a face or plane, which is not copied yet."; note which way Fusion moved its start (along the sketch normal
+    or along the face's normal), so a later copy can follow it.

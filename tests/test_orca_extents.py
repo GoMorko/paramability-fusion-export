@@ -133,6 +133,30 @@ class ToTest(unittest.TestCase):
         self.assertEqual([g["cause"] for g in run(capture).left_out], [gap_hints.EXTRUDE_END_FACE])
 
 
+class MeasuredEndTest(unittest.TestCase):
+    """The checks against what Fusion measured come from the shared reader, for every kind of side."""
+
+    def plate(self, **data):
+        items = ex.plate_items(sized=False)
+        items[1]["data"].update(data)
+        return run(ex.capture(items, ((-20, -10, 0), (20, 10, 10)), 8000.0))
+
+    def test_a_plain_extrude_whose_end_face_is_elsewhere_is_left_out(self):
+        self.assertEqual(self.plate().left_out, [])
+        self.assertEqual([g["index"] for g in self.plate(end_offset=12.0).left_out], [1])
+
+    def test_a_symmetric_extrude_is_checked_at_half_its_length(self):
+        sym = {"extent_type": "symmetric", "side_one": None,
+               "symmetric": {"distance": 5.0, "full_length": False, "taper_deg": 0.0}}
+        self.assertEqual(self.plate(end_offset=-5.0, **sym).left_out, [])
+        self.assertEqual([g["index"] for g in self.plate(end_offset=10.0, **sym).left_out], [1])
+
+    def test_two_sides_whose_end_face_fits_only_the_turned_sides_are_turned(self):
+        result = self.plate(extent_type="two", end_offset=-6.0, side_one=ex.side(6.0), side_two=ex.side(4.0))
+        (plate,) = extrudes(result)
+        self.assertEqual((plate.extrude_end, plate.distance, plate.distance2), (ExtrudeEnd.TWO_SIDED, 4.0, 6.0))
+
+
 class FromTest(unittest.TestCase):
     def test_a_start_on_a_face_moves_the_sketch_and_marks_the_sizes_that_move_the_face(self):
         result = run(ex.from_top_face(length=5.0))

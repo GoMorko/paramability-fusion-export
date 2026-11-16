@@ -631,12 +631,14 @@ against `samples`.
   length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
   `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
-  (`FromEntityStartDefinition`, TARGET below).
+  (`FromEntityStartDefinition`, TARGET below). A start on a face whose parameter `start.offset` is not zero is left
+  out: which way Fusion measures that offset is not read.
 - `extent_type`: `one`, `two`, `symmetric`.
 - EXTENT: `{ "kind": "distance", "distance": mm, "taper_deg": d }` (`DistanceExtentDefinition.distance`, the value
   as Fusion stores it, sign kept), `{ "kind": "throughAll", "positive": bool, "taper_deg": d }`
-  (`ThroughAllExtentDefinition.isPositiveDirection`), `{ "kind": "all" }`, `{ "kind": "toEntity", "plane": PLANE or
-  null, "offset": mm, "entity_type": "...", "face_point": [..] }` (TARGET below), `{ "kind": "other", "type": "..." }`
+  (`ThroughAllExtentDefinition.isPositiveDirection`), `{ "kind": "all" }` (a legacy extent with no direction: only a
+  measured end face gives one), `{ "kind": "toEntity", "plane": PLANE or null, "offset": mm, "entity_type": "...",
+  "face_point": [..] }` (TARGET below; its taper is only in the parameter `side_one.taper_deg` or `side_two.taper_deg`), `{ "kind": "other", "type": "..." }`
   (also a distance extent whose `distance` Fusion refuses to give; a symmetric one then has `symmetric` null, so the
   step is left out instead of stopping the copy).
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
@@ -654,11 +656,14 @@ against `samples`.
   a taper that cannot be read, is left out; an untapered one marks the sizes behind its taper.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
-  `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
-  length) and two sided extrudes, of the length: the translator refuses when `abs(end_offset - start shift)` is not
-  the planned length within 1e-3 mm. A one sided cut that ends past the whole `target_box_before` makes no end face
-  of its own, so a nearer measured end is not checked there. A two sided extrude has faces on both sides of its
-  sketch, so the measured face turns its direction only when it lies out of reach of the stored one.
+  `endFaces[0].pointOnFace`, or null. The measured check of the direction and of the length
+  (`design_model/steps/extrude.py`, `end_check`): measured from the start (`end_offset - start shift`), the face must
+  lie at the end of the side on its side of the sketch within 1e-3 mm (half the length either way for a symmetric
+  extrude). A face nearer than 1e-3 mm to the start shows no direction. A side of a cut that ends past the whole
+  `target_box_before` makes no end face of its own, so a nearer face on the way of a side is accepted when a side of
+  the cut passes the whole part. A two sided extrude has faces on both sides of its sketch, so the measured face turns
+  its direction only when it lies out of reach of the stored one. A side to a face or plane goes toward it, and the
+  measured face does not turn it.
 - `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at
   `pointOnFace` along the first profile's sketch `z`, which is the sine of how far that wall leans. The taper check:
   a wall that narrows away from the sketch leans its outward normal along the travel; a cut lists the part's walls,

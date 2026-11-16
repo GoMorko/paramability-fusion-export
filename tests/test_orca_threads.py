@@ -47,7 +47,7 @@ def joined(capture, curves, z, height, at=2):
     profile = extrude["data"]["profiles"][0]
     profile["frame"] = dict(profile["frame"], origin=[0, 0, z])
     profile["loops"] = [{"outer": True, "curves": curves}]
-    extrude["data"].update(operation="join", end_offset=z + height)
+    extrude["data"].update(operation="join", end_offset=height)  # measured from its own sketch plane
     extrude["data"]["side_one"]["distance"] = height
     extrude.update(index=at, name="Extrude%d" % at)
     capture["items"].insert(at, extrude)

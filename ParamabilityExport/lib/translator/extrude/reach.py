@@ -1,12 +1,13 @@
 """How far an extrude goes: the distance of a side, where it starts and the length of a side that reaches to a face."""
-from ...capture_model import gap_hints
+from ...design_model.problem import is_problem
+from ...design_model.steps import extrude as dm
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import placement, values
 from ..ranges import kept_ranges
 from ..result import Refusal
 from . import reach_motion
-from .common import LENGTH_TOL, UNREADABLE, parallel, sign_of
+from .common import LENGTH_TOL, sign_of
 
 
 def distance_quantity(ctx, item, path, raw):
@@ -14,39 +15,30 @@ def distance_quantity(ctx, item, path, raw):
     return values.quantity(ctx, item, path, abs(raw), sign=sign_of(raw), absolute=True)
 
 
-def start_shift(start, frame, ctx, item, plane_q):
+def start_shift(data, frame, ctx, item, plane_q):
     """Signed distance along the sketch normal from the sketch plane to where the extrude starts, as a Quantity that
-    follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal.
+    follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal. The shared reader
+    (`design_model.steps.extrude.start_of`) gives where it starts.
 
     An offset starts from the sketch plane and moves with it. A start on a face is measured from the plane too, so the
     plane's own move (`plane_q`, along the sketch normal) comes off the face's move: the written origin adds it back."""
-    if start is None:
-        return Refusal(UNREADABLE)
-    kind = start.get("kind", "profilePlane")
-    if kind == "profilePlane":
+    found = dm.start_of(data, frame)
+    if is_problem(found):
+        return Refusal(found.words, cause=found.cause)
+    if found.kind == dm.SKETCH_PLANE:
         return Quantity(0.0)
-    if kind == "offset":
-        if start.get("offset") is None:
-            return Refusal(UNREADABLE)
-        return values.quantity(ctx, item, "start.offset", float(start["offset"]))
-    if kind == "fromEntity":
-        values.pin(ctx, item, "start.offset", "it sets how far %s starts from its face" % item.get("name", "a step"))
-        plane = start.get("plane")
-        if not plane:
-            return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.",
-                           cause=gap_hints.EXTRUDE_END_FACE)
-        if not parallel(plane["normal"], frame["z"]):
-            return Refusal("This extrude starts from a tilted surface, which is not copied yet.",
-                           cause=gap_hints.EXTRUDE_END_FACE)
-        shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
-        moved = reach_motion.target_shift(ctx, item, "start", start, vec.unit(frame["z"]), "starts from")
-        face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
-        if not plane_q.sized:
-            return face
-        if face.sized and (face.text == plane_q.text or face.core == plane_q.core):
-            return Quantity(face.n - plane_q.n)
-        return face.plus(plane_q.scaled(-1))
-    return Refusal("This extrude starts in a way that is not copied yet.")
+    if found.kind == dm.OFFSET:
+        return values.quantity(ctx, item, found.path, found.shift)
+    values.pin(ctx, item, found.path, "it sets how far %s starts from its face" % item.get("name", "a step"))
+    z = vec.unit(frame["z"])
+    shift = found.shift
+    moved = reach_motion.target_shift(ctx, item, "start", found.target.record, z, "starts from")
+    face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
+    if not plane_q.sized:
+        return face
+    if face.sized and (face.text == plane_q.text or face.core == plane_q.core):
+        return Quantity(face.n - plane_q.n)
+    return face.plus(plane_q.scaled(-1))
 
 
 def sketch_origin(frame, shift_q):
