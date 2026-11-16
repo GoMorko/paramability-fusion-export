@@ -192,8 +192,15 @@ def holds(node, inside):
     """The formula's answer when `inside[i]` says whether a point lies left of edge `i`."""
     if node[0] == "lit":
         return inside[node[1]]
-    answers = (holds(kid, inside) for kid in node[1])
-    return all(answers) if node[0] == "and" else any(answers)
+    if node[0] == "and":
+        for kid in node[1]:
+            if not holds(kid, inside):
+                return False
+        return True
+    for kid in node[1]:
+        if holds(kid, inside):
+            return True
+    return False
 
 
 def depth(node):
@@ -233,14 +240,14 @@ def _gap(line, x):
 def samples(points):
     """A point inside every cell of the lines through the edges of the loop: around each point where lines cross,
     one between each two neighbouring rays of the lines through it."""
-    return line_samples(_lines(points), max(max(abs(c) for c in p) for p in points) or 1.0)
+    return list(line_samples(_lines(points), max(max(abs(c) for c in p) for p in points) or 1.0))
 
 
 def line_samples(lines, size):
     """A point inside every cell of `lines` ((point, unit direction) pairs) that has a corner, as `samples` gives
-    them. `size` is the size of the region the lines bound, for the tolerances."""
+    them, one at a time. `size` is the size of the region the lines bound, for the tolerances."""
     near = _THROUGH * size
-    out = []
+    flat = [(a[0], a[1], d[0], d[1]) for a, d in lines]
     for i in range(len(lines)):
         for j in range(i + 1, len(lines)):
             (p, d), (q, e) = lines[i], lines[j]
@@ -249,26 +256,46 @@ def line_samples(lines, size):
                 continue
             s = _cross(_sub(q, p), e) / den
             x = (p[0] + s * d[0], p[1] + s * d[1])
-            gaps = [abs(_gap(line, x)) for line in lines]
+            x0, x1 = x
+            gaps = [abs(dx * (x1 - ay) - dy * (x0 - ax)) for ax, ay, dx, dy in flat]
             through = [k for k, g in enumerate(gaps) if g <= near]
-            if sorted(through)[:2] != [i, j]:
+            if through[:2] != [i, j]:
                 continue  # this crossing is sampled from the first two of its lines
-            rest = [g for k, g in enumerate(gaps) if k not in through]
+            held = set(through)
+            rest = [g for k, g in enumerate(gaps) if k not in held]
             reach = min([_REACH * size] + [_SHARE * g for g in rest])
             rays = sorted({round(math.atan2(lines[k][1][1] * sign, lines[k][1][0] * sign) % (2 * math.pi), 12)
                            for k in through for sign in (1.0, -1.0)})
             for at, ray in enumerate(rays):
                 after = rays[(at + 1) % len(rays)] + (2 * math.pi if at + 1 == len(rays) else 0.0)
                 mid = (ray + after) / 2.0
-                out.append((x[0] + reach * math.cos(mid), x[1] + reach * math.sin(mid)))
-    return out
+                yield (x[0] + reach * math.cos(mid), x[1] + reach * math.sin(mid))
+
+
+# What `check` answered, by the formula and the points as written out: the same polygon at the same numbers always
+# gives the same answer, and the limit walks ask for the same polygons again and again.
+_CHECKED = {}
+_CHECKED_MAX = 50000
 
 
 def check(points, node):
     """True when the formula gives the polygon at a point of every cell of the edge lines."""
+    key = repr((node, points))
+    found = _CHECKED.get(key)
+    if found is None:
+        found = _agrees(points, node)
+        if len(_CHECKED) >= _CHECKED_MAX:
+            _CHECKED.clear()
+        _CHECKED[key] = found
+    return found
+
+
+def _agrees(points, node):
     lines = _lines(points)
-    for x in samples(points):
-        inside = [_gap(line, x) > 0 for line in lines]
+    flat = [(a[0], a[1], d[0], d[1]) for a, d in lines]
+    for x in line_samples(lines, max(max(abs(c) for c in p) for p in points) or 1.0):
+        x0, x1 = x
+        inside = [dx * (x1 - ay) - dy * (x0 - ax) > 0 for ax, ay, dx, dy in flat]
         if holds(node, inside) != in_polygon(points, x):
             return False
     return True

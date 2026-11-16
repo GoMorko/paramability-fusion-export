@@ -314,6 +314,14 @@ class HalfPlaneTest(unittest.TestCase):
         convex = ("and", [("lit", k) for k in range(6)])
         self.assertFalse(halfplanes.check(corners, convex))
 
+    def test_kept_answers_follow_the_formula(self):
+        corners = ELL.corners()
+        node = halfplanes.formula(corners)
+        convex = ("and", [("lit", k) for k in range(6)])
+        for _ in range(2):  # the second round answers from what the first kept
+            self.assertTrue(halfplanes.check(corners, node))
+            self.assertFalse(halfplanes.check(corners, convex))
+
     def test_a_loop_whose_sides_cross_is_not_simple(self):
         self.assertFalse(halfplanes.simple([(0, 0), (10, 0), (0, 10), (10, 10)]))
         self.assertTrue(halfplanes.simple(PLATE))
