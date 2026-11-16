@@ -1788,8 +1788,9 @@ one folder per family of steps.
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
   `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
-  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
-  (joins that would float).
+  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
+  (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
+  `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
   `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
