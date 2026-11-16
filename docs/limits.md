@@ -115,9 +115,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   face with Chain Faces on, extrudes that end on a curved face with Chain Faces off when the outline reaches past
   that face (the sizes that may move the face or the outline are marked when it does not), extrudes that end on a
   face whose surface could not be read, extrudes that start at a
-  distance from a face or plane when Fusion gives no start face that shows which way, extrudes with two sides that
+  distance from a face or plane when Fusion gives no start face that shows which way and the end of the extrude does
+  not show it either, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
-  does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
+  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join
+  up to a curved face when Fusion gives no end face and the part after it does not lie wholly on one side of where
+  the extrude starts, a quarter turn revolve joined to the part when its ends do not show the way and the material it
+  added lies inside the box of the part before it, a cut whose measured end lies short of its side when
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
   along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes

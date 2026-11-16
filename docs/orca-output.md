@@ -533,7 +533,9 @@ not judged to meet material where Orca removes nothing.
   anywhere in the plane. The turning sense comes from the measured caps (`design_model/steps/revolve.py`): the start
   cap's outward normal points against the turn for new material and along it for a cut, the end cap's the other way;
   when a join merged the start cap into a face of the part and the end cap does not tell (a quarter turn ends with the
-  same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only. A
+  same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only.
+  For a join, the made faces (which can include faces of the part the revolve merged with) and the body after the
+  step must fit the box of the body before it together with the swept box, one way only (`body_boxes`). A
   full turn needs none. Fusion's angle of a symmetric revolve is the turn to each side: the copy turns the sketch
   plane that angle back and turns twice the angle, so its angle keeps its number, and the measured caps must sit
   there; 180 degrees or more to each side is a full turn. A turn to two sides with two angles turns the sketch plane

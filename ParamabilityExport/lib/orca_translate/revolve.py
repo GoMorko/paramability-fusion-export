@@ -118,9 +118,10 @@ def _travel_turn(data, operation, frame, outer, point, direction):
     return turn if isinstance(turn, Skip) else (travel, turn)
 
 
-def _sense(data, operation, frame, outer, point, direction, angle, symmetric):
+def _sense(data, operation, frame, outer, point, direction, angle, symmetric, bodies):
     """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way (a symmetric turn keeps
-    +1 once its caps fit), or a Skip."""
+    +1 once its caps fit), or a Skip. `bodies` holds the boxes of the body before and after the step
+    (`revolve_facts.body_boxes`)."""
     turn = _turn(frame, outer, point, direction)
     if isinstance(turn, Skip):
         return turn
@@ -130,8 +131,7 @@ def _sense(data, operation, frame, outer, point, direction, angle, symmetric):
         if fits is None:
             return Skip(shared.REVOLVE_TURN_UNREAD)
         return 1.0 if fits else Skip(shared.REVOLVE_SYMMETRIC_CAPS)
-    points = [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _points(outer)]
-    found = revolve_facts.sense(data, turn, direction, angle, cut, points, point)
+    found = revolve_facts.sense(data, turn, direction, angle, cut, revolve_facts.outline_points(data), point, bodies)
     return Skip(shared.REVOLVE_TURN_UNREAD) if found is None else found
 
 
@@ -213,7 +213,8 @@ def revolve(ctx, step):
             return back
         start = -back
     elif angle.n < FULL_TURN_DEG:
-        sense = _sense(data, operation, frame, outline.outer, point, direction, angle.n, sides == "symmetric")
+        sense = _sense(data, operation, frame, outline.outer, point, direction, angle.n, sides == "symmetric",
+                       revolve_facts.body_boxes(item))
         if isinstance(sense, Skip):
             return sense
         if sides == "symmetric":

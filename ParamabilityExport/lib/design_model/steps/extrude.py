@@ -105,14 +105,14 @@ _WORDS = {
     TILTED: (words.EXTRUDE_TILTED, gap_hints.EXTRUDE_END_FACE),
     ON_START: (words.EXTRUDE_ON_START, None),
     SAME_SIDE: (words.EXTRUDE_SAME_SIDE, gap_hints.EXTRUDE_END_FACE),
-    START_OFFSET: (words.EXTRUDE_START_OFFSET, gap_hints.EXTRUDE_END_FACE),
+    START_OFFSET: (words.EXTRUDE_START_OFFSET, gap_hints.EXTRUDE_START_OFFSET),
     TAPER_WAY: (words.TAPER_WAY, None),
     TAPER_UNMEASURED: (words.TAPER_UNMEASURED, None),
     TAPER_WAY_UNMEASURED: (words.TAPER_WAY_UNMEASURED, None),
     TAPER_NO_CHANGE: (words.TAPER_NO_CHANGE, None),
     VOLUME_UNMEASURED: (words.VOLUME_UNMEASURED, None),
     VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
-    WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, None),
+    WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, gap_hints.EXTRUDE_WAY),
     CHAINED: (words.EXTRUDE_CHAINED, gap_hints.EXTRUDE_END_FACE),
     FACE_UNREAD: (words.EXTRUDE_FACE_UNREAD, gap_hints.EXTRUDE_END_FACE),
     PAST_CURVED: (words.EXTRUDE_PAST_CURVED, gap_hints.EXTRUDE_END_FACE),
@@ -227,14 +227,35 @@ def _param_value(data, path):
     return float(held.get("value") or 0.0) if isinstance(held, dict) else None
 
 
-def _offset_start(data, record, plane, shift, offset):
+def _way_from_end(data, z, shift, offset):
+    """The sign that puts the start `offset` (mm) from the face at `shift`, told by the measured end cap of a one sided
+    extrude with a distance; None when that does not tell. A join merges its start cap into the part, so Fusion gives
+    no start face, but the end cap lies the length of the side from the start. Every start (either sign) and every
+    way the side may go (either, unless the side carries its `direction`) is tried: exactly one pair must reach the
+    end cap (`end_offset`, an end cap by `end_is_cap`)."""
+    side = data.get("side_one")
+    end = data.get("end_offset")
+    if data.get("extent_type", "one") != "one" or not isinstance(side, dict) or side.get("kind") != "distance" \
+            or not _number(side.get("distance")) or not side["distance"] or not _number(end) \
+            or end_is_cap(data, z) is not True:
+        return None
+    length = abs(float(side["distance"]))
+    ways = [side["direction"]] if side.get("direction") in (1, -1) else [1, -1]
+    fits = [way for way in (1, -1) for go in ways if abs(shift + way * offset + go * length - end) <= LENGTH_TOL]
+    return fits[0] if len(fits) == 1 else None
+
+
+def _offset_start(data, record, plane, shift, offset, z):
     """The `Start` at `offset` (mm, Fusion's `start.offset`) from the face or plane `record` that lies `shift` along
-    the sketch normal, or a Problem. Fusion measures the offset along the face normal, whose direction the reader does
-    not read; the measured start face (`start_offset`) decides. Exactly one sign must put the start there."""
+    the unit sketch normal `z`, or a Problem. Fusion measures the offset along the face normal, whose direction the
+    reader does not read; the measured start face (`start_offset`) decides, and exactly one sign must put the start
+    there. Without a measured start face, the measured end cap may decide (`_way_from_end`)."""
     measured = data.get("start_offset")
-    if not _number(measured):
-        return problem(START_OFFSET, "start")
-    fits = [way for way in (1, -1) if abs(shift + way * offset - measured) <= LENGTH_TOL]
+    if _number(measured):
+        fits = [way for way in (1, -1) if abs(shift + way * offset - measured) <= LENGTH_TOL]
+    else:
+        found = _way_from_end(data, z, shift, offset)
+        fits = [] if found is None else [found]
     if len(fits) != 1:
         return problem(START_OFFSET, "start")
     return Start(FACE, shift + fits[0] * offset, Target(record, plane, shift), offset=fits[0] * offset, way=fits[0])
@@ -264,7 +285,7 @@ def start_of(data, frame, offsets=False):
         held = _param_value(data, "start.offset")
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), z)
         if held is not None and abs(held) > SIGN_TOL:
-            return _offset_start(data, start, plane, shift, held) if offsets else problem(START_OFFSET, "start")
+            return _offset_start(data, start, plane, shift, held, z) if offsets else problem(START_OFFSET, "start")
         return Start(FACE, shift, Target(start, plane, shift))
     return problem(START_KIND, "start")
 
@@ -514,14 +535,52 @@ def end_is_cap(data, z):
     return any(abs(end - area) <= CAP_RELATIVE_TOL * area + CAP_ABSOLUTE_TOL for area in candidates)
 
 
-def read_sides(data, frame, shift=0.0, faces=False):
+def joined_side(data, bodies, origin, z):
+    """+1 or -1: the side of the start plane (through `origin`, unit normal `z`) that a one sided join went to, told by
+    the body it joined; None when the body does not tell.
+
+    `bodies` holds the measures of the body before and after the step (the item's `target_before` and
+    `target_after`: { box, volume_mm3 }). A join merges all its material into the body, so when the body grew, the
+    material of the extrude lies inside the box of the body after it. When that box lies wholly on one side of the
+    start plane, the extrude went to that side. A box that is looser than the body can only hide the side, never
+    give the wrong one."""
+    before, after = bodies
+    if data.get("operation") != "join" or not isinstance(before, dict) or not isinstance(after, dict):
+        return None
+    grown = before.get("volume_mm3"), after.get("volume_mm3")
+    box = after.get("box")
+    if not all(_number(v) for v in grown) or grown[1] - grown[0] <= LENGTH_TOL or not isinstance(box, dict):
+        return None
+    try:
+        corners = [[(box["max"] if (k >> i) & 1 else box["min"])[i] for i in range(3)] for k in range(8)]
+        along = [vec.dot(vec.sub(corner, origin), z) for corner in corners]
+    except (KeyError, TypeError, IndexError):
+        return None
+    if max(along) <= LENGTH_TOL and min(along) < -LENGTH_TOL:
+        return -1
+    if min(along) >= -LENGTH_TOL and max(along) > LENGTH_TOL:
+        return 1
+    return None
+
+
+def bodies_of(item):
+    """The measures of the body before and after the timeline item `item` (`target_before`, `target_after`), for
+    `read_sides`."""
+    return item.get("target_before"), item.get("target_after")
+
+
+def read_sides(data, frame, shift=0.0, faces=False, bodies=(None, None)):
     """The sides of the extrude in `data` as `SidePlan`s, or a Problem. `frame` is the sketch frame of its first
     outline and `shift` (mm) where it starts along the sketch normal from that sketch plane (`Start.shift`).
 
     With `faces`, one side up to a tilted or curved face of the part is an UP_TO side. A curved face can lie on both
     sides of the sketch, so its direction must agree with the measured end face (`end_offset`, a face on the curved
     face, which is no end cap); else the direction is a Problem (WAY_UNSURE). A flat face reaches the sketch normal
-    on one side only."""
+    on one side only.
+
+    `bodies` holds the measures of the body before and after the step (`bodies_of`, `joined_side`). Where the
+    measured end face does not show the direction of one side (a join merges its end cap into the part, or Fusion
+    measured a face that is no end cap), the body the extrude joined may show it."""
     extent = data.get("extent_type", "one")
     if extent not in ("one", "two", "symmetric"):
         return problem(EXTENT_KIND)
@@ -587,15 +646,23 @@ def read_sides(data, frame, shift=0.0, faces=False):
     plan = _side(data, side, "side_one", origin, z, measured, faces)
     if isinstance(plan, Problem):
         return plan
+    joined = joined_side(data, bodies, origin, z)
     if plan.kind == UP_TO and plan.reach.plane is None:
         raw = data.get("end_offset")
-        if not _number(raw) or abs(raw - shift) <= LENGTH_TOL or sign_of(raw - shift) != plan.sign:
+        if _number(raw) and abs(raw - shift) > LENGTH_TOL:
+            found = sign_of(raw - shift)
+        else:
+            found = joined
+        if found != plan.sign or joined not in (None, plan.sign):
             return problem(WAY_UNSURE, "side_one")
     if not_cap and not plan.fixed and abs(data["end_offset"] - shift) > LENGTH_TOL and (
             plan.stored is None or sign_of(data["end_offset"] - shift) != plan.stored):
         # Fusion can store the direction of one side two ways, and the measured end face would decide it, but that
-        # face is not an end cap: the direction is not known for sure.
-        return problem(WAY_UNSURE, "side_one")
+        # face is not an end cap: the direction is not known for sure, unless the body the extrude joined shows it.
+        if joined is None:
+            return problem(WAY_UNSURE, "side_one")
+        plan.sign = joined
+        return [plan]
     sign = _one_way(plan)
     if sign is None:
         return problem(UNREADABLE, "side_one")

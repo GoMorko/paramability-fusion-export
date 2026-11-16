@@ -775,8 +775,10 @@ against `samples`.
   the part). `made_box`: `{ "min", "max" }` around the boxes of the faces the revolve made (`faces`), or null. Absent
   for a full turn; older captures have only `start_face_normal`. The measured check of the turning sense
   (`design_model/steps/revolve.py`): the caps decide, and when they do not (a quarter turn ends with the same cap
-  normal either way) the made faces must fit the box the outline sweeps one way only. For two sides `start_face_normal` is the end face of one side, which tells which side each
-  angle turns to (`back_sides`).
+  normal either way) the made faces must fit the box the outline sweeps one way only. After a join the made faces
+  can include faces of the part that the revolve merged with; then the made faces and the body after the step (the
+  item's `target_after`) must fit the body before it (`target_before`) together with the swept box. For two sides
+  `start_face_normal` is the end face of one side, which tells which side each angle turns to (`back_sides`).
 
 **HoleFeature** (`holeType`, `holeTapType`, `holeDiameter`, `tipAngle`, `counterboreDiameter`, `counterboreDepth`,
 `countersinkDiameter`, `countersinkAngle`, `position`, `direction`, `extentDefinition`, `holePositionDefinition`,

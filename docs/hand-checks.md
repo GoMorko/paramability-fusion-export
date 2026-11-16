@@ -445,11 +445,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (toward -Y), Join. In a second design, sketch on the XZ plane a 10 by 15 mm rectangle from x = 20 to 30, z = 0 to
     15, and revolve it about the Z axis, Direction Symmetric, angle 60 degrees (user parameter `Sweep`). Make a third
     design like the second with 200 degrees.
-    Export: Export for Orca each body. In `report.json` the first revolve has `start_face_normal` null,
-    `end_face_normal` [0, 0, 1] and a `made_box` of about x 10 to 15, y -8 to 0, z 2 to 10; it is copied, and the
-    volume in Orca equals Fusion's (8251.3 mm3). The second is copied as a turn of 120 degrees (Fusion's angle is the
-    turn to each side) with `Sweep` a fixed number; the volume equals Fusion's (7853.98 mm3). The third is a closed
-    ring (23561.94 mm3).
+    Export: Export for Orca and for Paramability each body. In `report.json` the first revolve has `start_face_normal`
+    null and `end_face_normal` [0, 0, 1]. Its `made_box` can be x 0 to 40, y -8 to 20, z 2 to 10, because Fusion
+    merged the start cap with the front face of the box. It is copied in both outputs, turned toward -Y (the body
+    boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). The second is copied as a
+    turn of 120 degrees (Fusion's angle is the turn to each side) with `Sweep` a fixed number; the volume equals
+    Fusion's (7853.98 mm3). The third is a closed ring (23561.94 mm3).
 
 43. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
     high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular
@@ -485,7 +486,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and the one at (57, 25) with "reaches past that face". Then move the chamfer post with
     Chain Faces on to (20, 33), so it reaches past the chamfer onto the top face, and export again: Fusion ends it on
     both faces, and the post is left out with "its outline may reach past that face". Move it back. Export again with
-    `Height` ticked: the first roof post is still copied (the extrude that made the roof places its point), and
+    `Height` ticked: the first roof post is still copied (the extrude that made the roof places its point; Fusion
+    gives no end face for this join, and the box after the step, which lies wholly below the plane 30 mm up, shows
+    that it goes down), and
     `Height` is marked with "ends on a curved face"; the chamfer post is left out with "may move when the sizes
     change". Afterwards the design is as before.
 46. EX4, an extrude that starts at a distance from a face, both ways. Add user parameters `Height` = 10 mm and
@@ -496,9 +499,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the box.
     Export: export each new body with both sizes ticked. In `report.json` note `start_offset` of each extrude and
     which way Fusion moved the start. Expect the first body to start at `Height + Lift` and the second at
-    `Height - Lift`, both following the sizes in Paramability. Export the box: note `start_offset` of the join. When
-    it is null (no start face inside material), the join is left out with "starts at a distance from a face or
-    plane".
+    `Height - Lift`, both following the sizes in Paramability. Export the box: `start_offset` of the join is null
+    (no start face inside material) and `end_offset` is 13. The join is copied: it starts 2 mm below the top face
+    (z = 8) and goes 5 mm up, and the shape matches the STEP.
 47. EX5, an intersect to two sides. On the XY plane draw a 40 x 40 mm rectangle from the origin and extrude it
     20 mm up. Add a construction plane 10 mm above the XY plane. On it draw a 20 mm circle centred at (20, 20) and
     extrude it as an intersect with Two Sides: side one 4 mm up, side two 6 mm down.

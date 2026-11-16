@@ -161,7 +161,7 @@ def _sides(ctx, item, data, frame, shift):
     if kind == "two" and one and two and not (through(one) and through(two)) and shift:
         return Skip("A two sided extrude that starts away from its sketch is not copied.")
 
-    read = dm.read_sides(data, frame, shift)
+    read = dm.read_sides(data, frame, shift, bodies=dm.bodies_of(item))
     if is_problem(read):
         return extents.reader_skip(read, item)
     first = read[0]
@@ -359,7 +359,8 @@ def extrude(ctx, step):
     refused = extents.taper_measured(data, sides, len(profiles))
     if refused is not None:
         return refused
-    found = dmc.volume_problem(data, dm.read_sides(data, frame, shift), operation, profiles, False)
+    found = dmc.volume_problem(data, dm.read_sides(data, frame, shift, bodies=dm.bodies_of(item)), operation, profiles,
+                               False)
     if found is not None:
         return Skip.of(found)
     start = data.get("start") or {}

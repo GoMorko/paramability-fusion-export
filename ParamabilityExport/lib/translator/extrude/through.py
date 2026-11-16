@@ -1,4 +1,5 @@
 """The length of a cut through all, and whether a tapered one stays open until it passes the part."""
+from ...capture_model import gap_hints
 from ...geometry import vec
 from ..ranges import range_check
 from ..result import Refusal
@@ -9,6 +10,7 @@ from .taper import MAX_TAPER_DEG
 
 # A tapered cut through all whose walls lean in ends this far (mm) past the part.
 THROUGH_TAPER_MARGIN_MM = 1.0
+_ADDS = "Extruding through all is only copied for cuts."
 
 
 def _farthest(box, origin, direction):
@@ -44,10 +46,10 @@ def resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=
     (`through_taper.keep_open`)."""
     for entry in plan:
         if entry.extent == "through" and combine not in ("cut", "intersect"):
-            return Refusal("Extruding through all is only copied for cuts.")
+            return Refusal(_ADDS, cause=gap_hints.THROUGH_ADDS)
         if entry.extent == "through-one":
             if combine not in ("cut", "intersect"):
-                return Refusal("Extruding through all is only copied for cuts.")
+                return Refusal(_ADDS, cause=gap_hints.THROUGH_ADDS)
             box = _box_union(data.get("target_box_before"), box_max)
             if not box:
                 return Refusal("The part this cuts through could not be measured.")

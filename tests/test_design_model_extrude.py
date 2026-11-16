@@ -97,6 +97,32 @@ class StartTest(unittest.TestCase):
                 self.assertEqual(start(offset, measured).code, dm.START_OFFSET)
 
 
+    def test_without_a_start_face_the_end_cap_of_a_join_places_the_offset_start(self):
+        flat = {"kind": "fromEntity", "plane": {"point": [0, 0, 10.0], "normal": [0, 0, 1]}}
+
+        def start(end, side=None, **more):
+            data = dict({"start": flat, "start_offset": None, "end_offset": end, "end_normal": [0.0, 0.0, 1.0],
+                         "extent_type": "one", "side_one": side or distance(5.0),
+                         "params": {"start.offset": {"name": "d1", "expression": "-2 mm", "value": -2.0}}}, **more)
+            return dm.start_of(data, FRAME, offsets=True)
+
+        # The start 2 mm into the part (z 8) and 5 mm up is the only start and way that end at 13.
+        found = start(13.0)
+        self.assertEqual((found.shift, found.offset, found.way), (8.0, -2.0, 1))
+        self.assertEqual(start(7.0).shift, 12.0)
+        cases = [
+            start(10.0),  # no start and way end there
+            start(13.0, end_normal=[1.0, 0.0, 0.0]),  # the measured face is no end cap
+            start(13.0, side=plane_at(13.0)),  # a side up to a plane: its end does not tell where it starts
+            start(13.0, extent_type="symmetric"),
+        ]
+        for found in cases:
+            with self.subTest(found=found):
+                self.assertEqual(found.code, dm.START_OFFSET)
+        # An offset as long as the side: 12 - 2 and 8 + 2 both end at 10.
+        self.assertEqual(start(10.0, side=distance(2.0)).code, dm.START_OFFSET)
+
+
 class OneSideTest(unittest.TestCase):
     def test_a_distance_goes_the_stored_way_until_the_end_face_says_otherwise(self):
         self.assertEqual(ways(sides(one(distance(-5.0)))), [(dm.DISTANCE, -1, 5.0)])
@@ -232,6 +258,31 @@ class OneSideTest(unittest.TestCase):
             with self.subTest(side=side):
                 found = dm.read_sides(one(side, end_offset=5.0), FRAME, faces=True)
                 self.assertEqual(found.code if is_problem(found) else found[0].kind, kind)
+
+    def test_the_body_a_join_grew_shows_the_way_when_no_end_face_does(self):
+        def body(low, high, volume):
+            return {"box": {"min": [0.0, 0.0, low], "max": [60.0, 40.0, high]}, "volume_mm3": volume}
+
+        before = body(-20.0, 0.0, 1000.0)
+        below = (before, body(-20.0, 0.0, 1100.0))
+        wall = {"end_area": 0.96, "profiles": [square(10)]}
+        cases = [
+            # A join up to a curved face below the sketch: Fusion gives no end face, the body lies below the sketch.
+            (one(curved_at([0.0, 0.0, -6.0]), operation="join"), below, (dm.UP_TO, -1)),
+            # A distance whose measured face is no end cap and would turn the stored way.
+            (one(distance(5.0), end_offset=-3.0, operation="join", **wall), below, (dm.DISTANCE, -1)),
+            # The body lies on both sides of the sketch, it did not grow, or it is not a join.
+            (one(curved_at([0.0, 0.0, -6.0]), operation="join"), (before, body(-20.0, 4.0, 1100.0)), dm.WAY_UNSURE),
+            (one(curved_at([0.0, 0.0, -6.0]), operation="join"), (before, before), dm.WAY_UNSURE),
+            (one(curved_at([0.0, 0.0, -6.0]), operation="cut"), below, dm.WAY_UNSURE),
+            # The face lies above the sketch but the body only below it.
+            (one(curved_at([0.0, 0.0, 6.0]), operation="join"), below, dm.WAY_UNSURE),
+            (one(distance(5.0), end_offset=-3.0, operation="join", **wall), (None, None), dm.WAY_UNSURE),
+        ]
+        for data, bodies, expected in cases:
+            with self.subTest(data=data, bodies=bodies):
+                found = dm.read_sides(data, FRAME, faces=True, bodies=bodies)
+                self.assertEqual(found.code if is_problem(found) else (found[0].kind, found[0].sign), expected)
 
     def test_up_to_sides_that_stay_problems(self):
         tilted = {"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]}

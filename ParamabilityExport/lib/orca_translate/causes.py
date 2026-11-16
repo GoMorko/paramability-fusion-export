@@ -6,8 +6,9 @@ and the tests which rule left the step out. Causes the recipe translator gives a
 """
 from ..capture_model import gap_hints
 
-# A join or new body extrude through all: the copy cannot give it a length that stays right when sizes change.
-THROUGH_ALL_ADDS = "throughAllAdds"
+# A join or new body extrude through all: the copy cannot give it a length that stays right when sizes change. The
+# recipe translator gives the same cause.
+THROUGH_ALL_ADDS = gap_hints.THROUGH_ADDS
 # A cut, intersect or hole that removes nothing from the part the copy builds (Orca stops its rebuild on it).
 MISSES_PART = "missesPart"
 
