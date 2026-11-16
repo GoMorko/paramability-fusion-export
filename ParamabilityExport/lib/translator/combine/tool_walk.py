@@ -10,7 +10,7 @@ steps out again against the part as it stood at each step.
 from ...design_model import tool_chains
 from .. import walk
 from ..result import Refusal, StepResult, TranslateResult
-from ...design_model.words import type_words
+from ...design_model.words import ToolStop
 
 MAX_DEPTH = 3
 
@@ -65,13 +65,12 @@ class ToolBuild:
         out.gaps.extend(self.gaps)
 
 
-def cannot_copy(body, item, why, cause=None):
-    """The refusal that names the step of a tool that stops the copy, and what it is. `cause` is that step's
-    `gap_hints` cause, so the gap gets its hint."""
-    operation = (item.get("data") or {}).get("operation")
-    kind = operation if operation in ("cut", "intersect") else type_words(item.get("type") or "")
-    return Refusal("The tool body %s cannot be copied: %s (%s): %s"
-                   % (tool_chains.name_of(body), item.get("name"), kind, why), cause=cause)
+def cannot_copy(body, item, why, cause=None, inner=None):
+    """The refusal that names the step of a tool that stops the copy, and why (`why`, a sentence). `cause` is that
+    step's `gap_hints` cause, so the gap gets its hint. `inner` is the `ToolStop` of that step when it is a Combine
+    whose own tool cannot be built."""
+    stop = ToolStop.through(tool_chains.name_of(body), item.get("name"), why, inner)
+    return Refusal(stop.reason, cause=cause, stop=stop)
 
 
 def _exported(ctx, body):
@@ -94,8 +93,7 @@ def build(ctx, body, before, depth, place=0):
         return Refusal("The tool body %s is built in a way that cannot be copied." % tool_chains.name_of(body))
     for item in chain:
         if item.get("helper_unread"):
-            return Refusal("The tool body %s cannot be copied: %s could not be read: %s"
-                           % (tool_chains.name_of(body), item.get("name"), item["helper_unread"]))
+            return cannot_copy(body, item, "This step could not be read: %s" % item["helper_unread"])
     child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
     child.lineage = list(found.links)
     walked = TranslateResult()
@@ -103,7 +101,7 @@ def build(ctx, body, before, depth, place=0):
         if walked.over_gap_cap:
             return Refusal(walked.refusal["reason"], over_gap_cap=True, tool_steps=walked.items)
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
-        return cannot_copy(body, stopped, walked.refusal["reason"], walked.refusal_cause)
+        return cannot_copy(body, stopped, walked.refusal["reason"], walked.refusal_cause, walked.refusal_stop)
     if not child.steps:
         return Refusal("The tool body %s is built in a way that cannot be copied." % tool_chains.name_of(body))
     return ToolBuild(body, chain, child, walked.items, walked.notes)
@@ -121,7 +119,7 @@ def on_part(ctx, tool):
                 walk.fix_construction(ctx, item)
             outcome = walk.run_handler(ctx.handlers[item["type"]], item, ctx)
         if isinstance(outcome, Refusal):
-            return cannot_copy(tool.body, item, outcome.reason, outcome.cause)
+            return cannot_copy(tool.body, item, outcome.reason, outcome.cause, outcome.stop)
         out.extend(outcome.entries)
         out.doubts.extend(construction.doubts + outcome.doubts)
         out.asked |= outcome.asked

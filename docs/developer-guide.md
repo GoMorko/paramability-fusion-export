@@ -1901,7 +1901,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `words.py`: the sentences that both outputs give for the same fact: the noun of a reference, "may move with it", the
   note of a borrowed outline, the reasons of `why_foreign`, the problems of the readers of extrudes, holes, threads and
   sweeps, and the refusals that the two translators word the same (patterns, mirrors, splits, revolves, lofts, sweeps,
-  rounds and chamfers). The words of the problems of sweep paths are in `paths/words.py`. A sentence in these files
+  rounds and chamfers), and the sentence of a tool body that cannot be copied because one of its steps cannot
+  (`ToolStop`, 3.5). The words of the problems of sweep paths are in `paths/words.py`. A sentence in these files
   says what the design has and that it is not copied. It does not name an output (no "Orca", no "Paramability"), and
   it does not say "yet", since the layer cannot promise that a later version copies it. So each sentence reads right
   in the recipe and in the Orca copy, and the Orca output shows the sentence of a `Problem` as it is (`Skip.of`). A
@@ -2742,12 +2743,19 @@ part's frame with the tool's place in the assembly (`tool_move`, with the move o
 moves the tool's component follows when the probe measured it, else it is marked ("puts its tool at the place of Rod
 that turns with it").
 
-A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool: "The tool
-body Body3 cannot be copied: Thicken1 (thicken): ...".
+A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool. It is
+two sentences: the first names the tool body and the step the way the timeline shows them, the second is the reason of
+that step, as it is: "The tool body Body3 cannot be copied because of its step Thicken1. Steps of type thicken are not
+copied." No kind word follows the step name, and the reason of the step is not joined into the first sentence, so it
+keeps its own capital letter and full stop.
 
-The Orca output gives the same fact in other words: "The tool body Body3 cannot be copied, because its step Thicken1
-is left out: ...". The reason of the step follows the colon. It is not put in parentheses, so a reason that has
-parentheses of its own stays easy to read. The handlers of the Orca output name the body that they work on with
+Both outputs give this sentence from one place, `design_model.words.ToolStop`, so the recipe and the Orca copy say the
+same. A tool built from another tool can stop for a step of the inner tool. Then the sentence names that step once and
+the tool body that holds it: "The tool body Body2 cannot be copied because of the step Thicken1 in the tool body
+Body3. Steps of type thicken are not copied." It does not name the Combine steps in between. To do this, a `Refusal`
+(recipe) and a `Skip` (Orca) that say a tool body cannot be built carry the `ToolStop` as `stop`, and the Combine
+that meets such a step passes it to `ToolStop.through`. The recipe walk keeps it in `TranslateResult.refusal_stop`
+beside `refusal_cause`. The cause of the inner step goes on as before, so the hint stays right. The handlers of the Orca output name the body that they work on with
 `Context.body_words`. On the part, this is "the part". While the Orca output builds a tool body, this is "the tool
 body Body3". So the reason of a round, a chamfer or a cut in a tool body names the tool body and not the part (see
 `docs/orca-output.md`).

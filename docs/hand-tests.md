@@ -190,7 +190,7 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
       (a coil as the first step). Export. Expect: the export stops as before: a fixed shape, the message
       names the step, no `gaps.json`, a `manifest.json` of `version` 1.
 - [ ] L5, a Combine whose tool has a coil. Make a Combine (cut) whose tool body was made with a coil. Export.
-      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied: Coil1 (coil) ..."), the rest
+      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied because of its step Coil1. ..."), the rest
       of the part is copied, and the gap's `after` and `before` are the steps around the Combine. Then add a fillet
       on an edge the cut made (an edge of a face of the tool) and export again: the fillet is left out too and
       `reach.makers` lists the Combine's index for it.
@@ -1515,7 +1515,7 @@ step by step. Any other tool is written as one tool step that holds the steps th
 holes, shells, a Combine of its own, Copy Paste Body, Move, patterns and mirrors of bodies). Look in `report.json` at
 the Combine's verdict: `tool_steps` holds the verdicts of the items inside the tools, and the recipe shows a `toolBody`
 step with its own `features`. A step that cannot be copied is left out as a gap (inside the tool, or the whole Combine when the tool cannot be built) and the reason names it, for example "The
-tool body Body3 cannot be copied: Coil1 (coil)". The calls behind these tests are listed under "Capture reader calls
+tool body Body3 cannot be copied because of its step Coil1". The calls behind these tests are listed under "Capture reader calls
 to watch (tool bodies)". Use a design with a user parameter behind a tool's size, and check each result in
 Paramability against the STEP, at the current sizes and at one other size.
 

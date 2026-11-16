@@ -225,7 +225,8 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
   bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
   names no body of its target.
 - A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
-  reason names it: "The tool body Body3 cannot be copied: Thicken1 (thicken): ...". The gaps inside the tool are dropped
+  reason names it: "The tool body Body3 cannot be copied because of its step Thicken1. Steps of type thicken are not
+  copied." The gaps inside the tool are dropped
   with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
   onto the part (`combine.step._writes_flat`).
 

@@ -70,7 +70,7 @@ RAW_STEP_DATA = {
     "probe/plan/covered.py", "probe/plan/request.py",
     "translator/audit.py", "translator/bodies/move.py", "translator/bodies/paste.py", "translator/bodies/split.py",
     "translator/bodies/split_rules.py", "translator/coil/step.py", "translator/combine/step.py",
-    "translator/combine/tool_walk.py", "translator/extrude/emboss.py", "translator/extrude/step.py",
+    "translator/extrude/emboss.py", "translator/extrude/step.py",
     "translator/faces/floating.py", "translator/finishes/draft.py", "translator/finishes/finish.py",
     "translator/finishes/offset.py", "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py",
     "translator/hole/step.py", "translator/hole/thread.py", "translator/loft/step.py",

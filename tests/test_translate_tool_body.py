@@ -140,7 +140,7 @@ class WrittenToolTest(unittest.TestCase):
         capture = load_capture("combine_tool_chamfer")
         capture["items"][3]["type"] = "ThickenFeature"
         result = translate(capture)
-        self.assertIn("Extrude3 (thicken)", left_out(result)["reason"])
+        self.assertIn("Extrude3", left_out(result)["reason"])
         self.assertEqual([gap["hint"] for gap in result.gaps], [gap_hints.HINTS[gap_hints.SURFACE]])
 
     def test_a_step_of_the_tool_from_another_component_leaves_the_combine_out(self):
