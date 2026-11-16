@@ -1694,7 +1694,7 @@ one folder per family of steps.
     the copies, the grid index, the reach of a symmetric direction and the mirror plane is in
     `design_model/steps/repeat.py`. The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
-  - `finishes/`: `finish.py` (fillet, chamfer, shell), `draft.py`, `offset.py`.
+  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `draft.py`, `offset.py`.
   - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
@@ -1782,6 +1782,40 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`quantity`, `pin`, `handled`, the checks of ranges and the audit). The Orca output uses `Context.quantity` and
   `Context.bind`, which turn the formula into an Orca formula. The formula text of a result can differ between the
   two outputs. The value that it gives at every size is the same.
+- `steps/finish.py`: the sets of a round or a chamfer step, as facts. It came from `translator/finishes/finish.py`,
+  `orca_translate/finishes.py`, `orca_translate/left_corners.py` and `orca_translate/outline_rounds.py`. A step holds
+  one or more sets. Each set has the edges that Fusion picked (records with measured points), a kind, and sizes. The
+  module says what is known about a set. It does not say if a set is copied, and it does not name the edges. Each
+  output does both:
+  - `FinishSet` is what every set has: its `index` (the number in the names of its parameters, `path`), its `kind`, its
+    `edges`, and the facts `follows_step` (Fusion was given the edges of another step), `unlocated` (an edge has no
+    measured point) and `foreign` (an edge is on another component). `entry` is the capture dict, for the picks that
+    read the faces or the tangent chains that Fusion was given.
+  - `RoundSet` adds `radius` and `continuity`. The kinds are `CONSTANT`, `VARIABLE`, `CHORD_LENGTH` and `ASYMMETRIC`.
+    A value that is not a positive number reads as None.
+  - `ChamferSet` adds `distance`, `other` (the second distance), `angle` and the facts that come from them. The kinds
+    are `EQUAL`, `TWO_DISTANCES` and `DISTANCE_ANGLE`. `problem` says what a set lacks (`NO_SIZE`, `NO_ANGLE`,
+    `UNKNOWN_KIND`). `even` is true when both sides of the cut have the same size: two equal distances, or a distance
+    and 45 degrees. `second` is the second `Measure` of an uneven chamfer. `held` is the second `Measure` of an even
+    chamfer that is even only while that value stays so. `ratio` is the first distance over the second on a square
+    edge. `reach` is how far the chamfer reaches along a face.
+  - `reach` also exists on `RoundSet`. The Orca output uses it to measure a step that it leaves out
+    (`outline_rounds.note_left_out`).
+  - `ChamferSet.sides()` splits the edges of an uneven chamfer by the face that takes the first distance. The reader
+    measured, for each point of an edge, the normals of the two faces (`sides`) and the normal of the chamfer face
+    (`cut_normals`). The chamfer face normal is a mix of the two face normals, weighted by the two distances. The
+    mix tells which face has the first distance. All points of a group must agree on one direction (`sizeOn`). Edges
+    that no one direction fits make more groups. When an edge was not measured, or the chamfer face does not tell, the
+    result is None. For an even chamfer the result is one group with no direction.
+  - A size that follows the sizes is a `Quantity`. The set gives the number and the path of its parameter, and the
+    output makes the `Quantity` (`size(quantity)`, where `quantity(path, number, dim)` is the function of the output:
+    `translator/values.py` or `Context.quantity`). This keeps the rule of how a value follows the sizes in the output.
+  - `Part` and `merge` put the edges of a step in parts of one size. A part has a size, a direction (the face of the
+    first distance), the second measures and its edges. `merge` joins the parts that are equal and keeps the order of
+    the first appearance. The recipe output writes one step for each part ("chamfers of different sizes are applied
+    one after the other"). The Orca output makes one round or chamfer for each part (see `docs/orca-output.md`).
+  The picks stay in the outputs: the recipe names edges by points that follow the sizes (`faces/`), the Orca output by
+  a group of faces of the part (`finish_body`) or by the corners of an outline (`outline_rounds`).
 - `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
   the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
 - `reach.py`: which ticked sizes can move something that a step uses. This came from `translator/sizes.py`. Each

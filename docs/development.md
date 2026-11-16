@@ -33,7 +33,9 @@ package may import only packages above it in this list (not every one of them). 
   them; `steps/` holds one reader per kind of step: `steps/hole.py` and `steps/thread.py` (the kind, the direction,
   the measured sizes and the thread of a hole and of a ThreadFeature), `steps/repeat.py` (the copies a pattern kept and
   their frames, the grid index of a copy, the reach of a symmetric direction, the plane of a mirror), `steps/move.py`
-  (the rigid move fitted from the corners of a body) and `steps/split.py` (which piece of a split lies inside the tool).
+  (the rigid move fitted from the corners of a body), `steps/split.py` (which piece of a split lies inside the tool) and
+  `steps/finish.py` (the sets of a round or a chamfer: kinds, sizes, the face of the first distance of an uneven
+  chamfer, edges of one size; each translator keeps its own picks of the edges).
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. The modules are listed in `docs/orca-output.md`.

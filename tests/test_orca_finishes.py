@@ -251,6 +251,56 @@ class KindTest(unittest.TestCase):
         self.assertEqual([(g["name"], g["cause"]) for g in result.left_out], [("Draft1", causes.FACE_BY_NUMBER)])
 
 
+def with_sets(kind, *parts):
+    """A step of `kind` ("FilletFeature" or "ChamferFeature") with one set per (edge points, size)."""
+    capture = plate()
+    item = finish_item(len(capture["items"]), kind, parts[0][0], parts[0][1])
+    first = item["data"]["sets"][0]
+    key = "radius" if kind == "FilletFeature" else "distance"
+    item["data"]["sets"] = [dict(first, edges=edges(points), **{key: size}) for points, size in parts]
+    capture["items"].append(item)
+    return capture
+
+
+class SizesTest(unittest.TestCase):
+    def test_sets_of_different_sizes_on_the_top_and_the_bottom_are_made_one_after_the_other(self):
+        for kind, made_type in (("ChamferFeature", FeatureType.CHAMFER), ("FilletFeature", FeatureType.FILLET)):
+            with self.subTest(kind):
+                result = translate(with_sets(kind, (TOP, 1.0), (BOTTOM, 2.0)))
+                self.assertEqual([(f.type, f.face_group, f.dressup_size) for f in finishes(result)],
+                                 [(made_type, FaceGroup.TOP, 1.0), (made_type, FaceGroup.BOTTOM, 2.0)])
+                self.assertEqual(result.left_out, [])
+
+    def test_sets_of_one_size_that_are_a_group_together_stay_one_feature(self):
+        (made,) = finishes(translate(with_sets("ChamferFeature", (TOP[:2], 1.0), (TOP[2:], 1.0))))
+        self.assertEqual((made.face_group, made.dressup_size), (FaceGroup.TOP, 1.0))
+
+    def test_sizes_that_follow_two_variables_are_bound_each(self):
+        capture = with_sets("ChamferFeature", (TOP, 1.0), (BOTTOM, 2.0))
+        capture["parameters"] = {"user": [user("a", "1 mm", 1), user("b", "2 mm", 2)],
+                                 "model": [model("d1", "a", 1), model("d2", "b", 2)]}
+        capture["items"][-1]["data"]["params"] = {
+            "sets.0.distance": {"name": "d1", "expression": "a", "value": 1.0},
+            "sets.1.distance": {"name": "d2", "expression": "b", "value": 2.0}}
+        table = size_table.build(capture["parameters"]["user"], ["a", "b"], capture["parameters"]["model"])
+        result = translate(capture, table)
+        self.assertEqual([f.expr.get("dressup_size") for f in finishes(result)], ["a", "b"])
+
+    def test_a_size_that_leaves_too_little_with_the_other_is_left_out(self):
+        result = translate(with_sets("FilletFeature", (BOTTOM, 4.0), (TOP, 4.8)))
+        self.assertEqual(finishes(result), [])
+        self.assertEqual([g["cause"] for g in result.left_out], [causes.NO_ROOM])
+
+    def test_a_part_that_is_not_a_group_or_follows_a_group_that_changes_is_left_out(self):
+        cases = {"hand picked": ((TOP[:2], 1.0), (TOP[2:], 2.0)),
+                 "side after top": ((TOP, 1.0), (SIDES, 2.0))}
+        for name, parts in cases.items():
+            with self.subTest(name):
+                result = translate(with_sets("ChamferFeature", *parts))
+                self.assertEqual(finishes(result), [])
+                self.assertEqual([g["cause"] for g in result.left_out], [gap_hints.REFUSED])
+
+
 class OrderTest(unittest.TestCase):
     def test_the_other_end_after_a_round_is_copied_and_the_same_end_is_not(self):
         both = translate(plate(("FilletFeature", BOTTOM, 2.0), ("ChamferFeature", TOP, 1.0)))
