@@ -182,7 +182,7 @@ def _translate(capture, handlers=None, size_table=None, motion=None, timer=None)
     holds the verdicts up to and including it.
 
     `size_table` makes the recipe follow Fusion parameters: feature values whose parameters read a size
-    are written as formulas, the recipe gets `sizes` and the `sizesAsWritten` marker. A value that cannot follow its
+    are written as formulas, the recipe gets `sizes`. Every recipe carries the `sizesAsWritten` marker. A value that cannot follow its
     sizes is written as its number, and the sizes it reads stay free: the shape at the current values is the same and
     the other values still follow them. `result.loose` lists those sizes with the reason; one that no formula reads is
     not a size and is listed in `result.dropped` with the reason (as is every ticked size no step reads). After the walk
@@ -337,7 +337,6 @@ def _finish(settled, doubts, capture, motion):
                               {name: found[0] for name, found in spans.items()})
     result.notes.extend(d["reason"] for d in result.dropped)
     result.follows_components = _followed_components(settled.ctx, checked)
-    result.recipe["sizesAsWritten"] = True
     if sizes:
         result.recipe["sizes"] = sizes
     return result
@@ -517,7 +516,7 @@ def _walk(capture, table, size_table, motion=None, cache=None):
                   + [_counts_version(step, ctx.table) for step in written]
                   + [_sweep_version(step) for step in written]
                   + [_shell_version(step) for step in written])
-    recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
+    recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps, "sizesAsWritten": True}
     over = _over_caps(recipe, ctx)
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
