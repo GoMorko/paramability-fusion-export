@@ -32,6 +32,7 @@ learning only.
 The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the step out and tells you why.
 For some steps the add-in measures the shape that Fusion made, for example the radius of a round set by chord
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
+A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
 Scale of a body is copied only when the body measured after it has the size and volume that its factors give.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors

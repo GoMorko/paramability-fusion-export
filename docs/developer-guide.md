@@ -31,7 +31,7 @@ What version 0.12.0 added, with the sections that explain it:
 
 What this version writes:
 
-- recipe version 16 when a sweep needs it, else a lower version;
+- recipe version 17 when a shell needs it, else 16 when a sweep needs it, else a lower version;
 - a gaps file of version 3 always (up to 256 left-out steps, each with a `finishing` flag). Version 0.11.1 wrote version 1 for up to 16 steps and version 2 for more;
 - a `report.json` with a `timing` block and a `health` block, and also the record of the time limit
   (`probe.time_limit`), the count of pieces in the tries (`pieces`) and a `hint` in `refusal`;
@@ -1136,7 +1136,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
-| `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
+| `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
 | `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
 | `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
 | `twistLong` | a sweep with a twist of more than 3600 degrees | Use a twist of 3600 degrees or less. |
@@ -1289,8 +1289,8 @@ rows, then the offset) that map a point of the capture to the recipe.
 
 The recipe version is the lowest version that holds every written step and selector: 12 as the base, 13 with an
 `offsetFaces` step, 14 with a `chain` or `faceEdges` pick, 15 with a `toolBody` or `move` step or a pattern of more
-than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path. So a simple part still
-opens in an older app.
+than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path, 17 with a shell that grows
+outward, rounds its corners or has no open faces. So a simple part still opens in an older app.
 
 `_over_caps` checks the app's limits at the current values: at most 400 steps, tool steps nested at most 3 deep, at most
 256 copies per pattern. A limit that is broken stops the copy. A pattern count that can pass its limit somewhere in the
@@ -1774,7 +1774,7 @@ one folder per family of steps.
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
   (joins that would float).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
@@ -4065,6 +4065,63 @@ Example: a block of 40 by 20 by 10 mm is scaled by the user parameter `Grow` = 1
 from 8000 mm3 to 27000 mm3, which is 8000 multiplied by 1.5 three times. The box goes from (40, 20, 10) to
 (60, 30, 15). The copy writes `{ "kind": "scale", "factor": { "expr": "Grow" }, "point": [0, 0, 0] }`. The recipe has
 version 17.
+
+### 3.19 How a shell is translated
+
+`finish.shell` (`lib/translator/finishes/finish.py`) writes a recipe `shell` step. A shell hollows the part and leaves a
+wall of one thickness. The copy reads four things from Fusion.
+
+1. The direction. Fusion has an inside thickness and an outside thickness (`ShellFeature.insideThickness`,
+   `outsideThickness`). Only one of them is more than 0 in the copy. The inside thickness gives a wall that grows
+   inward: the outer shape of the part stays. The outside thickness gives a wall that grows outward: the faces of the
+   part stay as the walls of the hollow, and the wall is added outside them, so the part gets bigger by the thickness.
+   The step then has `outside: true`. When both thicknesses are more than 0, the wall grows both ways. The recipe
+   cannot say that, so the step is left out with the cause `shellKind`. When the outside thickness cannot be read, the
+   step is left out too. The reader does not guess 0 for it, because that would write an inward wall for an outward one.
+2. The corners. `shellType` is sharp or rounded. A rounded shell writes `corners: "round"`. A sharp shell writes no
+   `corners` field. A type that cannot be read, or that is neither of the two, is left out with the cause `shellKind`.
+3. The open faces. A shell that picks faces opens them: the step has `openFaces`, picked as before (`follow.faces`). A
+   shell that picks the body opens nothing, and it is a closed hollow: the step has no `openFaces`. A shell that picks
+   a body and faces together is left out.
+4. The volume of the part before and after the step (`volume_before`, `volume_after`, read with `target_volume`). An
+   inward shell must make the part smaller, and an outward shell must change the volume. A step that does not is left
+   out, because the copy then does not do what Fusion did. A shell that grows outward or has rounded corners is also
+   left out when the volume was not measured. A shell that goes inward with sharp corners is copied without the
+   measure, as before, but it is checked when the measure is there. The volume does not tell the corners apart.
+   So the corners come from `shellType` only.
+
+Example, made up: a box of 40 by 20 by 10 mm. `Shell1` picks the body, with an outside thickness of 1.5 mm and sharp
+corners. Fusion measures 8000 mm3 before the step and 5200 mm3 after it. The recipe gets
+`{ "kind": "shell", "thickness": 1.5, "outside": true }` and no `openFaces`. The recipe is version 17.
+
+The version is the lowest one that holds the step (`_shell_version` in `translator/translate.py`). A shell with
+`outside`, with `corners` or without `openFaces` needs version 17. A shell with open faces, a thickness and sharp
+corners keeps the lowest version. The app reads the three fields only from version 17, and it refuses a file that
+states an older version.
+
+The thickness follows its parameter. An inward wall reads `inside`, and an outward wall reads `outside`, both as a
+length that stays above 0 (`values.quantity`).
+
+How later steps find faces after a shell. Each step that makes faces is kept as a placer (3.3).
+
+- A shell that goes inward is the placer `Shell`. A point on an inner wall is moved back out by the thickness, placed on
+  the step that made the outer face, and follows that step and the thickness. A closed hollow is the same placer with no
+  open face.
+- A shell that goes outward is the placer `OutsideShell`. The faces of the part before it stay where they are, and a
+  pick on one of them is placed as before. The new outer faces are not placed. A point that lies outside the part as it
+  was is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and gives no place. Without it, an
+  earlier step could place such a point by chance: for example, a cut that reaches 2 mm past the top of the part has an
+  end face where the new outer wall is. A pick with no place is written as measured points, and every size that an
+  earlier step reads is marked, as for any pick the copy cannot follow. A tool placer and a moved placer pass the claim
+  of the placer inside them.
+- `OutsideShell` knows the hollow (the part before it, as material that is removed) and does not know the wall. It is
+  `opaque`: a later step on the sketch of another part says it cannot check that it still meets the wall.
+- The check for a join that would float (`faces/floating.py`) treats an outward shell as a step that may add material.
+  The material lies no further than the thickness from the material the copy holds, so a join on the outer wall stays.
+  An inward shell only removes material.
+
+An outward shell, a closed hollow and a rounded shell cannot be checked in Fusion's tests. They have hand checks in
+`docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).
 
 ## 4. Debugging
 

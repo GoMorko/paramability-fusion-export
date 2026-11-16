@@ -168,7 +168,9 @@
         "bodies_input": true,
         "inside": 2.0,
         "outside": 0.0,
-        "shell_type": "sharp"
+        "shell_type": "sharp",
+        "volume_before": 8000.0,
+        "volume_after": 5000.0
       }
     }
   ]

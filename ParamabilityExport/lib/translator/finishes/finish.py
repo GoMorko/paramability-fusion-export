@@ -9,13 +9,16 @@ picked one point each, from sets that Fusion picked by faces or chains, mark the
 A chamfer with two distances, or a distance and an angle, says which face takes the first distance (`sizeOn`); the
 reader measures it per edge (`sides`, `cut_normals`). Rounds set by chord length and rounds whose radius changes
 along the edge are worked out from what the reader measured along the edges (finishes/measured_rounds.py). What the
-recipe has no words for is refused: two radii, curvature continuity, outside or rounded shells.
+recipe has no words for is refused: two radii, curvature continuity, a shell that grows both ways. A shell can grow
+outward, close the body (no open faces) and round its corners; those need recipe version 17, and the part's measured
+volume must change the way the shell says.
 """
 from ...capture_model import gap_hints
 from ...design_model.steps import finish as sets_of
 from ...design_model.steps.repeat import repeated_items
 from ...design_model.values import Sized, number, reads_in
 from ...design_model import reach, words as shared
+from ...package.numbers import is_number
 
 from .. import values
 from ..faces import follow, picks
@@ -388,25 +391,62 @@ def chamfer(ctx, step):
     return StepResult(entries)
 
 
+# A smaller change of the part's volume (mm3) does not show that a shell hollowed or thickened it.
+_SHELL_VOLUME_TOL_MM3 = 1e-3
+
+
+def _shell_volume_problem(outward, before, after):
+    """A reason when the part's measured volume does not fit the shell (inward: smaller, outward: changed), else None.
+    Nothing is checked when the part was not measured."""
+    if not (is_number(before) and is_number(after)):
+        return None
+    if not after > 0:
+        return "The part has no volume after this shell, so it is not copied."
+    change = after - before
+    fits = abs(change) > _SHELL_VOLUME_TOL_MM3 if outward else change < -_SHELL_VOLUME_TOL_MM3
+    if fits:
+        return None
+    return "The volume of the part does not change the way this shell should change it, so it is not copied."
+
+
 def shell(ctx, step):
     item, data = step.brought, step.brought_data
-    if (data.get("outside") or 0) > 0:
-        return Refusal("Shells that grow outward are not copied yet.", cause=gap_hints.SHELL_KIND)
-    if data.get("bodies_input"):
-        return Refusal("Closed hollow shells are not copied yet.", cause=gap_hints.SHELL_KIND)
-    if data.get("shell_type", "sharp") != "sharp":
-        return Refusal("Shells with rounded corners are not copied yet.")
-    thickness = data.get("inside")
-    if not isinstance(thickness, (int, float)) or not thickness > 0:
+    inside, outside = data.get("inside"), data.get("outside")
+    if not (is_number(inside) and is_number(outside)):
         return Refusal("This shell has no readable wall thickness.")
+    if inside > 0 and outside > 0:
+        return Refusal("This shell grows its wall both inward and outward, which is not copied yet.",
+                       cause=gap_hints.SHELL_KIND)
+    outward = outside > 0
+    thickness = outside if outward else inside
+    if not thickness > 0:
+        return Refusal("This shell has no readable wall thickness.")
+    corners = data.get("shell_type")
+    if corners not in ("sharp", "rounded"):
+        return Refusal("The corners of this shell could not be read.", cause=gap_hints.SHELL_KIND)
     faces = data.get("faces") or []
+    closed = bool(data.get("bodies_input"))
+    if closed and faces:
+        return Refusal("This shell picks a body and faces together, which is not copied.")
     points = picks.face_points(faces)
-    if not points:
+    if not closed and not points:
         return Refusal("This shell has no open faces to copy.")
     if len(points) > picks.MAX_NEAR_POINTS:
         return Refusal("This shell opens more than %d faces." % picks.MAX_NEAR_POINTS)
-    wall = values.quantity(ctx, item, "inside", thickness, absolute=True)
+    before, after = data.get("volume_before"), data.get("volume_after")
+    if (outward or corners == "rounded") and not (is_number(before) and is_number(after)):
+        return Refusal("The part was not measured around this shell, so it is not copied.")
+    problem = _shell_volume_problem(outward, before, after)
+    if problem:
+        return Refusal(problem)
+    wall = values.quantity(ctx, item, "outside" if outward else "inside", thickness, absolute=True)
+    recipe = {"kind": "shell", "thickness": wall.json()}
+    if outward:
+        recipe["outside"] = True
+    if corners == "rounded":
+        recipe["corners"] = "round"
+    if not closed:
+        recipe["openFaces"] = follow.faces(ctx, item, faces)
     out = StepResult()
-    out.add({"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces)},
-            [ShellMaker(wall, faces)])
+    out.add(recipe, [ShellMaker(wall, faces, outward)])
     return out

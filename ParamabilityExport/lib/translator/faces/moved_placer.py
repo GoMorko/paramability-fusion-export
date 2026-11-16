@@ -38,6 +38,9 @@ class MovedPlacer(Placer):
     def place(self, p, edge):
         return None
 
+    def claims(self, p):
+        return self.inner.claims(self.motion.back(p))
+
     def material_at(self, p):
         return self.inner.material_at(self.motion.back(p))
 

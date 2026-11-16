@@ -924,11 +924,16 @@ neither way, refuses an uneven chamfer.
 **ShellFeature** (`inputEntities`, `insideThickness`, `outsideThickness`, `isTangentChain`, `shellType`):
 
 ```json
-{ "faces": [{ "token": "...", "point": [..] }], "bodies_input": false, "inside": 2.0, "outside": 0.0, "shell_type": "sharp" }
+{ "faces": [{ "token": "...", "point": [..] }], "bodies_input": false, "inside": 2.0, "outside": 0.0, "shell_type": "sharp",
+  "volume_before": 8000.0, "volume_after": 5200.0 }
 ```
 
 `faces[].point` is `BRepFace.pointOnFace`; tangent chains expanded with `tangentiallyConnectedFaces`;
-`bodies_input` true when the input is a body (a closed hollow). `shell_type`: `sharp` or `rounded`.
+`bodies_input` true when the input is a body (a closed hollow). `shell_type`: `sharp`, `rounded` or `other` (a name
+that is not known, or a member that cannot be read). `outside` is null when `outsideThickness` cannot be read, and the
+translator leaves such a shell out. `volume_before` and `volume_after` are the target body's volume in mm3 before and
+after the step (`read_geometry.target_volume`; null when it cannot be read); the translator checks that the shell
+made the part smaller (inward) or changed it (outward).
 
 **DraftFeature** (`inputFaces`, `isTangentChain`, `plane`, `isDirectionFlipped`, `draftDefinition`; read in
 `read_finish.py`):
@@ -1768,7 +1773,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | HoleFeature | `diameter`, `tip_angle_deg`, `extent.depth`, `counterbore.diameter`, `counterbore.depth`, `countersink.diameter`, `countersink.angle_deg` |
 | FilletFeature | `sets.<n>.radius` |
 | ChamferFeature | `sets.<n>.distance`, `sets.<n>.distance_two`, `sets.<n>.angle_deg` |
-| ShellFeature | `inside` |
+| ShellFeature | `inside`, `outside` |
 | RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
 | CircularPatternFeature | `quantity`, `total_angle_deg` |
 | PathPatternFeature | `quantity`, `distance` (on a round path the distance gives the angle; on a whole circle it is not followed) |
@@ -1920,7 +1925,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). It always carries `sizesAsWritten: true`; with a size table it also carries `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`; 17 with a `scale` step, or a `shell` step that has `outside` or `corners` or has no `openFaces`: `SHELL_VERSION`). It always carries `sizesAsWritten: true`; with a size table it also carries `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`.
 

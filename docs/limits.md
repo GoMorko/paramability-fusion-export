@@ -121,7 +121,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
   along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes
-  along the edge, rounds with curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
+  along the edge, rounds with curvature continuity, shells that grow both inward and outward, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset

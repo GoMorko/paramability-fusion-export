@@ -120,7 +120,7 @@ can be.
 | Chamfer: equal distance | Copied | - | Partly | Needs Orca | Orca: the same edges as for a fillet. |
 | Chamfer: two distances, distance and angle | Copied | - | Left out | Needs Orca | Orca makes only even chamfers. Paramability: two distances need sides that the add-in could measure. |
 | Shell: inside, open faces | Copied | - | Left out | Needs Orca | Orca opens only a face that it picks by its own numbering. |
-| Shell: outward, closed, rounded corners | Left out | Yes, needs an app change | Left out | Needs Orca | |
+| Shell: outward, closed, rounded corners | Copied | - | Left out | Needs Orca | Paramability: needs a Paramability release that reads recipe version 17. The part's volume must change as the shell says. A shell that grows both inward and outward is left out. |
 | Draft | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane. Two different angles are left out. |
 | Scale of bodies | Copied | - | Left out | Needs Orca | Paramability: the factors follow sizes. A point that sizes can move keeps its place, and those sizes are marked. Factors per axis in a component turned at an angle are left out. |
 | Scale of sketches, or of a body and a sketch together | Left out | Yes, add-in only | Left out | Needs Orca | |
@@ -198,7 +198,7 @@ Sorted by how many printing projects it helps:
 6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
    change).
 7. Coils with a taper or a spiral (app change), and half turns (add-in only).
-8. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
+8. Drafts with two angles, and shells that grow both inward and outward (app change).
 9. Emboss on a curved face (app change).
 10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
