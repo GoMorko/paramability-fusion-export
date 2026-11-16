@@ -184,6 +184,7 @@ class LimitTest(unittest.TestCase):
     def test_the_limits_where_the_cuts_stop_giving_the_outline_are_told(self):
         ell = run(outline_capture(ELL))
         self.assertAlmostEqual(told(ell, "wall").high, 29.9)  # the wall reaches the 30 mm leg
+        self.assertEqual(told(ell, "wall").why, (None, limits.OUTLINE_MEETS))
         self.assertAlmostEqual(told(ell, "leg_a").low, 8.01)  # the leg shrinks to the wall
         trapezoid = run(outline_capture(TRAPEZOID))
         self.assertAlmostEqual(told(trapezoid, "ang").low, 45.1)  # the top shrinks to nothing at 45 degrees
@@ -193,6 +194,7 @@ class LimitTest(unittest.TestCase):
         window = run(window_capture())
         # The window may move off the plate to the left, up to where it leaves the block the cuts start from.
         self.assertLess(told(window, "wx").low, -900.0)
+        self.assertEqual(told(window, "wx").why[0], limits.OUTLINE_TOO_LARGE)
         self.assertIsNone(told(window, "wide").low)  # a size reaches zero, which needs no limit
 
     def test_a_band_where_the_check_fails_is_not_stepped_over(self):

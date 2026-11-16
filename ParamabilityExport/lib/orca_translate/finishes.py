@@ -255,6 +255,13 @@ def _finish(ctx, item, kind, records, value, notes):
     return [feature]
 
 
+def _room(body, size, ends):
+    """True when rounds of `size` in all fit on `body` (`finish_body.room`), else `limits.Stop` with why not."""
+    if size <= finish_body.SMALLEST:
+        return limits.Stop(limits.CORNER_TOO_SMALL)
+    return limits.stop(finish_body.room(body, size, ends) is None, limits.ROUND_NO_ROOM)
+
+
 def _limits(ctx, body, rounds, ends, outlines):
     """Tell the person how far the variables of the rounds on this part (`rounds`, their sizes added together) may
     go before Orca can no longer make them. The outlines whose corners corner tools cut (`outlines`, as
@@ -263,13 +270,13 @@ def _limits(ctx, body, rounds, ends, outlines):
     fields = [(f, "dressup_size") for f in rounds]
     reads, at = outlines
     if not reads:
-        limits.tell(ctx, fields, lambda sizes: finish_body.room(body, sum(sizes), ends) is None, floor=True)
+        limits.tell(ctx, fields, lambda sizes: _room(body, sum(sizes), ends), floor=True)
         return []
 
     def ok(sizes, env):
         shape = at(env)
         found = finish_body.body_of(shape) if shape is not None else "no shape"
-        return not isinstance(found, str) and finish_body.room(found, sum(sizes), ends) is None
+        return not isinstance(found, str) and _room(found, sum(sizes), ends)
     return limits.tell_sizes(ctx, fields, reads, ok)[1]
 
 

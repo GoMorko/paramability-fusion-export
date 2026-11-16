@@ -377,7 +377,9 @@ def _limit(ctx, sketch, outer, plane, found):
     def ok(numbers):
         loop = extents.drawn_loop(sketch, outer, *numbers)
         reach = max(_across(sketch.plane, plane, p) for c in loop for p in polyline(c))
-        return bend_problem(reach, found.tightest) is None and overlap_problem(points, reach, found.closed) is None
+        if bend_problem(reach, found.tightest) is not None:
+            return limits.Stop(limits.SWEEP_BEND)
+        return limits.stop(overlap_problem(points, reach, found.closed) is None, limits.SWEEP_OVERLAP)
 
     limits.guard(ctx, fields, ok, "%s: the Orca copy cannot tell how far this may change before the sweep runs into "
                  "itself" % sketch.name)
