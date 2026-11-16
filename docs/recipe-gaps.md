@@ -51,8 +51,12 @@ walk of another component's body, more than 256 gaps in one part (`gaps.stops.MA
 the tool bodies count, and a tool that meets the cap stops the whole copy), and the size caps of the recipe.
 
 A tool body of a Combine is walked by the same loop. A gap inside a tool body is kept only when the Combine writes that
-tool, and the tool is then always a `toolBody` step (the gap is in its list). When the tool cannot be built (its first
-step is a gap, for example) the Combine becomes one gap on its own level and the gaps inside the tool are dropped.
+tool, and the tool is then always a `toolBody` step (the gap is in its list). Only a gap that finishes surfaces
+(`finishing` true: a round, a chamfer, a draft, an emboss, a cosmetic thread) is kept so. A gap of any other step (a
+Move, an extrude, a Combine of the tool) can change the place or the material of the tool, so a join, cut or
+intersect with the tool as written would give a wrong part: the Combine becomes one gap on its own level, its reason
+names the tool body and that step, and it takes that step's cause (`tool_walk.unfinished`). The same holds when the
+tool cannot be built (its first step is a gap, for example). In both cases the gaps inside the tool are dropped.
 
 What a left out step would have recorded (doubts about sizes, notes) is dropped with it, so a step that is not
 written never fixes a size.

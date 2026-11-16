@@ -223,8 +223,8 @@ class PicksTest(unittest.TestCase):
 class PlaceTest(unittest.TestCase):
     def test_a_gap_inside_a_tool_body_belongs_to_the_tool_step_written_for_it(self):
         capture = load_capture("combine_tool_two_steps")  # a tool of two adding steps, written onto the part
-        capture["items"][5]["type"] = "ThickenFeature"
-        result = translate(capture)
+        capture["items"][5].update(type="ChamferFeature", data={})
+        result = translate(capture, {"ChamferFeature": lambda ctx, step: Refusal("This bevel cannot be copied.")})
         tool = steps_of(result.recipe, "toolBody")[0]
         self.assertEqual(place_of(result.gaps[0]), (tool["features"][0]["id"], None, tool["id"]))
 

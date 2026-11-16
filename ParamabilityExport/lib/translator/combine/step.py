@@ -10,9 +10,11 @@ tool of one step. Such recipes open in older versions of the app.
 
 Any other tool (with a cut, a round, a hole, a shell, a Move, a Paste or a Combine of its own) becomes one `toolBody`
 step that holds the tool's steps. A pattern of bodies the Combine takes whole becomes a tool per source and one step
-that repeats them (`repeat/body_copies.py`). A tool whose walk leaves a step out (a gap) is always a `toolBody` step. A tool
-that cannot be built refuses the Combine, and the reason names the step that stops it. A tool the Combine keeps can be
-used again by a later Combine.
+that repeats them (`repeat/body_copies.py`). A tool whose walk leaves out only steps that finish surfaces (a round, a
+bevel) is always a `toolBody` step, with those gaps in its list. A tool whose walk leaves out any other step (a Move, an
+extrude) cannot be built (`tool_walk.unfinished`): the tool would sit at the wrong place or hold the wrong material, so
+the part would come out wrong. A tool that cannot be built refuses the Combine, and the reason names the step that
+stops it. A tool the Combine keeps can be used again by a later Combine.
 
 Fusion's help does not say what an intersect of several tools keeps, so the export measures it (`intersect_model`):
 what every tool holds is one `toolBody` per tool, what any tool holds is one `toolBody` that holds the tools. When the
@@ -82,7 +84,7 @@ def _uses_face(data):
 
 def _writes_flat(tool):
     """True when the steps of a walked tool can be written one by one onto the part. A tool with a step left out
-    (a gap) is not: the missing step belongs in the tool's own list."""
+    (a gap that only finishes surfaces) is not: the missing step belongs in the tool's own list."""
     if tool.gaps:
         return False
     joining = False
@@ -202,7 +204,9 @@ def _whole_patterns(ctx, item, tools, combine):
         written = body_copies.write(ctx, item, group, combine, number)
         if isinstance(written, Refusal):
             return written
-        if written is not None:
+        # A source that misses a step that changes its place or material is walked again as a tool of its own below,
+        # which refuses the Combine and names that step.
+        if written is not None and tool_walk.shaping_gap(written.gaps) is None:
             results.append(written)
             left = [tool for tool in left if not group.holds(tool)]
     return results, left
@@ -258,6 +262,9 @@ def write_tools(ctx, item, data, combine):
         tool = tool_walk.build(ctx, body, item["index"], ctx.depth + (2 if union else 1), number)
         if isinstance(tool, Refusal):
             return tool
+        missing = tool_walk.unfinished(tool)
+        if missing is not None:
+            return missing
         moved = tool_move(ctx, item, body) if tool_items.is_foreign_tool(body) else (None, None)
         if isinstance(moved, Refusal):
             return moved

@@ -36,6 +36,12 @@ def moved(edit, name="move_translate_sized"):
     return capture
 
 
+def stopped_by_move(result):
+    """True when the Combine whose tool the Move carries is left out because of the Move: a tool that misses its Move
+    sits at the wrong place."""
+    return [gap["name"] for gap in result.gaps] == ["Combine1"] and "Move1" in result.gaps[0]["reason"]
+
+
 def as_measured(data, kind):
     """The Move rewritten as a kind that holds only the measured points."""
     for key in ("translate", "is_design_space", "params"):
@@ -162,13 +168,13 @@ class RefusedMoveTest(unittest.TestCase):
         }
         for name, edit in cases.items():
             with self.subTest(name):
-                self.assertEqual(left_out(translate(moved(edit)))["type"], "MoveFeature")
+                self.assertTrue(stopped_by_move(translate(moved(edit))))
 
     def test_a_turn_that_cannot_be_copied_exactly_refuses(self):
         cases = {"axis unread": lambda d: d.update(axis={"kind": "other"}), "angle disagrees": lambda d: d.update(angle_deg=45.0)}
         for name, edit in cases.items():
             with self.subTest(name):
-                self.assertEqual(left_out(translate(moved(edit, "move_rotate_sized")))["type"], "MoveFeature")
+                self.assertTrue(stopped_by_move(translate(moved(edit, "move_rotate_sized"))))
 
     def test_a_move_that_names_no_body_and_may_change_the_part_refuses(self):
         capture = load_capture("extrude_plate")
