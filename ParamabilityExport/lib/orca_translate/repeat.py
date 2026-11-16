@@ -506,8 +506,10 @@ def circular(ctx, step):
     count_value = ctx.quantity(item, "quantity", n, "scalar")
     angle_value = ctx.quantity(item, "total_angle_deg", abs(raw), "angle").magnitude()
     if not symmetric:
+        # No copy is marked suppressed (checked above), so places that do not fill the count mean the copies
+        # Fusion gives are not where its count and angle put them.
         if sorted(set(numbers)) != list(range(n)):
-            return Skip(LEAVES_COPIES_OUT % "pattern", causes.COPIES_SUPPRESSED)
+            return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
         layouts = [(axis_dir, n, count_value, abs(raw) if not full else FULL_TURN_DEG, angle_value)]
     else:
         found = symmetric_reach(numbers, n)
