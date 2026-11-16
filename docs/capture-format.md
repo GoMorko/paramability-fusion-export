@@ -270,8 +270,11 @@ probe decides.
 
 A step can also use a plane, axis, direction or point of another component directly (measured references, "Measured
 references", section 4). A user parameter that acts on the component that owns such a reference gets a link `{ "param", "sketch": "", "component", "via": "reference", "step", "ref" }` once per
-component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). It is offered, ticked
-to start with and probed like a sketch link; the offer text says which step uses which component.
+component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). A user parameter that
+may place an occurrence (`places_occurrence`) gets the same link with `via: "assembly"` for every component whose
+reference moves with its occurrence: not a reference of the target's own component, and not one marked `own`. It is
+offered, ticked to start with and probed like a sketch link; the offer text says which step uses which component,
+and for `assembly` that the parameter may move that component in the assembly.
 
 When a sketch of the body is tied to another component (a link, or only `unknown` references), or a step of the body
 uses a reference of another component, the user parameters that act on a component other than the target's
@@ -2146,8 +2149,8 @@ nothing is known. For one
 reference and one size acting on its component, `sketch_values.coverage.ref_answer` gives the same three answers as for
 sketches: `STILL`, `MOVED` (with the keys) or `NOT_MEASURED` (with the reason, or `NOT_TRIED` for a size left without
 rows or set by no state, `NOT_LOOKED` for a key not in `refs`). A size of a joint or of a move that places an
-occurrence may move every reference of another component (`design_model.refs.acting_sizes`), but the probe tries it
-only on a guess, while rows are left. When no state set it, the answer is `NOT_TRIED`, and the step marks the size.
+occurrence may move every reference of another component (`design_model.refs.acting_sizes`). When no state set it
+(the row limit, a time limit, or a probe of an older add-in), the answer is `NOT_TRIED`, and the step marks the size.
 
 ### Probe states (`lib/fusion_reader/probe_state.py`)
 

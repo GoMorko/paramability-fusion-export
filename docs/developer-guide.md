@@ -2640,7 +2640,8 @@ not measured. A size that no try set to another value is not measured (`coverage
 the tries tell nothing about it. This is important for the size of a joint, or of a move that places an occurrence:
 
 1. Such a size can move every place of another component (`refs.acting_sizes`).
-2. The probe tries it only on a guess (`probe_flow/sizes.extra_sizes`), and only while rows are left.
+2. The probe tries it as a linked size (a link with `via: "assembly"`, see below). The row limit or the time limit can
+   still leave it without a try.
 3. When no row set it, the answer is "not tried". The translator gives the size a doubt that names the step and says
    that the size was not tried at other values. The size is then loose, or left out with that reason when no formula
    reads it. The audit does not say "nothing in this part moved with it".
@@ -2669,8 +2670,11 @@ The facts that do not need the probe are in the shared layer, `lib/design_model/
     parameter gets a link (`via: "assembly"`) to every sketch of the part that is tied to another component, for
     example a sketch that projects an edge of that component. Thus the size counts as a size that the sketch reads
     (`reach.sketch_sizes`):
+    `reference_links` gives such a parameter the same kind of link to every component whose plane, axis, point or
+    face a step of the part uses (not the component of the part itself). Thus:
     1. The probe tries it like a size behind a sketch dimension. When the row limit leaves it without a try, it is
-       listed as not tried.
+       listed as not tried. The dialog offers it as linked: "It may move Cover in the assembly, and the step ...".
+       A joint parameter is still not ticked to start with.
     2. The recipe translator follows the sketch as the probe measured it. It marks the size when no try set it, or
        when there is no motion file.
     3. The Orca output marks the size, because it writes the sketch with its numbers.

@@ -191,24 +191,39 @@ def _owners(refs):
     return out
 
 
+def _placed_against_part(capture, ref, owner):
+    """True when a reference of `owner` moves with the place of its occurrence against the part: it is not a
+    reference of the part's own component (`own`, or the target's component)."""
+    return not ref.get("own") and not _same(owner, _target_component(capture))
+
+
 def reference_links(capture, items=None):
-    """The links of the user parameters that act on a component that owns a reference of the steps (`items` as in
-    `capture_refs`), once per parameter and component, in parameter order. Without `dependents` in the capture there
-    is nothing to say about where parameters act, so no links."""
+    """The links of the user parameters that may move a reference of the steps (`items` as in `capture_refs`), once
+    per parameter and component, in parameter order: `via` "reference" for a parameter that acts on the component that
+    owns it, else "assembly" for one that may place an occurrence (`places_occurrence`) when the reference moves with
+    the place of its occurrence (`_placed_against_part`). Without `dependents` in the capture there is nothing to say
+    about where parameters act, so no links."""
     refs = capture_refs(capture, items)
     if not refs:
         return []
     out = []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         where = acts(capture, param)
+        placing = places_occurrence(capture, param)
         seen = []
         for r in refs:
             owner = _key(r["ref"].get("component"))
-            if not any(owner) or any(_same(owner, k) for k in seen) or not any(_same(owner, c) for c in where.components):
+            if not any(owner) or any(_same(owner, k) for k in seen):
+                continue
+            if any(_same(owner, c) for c in where.components):
+                via = "reference"
+            elif placing and _placed_against_part(capture, r["ref"], owner):
+                via = "assembly"
+            else:
                 continue
             seen.append(owner)
             out.append({"param": param["name"], "sketch": "", "component": owner[1] or "another component",
-                        "via": "reference", "step": r["name"], "ref": r["key"]})
+                        "via": via, "step": r["name"], "ref": r["key"]})
     return out
 
 
