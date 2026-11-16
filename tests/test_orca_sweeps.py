@@ -13,7 +13,7 @@ from tests.translator_helpers import load_capture
 
 from lib.capture_model import gap_hints
 from lib.orca_recipe.enums import BooleanMode, EntityType, ExtrudeEnd, FeatureType, SketchShape
-from lib.orca_translate import FIXED, VARIABLE, causes
+from lib.orca_translate import FIXED, VARIABLE, causes, limits
 from lib.orca_translate import splines, sweep_splines
 from lib.orca_translate.lofts import Lofted
 from lib.orca_translate.solid import Solid
@@ -93,6 +93,7 @@ class SweepTest(unittest.TestCase):
         # Neither side may reach zero, where the outline vanishes.
         self.assertEqual(limit_of(width).low, 0.01)
         self.assertAlmostEqual(limit_of(width).high, 20.0, delta=0.11)
+        self.assertEqual(limit_of(width).why[1], limits.SWEEP_BEND)
         self.assertEqual((limit_of(height).low, limit_of(height).high), (0.01, None))
 
     def test_sizes_that_move_the_outline_plane_are_marked(self):

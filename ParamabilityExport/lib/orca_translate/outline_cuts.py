@@ -93,7 +93,7 @@ class Planned:
         self.half = max(_BLOCK_MIN, _BLOCK_GROW * size)
         self.shape, self.notes, self.moves, self.feature = "cuts", [], (), None
         self.bound = {}
-        self.found = {}  # Orca variable -> (low, high)
+        self.found = {}  # Orca variable -> limits.Range (low, high)
         self._leaves = {n: leaf.value for n, leaf in formulas.solution.leaves.items()}
         self._guards = [a.guard for a in formulas.solution.assumptions if not a.guard.is_constant]
 
@@ -103,20 +103,21 @@ class Planned:
     def fits(self, env):
         """True when the cuts give the outline at the size values `env`: the corners make a simple counter clockwise
         loop inside the block, every side runs along its direction formula, the sketch solver's choices hold and the
-        half-plane formula gives the loop in every cell (`halfplanes.check`)."""
+        half-plane formula gives the loop in every cell (`halfplanes.check`). Else `limits.Stop` with the first check
+        that fails, or False when a formula cannot be worked out there."""
         try:
             pts = self.points(env)
             leaves = dict(self._leaves, **leaf_values(self.formulas.formulas, env))
             if any(guard.value(leaves) <= 0 for guard in self._guards):
-                return False
+                return limits.Stop(limits.SKETCH_FLIPS)
             turns = [math.radians(side.direction.value(env)) for side in self.sides]
         except _MATH_ERRORS:
             return False
         if not halfplanes.simple(pts, _SHORTEST) or halfplanes.area(pts) <= 0:
-            return False
+            return limits.Stop(limits.OUTLINE_MEETS)
         reach = self.half * (1.0 - _BLOCK_MARGIN)
         if any(abs(p[0] - self.centre[0]) > reach or abs(p[1] - self.centre[1]) > reach for p in pts):
-            return False
+            return limits.Stop(limits.OUTLINE_TOO_LARGE)
         n = len(pts)
         for i, phi in enumerate(turns):
             a, b = pts[i], pts[(i + 1) % n]
@@ -124,8 +125,8 @@ class Planned:
             length = math.hypot(*d)
             if d[0] * math.cos(phi) + d[1] * math.sin(phi) <= 0 or \
                     abs(d[0] * math.sin(phi) - d[1] * math.cos(phi)) > _DIRECTION_TOL * length:
-                return False
-        return halfplanes.check(pts, self.tree)
+                return limits.Stop(limits.SIDE_TURNS)
+        return limits.stop(halfplanes.check(pts, self.tree), limits.CUTS_DIFFER)
 
     def count(self):
         """The Orca features the outline takes in the part: the block's sketch and extrude, its cuts, turns and tool
@@ -276,9 +277,9 @@ def _limits(ctx, planned):
 
         if not fits(entry.value):
             return "the copy cannot tell how far %s may change" % entry.name
-        low, high = limits.bounds(fits, entry.value)
-        if low is not None or high is not None:
-            planned.found[ctx.names[entry.size_name]] = (low, high)
+        span = limits.bounds(fits, entry.value)
+        if span != (None, None):
+            planned.found[ctx.names[entry.size_name]] = span
     return planned
 
 

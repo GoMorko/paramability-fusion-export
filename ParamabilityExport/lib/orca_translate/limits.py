@@ -16,6 +16,11 @@ A field that sizes a shape (`POSITIVE`: a sketch width, height or radius, a roun
 never fits at zero or below, whatever the step's check says, and the lower limit of a variable that drives one is
 told even when it is small: the person sees where the shape stops, never a limit below zero.
 
+When a check knows why a value does not fit, it returns `Stop(cause)` (falsy) instead of False. `bounds` keeps the
+cause of the first value past each limit (`Range.why`), and `words` adds it to the limit in plain words (`CAUSES`):
+"keep wall between 3 and 28 mm (outside that, a rounded corner reaches another side of the outline)".
+The cause changes only the words, never where a limit is found.
+
 The search walks out from the current value in growing steps until the check fails, then halves the gap. The
 growing steps can jump over a band where the check fails, so the search then tests evenly spaced values on each side
 between the current value and the end it found (for a side with no end, up to `FAR` times the current value away)
@@ -53,6 +58,80 @@ POSITIVE = frozenset((
     "thread_diameter", "thread_radius", "thread_pitch", "thread_height", "thread_depth", "helix_pitch",
     "helix_radius", "plane_u_size", "plane_v_size",
 ))
+
+# Why a value past a limit does not fit, as the kind a check gives (`Stop`) and the short plain words of `words`.
+SHAPE_ZERO = "shapeZero"
+OUTLINE_MEETS = "outlineMeets"
+OUTLINE_TOO_LARGE = "outlineTooLarge"
+SIDE_TURNS = "sideTurns"
+SKETCH_FLIPS = "sketchFlips"
+CUTS_DIFFER = "cutsDiffer"
+CORNER_TURNS = "cornerTurns"
+CORNER_NOT_SQUARE = "cornerNotSquare"
+CORNER_TOO_SMALL = "cornerTooSmall"
+SIDE_TAKEN = "sideTaken"
+CORNER_MEETS = "cornerMeets"
+SWEEP_BEND = "sweepBend"
+SWEEP_OVERLAP = "sweepOverlap"
+END_PASSES_START = "endPassesStart"
+TAPER_CLOSES = "taperCloses"
+ROUND_NO_ROOM = "roundNoRoom"
+THREAD_NO_FIT = "threadNoFit"
+CAUSES = {
+    SHAPE_ZERO: "a size of the shape reaches zero",
+    OUTLINE_MEETS: "two sides of the outline meet or cross",
+    OUTLINE_TOO_LARGE: "the outline grows too large for the copy",
+    SIDE_TURNS: "a side of the outline turns around",
+    SKETCH_FLIPS: "the sketch can flip to another shape",
+    CUTS_DIFFER: "the cuts of the copy no longer give the outline",
+    CORNER_TURNS: "a rounded corner gets flat or turns the other way",
+    CORNER_NOT_SQUARE: "an angled chamfer needs a square corner",
+    CORNER_TOO_SMALL: "a round or chamfer gets too small",
+    SIDE_TAKEN: "the rounds and chamfers need more than a whole side",
+    CORNER_MEETS: "a rounded corner reaches another side of the outline",
+    SWEEP_BEND: "the outline gets wider than the tightest bend of the path",
+    SWEEP_OVERLAP: "the outline reaches another part of the path",
+    END_PASSES_START: "the end of the extrude passes its start",
+    TAPER_CLOSES: "the taper closes the outline",
+    ROUND_NO_ROOM: "the rounds or chamfers no longer fit on the part",
+    THREAD_NO_FIT: "the thread no longer fits",
+}
+
+
+class Stop:
+    """A check that does not hold (falsy), with the kind of its cause (a key of `CAUSES`)."""
+
+    def __init__(self, cause):
+        self.cause = cause
+
+    def __bool__(self):
+        return False
+
+    def __repr__(self):
+        return "Stop(%r)" % self.cause
+
+
+def stop(holds, cause):
+    """True when `holds`, else `Stop(cause)`."""
+    return True if holds else Stop(cause)
+
+
+def _checked(got):
+    """The answer of a check as `fits` gives it: a `Stop` as it is, else True or False."""
+    return got if isinstance(got, Stop) else bool(got)
+
+
+class Range(tuple):
+    """`(low, high)` as `bounds` finds them, with `why`: the cause kind (`CAUSES`) of the first value past each
+    limit, None when the check did not say."""
+
+    def __new__(cls, low, high, why=(None, None)):
+        made = super().__new__(cls, (low, high))
+        made.why = tuple(why)
+        return made
+
+    def __getnewargs__(self):
+        return self[0], self[1], self.why
 
 
 def _free(text):
@@ -114,7 +193,7 @@ def _search(ctx, fields, ok):
             try:
                 values = variable_values(dict(variables, **{name: repr(float(x))}))
                 numbers = _numbers(fields, values)
-                return _shaped(fields, numbers) and bool(ok(numbers))
+                return _checked(ok(numbers)) if _shaped(fields, numbers) else Stop(SHAPE_ZERO)
             except (ExpressionError, ArithmeticError, ValueError):
                 return False
 
@@ -128,20 +207,23 @@ def _search(ctx, fields, ok):
 
 
 def bounds(fits, current):
-    """`(low, high)`: the last values below and above `current` at which `fits(value)` holds, None for a side where
-    it holds as far as the search looks. `fits(current)` must hold."""
+    """The `Range` `(low, high)`: the last values below and above `current` at which `fits(value)` holds, None for a
+    side where it holds as far as the search looks, with the cause of the first value past each (`Range.why`).
+    `fits(current)` must hold."""
     found = [_edge(fits, current, -1), _edge(fits, current, 1)]
     reach = FAR * (abs(current) or 1.0)
     for n, sign in enumerate((-1, 1)):
-        end = found[n] if found[n] is not None else current + sign * reach
+        end = found[n][0] if found[n] is not None else current + sign * reach
         good = current
         for k in range(1, _SAMPLES + 1):
             value = current + (end - current) * k / _SAMPLES
-            if not fits(value):
-                found[n] = _halve(fits, good, value)
+            got = fits(value)
+            if not got:
+                found[n] = _halve(fits, good, value, got)
                 break
             good = value
-    return found[0], found[1]
+    return Range(*(f[0] if f else None for f in found),
+                 why=tuple(getattr(f[1], "cause", None) if f else None for f in found))
 
 
 def tell_found(ctx, found):
@@ -152,28 +234,32 @@ def tell_found(ctx, found):
 
 
 def _edge(fits, current, sign):
-    """The last value from `current` toward `sign` at which `fits` holds, or None when it holds as far as looked."""
+    """`(last value, answer past it)` from `current` toward `sign`: the last value at which `fits` holds and the
+    answer of `fits` at the nearest value tested past it, or None when it holds as far as looked."""
     step = abs(current) * _FIRST_STEP or _FIRST_STEP
     good = current
     for _ in range(_STEPS):
         trial = good + sign * step
-        if not fits(trial):
-            return _halve(fits, good, trial)
+        got = fits(trial)
+        if not got:
+            return _halve(fits, good, trial, got)
         good, step = trial, step * 2.0
     return None
 
 
-def _halve(fits, good, bad):
-    """The last value from `good` (where `fits` holds) toward `bad` (where it fails) at which it holds."""
+def _halve(fits, good, bad, failed):
+    """`(last value, answer past it)`: the last value from `good` (where `fits` holds) toward `bad` (where it gives
+    `failed`) at which it holds, and the answer of `fits` at the nearest value tested past it."""
     for _ in range(_HALVINGS):
         if abs(bad - good) <= _FINE * max(1.0, abs(good)):
             break
         mid = (good + bad) / 2.0
-        if fits(mid):
+        got = fits(mid)
+        if got:
             good = mid
         else:
-            bad = mid
-    return good
+            bad, failed = mid, got
+    return good, failed
 
 
 def _shown(value, sign):
@@ -187,22 +273,24 @@ def _shown(value, sign):
 
 class Limit(str):
     """The words of a told limit ("keep Round under 4.5 mm"), with the Orca `variable` and the `low` and `high`
-    numbers they give (rounded as told; None for a side with no limit told)."""
+    numbers they give (rounded as told; None for a side with no limit told), and `why`: the cause kind told for each
+    side (`CAUSES`, None when it is not told)."""
 
-    def __new__(cls, text, variable, low, high):
+    def __new__(cls, text, variable, low, high, why=(None, None)):
         made = super().__new__(cls, text)
-        made.variable, made.low, made.high = variable, low, high
+        made.variable, made.low, made.high, made.why = variable, low, high, tuple(why)
         return made
 
 
-def words(name, low, high, current, unit="", near=True, floor=False):
+def words(name, low, high, current, unit="", near=True, floor=False, why=(None, None)):
     """The `Limit` for a range around `current`, such as "keep Round under 4.5 mm", or None when it says nothing.
     With `near` (a step Orca stops on with an error), a lower limit at zero or below is told only for a value below
     zero (a taper angle), and a limit far from the current value (a lower one under a tenth of it, a higher one over
     ten times it) is not worth telling and is not shown. Without `near` (a step Orca builds wrong past the limit),
     every limit is told except a lower one where the value reaches zero, which a size never goes below: an offset
     that may go below zero is told how far. With `floor` (a size Orca cannot make near zero, such as a round), a
-    lower limit above zero is always told, however small."""
+    lower limit above zero is always told, however small. `why` holds the cause kind past each limit (`Range.why`):
+    the cause of each side told is added in plain words (`CAUSES`)."""
     kept = low if floor and low is not None and low > 0 else None
     if near and low is not None and not (low > _AT_ZERO or current < 0):
         low = None
@@ -223,8 +311,27 @@ def words(name, low, high, current, unit="", near=True, floor=False):
         text = "keep %s over %s%s" % (name, low_text, unit)
     else:
         return None
+    told = (why[0] if low_text is not None and why[0] in CAUSES else None,
+            why[1] if high_text is not None and why[1] in CAUSES else None)
+    text += _cause_words(low_text, high_text, unit, told)
     return Limit(text, name, None if low_text is None else float(low_text),
-                 None if high_text is None else float(high_text))
+                 None if high_text is None else float(high_text), told)
+
+
+def _cause_words(low_text, high_text, unit, why):
+    """" (below that, ...)" and the like: the causes `why` of the sides told, or "" when none is known."""
+    low, high = CAUSES.get(why[0]), CAUSES.get(why[1])
+    if low and high and low != high:
+        return " (below %s%s, %s; above %s%s, %s)" % (low_text, unit, low, high_text, unit, high)
+    if low and high:
+        return " (outside that, %s)" % low
+    if low and high_text is not None:
+        return " (below %s%s, %s)" % (low_text, unit, low)
+    if high and low_text is not None:
+        return " (above %s%s, %s)" % (high_text, unit, high)
+    if low or high:
+        return " (%s that, %s)" % ("below" if low else "above", low or high)
+    return ""
 
 
 def tell(ctx, fields, ok, floor=False):
@@ -254,7 +361,9 @@ def tell_sizes(ctx, fields, names, ok):
             try:
                 values = variable_values(dict(variables, **{name: repr(float(x))}))
                 numbers = _numbers(fields, values)
-                return _shaped(fields, numbers) and bool(ok(numbers, size_env(ctx.table, {entry.name: x})))
+                if not _shaped(fields, numbers):
+                    return Stop(SHAPE_ZERO)
+                return _checked(ok(numbers, size_env(ctx.table, {entry.name: x})))
             except (ExpressionError, ArithmeticError, ValueError):
                 return False
 
@@ -284,14 +393,15 @@ def _tell(ctx, found, near, floor=False, sizing=()):
         return told, untold
     by_variable = {ctx.names.get(e.size_name): e for e in ctx.table.entries if e.size_name}
     variables = ctx.variables()
-    for name, (low, high) in found.items():
+    for name, span in found.items():
+        low, high = span
         entry = by_variable.get(name)
         if entry is None:
             untold.append(name)
             continue
         unit = {"length": " mm", "angle": " degrees"}.get(entry.kind, "")
         text = words(name, low, high, _free(variables.get(name)) if name in variables else entry.value, unit, near,
-                     floor or name in sizing)
+                     floor or name in sizing, getattr(span, "why", (None, None)))
         if text is None:
             continue
         where = ctx.follows.setdefault(entry.name, [])

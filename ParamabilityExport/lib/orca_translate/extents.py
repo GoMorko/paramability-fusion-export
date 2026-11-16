@@ -286,14 +286,15 @@ def guard(ctx, sketch, feature, side, outer):
     def ok(numbers):
         distance, distance2, taper_deg, width, height, radius = numbers
         if reaches[0] and not distance > _SIGN_TOL or reaches[1] and not distance2 > _SIGN_TOL:
-            return False
+            return limits.Stop(limits.END_PASSES_START)
         if not tapered or not taper_deg:
             return True
         deg = -taper_deg if feature.flip else taper_deg
         if abs(deg) >= _TAPER_MAX or distance <= 0:
             return False
         loop = drawn_loop(sketch, outer, width, height, radius)
-        return not isinstance(taper_gap(loop, deg > 0, distance * math.tan(math.radians(abs(deg)))), str)
+        gap = taper_gap(loop, deg > 0, distance * math.tan(math.radians(abs(deg))))
+        return limits.stop(not isinstance(gap, str), limits.TAPER_CLOSES)
 
     limits.guard(ctx, fields, ok, "%s: the Orca copy cannot tell how far this may change before Orca builds the "
                  "extrude wrong" % name)

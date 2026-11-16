@@ -322,7 +322,8 @@ def _cells_checked(planned, spec, points, cuts, node):
 
 
 def holds(planned, specs, env):
-    """True when the corner tools `specs` give the rounded outline at the size values `env`: each corner keeps its
+    """True when the corner tools `specs` give the rounded outline at the size values `env`, else `limits.Stop` with
+    the first check that fails (False when a formula cannot be worked out there): each corner keeps its
     kind and turns by more than `_TURN_MIN` and less than 180 degrees less that, each size stays above `SIZE_MIN`, a
     chamfer set by an angle stays on a square corner, what the corners take from each side fits on it, each tool
     lies inside the outline's block, and inside each tool the body it is cut from is the corner alone. The outline's
@@ -334,11 +335,11 @@ def holds(planned, specs, env):
             local = spec.env(env)
             tau = spec.tau.value(local)
             if (1 if tau > 0 else -1) != spec.sign or not _TURN_MIN < abs(tau) < 180.0 - _TURN_MIN:
-                return False
+                return limits.Stop(limits.CORNER_TURNS)
             if spec.square and abs(abs(tau) - 90.0) > 1e-6:
-                return False
+                return limits.Stop(limits.CORNER_NOT_SQUARE)
             if spec.r.value(local) <= SIZE_MIN:
-                return False
+                return limits.Stop(limits.CORNER_TOO_SMALL)
             reach = spec.reach().value(local)
             for side in (spec.side_a.index, spec.side_b.index):
                 taken[side] = taken.get(side, 0.0) + reach
@@ -346,7 +347,7 @@ def holds(planned, specs, env):
         for side, reach in taken.items():
             a, b = points[side], points[(side + 1) % n]
             if math.hypot(b[0] - a[0], b[1] - a[1]) - reach < -_GONE:
-                return False
+                return limits.Stop(limits.SIDE_TAKEN)
         found = nodes(planned.tree)
         limit = planned.half * (1.0 - 0.05)
         for spec in specs:
@@ -354,9 +355,9 @@ def holds(planned, specs, env):
             corners = _corners_of(_lines_at([cut[:2] for cut in spec.cuts()], local))
             if corners is None or any(abs(p[0] - planned.centre[0]) > limit or abs(p[1] - planned.centre[1]) > limit
                                       for p in corners):
-                return False
+                return limits.Stop(limits.OUTLINE_TOO_LARGE)
             if not _cells_hold(planned, spec, points, local, found[spec.label]):
-                return False
+                return limits.Stop(limits.CORNER_MEETS)
     except _MATH_ERRORS:
         return False
     return True
@@ -446,7 +447,7 @@ def walk(ctx, planned, specs):
 
         if not fits(entry.value):
             return entry.name
-        low, high = limits.bounds(fits, entry.value)
-        if low is not None or high is not None:
-            found[ctx.names[entry.size_name]] = (low, high)
+        span = limits.bounds(fits, entry.value)
+        if span != (None, None):
+            found[ctx.names[entry.size_name]] = span
     return found
