@@ -13,7 +13,8 @@ from ..step_walk import moved_later
 
 MAX_REFERENCES = 64
 
-# Finish fields that a copy cannot carry; the translator never writes them.
+# Finish fields that a pattern or mirror copy cannot carry: a changing radius (`sizeEnd`) starts at the end of its
+# edge lowest along x, which a turned or mirrored copy may swap.
 UNCOPYABLE_FINISH_KEYS = ("sizeEnd",)
 
 

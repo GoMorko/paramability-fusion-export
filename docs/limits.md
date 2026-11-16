@@ -48,6 +48,16 @@ What the copy can and cannot do, step by step. The README lists only the main li
   equal angles keep their numbers, since the copy cannot tell their sides apart at other sizes. The angle on the far
   side of the sketch keeps its number when the axis is projected onto the sketch or moves with sizes.
 - A round with two different radii (Fusion's "asymmetric" rounds) is left out by both exports.
+- A round set by chord length is copied as a plain round. Its radius is the one the chord length gives at the angle
+  where the two faces meet. That angle must be the same along each edge, and the radius Fusion made must match.
+  The radius follows the chord length size only while no size can turn the faces (faces of plain extrudes of the
+  part). Otherwise the copy writes the radius as a number: the chord length is not a size, and each size that may
+  turn the faces is marked "may give unexpected results".
+- A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet, with
+  no radii set between the two ends, and only when the radius Fusion made changes evenly from one end to the other
+  (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a
+  tool body. A size that may swap which end of the edge lies lowest along x, y and z is marked "may give unexpected
+  results". The Orca export leaves both kinds out.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
@@ -89,8 +99,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
   does not confirm when that face is not the end of the extrude, a cut whose measured end lies short of its side when
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
-  plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds with variable or chord length
-  sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
+  plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
+  along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes
+  along the edge, rounds with curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset

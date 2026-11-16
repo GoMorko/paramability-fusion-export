@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from lib.fusion_reader.capture import read_capture
 from tests.fakes import install_adsk_core
-from tests.test_capture_reader import (Coll, FakeDesign, Obj, P, body, entry, feature, matrix, param,
+from tests.test_capture_reader import (CM, Coll, FakeDesign, Obj, P, body, entry, feature, matrix, param,
                                        sketch_entry)
 
 
@@ -153,6 +153,80 @@ class UnevenChamferTest(unittest.TestCase):
         data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll([edge_set]),
                                  faces=Coll([cut_face((5, 1, 0), (0, -1, 1))])))
         self.assertFalse({"sides", "cut_normals"} & set(data["sets"][0]["edges"][0]))
+
+
+def flat_face(point, normal):
+    """A flat face through `point` (mm) whose outward normal is `normal`."""
+    return Obj("fusion::BRepFace", pointOnFace=P(*point), geometry=Obj("core::Plane"),
+               evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=normal[0], y=normal[1], z=normal[2]))))
+
+
+def top_front_edge(faces):
+    """The straight edge from (0, 0, 10) to (40, 0, 10) mm between `faces`; its parameter is its x (mm)."""
+    evaluator = Obj(getParameterExtents=lambda: (True, 0.0, 40.0), getPointAtParameter=lambda t: (True, P(t, 0, 10)),
+                    getTangent=lambda t: (True, Obj(x=2.0, y=0.0, z=0.0)))
+    return Obj("fusion::BRepEdge", entityToken="e1", evaluator=evaluator, startVertex=Obj(entityToken="v1"),
+               endVertex=Obj(entityToken="v2"), geometry=Obj("core::Line3D"), faces=Coll(faces))
+
+
+def round_face(radius_at, largest_along=False):
+    """A round face on which every point is its own nearest point; `radius_at(x)` (mm) is its radius across the
+    edge. With `largest_along` the larger curvature runs along the edge (a tight bend), so the radius across is the
+    smaller curvature."""
+    def curvature(p):
+        across = 1.0 / (radius_at(p.x / CM) * CM)
+        if largest_along:
+            return True, Obj(x=1.0, y=0.0, z=0.0), across * 4, across
+        return True, Obj(x=0.0, y=0.6, z=0.8), across, 0.0
+    evaluator = Obj(getParameterAtPoint=lambda p: (True, p), getPointAtParameter=lambda uv: (True, uv),
+                    isParameterOnFace=lambda uv: True, getCurvature=curvature)
+    return Obj("fusion::BRepFace", evaluator=evaluator)
+
+
+class MeasuredRoundTest(unittest.TestCase):
+    """Chord length and changing radius sets: samples along each edge before the step, the round's radius after."""
+
+    def setUp(self):
+        core = install_adsk_core()
+        core.Point3D = type("Point3D", (), {"create": staticmethod(lambda x, y, z: Obj(x=x, y=y, z=z))})
+
+    def test_a_chord_length_set_samples_the_faces_and_measures_the_round_across_the_edge(self):
+        faces = [flat_face((20, 10, 10), (0, 0, 1)), flat_face((20, 0, 5), (0, -1, 0))]
+        edge_set = with_edges("ChordLengthFilletEdgeSet", [top_front_edge(faces)],
+                              chordLength=Obj(value=0.2, name="d5", expression="chord_mm"))
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set]),
+                                 faces=Coll([round_face(lambda x: 1.5)])))
+        (entry,) = data["sets"]
+        self.assertEqual((entry["kind"], entry["chord_length"]), ("chordLength", 2.0))
+        self.assertEqual(data["params"]["sets.0.chord_length"]["expression"], "chord_mm")
+        (record,) = entry["edges"]
+        self.assertEqual(record["curve"], "Line3D")
+        self.assertEqual([(s["at"], s["point"]) for s in record["samples"]],
+                         [(0.0, [0, 0, 10]), (0.25, [10, 0, 10]), (0.5, [20, 0, 10]), (0.75, [30, 0, 10]),
+                          (1.0, [40, 0, 10])])
+        self.assertEqual(record["samples"][0]["sides"], [[0, 0, 1], [0, -1, 0]])
+        self.assertEqual(record["side_faces"][1], {"face_point": [20, 0, 5], "surface": "Plane", "normal": [0, -1, 0]})
+        self.assertEqual({s["radius"] for s in record["samples"]}, {1.5})
+
+    def test_a_changing_radius_set_reads_both_radii_its_mid_points_and_the_radius_along_the_edge(self):
+        edge_set = with_edges("VariableRadiusFilletEdgeSet", [top_front_edge([])], startRadius=param(0.1),
+                              endRadius=param(0.3), midPositions=Coll([]))
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set]),
+                                 faces=Coll([round_face(lambda x: 1 + x / 20, largest_along=True)])))
+        (entry,) = data["sets"]
+        self.assertEqual((entry["start_radius"], entry["end_radius"], entry["mid_count"]), (1.0, 3.0, 0))
+        (record,) = entry["edges"]
+        self.assertNotIn("sides", record["samples"][0])
+        self.assertEqual([s["radius"] for s in record["samples"]], [1.0, 1.5, 2.0, 2.5, 3.0])
+
+    def test_unreadable_mid_points_and_a_sample_that_fails_read_as_null(self):
+        broken = top_front_edge([])
+        broken.evaluator.getTangent = lambda t: (False, None)
+        edge_set = with_edges("VariableRadiusFilletEdgeSet", [broken], startRadius=param(0.1), endRadius=param(0.3))
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set])))
+        (entry,) = data["sets"]
+        self.assertIsNone(entry["mid_count"])
+        self.assertNotIn("samples", entry["edges"][0])
 
 
 class ShellTest(unittest.TestCase):

@@ -1127,7 +1127,8 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `taperCutBothWays` | a tapered cut through all, both ways | Make two tapered cuts through all, one for each way, or give the cut a distance. |
 | `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
-| `roundKind` | a round of a kind the copy does not write | Use a fillet with one radius. |
+| `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
+| `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
 | `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
 | `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
@@ -1753,7 +1754,7 @@ one folder per family of steps.
     the copies, the grid index, the reach of a symmetric direction and the mirror plane is in
     `design_model/steps/repeat.py`. The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
-  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `draft.py`, `offset.py`.
+  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py`.
   - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
@@ -1976,7 +1977,19 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     measured point) and `foreign` (an edge is on another component). `entry` is the capture dict, for the picks that
     read the faces or the tangent chains that Fusion was given.
   - `RoundSet` adds `radius` and `continuity`. The kinds are `CONSTANT`, `VARIABLE`, `CHORD_LENGTH` and `ASYMMETRIC`.
-    A value that is not a positive number reads as None.
+    A value that is not a positive number reads as None. A `CHORD_LENGTH` set also has `chord`. A `VARIABLE` set also
+    has `start` and `end` (the radii at the two ends of the edge) and `mid_count` (the number of radii between the
+    ends). `chord_size` and `end_sizes` give these values as `Quantity`s.
+  - The functions for the samples along an edge (`samples` of an edge record, 3.16):
+    - `face_angle` gives the angle between the normals of the two faces of the edge. It gives None when the angle
+      changes by more than `FACE_ANGLE_TOL` along the edge, or when a sample has no normals.
+    - `chord_radius` gives the radius that a chord length gives at an angle. It gives None when the faces are almost
+      flat into each other or folded back (`FACE_ANGLE_RANGE`).
+    - `matches_radius` tells if the radius that the reader measured at each sample is a given radius, within
+      `RADIUS_TOL` plus `RADIUS_SHARE` of the radius. It can skip the samples at the two ends of the edge.
+    - `law` tells how a radius that changes from `start` to `end` runs along the edge: `FROM_START`, `FROM_END`,
+      `LEVEL` (the two radii are equal, so the samples cannot tell) or None (the change is not even, or a sample is
+      missing).
   - `ChamferSet` adds `distance`, `other` (the second distance), `angle` and the facts that come from them. The kinds
     are `EQUAL`, `TWO_DISTANCES` and `DISTANCE_ANGLE`. `problem` says what a set lacks (`NO_SIZE`, `NO_ANGLE`,
     `UNKNOWN_KIND`). `even` is true when both sides of the cut have the same size: two equal distances, or a distance
@@ -2097,6 +2110,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   solver (the default reading, `sketch_solve`) gives its two ends a gap of zero across or along, or a constant gap.
   Otherwise the line can turn, and the general sizes stay. Without a match, `direction_sizes` gives
   `reach.direction_sizes`.
+  `angle_sizes` gives the sizes that can change the angle between two faces of the part, for a round by chord length
+  (3.16). Each face record has a point, a surface kind and an outward normal. When each face is a flat face that a
+  straight extrude of a plain part made (an end face or a side face, as above), the faces turn only with the sketch
+  planes of the extrudes. Then `angle_sizes` gives the sizes of these planes. Otherwise it gives
+  `reach.any_face_sizes`: every size that a step before the round reads.
   `through_sizes` gives the sizes that can change the thickness of the part where a hole goes through. The thickness
   is the same at all positions of the hole only when all of these conditions are true:
   - the part is plain before the hole;
@@ -3653,6 +3671,109 @@ the same plane, so they touch. The recipe writes the two sides as one `toolBody`
 that is already nested as deep as the cap (`tool_walk.MAX_DEPTH`) cannot hold one more level, so the step is left
 out. An intersect with more than one outline is left out.
 
+### 3.16 How a round by chord length or with a changing radius is translated
+
+Fusion has two more kinds of fillet sets that the copy can write as a `round` step:
+
+- A chord length set (`ChordLengthFilletEdgeSet`). The person gives the chord length: the distance between the two
+  lines where the round touches its faces.
+- A changing radius set (`VariableRadiusFilletEdgeSet`). The person gives a radius at the start of the edge and a
+  radius at its end, and can give more radii between the ends.
+
+The API does not give the radius of a chord length round. The API also does not say how a changing radius changes
+between the ends. Thus the copy measures what Fusion made.
+
+#### What the reader measures
+
+The reader (`fusion_reader/read_finish.py`) reads each edge of these sets at five places along the edge: at 0, 0.25,
+0.5, 0.75 and 1 of its parameter range (`SAMPLE_FRACTIONS`). A closed edge has no sample at 1, because it starts
+there again. Each sample has:
+
+- the point and the direction of the edge there (`point`, `tangent`);
+- for a chord length set, the outward normals of the two faces of the edge at the point (`sides`);
+- after the step, the radius of the round at the point (`radius`).
+
+The radius is measured on the faces that the step made (`FilletFeature.faces`). The reader finds the round face that
+is nearest to the point. Then it reads the two main curvatures of the face there (`SurfaceEvaluator.getCurvature`).
+The curvature across the edge gives the radius. The reader uses the curvature whose direction is more across the
+edge than along it. The other curvature comes from the bend of the edge itself. A sample that the reader cannot
+measure has a null radius.
+
+The reader also reads the kind of curve of the edge (`curve`). For a chord length set, it records the two faces of
+the edge (`side_faces`): a point on each face, the surface kind and the outward normal.
+
+#### A chord length set
+
+The radius of a round between two faces is r = c / (2 sin(a / 2)). Here c is the chord length and a is the angle
+between the outward normals of the two faces. For faces at a square corner, a is 90 degrees and r is c divided by
+the square root of 2.
+
+The handler (`finishes/measured_rounds.py`, `chord_sizes`) does these steps for each edge:
+
+1. It reads the angle a at each sample (`face_angle`). The angle must be the same along the edge, within 0.05
+   degrees. If the angle changes, the radius changes along the edge too. The recipe has no such round, so the step
+   becomes a gap (cause `roundKind`).
+2. It calculates the radius from the chord length and the angle (`chord_radius`).
+3. It compares this radius with the radius that the reader measured on the round (`matches_radius`). It uses only
+   the samples between the ends, because at an end the round can meet another round of the same step. When the
+   radii are not the same, the step becomes a gap. This check makes sure that the formula above is the rule that
+   Fusion uses.
+
+Edges with different angles get different radii. The step then writes `edgeSizes`.
+
+The radius follows the size of the chord length only when no size can turn the faces. The handler asks
+`design_model/edges.py` (`angle_sizes`) for the sizes that can change the angle between the faces of each edge:
+
+- When there are no such sizes, the radius is the chord length times a constant number (1 / (2 sin(a / 2))). The
+  formula is exact at all sizes.
+- When there are such sizes, the radius is written as a number. The chord length is pinned
+  (`values.pin`): its sizes are not sizes of the copy, and the reason says that the copy writes the radius. Each
+  size that can turn the faces is marked "may give unexpected results". The first translation of an export marks
+  nothing.
+
+The handler writes one point for each edge. It does not use the picks that Fusion was given (the faces of the set, or
+a tangent chain). At other sizes, such a pick can include an edge that has a different angle, and thus a different
+radius.
+
+#### A changing radius set
+
+The recipe has `sizeEnd` (recipe version 5): the radius changes evenly along the edge, from `size` at the end of the
+edge that is lowest along x (then y, then z) to `sizeEnd` at the other end. The app reads the ends in the axes of the
+recipe, after the move into the assembly (`place.place`).
+
+The handler (`changing`) writes such a round only when all these conditions are true:
+
+- The set is the only set of the step. Sets of one step are made together in Fusion. Steps one after the other can
+  make different corners.
+- The set has one edge, and that edge is a straight line or an arc (`EVEN_CURVES`). Along these curves, the fraction
+  of the parameter range is the fraction of the length.
+- The set has no radii between the ends (`mid_count` is 0). The recipe has no round with more than two radii.
+- The step is not in a tool body (`ctx.outer` is None). A tool body is moved into place, and the move can change
+  which end is lowest.
+- The radii that the reader measured at the five samples change evenly from one end to the other (`law`). Fusion can
+  blend the radius in a smooth curve. Then the step becomes a gap (cause `roundKind`).
+
+The measured radii also tell which end of the edge has the start radius. The handler does not use the direction of
+the edge in Fusion, because the API does not say how Fusion relates it to the start radius.
+
+Then the handler finds the end that the app starts from (`end_order`):
+
+1. It takes the points of the two ends. When earlier steps move these points with the sizes, the points are formulas
+   (`follow.follow_points`).
+2. It turns the gap between the two ends into the axes of the recipe (`rigid.move_for`).
+3. Along x, then y, then z: a gap of at most 0.000001 mm is level, as in the app, and the next axis decides. A gap of
+   less than 0.001 mm on the axis that decides is too small to tell. Then the step becomes a gap.
+4. When a gap is a formula, the range check (`range_check.sweep`) tells if the gap keeps its sign over the size
+   ranges, and if a level gap stays level. If not, its sizes are marked "may give unexpected results", because the
+   app could then start from the other end.
+
+When the two radii are equal now, the samples cannot tell the ends apart (`LEVEL`). When the two radii are the same
+value (the same formula), the step is a plain round. Otherwise the radius is written as a number, and the two radii
+are pinned.
+
+A pattern or a mirror cannot repeat a round with `sizeEnd` (`repeat/repeat_sources.py`, `UNCOPYABLE_FINISH_KEYS`): a
+turned or mirrored copy can swap the ends. The Orca output leaves both kinds of sets out.
+
 ## 4. Debugging
 
 ### 4.1 What you need
@@ -4061,6 +4182,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
 | `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
+| `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null, and the round is left out. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |

@@ -148,10 +148,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     as before; if not, a message box names the step and says to use Undo.
 
 14. LP1, the list before the export. Extrude a 40 by 30 by 20 mm box. Round one vertical edge with a variable radius (a
-    different radius at each end). Then round the top edges with 1 mm, which includes the edge between the top and
-    the face the variable round made. Add a second body, a plain box with no such step.
+    different radius at each end and a third radius at its middle). Then round the top edges with 1 mm, which includes
+    the edge between the top and the face the variable round made. Add a second body, a plain box with no such step.
     Export: pick the first box and do not click OK. Under the body picker a box lists the variable round with the
-    reason and "Tip: Use a fillet with one radius.", and says "More may show after the export." (the 1 mm round picks
+    reason and "Tip: Give the changing radius a fillet of its own with one edge and no radii between the ends.", and
+    says "More may show after the export." (the 1 mm round picks
     faces that only the export can check). Pick the second box: the list is gone. Pick both: the list starts with
     the first box's name and says "More may show" once. The Text Commands window has a line "warning under the body
     picker: ... s; reading the steps of the picked bodies: ... s". Then click OK on the first box: the Saved window
@@ -507,3 +508,21 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     face of the shelf. The first post is copied and matches the STEP. The second post is left out with "its outline
     may reach past that face"; note where Fusion ended it. Turn Chain Faces off on the second post: it is copied and
     ends on the plane of the shelf bottom, as Fusion then makes it.
+49. CR1, a round set by chord length. Model a 40 x 20 x 10 mm box with its corner at the origin, and add user
+    parameter `Chord` = 3 mm. Round the four top edges with a fillet whose type is Chord Length, chord length `Chord`.
+    On a second box, draw a triangle on the XZ plane with corners (0, 0), (30, 0) and (0, 20), extrude it 40 mm, and
+    round its slanted top edge the same way.
+    Export: export the first box with `Chord` ticked. In `report.json` each edge of the fillet set has five `samples`,
+    each with a `radius` of 2.121 mm (3 divided by the square root of 2). The recipe has one round of
+    `0.707106781 * Chord`, and `Chord` is a size. Change `Chord` to 5 in Paramability: the round grows like Fusion's.
+    Export the second box: the radius is 3 / (2 sin(a / 2)), where a is the angle between the slanted face and the
+    face beside it, and matches the measured `radius`. If the measured radius differs, note both numbers.
+50. VR1, a variable radius: is Fusion's change even? Model a 60 x 20 x 20 mm box with its corner at the origin.
+    Round the front top edge (along X) with a fillet whose type is Variable Radius: 1 mm at the start, 5 mm at the
+    end, no radii between them. On a copy, round the same edge with 5 mm at the start and 1 mm at the end.
+    Export: export each box. In `report.json` the fillet set has `start_radius`, `end_radius` and `mid_count` 0, and
+    the edge has five `samples` with a `radius`. Note the five radii. When they are 1, 2, 3, 4 and 5 (or the other
+    way round) within 0.01 mm, Fusion's change is even: the recipe has a round with `size` at the end with the lower
+    x and `sizeEnd` at the other, and the round in Paramability looks like Fusion's. When the middle radii are off
+    the straight line (for example 1.6 and 4.4 at a quarter and three quarters), Fusion blends in a curve: the round
+    is left out with the reason that the radius does not change evenly. Note the measured radii in both cases.

@@ -112,8 +112,9 @@ can be.
 | Press Pull of a flat face (Offset Faces) | Copied | - | Left out | Needs Orca | Paramability: not two faces that meet, not a face with a leaning or rounded side. |
 | Press Pull of a curved face | Left out | Yes, needs an app change | Left out | Needs Orca | The app moves flat faces only. |
 | Fillet: constant radius | Copied | - | Partly | Needs Orca | Orca: only when the edges are all, top, bottom or side edges of the part, or corners of straight extrudes. Other edges are left out, because Orca names edges by its own numbering. |
-| Fillet: variable radius | Left out | Yes, add-in only | Left out | Needs Orca | The app has a round whose radius changes steadily along an edge. |
-| Fillet: chord length, two radii, curvature continuity | Left out | Yes, needs an app change | Left out | Needs Orca | |
+| Fillet: variable radius | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one straight or arc edge alone in its fillet, no radii between the ends, and only when the radius changes evenly along the edge. Radii between the ends need an app change. |
+| Fillet: chord length | Partly | - | Left out | Needs Orca | Paramability: a plain round of the radius the chord gives, where the faces meet at the same angle along each edge. |
+| Fillet: two radii, curvature continuity | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Fillet: setback corners | Partly | Yes, needs an app change | Partly | Needs Orca | Copied with rolling ball corners, with a note. |
 | Rule Fillet, Full Round Fillet | Left out | Yes, add-in only | Left out | Needs Orca | The add-in does not read these step types yet. |
 | Chamfer: equal distance | Copied | - | Partly | Needs Orca | Orca: the same edges as for a fillet. |
@@ -187,8 +188,8 @@ can be.
 
 Sorted by how many printing projects it helps:
 
-1. Rounds and chamfers of more kinds: variable radius (add-in only), chord length, two radii, Rule Fillet and Full
-   Round Fillet.
+1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
+   Fillet and Full Round Fillet.
 2. Thin extrudes of an open line, Rib and Web (add-in only): walls, brackets and stiffeners.
 3. Box, Cylinder, Sphere, Torus and Pipe (add-in only), and extrudes that make a new component (add-in only).
 4. Join or new body extrudes through all (app change).

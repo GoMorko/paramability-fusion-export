@@ -1,5 +1,6 @@
 """Edges and faces of the part matched to the straight extrudes that made them (`design_model/edges.py`): which sizes
-may turn a pattern direction taken from one, and which may change the thickness a hole goes through."""
+may turn a pattern direction taken from one, which may change the angle between two faces, and which may change the
+thickness a hole goes through."""
 import copy
 import unittest
 
@@ -103,6 +104,32 @@ class DirectionTest(unittest.TestCase):
             capture["parameters"]["model"].append(model("d21", "cube_mm", 1.0, kind="constructionPlane",
                                                         token="p1"))
         self.assertEqual(self.sizes(edge((40, -30, 10)), (0, 0, 1), boss), ["cube_mm"])
+
+
+def side(point, normal):
+    return {"face_point": list(point), "surface": "Plane", "normal": list(normal)}
+
+
+class AngleTest(unittest.TestCase):
+    def sizes(self, faces, edit=None):
+        capture = placed_hole_pattern()
+        if edit:
+            edit(capture)
+        return edges.angle_sizes(table_of(capture, BOX_TICKED), capture, capture["items"][-1], faces)
+
+    def test_the_top_and_a_side_of_a_plain_box_keep_their_angle(self):
+        self.assertEqual(self.sizes([side((0, 0, 32), (0, 0, 1)), side((40, 0, 10), (1, 0, 0))]), [])
+
+    def test_a_face_that_may_turn_or_is_not_described_keeps_the_general_sizes(self):
+        def unsolved(capture):
+            graph = capture["sketch_graphs"][0]
+            graph["constraints"] = [c for c in graph["constraints"] if c["id"] != 0]
+        top = side((0, 0, 32), (0, 0, 1))
+        cases = (("a side over a line that may turn", [top, side((0, -30, 10), (0, -1, 0))], unsolved),
+                 ("a face with no normal", [top, {"face_point": [40, 0, 10], "surface": "Plane"}], None),
+                 ("no faces", [], None))
+        for name, faces, edit in cases:
+            self.assertEqual(self.sizes(faces, edit), EVERY, name)
 
 
 class ThroughTest(unittest.TestCase):

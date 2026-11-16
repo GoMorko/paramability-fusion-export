@@ -5,7 +5,11 @@ sizes. This module reads a set and says only what is known about it; each destin
 reason to give and how to name the edges.
 
 - `RoundSet`: the kind (`CONSTANT`, `VARIABLE`, `CHORD_LENGTH`, `ASYMMETRIC`, or anything else Fusion has), the radius
-  and the smoothness of the join.
+  and the smoothness of the join; for a chord length set the chord, for a changing radius the radii at the two ends
+  and the number of radii set between them.
+- `face_angle`, `chord_radius`, `matches_radius`, `law`: what the samples of an edge (`samples` of the edge records)
+  show. The angle between the edge's two faces, the radius a chord length gives at that angle, whether the radius
+  measured on the round matches a radius, and how a changing radius runs along the edge.
 - `ChamferSet`: the kind (`EQUAL`, `TWO_DISTANCES`, `DISTANCE_ANGLE`), the first distance and the second measure
   (`second` when the two sides differ, `held` when it is a second way to write an even chamfer), and `problem` when
   a value cannot be read. `sides` splits the edges of an uneven chamfer by the face that takes the first distance,
@@ -98,17 +102,36 @@ class FinishSet:
 
 class RoundSet(FinishSet):
     """A set of a round. radius: the radius when it is a positive number, else None. continuity: how the round joins
-    its faces as read ("tangent", "curvature", "other"), or None."""
+    its faces as read ("tangent", "curvature", "other"), or None. chord: the chord length of a `CHORD_LENGTH` set.
+    start, end: the radii at the start and end of the edge of a `VARIABLE` set. mid_count: how many more radii a
+    `VARIABLE` set gives between them. Each is None when it is not a positive number (a count: a whole number)."""
 
     def __init__(self, index, entry):
         super().__init__(index, entry)
         radius = self.entry.get("radius")
         self.radius = radius if _positive(radius) else None
         self.continuity = self.entry.get("continuity")
+        chord = self.entry.get("chord_length") if self.kind == CHORD_LENGTH else None
+        self.chord = chord if _positive(chord) else None
+        start, end = (self.entry.get("start_radius"), self.entry.get("end_radius")) if self.kind == VARIABLE \
+            else (None, None)
+        self.start = start if _positive(start) else None
+        self.end = end if _positive(end) else None
+        count = self.entry.get("mid_count")
+        self.mid_count = count if isinstance(count, int) and not isinstance(count, bool) and count >= 0 else None
 
     def size(self, quantity):
         """The radius as a `Quantity`."""
         return quantity(self.path("radius"), self.radius, "length")
+
+    def chord_size(self, quantity):
+        """The chord length as a `Quantity`."""
+        return quantity(self.path("chord_length"), self.chord, "length")
+
+    def end_sizes(self, quantity):
+        """The radii at the start and at the end of the edge as `Quantity`s."""
+        return (quantity(self.path("start_radius"), self.start, "length"),
+                quantity(self.path("end_radius"), self.end, "length"))
 
     @property
     def reach(self):
@@ -226,6 +249,84 @@ class ChamferSet(FinishSet):
         if self._sides is _UNMEASURED:
             self._sides = _uneven_groups(self.edges, self.ratio)
         return self._sides
+
+
+# ---- rounds measured along their edges ----------------------------------------------------------------------
+
+# How far (degrees) the angle between the two faces of an edge may change along it.
+FACE_ANGLE_TOL = 0.05
+# The angle between the faces (degrees) a round by chord length needs: near 0 the faces run on into each other, near
+# 180 they fold back on each other.
+FACE_ANGLE_RANGE = (1.0, 179.0)
+# How far a measured radius may be from the radius it should have: mm, plus a share of that radius.
+RADIUS_TOL = 0.01
+RADIUS_SHARE = 0.002
+# How a changing radius runs along an edge (`law`): from the start radius at the edge's first sample, from the end
+# radius there, or the same at both ends (the two radii are equal, so the measured radii cannot tell).
+FROM_START, FROM_END, LEVEL = "fromStart", "fromEnd", "level"
+
+
+def samples(edge):
+    """The samples of an edge record that can be read: {at, point, tangent, ...} in order along the edge."""
+    found = edge.get("samples")
+    if not isinstance(found, list):
+        return []
+    return [s for s in found if isinstance(s, dict) and is_number(s.get("at")) and isinstance(s.get("point"), list)]
+
+
+def _angle_between(a, b):
+    return math.degrees(math.acos(max(-1.0, min(1.0, vec.dot(vec.unit(a), vec.unit(b))))))
+
+
+def face_angle(edge):
+    """The angle (degrees) between the outward normals of the edge's two faces when it is the same at every sample
+    (within FACE_ANGLE_TOL), else None. Also None when a sample has no two normals."""
+    found = samples(edge)
+    angles = []
+    for sample in found:
+        sides = sample.get("sides")
+        if not isinstance(sides, list) or len(sides) != 2 or not all(
+                isinstance(n, list) and len(n) == 3 and vec.length(n) > 0 for n in sides):
+            return None
+        angles.append(_angle_between(*sides))
+    if not angles or max(angles) - min(angles) > FACE_ANGLE_TOL:
+        return None
+    return sum(angles) / len(angles)
+
+
+def chord_radius(chord, angle):
+    """The radius of a round whose chord is `chord` (mm) between faces whose normals are `angle` degrees apart; None
+    outside FACE_ANGLE_RANGE."""
+    if not FACE_ANGLE_RANGE[0] <= angle <= FACE_ANGLE_RANGE[1]:
+        return None
+    return chord / (2.0 * math.sin(math.radians(angle) / 2.0))
+
+
+def _near(measured, wanted):
+    return is_number(measured) and abs(measured - wanted) <= RADIUS_TOL + RADIUS_SHARE * abs(wanted)
+
+
+def matches_radius(edge, radius_at, ends=True):
+    """True when the radius measured at every sample of the edge is `radius_at(at)` within the tolerance. `ends`
+    False skips the samples at the two ends of the edge, where the round may meet another round of the step. False
+    when no sample is checked."""
+    checked = [s for s in samples(edge) if ends or 0.0 < s["at"] < 1.0]
+    return bool(checked) and all(_near(s.get("radius"), radius_at(s["at"])) for s in checked)
+
+
+def law(edge, start, end):
+    """How a radius that changes from `start` to `end` runs along the edge, read from the radius measured at each of
+    its samples (at 0, 1/4, 1/2, 3/4 and 1): `FROM_START` when it changes evenly from `start` at the first sample to
+    `end` at the last, `FROM_END` the other way round, `LEVEL` when both fit (the radii are equal), None when neither
+    fits (it changes some other way, or a sample is missing)."""
+    found = samples(edge)
+    if [s["at"] for s in found] != [0.0, 0.25, 0.5, 0.75, 1.0]:
+        return None
+    forward = matches_radius(edge, lambda at: start + (end - start) * at)
+    backward = matches_radius(edge, lambda at: end + (start - end) * at)
+    if forward and backward:
+        return LEVEL
+    return FROM_START if forward else FROM_END if backward else None
 
 
 def round_sets(data):

@@ -852,7 +852,12 @@ against `samples`.
 ```
 
 - `kind`: `constant` (`ConstantRadiusFilletEdgeSet`: `radius`, `edges`, `isTangentChain`, `continuity`),
-  `variable`, `chordLength`, `asymmetric`, `other`.
+  `variable` (`VariableRadiusFilletEdgeSet`: `start_radius`, `end_radius` from `startRadius`, `endRadius`, and
+  `mid_count`, the number of `midPositions`), `chordLength` (`ChordLengthFilletEdgeSet`: `chord_length` from
+  `chordLength`), `asymmetric`, `other`. `continuity` is read for every kind but `other`. A value that cannot be
+  read is null. The parameters are in `params` as `sets.<n>.radius`, `sets.<n>.chord_length`,
+  `sets.<n>.start_radius` and `sets.<n>.end_radius`. Captures of add-in 0.13.0-preview.7 and older have none of the
+  `variable` and `chordLength` keys.
 - The reader expands the input: a face gives its `BRepFace.edges`; a tangent chain gives
   `BRepEdge.tangentiallyConnectedEdges`. A feature as input is listed in `input_kinds` as `feature` and not
   expanded.
@@ -863,6 +868,23 @@ against `samples`.
 - EDGE: `{ "token", "closed": bool, "points": [[..]] }`. `points` holds the middle point for an open edge and the
   points at 0.25 and 0.75 of the parameter range for a closed edge (`startVertex` equal to `endVertex`), from
   `BRepEdge.evaluator`.
+- An EDGE of a `variable` or `chordLength` set also has `curve`, the type of `BRepEdge.geometry` (`Line3D`, `Arc3D`,
+  `NurbsCurve3D` and so on), and `samples`: one record per place along the edge, at 0, 0.25, 0.5, 0.75 and 1 of its
+  parameter range (a closed edge leaves out 1):
+
+  ```json
+  { "at": 0.25, "point": [..], "tangent": [..], "sides": [[a], [b]], "radius": 1.5 }
+  ```
+
+  `point` and `tangent` (a unit vector) come from `BRepEdge.evaluator` (`getPointAtParameter`, `getTangent`).
+  `sides` (`chordLength` only) are the outward normals of the edge's two faces at the point, as for chamfers. After
+  the item, `radius` is the radius across the edge of the round face nearest to the point (`FilletFeature.faces`;
+  `getParameterAtPoint`, `getPointAtParameter`, `isParameterOnFace`, then `SurfaceEvaluator.getCurvature`): of the
+  two main curvatures there, the one whose direction lies more across the edge than along it, as 1 / curvature in
+  mm; null when it cannot be measured. A `chordLength` EDGE also has `side_faces`: per face of the edge
+  `{ "face_point", "surface", "normal" }` (`pointOnFace`, the surface kind, the outward normal there), which
+  `design_model/edges.py` matches to the extrudes that made them. An EDGE whose samples cannot be read has none of
+  these keys.
 
 **ChamferFeature** (`edgeSets`, `cornerType`):
 

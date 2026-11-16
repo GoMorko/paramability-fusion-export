@@ -469,7 +469,7 @@ builds agrees with the Fusion part.
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
       changed, note it). Cancel, and a forced error during the read, leave the marker where it was and the parameters
       as they were.
-- [ ] **Fixed shape**: a part with a coil, and one with a variable radius fillet. Each saves as a fixed shape
+- [ ] **Fixed shape**: a part with a coil, and one with a variable radius fillet that has a radius between its ends. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
 - [ ] **Y up**: a design made with the Y up preference, exported with "Y up". The plain part stands upright in
       Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
@@ -2071,6 +2071,12 @@ capture in `report.json`.
   (`cut_normals`). An edge without `cut_normals` makes the chamfer a fixed shape; check that a chamfer on a closed
   edge (a hole rim) gets two of each.
 - `FilletEdgeSet.isTangentChain` (default true when unreadable) and `FilletFeature.isRollingBallCorner`.
+- Chord length and variable radius sets (hand checks CR1 and VR1): `ChordLengthFilletEdgeSet.chordLength`,
+  `VariableRadiusFilletEdgeSet.startRadius`, `endRadius` and `midPositions` (a `ParameterList`, read for its count),
+  `FilletEdgeSet.continuity` on these sets, `BRepEdge.geometry` (the curve type), `CurveEvaluator3D.getTangent`; with
+  the marker after the item `FilletFeature.faces` and `SurfaceEvaluator.getCurvature` (the direction of the larger
+  curvature, then the larger and the smaller curvature, in 1/cm). Check that the measured `radius` of each sample is
+  the round's radius, not the bend of the edge.
 - `BRepEdge.tangentiallyConnectedEdges` and `BRepFace.tangentiallyConnectedFaces`: whether the list includes the edge
   or face itself (the reader adds it first and drops repeats, so both work). `BRepFace.edges`.
 - `ShellFeature.inputEntities` holding faces or a body, `isTangentChain`, `outsideThickness`.

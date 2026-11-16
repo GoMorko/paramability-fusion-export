@@ -17,6 +17,7 @@ TAPER_CUT_BOTH = "taperCutBothWays"
 EXTRUDE_END_FACE = "extrudeEndFace"
 THIN_OUTLINE = "thinOutline"
 ROUND_KIND = "roundKind"
+ROUND_CHANGING = "roundChanging"
 SHELL_KIND = "shellKind"
 REPEAT_FACES = "repeatFaces"
 SWEEP_KIND = "sweepKind"
@@ -61,6 +62,7 @@ HINTS = {
     EXTRUDE_END_FACE: "Start and end on flat faces or planes, or give a distance.",
     THIN_OUTLINE: "Draw one closed outline for the wall, or shell a solid body.",
     ROUND_KIND: "Use a fillet with one radius.",
+    ROUND_CHANGING: "Give the changing radius a fillet of its own with one edge and no radii between the ends.",
     SHELL_KIND: "Shell inward, with the open faces picked.",
     REPEAT_FACES: "Pattern or mirror the feature or the body.",
     SWEEP_KIND: "Use a twist or a taper alone, or a loft between two outlines.",
