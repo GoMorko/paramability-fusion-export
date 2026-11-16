@@ -1773,8 +1773,10 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     14): sets picked only by faces write `{ "faceEdges": <face selector of the face points> }`, every edge around
     those faces, and tangent chain sets picked only by edges write one point per `seed` edge with
     `"chain": "tangent"`. Both keep picking every edge when a size adds edges (more bumps along a rim) or splits
-    one, which one point per edge cannot. A step with part of a set, mixed inputs or sizes per edge keeps a point
-    per edge;
+    one, which one point per edge cannot, and both come before `featureEdges`. Tangent chain sets of different
+    radii in one round write one point per seed with `"chain": "tangent"` and `edgeSizes` (the app gives each chain
+    edge the size of its seed's point). A step with part of a set, mixed inputs, face sets of different sizes or chord
+    length and changing radius sets keeps a point per edge (or `featureEdges`) and marks the sizes read before the step;
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
   - a "to entity" reach to a moving end face writes its length as a formula. A construction plane follows what it is
     built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter

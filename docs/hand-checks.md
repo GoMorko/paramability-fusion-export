@@ -568,3 +568,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     change `Bore` to 5 mm: the thread of the counterbore hole starts 5 mm down and ends at the bottom of the hole.
     When `made_span` starts at 0 instead, Fusion starts its thread at the top: the holes are left out with "does not
     start at the top of the hole (or below its counterbore or countersink)". Afterwards the design is as before.
+53. RP1, one fillet with two tangent chains of different radii. Add a user parameter `Width` = 40 mm.
+    Sketch a 40 x 20 mm rectangle with its corner at the origin and width `Width`, and round two of its corners in
+    the sketch with arcs of 5 mm, so each long side runs on into an arc without a corner. Extrude it 10 mm. Make one
+    Fillet with two sets, both with Tangent Chain on: the first set picks the top front edge (radius 1 mm), the second
+    set picks the bottom back edge (radius 2 mm).
+    Export: tick `Width`. The recipe has one round with `chain: tangent`, two points and `edgeSizes` [1, 2], and
+    `Width` stays a size with no "may give unexpected results" for the fillet. In Paramability, change `Width` to 60
+    mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
+    fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
+    is as before.

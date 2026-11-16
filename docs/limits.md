@@ -55,10 +55,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   Otherwise the copy writes the radius as a number: the chord length is not a size, and each size that may turn or
   bend the faces is marked "may give unexpected results". On a ball shaped or ring shaped face, and on a round face
   along the edge, the radius also depends on how the face curves.
-- When Fusion picked the edges of a round set by chord length, or of a round whose radius changes along the edge,
-  from faces or from a chain of edges that touch smoothly, the copy picks the edges one by one. The sizes read before
-  the step are then marked "may give unexpected results": at other sizes the faces or the chain may hold other
-  edges, which the copy does not round.
+- When Fusion picked the edges of a round or chamfer from faces or from a chain of edges that touch smoothly, the
+  copy picks them the same way where it can: sets of one size picked only by faces or only by chains, and chains of
+  different radii in one round. Otherwise the copy picks the edges one by one, and the sizes read before the step
+  are marked "may give unexpected results": at other sizes the faces or the chain may hold other edges, which the
+  copy does not round. This happens for a round set by chord length, a round whose radius changes along the edge,
+  sets picked by faces and sets picked by chains in one step, sets of different sizes picked by faces, and a chamfer
+  with two different sizes whose edges take the first size on different faces.
 - A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet, with
   no radii set between the two ends, and only when the radius Fusion made changes evenly from one end to the other
   (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a

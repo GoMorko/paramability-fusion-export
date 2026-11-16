@@ -4,7 +4,8 @@ Edges and faces are picked by `near` points taken from the captured edge and fac
 picked faces move with sizes, the pick names the extrude that made them or its points follow the sizes (faces/follow.py).
 A step that holds whole Fusion sets picked by faces picks the edges around those faces (`faceEdges`), and one of
 whole tangent chain sets picks one point per chain (`chain: tangent`), so edges that a size adds or splits are
-still picked.
+still picked; tangent chain sets of different radii in one round keep one point per chain with `edgeSizes`. Edges
+picked one point each, from sets that Fusion picked by faces or chains, mark the sizes that may change those picks.
 A chamfer with two distances, or a distance and an angle, says which face takes the first distance (`sizeOn`); the
 reader measures it per edge (`sides`, `cut_normals`). Rounds set by chord length and rounds whose radius changes
 along the edge are worked out from what the reader measured along the edges (finishes/measured_rounds.py). What the
@@ -41,20 +42,28 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=(), own_pick=Tru
     size Quantity per point of the edges, in order; steps with mixed sizes carry `edgeSizes`. `extra` holds more fields
     of every step (the second measure of a chamfer). `sets` are the sets (`design_model.steps.finish`) the edges come
     from. `own_pick` False keeps Fusion's own picks (faces, tangent chains) out, for edges whose size depends on the
-    edge: an edge such a pick takes in at other sizes would get a size the copy cannot give it. The sizes that may
-    change which edges those picks hold are then marked (`_mark_own_picks`)."""
+    edge: an edge such a pick takes in at other sizes would get a size the copy cannot give it.
+
+    The copy picks the way Fusion did where the recipe can say it: whole sets of one size picked by faces or tangent
+    chains (`_input_pick`), and whole tangent chain sets of different radii in one round (`_chains_of_sizes`).
+    Otherwise it picks the edges of one extrude (`featureEdges`) or one point per edge; when a set was picked by
+    faces or tangent chains, the sizes that may change which edges those picks hold are then marked
+    (`_mark_own_picks`)."""
     extra = extra or {}
     even = all(s.same_as(sizes[0]) for s in sizes)
-    whole = follow.whole_edges(ctx, edges) if even else None
-    if whole is not None:
-        reads = next(p.followed_reads for p in ctx.placers if getattr(p, "id", None) == whole["featureEdges"])
-        return [_with_plain(dict({"kind": kind, "edges": whole, "size": sizes[0].json()}, **extra), edges, reads)]
     picked = _input_pick(ctx, item, edges, sets) if even and own_pick else None
     if picked is not None:
         step = dict({"kind": kind, "edges": picked, "size": sizes[0].json()}, **extra)
         return [_with_plain(step, edges, reads_in(picked), always=True)]
-    if not own_pick:
+    whole = follow.whole_edges(ctx, edges) if even else None
+    if whole is not None:
         _mark_own_picks(ctx, item, edges, sets)
+        reads = next(p.followed_reads for p in ctx.placers if getattr(p, "id", None) == whole["featureEdges"])
+        return [_with_plain(dict({"kind": kind, "edges": whole, "size": sizes[0].json()}, **extra), edges, reads)]
+    chained = _chains_of_sizes(ctx, item, edges, sizes, sets) if kind == "round" and own_pick and not even else None
+    if chained is not None:
+        return [chained]
+    _mark_own_picks(ctx, item, edges, sets)
     steps, at = [], 0
     for group in picks.edge_groups(edges):
         count = sum(len(edge["points"]) for edge in group)
@@ -65,6 +74,43 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=(), own_pick=Tru
             step["edgeSizes"] = [s.json() for s in own]
         steps.append(_with_plain(step, group))
     return steps
+
+
+def _chains_of_sizes(ctx, item, edges, sizes, sets):
+    """One round over whole tangent chain sets of different radii, or None. Fusion rounds the sets together; the
+    round writes one point per seed edge with `chain: tangent` and the radius of the seed's set in `edgeSizes`. The
+    app gives each edge of a chain the size of the point it grew from, so a chain that grows at other sizes keeps
+    its set's radius. The sets must be picked only by edges, hold no edge in common, each have one radius and a
+    seed, and their seeds must fit in one pick."""
+    found = _whole_sets(edges, sets)
+    if not found or not all(one.entry.get("input_kinds") == ["edge"] and one.entry.get("tangent_chain")
+                            for one in found):
+        return None
+    tokens = [edge.get("token") for one in found for edge in one.edges]
+    if not all(tokens) or len(set(tokens)) != len(tokens):
+        return None
+    size_of, at = {}, 0
+    for edge in edges:
+        count = len(edge.get("points") or [])
+        own = sizes[at:at + count]
+        at += count
+        if any(not s.same_as(own[0]) for s in own):
+            return None
+        size_of[id(edge)] = own[0] if own else None
+    seeds, seed_sizes = [], []
+    for one in found:
+        radii = [size_of.get(id(edge)) for edge in one.edges]
+        own_seeds = [edge for edge in one.edges if edge.get("seed")]
+        if None in radii or any(not r.same_as(radii[0]) for r in radii) or not own_seeds:
+            return None
+        seeds += own_seeds
+        seed_sizes += [radii[0]] * sets_of.point_count(own_seeds)
+    if not seed_sizes or len(seed_sizes) > picks.MAX_NEAR_POINTS:
+        return None
+    picked = dict(follow.edges_near(ctx, item, seeds), chain="tangent")
+    step = {"kind": "round", "edges": picked, "size": seed_sizes[0].json(),
+            "edgeSizes": [s.json() for s in seed_sizes]}
+    return _with_plain(step, seeds, reads_in(picked), always=True)
 
 
 def _picks_own_edges(one):
