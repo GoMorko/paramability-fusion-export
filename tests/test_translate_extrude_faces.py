@@ -119,6 +119,20 @@ class UpToFaceTest(unittest.TestCase):
         result = translate(slanted_post(lid_face(chained=True, face_outline=lid_outline())))
         self.assertIn("upTo", steps_of(result.recipe, "extrude")[-1]["extent"])
 
+    def test_a_curved_face_is_copied_only_when_every_outline_meets_it(self):
+        def roof(**more):
+            face = dict({"plane": None, "surface": "Cylinder", "outline_hits_face": True}, **more)
+            return slanted_post(lid_face(**face), end_offset=16.0)
+
+        self.assertIn("upTo", steps_of(translate(roof()).recipe, "extrude")[-1]["extent"])
+        for more in ({"chained": True}, {"outline_hits_face": False}, {"surface": "Plane"}):
+            with self.subTest(more=more):
+                result = translate(roof(**more))
+                self.assertIsNotNone(left_out(result, ITEM))
+                self.assertEqual(gap_cause(result), gap_hints.HINTS[gap_hints.EXTRUDE_END_FACE])
+        # At other values the outline may reach past the face.
+        self.assertEqual([entry["name"] for entry in sized(roof()).loose], ["lid_mm"])
+
     def test_orca_still_leaves_it_out(self):
         result = orca_translate.translate(slanted_post())
         self.assertEqual([g["index"] for g in result.left_out], [ITEM])

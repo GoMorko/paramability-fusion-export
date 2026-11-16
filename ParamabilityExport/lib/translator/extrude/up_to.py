@@ -9,10 +9,11 @@ that can happen:
 - a size that the person can change may move the face (`design_model.reach.reach_sizes`), and no step written before
   places the point on what it built (`faces.follow.placed_point`).
 
-The app has no taper and no offset past the face for such a side, and it extends a flat face to its whole plane. So a
-taper and an offset leave the side out too. Fusion may also stop at the faces next to a flat face (`chained` is not
-false); the side is then copied only when every outline lands on the face itself (`outline_on_face`), and the sizes
-that may carry it past the face are marked (`keep_on_face`, also for a side up to a face square to the sketch). A thin
+The app has no taper and no offset past the face for such a side, so a taper and an offset leave the side out too.
+Where Fusion may end the extrude on other faces than the app (the faces next to the face, or the surface of a curved
+face extended past its edges), the shared reader gives such a side only when every outline lands on the face itself
+(`design_model.steps.extrude`), and the sizes that may carry an outline past the face are marked here
+(`keep_on_face`, also for a side up to a face square to the sketch). A thin
 extrude never gets here (`faces/thin_wall.prepare` refuses it).
 """
 from ...capture_model import gap_hints
@@ -41,27 +42,29 @@ def _earlier_gaps(ctx, item):
 
 
 def keep_on_face(ctx, item, record):
-    """A side that ends on a face Fusion may chain to the faces next to it lands on that face alone at the measured
-    sizes; other values may carry the outline past it. The sizes that may move the face or the outline are marked."""
-    if not dm.joins_next_faces(record):
+    """A side that ends on a face where Fusion may also end it elsewhere lands on that face alone at the measured
+    sizes: a face Fusion may chain to the faces next to it, or a curved face whose surface Fusion extends past its
+    edges. Other values may carry the outline past the face, so the sizes that may move the face or the outline are
+    marked."""
+    if dm.joins_next_faces(record):
+        why = "ends on a face that Fusion joins with the faces next to it"
+    elif record.get("entity_type") == "BRepFace" and record.get("surface") in dm.CURVED_SURFACES:
+        why = "ends on a curved face"
+    else:
         return
     names = reach_sizes(ctx.table, ctx.timeline, item, record)
     if names:
-        ctx.doubt(names, "%s ends on a face that Fusion joins with the faces next to it, and at other values its "
-                  "outline may reach past that face" % item.get("name", "a step"))
+        ctx.doubt(names, "%s %s, and at other values its outline may reach past that face"
+                  % (item.get("name", "a step"), why))
 
 
-def up_to_side(ctx, item, data, side, z):
-    """The `RecipeSide` of an UP_TO side (`design_model.steps.extrude`), or a Refusal. `z` is the unit sketch
-    normal."""
+def up_to_side(ctx, item, side):
+    """The `RecipeSide` of an UP_TO side (`design_model.steps.extrude`), or a Refusal."""
     record = side.reach.record
     if side.taper:
         return _refusal(TAPER)
     if side.offset:
         return _refusal(OFFSET)
-    if side.reach.plane is not None and dm.joins_next_faces(record) and dm.outline_on_face(data, record, z) is not True:
-        found = dm.problem(dm.CHAINED, side.which)
-        return Refusal(found.words, cause=found.cause)
     body = record.get("body")
     if not body or not ctx.is_target(body):
         return _refusal(OTHER_BODY)
@@ -76,8 +79,7 @@ def up_to_side(ctx, item, data, side, z):
             return _refusal(MOVES)
     else:
         near = picks.face_points([{"point": point}])[0]
-    if side.reach.plane is not None:
-        keep_on_face(ctx, item, record)
+    keep_on_face(ctx, item, record)
     taper_quantity(ctx, item, side.taper_path, 0.0)
     values.pin(ctx, item, side.offset_path, "it sets how far %s reaches" % item.get("name", "a step"))
     return RecipeSide({"upTo": {"near": [near]}}, side.sign, None, 0.0, adjusts=True, read=side)

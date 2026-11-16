@@ -9,7 +9,7 @@ An extrude starts on its sketch plane, at an offset from it, or on a flat face o
   itself (`outline_on_face`), else it is a Problem (CHAINED).
 - UP_TO: up to a tilted or curved face of the part (`Target` with its `face_point`, its plane None when curved). Only a
   caller that asks (`read_sides(..., faces=True)`) gets it, for one side; for any other caller such a face stays a
-  Problem.
+  Problem. Where Fusion may end it elsewhere than on the face (`_up_to`), every outline must land on the face.
 - THROUGH: through all to one side.
 - THROUGH_BOTH: through all both ways (a symmetric extrude through all, or two sides through all). There is one plan
   per Fusion side, for the taper of each.
@@ -36,9 +36,8 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from ...capture_model import gap_hints
-from ...geometry import vec
+from ...geometry import region_inside, vec
 from ...geometry.combine_volume import profile_area
-from ...geometry.footprint import Footprint, polyline
 from ..problem import Problem
 from ..values import Quantity
 from .. import words
@@ -88,8 +87,12 @@ VOLUME_UNMEASURED = "volumeUnmeasured"
 VOLUME_DIFFERS = "volumeDiffers"
 WAY_UNSURE = "wayUnsure"
 CHAINED = "chained"
+FACE_UNREAD = "faceUnread"
+PAST_CURVED = "pastCurved"
 
 _THROUGH_KINDS = ("throughAll", "all")
+# The surfaces of a face record (`surface`, `read_geometry.surface_kind`) that are not flat.
+CURVED_SURFACES = ("Cylinder", "Cone", "other")
 # What a face or plane is to the extrude, by the capture field that holds it.
 _SLOT_WORDS = {"start": "starts from", "side_one": "ends on", "side_two": "ends on"}
 
@@ -115,6 +118,8 @@ _WORDS = {
     VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
     WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, None),
     CHAINED: (words.EXTRUDE_CHAINED, gap_hints.EXTRUDE_END_FACE),
+    FACE_UNREAD: (words.EXTRUDE_FACE_UNREAD, gap_hints.EXTRUDE_END_FACE),
+    PAST_CURVED: (words.EXTRUDE_PAST_CURVED, gap_hints.EXTRUDE_END_FACE),
 }
 
 
@@ -291,44 +296,33 @@ def _along(p, z, frame):
     return vec.frame_to_local(frame, on)[:2]
 
 
-def _points(region):
-    """The points along the loops of an outline or face record ({ frame, loops }), in model coordinates."""
-    return [vec.frame_apply(region["frame"], [u, v, 0.0]) for loop in region.get("loops") or []
-            for curve in loop.get("curves") or [] for u, v in polyline(curve)]
-
-
-def _inside(footprint, uv, strictly=False):
-    """True when `uv` lies in the region of `footprint` or on its edge; with `strictly`, inside and off its edge."""
-    gap = footprint.nearest_curve(uv)[1]
-    if strictly:
-        return gap > ON_FACE_TOL and footprint.covers(uv)
-    return gap <= ON_FACE_TOL or footprint.covers(uv)
-
-
 def outline_on_face(data, record, z):
     """Whether every outline of the extrude in `data`, moved along the unit sketch normal `z`, lands on the flat face
     `record` (its `face_outline`, `read_face.face_loops` at the step): True, False, or None when it cannot be told (no
-    face outline, an outline without loops, or a face along `z`).
+    face outline, an outline without loops or with a curve that does not read, or a face along `z`).
 
-    Every point along an outline must land in the face or on its edge, and no point of the face's edges may land
-    strictly inside an outline (a hole of the face, or the whole face, under the outline). Then the extrude ends on
-    that face alone, whether Fusion extends it or also takes the faces next to it."""
+    The face's loops are moved along `z` into the sketch plane of each outline, and the outline must lie in the face
+    region (outer loop less its holes) within `ON_FACE_TOL`: no edge of the face may cross it, and no hole of the face
+    may lie under it (`region_inside.inside`). Then the extrude ends on that face alone, whether Fusion extends it or
+    also takes the faces next to it."""
     face = record.get("face_outline")
     profiles = data.get("profiles") or []
     if not isinstance(face, dict) or not isinstance(face.get("frame"), dict) or not face.get("loops") or not profiles:
         return None
-    face_area = Footprint(face)
-    edges = _points(face)
+    exact = parallel(face["frame"]["z"], z)
     for profile in profiles:
         if not isinstance(profile, dict) or not isinstance(profile.get("frame"), dict) or not profile.get("loops"):
             return None
-        landed = [_along(p, z, face["frame"]) for p in _points(profile)]
-        back = [_along(p, z, profile["frame"]) for p in edges]
-        if not landed or any(uv is None for uv in landed + back):
+        frame = profile["frame"]
+        try:
+            loops = region_inside.moved_loops(
+                face["loops"], lambda uv: _along(vec.frame_apply(face["frame"], [uv[0], uv[1], 0.0]), z, frame), exact)
+            if loops is None:
+                return None
+            if not region_inside.inside(profile["loops"], loops, ON_FACE_TOL):
+                return False
+        except (IndexError, KeyError, TypeError, ValueError, ZeroDivisionError):
             return None
-        outline = Footprint(profile)
-        if not all(_inside(face_area, uv) for uv in landed) or any(_inside(outline, uv, True) for uv in back):
-            return False
     return True
 
 
@@ -356,9 +350,16 @@ def _through(side):
     return isinstance(side, dict) and side.get("kind") in _THROUGH_KINDS
 
 
-def _up_to(side, which, origin, z, taper, found):
-    """The UP_TO SidePlan of a side whose face is tilted or curved, or the Problem `found` when the record is not a
-    face of the part with a point on it. The side goes toward that point (`face_point`)."""
+def _up_to(data, side, which, origin, z, taper, found):
+    """The UP_TO SidePlan of a side whose face is tilted or curved, or a Problem. The side goes toward the face's
+    point (`face_point`). The record must be a face of the part with that point, else the Problem `found` stands.
+
+    The app extends a flat face to its whole plane and takes a curved face as it is, so the outline must land on the
+    face itself where Fusion may end the extrude elsewhere: on the faces next to the face (Chain Faces on, `chained`
+    not false), or on the surface of a curved face extended past its edges (Chain Faces off). A tilted flat face
+    is checked by its outline (`outline_on_face`); a curved face with Chain Faces on has no outline, and one with Chain
+    Faces off needs the reader's rays (`outline_hits_face`). A face without a plane whose surface is flat or unknown
+    is a Problem: it may be a flat face whose plane did not read."""
     point = side.get("face_point")
     if side.get("entity_type") != "BRepFace" or not (isinstance(point, list) and len(point) == 3
                                                      and all(_number(n) for n in point)):
@@ -368,7 +369,18 @@ def _up_to(side, which, origin, z, taper, found):
         return problem(ON_START, which)
     if "offset" in side and side["offset"] is None:
         return problem(UNREADABLE, which)
-    plane = side.get("plane") if found.code == TILTED else None
+    if found.code == TILTED:
+        plane = side.get("plane")
+        if joins_next_faces(side) and outline_on_face(data, side, z) is not True:
+            return problem(CHAINED, which)
+    else:
+        plane = None
+        if side.get("surface") not in CURVED_SURFACES:
+            return problem(FACE_UNREAD, which)
+        if joins_next_faces(side):
+            return problem(CHAINED, which)
+        if side.get("outline_hits_face") is not True:
+            return problem(PAST_CURVED, which)
     return SidePlan(UP_TO, which, sign_of(to), None, taper, Target(side, plane, to), float(side.get("offset", 0.0)),
                     stored=sign_of(to), fixed=True)
 
@@ -400,7 +412,9 @@ def _side(data, side, which, origin, z, measured, faces=False):
         return SidePlan(THROUGH, which, stored, None, taper, measured=measured, stored=stored)
     plane = _plane_of(side, z, which)
     if isinstance(plane, Problem):
-        return _up_to(side, which, origin, z, taper, plane) if faces and plane.code in (NOT_FLAT, TILTED) else plane
+        if faces and plane.code in (NOT_FLAT, TILTED):
+            return _up_to(data, side, which, origin, z, taper, plane)
+        return plane
     to = vec.dot(vec.sub(plane["point"], origin), z)
     if abs(to) < SIGN_TOL:
         return problem(ON_START, which)

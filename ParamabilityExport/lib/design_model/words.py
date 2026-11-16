@@ -124,6 +124,9 @@ EXTRUDE_ON_START = "This extrude ends on the surface it starts from."
 EXTRUDE_SAME_SIDE = "Both sides of this extrude end on the same side of its sketch, which is not copied."
 EXTRUDE_CHAINED = ("This extrude %s a face and the faces next to it, and its outline may reach past that face, so it "
                    "is not copied.")
+EXTRUDE_FACE_UNREAD = "Whether the face this extrude %s is flat or curved could not be read, so it is not copied."
+EXTRUDE_PAST_CURVED = ("This extrude %s a curved face, and its outline reaches past that face or could not be checked "
+                       "against it, so it is not copied.")
 EXTRUDE_WAY_UNSURE = "The face Fusion measured does not show which way this extrude goes, so it is not copied."
 EXTRUDE_START_OFFSET = "This extrude starts at a distance from a face or plane, which is not copied."
 TAPER_WAY = "The taper direction does not match what was measured, so it is not copied."

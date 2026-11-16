@@ -9,7 +9,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from ..geometry import vec
 from . import read_geometry as geo
-from . import read_intersect
+from . import read_face_rays, read_intersect
 from .param_refs import Params, with_params
 from .placement import foreign_target_ref, from_assembly, outline_in_target, ref_record
 from .read_bodies import tool_ref
@@ -58,6 +58,7 @@ def _target(definition, ctx, slot):
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     found.update(construction_token(entity))
     if found["entity_type"] == "BRepFace":
+        found["surface"] = geo.safe(lambda: geo.surface_kind(entity), None)
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
         body = geo.owner_body(entity, ctx)
         if body:
@@ -221,6 +222,9 @@ def extrude_before(feature, ctx):
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx, "side_two")
     operation = operation_of(feature.operation)
     profiles, areas = read_outlines(feature.profile, ctx, before=geo.safe(lambda: feature.timelineObject.index, None))
+    if extent_type == "one":
+        read_face_rays.mark_side(side_one, geo.native_input(geo.safe(lambda: feature.extentOne.entity, None), ctx),
+                                 profiles)
     data = {
         "operation": operation,
         "profiles": profiles,

@@ -1,9 +1,11 @@
 import json
 import math
+import types
 import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from tests.fakes import install_adsk_core
 from lib.fusion_reader import capture as capture_module
 from lib.fusion_reader import read_sketch
 from lib.fusion_reader.capture import CaptureReadError, read_capture
@@ -494,6 +496,27 @@ class ExtrudeDataTest(unittest.TestCase):
         chained = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=True))
         extended = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=False))
         self.assertEqual(("face_outline" in chained["side_one"], "face_outline" in extended["side_one"]), (True, False))
+
+    def test_a_curved_face_without_chained_faces_says_whether_every_outline_meets_it(self):
+        # The outline is the 40 x 20 mm rectangle at z 0; the face lies above it and reaches to x `reach` (mm).
+        core = install_adsk_core()
+        core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
+        core.Vector3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
+
+        def side(reach, chained=False):
+            other = Obj("fusion::BRepFace", entityToken="wall")
+            face = Obj("fusion::BRepFace", entityToken="roof", geometry=Obj("core::Cylinder"),
+                       pointOnFace=P(20, 10, 12))
+            rays = lambda start, way, kind, tol, visible: Coll([face if start.x <= reach / 10.0 + 1e-9 else other])
+            face.body = Obj(parentComponent=Obj(entityToken="root", findBRepUsingRay=rays))
+            extent = Obj("fusion::ToEntityExtentDefinition", entity=face, isChained=chained)
+            return self.read(extentOne=extent)["side_one"]
+
+        self.assertEqual(side(40.0)["surface"], "Cylinder")
+        self.assertIs(side(40.0)["outline_hits_face"], True)
+        self.assertIs(side(30.0)["outline_hits_face"], False)
+        # Fusion may also stop at the faces next to it: no rays are cast.
+        self.assertNotIn("outline_hits_face", side(40.0, chained=True))
 
     def test_a_start_on_a_face_measures_the_start_face_parallel_to_the_sketch(self):
         def face(z, normal):

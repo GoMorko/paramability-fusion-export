@@ -16,8 +16,13 @@ def plane_at(height, normal=(0.0, 0.0, 1.0), **more):
 
 
 def face_at(point, **more):
-    """A face of the part that a side reaches to: curved (no plane) unless `plane` is given."""
+    """A face of the part that a side reaches to, flat when `plane` is given."""
     return dict({"kind": "toEntity", "entity_type": "BRepFace", "offset": 0.0, "face_point": list(point)}, **more)
+
+
+def curved_at(point, **more):
+    """A curved face of the part with Chain Faces off that every outline meets."""
+    return face_at(point, **dict({"surface": "Cylinder", "chained": False, "outline_hits_face": True}, **more))
 
 
 def distance(value, **more):
@@ -145,19 +150,21 @@ class OneSideTest(unittest.TestCase):
         self.assertEqual(sides(one(plane_at(2.0, offset=-3.0))).code, dm.NO_LENGTH)
 
     def test_a_tilted_or_curved_face_of_the_part_is_an_up_to_side_only_when_asked(self):
-        tilted = face_at([2.0, 0.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]})
+        tilted = face_at([2.0, 0.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]}, chained=False)
         self.assertEqual(sides(one(tilted)).code, dm.TILTED)
         (found,) = dm.read_sides(one(tilted), FRAME, faces=True)
         self.assertEqual((found.kind, found.sign, found.length, found.reach.distance), (dm.UP_TO, 1, None, 8.0))
         self.assertEqual(found.reach.plane, tilted["plane"])
-        (found,) = dm.read_sides(one(face_at([0.0, 0.0, -6.0]), end_offset=-5.0), FRAME, faces=True)
+        (found,) = dm.read_sides(one(curved_at([0.0, 0.0, -6.0]), end_offset=-5.0), FRAME, faces=True)
         self.assertEqual((found.kind, found.sign, found.reach.plane), (dm.UP_TO, -1, None))
 
     def test_a_face_fusion_may_chain_is_read_only_when_every_outline_lands_on_it(self):
-        def rect(x0, y0, x1, y1, outer=True):
-            corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+        def ring(corners, outer=True):
             return {"outer": outer, "curves": [{"kind": "line", "start": a, "end": b}
                                                for a, b in zip(corners, corners[1:] + corners[:1])]}
+
+        def rect(x0, y0, x1, y1, outer=True):
+            return ring([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], outer)
 
         def face(*loops, chained=True):
             frame = {"origin": [0.0, 0.0, 8.0], "x": [1.0, 0.0, 0.0], "y": [0.0, -1.0, 0.0], "z": [0.0, 0.0, -1.0]}
@@ -172,6 +179,11 @@ class OneSideTest(unittest.TestCase):
             (face(rect(-1.0, 1.0, 3.0, -5.0)), dm.CHAINED),
             # A hole of the face under the outline.
             (face(rect(-1.0, 1.0, 5.0, -5.0), rect(1.0, -1.0, 2.0, -2.0, outer=False)), dm.CHAINED),
+            # A slot of the face crosses the outline, its corners and the outline's corners all outside the other: one
+            # open to the face's edge, one closed.
+            (face(ring([[-1.0, 1.0], [1.5, 1.0], [1.5, -4.5], [2.5, -4.5], [2.5, 1.0], [5.0, 1.0], [5.0, -5.0],
+                        [-1.0, -5.0]])), dm.CHAINED),
+            (face(rect(-1.0, 1.0, 5.0, -5.0), rect(1.5, 0.5, 2.5, -4.5, outer=False)), dm.CHAINED),
             (dict(face_at([1.0, 1.0, 8.0], plane={"point": [0, 0, 8.0], "normal": [0, 0, 1.0]}, chained=None)),
              dm.CHAINED),
             # Fusion extends the face to its plane: no outline is needed.
@@ -182,12 +194,50 @@ class OneSideTest(unittest.TestCase):
                 found = sides(one(side, profiles=[square]))
                 self.assertEqual(found.code if is_problem(found) else found[0].kind, kind)
 
+    def test_the_outline_of_a_tilted_face_is_moved_onto_the_sketch_along_the_sketch_normal(self):
+        # The face leans 45 degrees: the 4 mm square sketch lands on it 5.66 mm long (u 0 to 5.66, v 0 to 4). A slot
+        # of the face crosses it with no corner inside; a round hole beside it becomes an ellipse on the sketch.
+        r = 2 ** 0.5 / 2
+        frame = {"origin": [0.0, 0.0, 0.0], "x": [r, 0.0, -r], "y": [0.0, 1.0, 0.0], "z": [r, 0.0, r]}
+
+        def ring(*corners):
+            return [{"kind": "line", "start": a, "end": b} for a, b in zip(corners, corners[1:] + corners[:1])]
+
+        square = ring([0, 0], [4, 0], [4, 4], [0, 4])
+        data = {"profiles": [{"frame": FRAME, "loops": [{"outer": True, "curves": square}]}]}
+        face = ring([-1, -1], [7, -1], [7, 5], [-1, 5])
+        slot = ring([2.5, -0.5], [3, -0.5], [3, 4.5], [2.5, 4.5])
+        beside = [{"kind": "circle", "center": [6.3, 2.0], "radius": 0.5}]
+        for hole, lands in ((beside, True), (slot, False)):
+            with self.subTest(lands=lands):
+                record = {"face_outline": {"frame": frame, "loops": [{"outer": True, "curves": face},
+                                                                     {"outer": False, "curves": hole}]}}
+                self.assertIs(dm.outline_on_face(data, record, [0.0, 0.0, 1.0]), lands)
+
+    def test_a_face_without_a_plane_is_read_only_when_it_is_curved_and_every_outline_meets_it(self):
+        cases = [
+            (curved_at([0.0, 0.0, 6.0]), dm.UP_TO),
+            # A flat face whose plane did not read, or a face whose surface did not read.
+            (curved_at([0.0, 0.0, 6.0], surface="Plane"), dm.FACE_UNREAD),
+            (curved_at([0.0, 0.0, 6.0], surface=None), dm.FACE_UNREAD),
+            # Fusion may also stop at the faces next to it, which no outline of a curved face shows.
+            (curved_at([0.0, 0.0, 6.0], chained=True), dm.CHAINED),
+            (curved_at([0.0, 0.0, 6.0], chained=None), dm.CHAINED),
+            # Fusion extends the face where the outline reaches past it; the app takes the face as it is.
+            (curved_at([0.0, 0.0, 6.0], outline_hits_face=False), dm.PAST_CURVED),
+            (curved_at([0.0, 0.0, 6.0], outline_hits_face=None), dm.PAST_CURVED),
+        ]
+        for side, kind in cases:
+            with self.subTest(side=side):
+                found = dm.read_sides(one(side, end_offset=5.0), FRAME, faces=True)
+                self.assertEqual(found.code if is_problem(found) else found[0].kind, kind)
+
     def test_up_to_sides_that_stay_problems(self):
         tilted = {"point": [0, 0, 8.0], "normal": [1.0, 0.0, 1.0]}
         cases = [
             # A curved face can lie on both sides of the sketch: the measured end face must show the way.
-            (dm.WAY_UNSURE, one(face_at([0.0, 0.0, 6.0]), end_offset=-5.0)),
-            (dm.WAY_UNSURE, one(face_at([0.0, 0.0, 6.0]))),
+            (dm.WAY_UNSURE, one(curved_at([0.0, 0.0, 6.0]), end_offset=-5.0)),
+            (dm.WAY_UNSURE, one(curved_at([0.0, 0.0, 6.0]))),
             (dm.ON_START, one(face_at([3.0, 0.0, 0.0], plane=tilted))),
             (dm.TILTED, one(plane_at(8.0, normal=(1.0, 0.0, 1.0)))),
             (dm.TILTED, two(face_at([0.0, 0.0, 8.0], plane=tilted), distance(2.0))),

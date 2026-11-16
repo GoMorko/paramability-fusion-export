@@ -1619,7 +1619,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | Package | May import | What it owns |
 | --- | --- | --- |
 | `package` | nothing | The `.paramability` file: units, manifest builders and checks, caps, file names, zip writer, gaps file bytes. |
-| `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). The volume checks take the data of the steps, not the timeline items: the caller reads the data through the shared layer (`design_model.design`). |
+| `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), a region inside another (`region_inside`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). The volume checks take the data of the steps, not the timeline items: the caller reads the data through the shared layer (`design_model.design`). |
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
@@ -2206,7 +2206,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     of the sketch, so the measured end face (`end_offset`) must lie on the same side as the point. Else the result
     is a `Problem` (`WAY_UNSURE`). A flat face that is tilted meets the line of the sketch normal on one side only,
     so its point gives the direction. The `Target` of the side has the plane of a tilted face, and no plane for a
-    curved face. The side has no length. The recipe output sets `faces` (see the section about extrudes in part 3). The Orca output does not set it.
+    curved face. A face without a plane must be curved (`surface`), else the result is a `Problem` (`FACE_UNREAD`).
+    Where Fusion can end the side on other faces than the app, the outline must land on the face alone, else the
+    result is a `Problem` (`CHAINED`, `PAST_CURVED`; see the section about extrudes in part 3). The side has no
+    length. The recipe output sets `faces` (see the section about extrudes in part 3). The Orca output does not set it.
   - The direction of one side: the measured end face (`end_offset`) wins over the direction that Fusion stored,
     because Fusion can store the direction in two ways. An end face nearer than 0.001 mm to the start does not show a
     direction. A side that has `direction` (a step that the translator writes again as an extrude) goes in that
@@ -2354,7 +2357,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   a turn). `geometry/tolerances.py`: see 4.11. `geometry/plane2d.py`: small 2D helpers on `(x, y)` points: the distance to a segment
   or to a ring, a point inside a ring, and an arc drawn as points the way the app draws it (`to_segment`, `to_ring`,
   `inside_ring`, `arc_points`). `footprint`, the outline checks and the coil fit use them. `geometry/footprint.py`
-  also has `closed_chain`, which puts the curves of one loop in order, end to end. `geometry/spline_fit.py`: the
+  also has `closed_chain`, which puts the curves of one loop in order, end to end. `geometry/region_inside.py`:
+  whether one region lies inside another (`inside`, exact for lines, arcs and circles), the loops of one frame moved
+  into another (`moved_loops`), and points spread over a region (`sample_points`). The check that an extrude lands on
+  a face alone and the rays of the reader use them. `geometry/spline_fit.py`: the
   spline of the app (`interpolate`, `evaluate`) and the fit of points to a free curve (`fit`). The sketch outlines of
   the recipe and the free curves of a sweep path use them.
 
@@ -2402,6 +2408,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `placement.py`: the place of the body in the assembly, `ref_record`.
 - `probe_state.py`, `probe_refs.py`, `read_face.py`, `probe_patterns.py`: the reads at each probe row.
 - `read_gap_reach.py`: the reach read.
+- `read_face_rays.py`: the rays from the outlines of an extrude to a curved face it ends on (`outline_hits_face`).
 - `rows.py`: `DesignParameterStore` (set expressions, rebuild, health, marker roll, suppression). It has every member of
   `ParameterStore` and of the timeline controls.
 - `sketch_keep.py`: `SketchKeeper`. `step_export.py`: the STEP file.
@@ -3628,6 +3635,16 @@ The app cannot build some sides. Thus the add-in also leaves the step out in the
 2. The side has an offset past the face.
 3. The face is flat, Fusion can also stop at the faces next to it, and the outline does not land on the face
    alone. See "A face that Fusion chains to the faces next to it" below.
+4. The face is curved, and Fusion can also stop at the faces next to it (`chained` is true or null). The reader
+   records no outline of a curved face, so the add-in cannot show that the outline lands on the face alone.
+5. The face is curved, Fusion extends it (`chained` is false), and a ray from a point of the outline does not hit
+   the face, or the reader could not cast the rays. See "A curved face that Fusion extends" below.
+6. The face has no plane, and its surface is flat (`surface` is `Plane`) or not known (`surface` is null or not
+   in the capture). Such a face can be a flat face whose plane did not read. If the add-in used it as a curved face,
+   the copy could end on a different surface.
+
+The shared reader (`_up_to` in `design_model/steps/extrude.py`) gives conditions 3 to 6 as a `Problem`. The codes are
+`CHAINED`, `PAST_CURVED` and `FACE_UNREAD`.
 
 A thin extrude up to a face never gets to `up_to.py`: `faces/thin_wall.prepare` leaves it out before. An extrude
 with two sides, where one side goes up to such a face, stays a `Problem` of the reader. The step of an `UP_TO` side
@@ -3648,12 +3665,28 @@ side up to a flat face square to the sketch (`REACH`) and to a side up to a tilt
 Thus the reader also reads the outline of a face that can be chained (`face_outline`, `read_face.face_loops`, with
 the marker before the step). For a face of another component, the outline goes into the measured reference (`ref`)
 in the coordinates of the part, and `refs.bring_in` takes it from there. `outline_on_face` in
-`design_model/steps/extrude.py` then moves each outline of the extrude along the sketch normal onto the face. The
-answer is true when these two conditions are true:
+`design_model/steps/extrude.py` then moves the loops of the face along the sketch normal onto the sketch plane of
+each outline. When the face is square to the sketch normal, this move keeps all lengths, so an arc stays an arc. When
+the face is tilted, the move changes the shape of an arc, so the arc becomes a chain of points.
 
-1. Each point along each outline lands in the face or on its edge (within 0.001 mm).
-2. No point along the edges of the face lands inside an outline. Such a point shows a hole of the face under the
+Then `region_inside.inside` (in `geometry/`) compares the two regions. The region of the face is its outer loop less
+its holes. The answer is true when the outline lies in that region. The outline can touch the edges of the face
+(within 0.001 mm). The check is exact for lines, arcs and circles. It does not compare only the corners, because a
+straight edge of the face can cross the outline between two corners. Example: a slot in the face, 2 mm wide, crosses
+a 6 mm square post. No corner of the slot is in the post, and no corner of the post is in the slot. But the post
+does not land on the face alone. The check does these steps:
+
+1. It cuts each edge of the outline and each edge of the face at each point where the two edges meet, and at each
+   corner of the other region that lies on the edge.
+2. Each piece of an edge of the outline must lie in the face or on its edge. The check tests the middle point of
+   each piece.
+3. When a piece of an edge of the outline lies on an edge of the face, the check tests a point 0.01 mm into the
+   outline. That point must lie in the face. Else the outline fills a hole of the face, or lies outside the face.
+4. No piece of an edge of the face can lie inside the outline. Such a piece shows a hole of the face under the
    outline, or a face that is smaller than the outline.
+
+A curve that does not read gives no answer (null). The inside test of a point uses chords that are not more than
+0.00001 mm from the arcs, so it is correct for points more than 0.001 mm from the edges.
 
 When `chained` is true or null (not read), and the answer is not true, the reader gives a `Problem` (`CHAINED`).
 This includes a face without an outline. Both outputs then leave the step out. When `chained` is null, the add-in
@@ -3664,8 +3697,28 @@ When the answer is true, the extrude ends on the face alone at the values of the
 move the outline past the edge of the face. The add-in does not measure the edges of the face at other values. Thus
 each output marks the sizes that can move the face or the outline (`reach_sizes`): `extrude/up_to.keep_on_face` for
 the recipe and `extents.reach` for Orca. These sizes stay free, with the reason "ends on a face that Fusion joins with
-the faces next to it". A curved face needs no outline: where the two shapes are different, the face does not cover
-the outline, and the app refuses the step. A construction plane is never chained.
+the faces next to it". A construction plane is never chained.
+
+#### A curved face that Fusion extends
+
+When `chained` is false, Fusion extends a curved face past its edges, where the outline reaches past them. The app
+uses a curved face as it is. Thus the two shapes are different when the outline reaches past the edge of the face.
+The reader records no outline of a curved face (`face_loops` reads flat faces only). Thus the reader casts rays
+(`fusion_reader/read_face_rays.py`), with the marker before the step:
+
+1. It takes points of each outline of the extrude (`region_inside.sample_points`): points along each curve, and
+   points of a grid inside the outline. All outlines together get not more than 200 points.
+2. From each point, it casts a ray along the sketch normal, toward the point on the face (`face_point`).
+3. It asks Fusion which faces the ray meets (`Component.findBRepUsingRay`, with hidden bodies included).
+4. The answer (`outline_hits_face`) is true when every ray meets the face. It is false when a ray does not meet it.
+   It is null when Fusion gives no answer.
+
+The reader casts the rays only for a curved face of the part with `chained` false. The shared reader gives the side
+only when the answer is true. At other values, a size can move the outline past the edge of the face. Thus
+`keep_on_face` marks the sizes that can move the face or the outline, with the reason "ends on a curved face". The
+points are a sample: a narrow gap of the face between two points is not found. In that case Fusion and the app can
+make different shapes. The app refuses the step when the face is not in front of the whole outline, so this does
+not give a wrong shape that looks correct.
 
 #### A start at a distance from a face
 
@@ -4280,6 +4333,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null, and the round is left out. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
+| `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
