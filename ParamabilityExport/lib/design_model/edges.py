@@ -3,8 +3,10 @@ direction taken from one, which may change the angle between two faces, and whic
 hole goes through. Also which sizes may turn or stretch a sketch line a step takes as numbers (`line_sizes`): only
 the dimensions the sketch solver shows on the gap between its ends, and what moves the sketch plane.
 
-Both outputs write such a direction and such a thread length as numbers. In general every size read before the step
-may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The capture can show less, but only for a part
+Both outputs write such a direction as a number, and the Orca output such a thread length. In general every size read
+before the step may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The recipe output lets the thread
+length of a hole through all follow the sizes only when the part is shown to be as thick wherever the holes can go
+(`even_sizes`); else it writes the length as a number and marks those general sizes. The capture can show less, but only for a part
 that is plain before the step (`_plain_body`): every step of the body's component before it is a straight extrude, a
 simple hole through all (round faces and round edges only), a sketch or construction geometry. Any other step (a
 revolve, a loft, a sweep, a pattern, a round, a move, a step the step kind table does not know) may make an edge or a
@@ -23,7 +25,7 @@ shows where its end caps lie. In a plain part:
   the general sizes. Two such flat faces keep the angle between them at every size but the sizes of the sketch
   planes;
 - when every extrude is one sided, makes or joins material along the hole and spans the same two planes, and each
-  hole goes in at one of these planes and out at the other inside an outline, the part is that thick wherever a hole
+  hole goes in at one of these planes and out at the other (where its measured bore leaves the part) inside an outline, the part is that thick wherever a hole
   can go (outside every outline it cuts nothing). The thickness then changes only with the lengths and sketch planes
   of the extrudes (a plane may tilt against the hole) and, for several extrudes, with their start offsets.
 """
@@ -32,6 +34,7 @@ from ..geometry import footprint, plane2d, vec
 from ..sketch_solve.constants import constants_of
 from ..sketch_solve.solve import solve_sketch
 from . import reach
+from .steps import hole
 
 # How far (mm) a point may lie from where an outline puts it.
 TOL_MM = 1e-4
@@ -385,20 +388,25 @@ def through_sizes(table, timeline, item, data):
     `reach.hole_end_sizes`."""
     if table is None:
         return []
-    found = _even_sizes(table, timeline, item, data)
+    found = even_sizes(table, timeline, item, data)
     if found is not None:
         return [name for name in table.ticked if name in found]
     return reach.hole_end_sizes(table, timeline, item, data)
 
 
-def _even_sizes(table, timeline, item, data):
-    """The sizes that may change the thickness of a plain part made of one sided extrudes that all span the two
-    planes each hole goes in and comes out at (`positions`, `end_points`), or None."""
+def even_sizes(table, timeline, item, data):
+    """The ticked sizes that may change the thickness of a plain part made of one sided extrudes that all span the two
+    planes each hole goes in and comes out at, or None when the part is not shown to be that thick wherever the holes
+    can go. Each hole comes out where its measured bore leaves the part (`hole.bore_exits`), else at its measured end
+    (`end_points`)."""
     positions = [p for p in data.get("positions") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
-    ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
     normal = data.get("direction")
-    if not positions or len(ends) != len(positions) or not isinstance(normal, (list, tuple)) \
-            or vec.length(normal) <= 0:
+    if not positions or not isinstance(normal, (list, tuple)) or vec.length(normal) <= 0:
+        return None
+    ends = hole.bore_exits(data, vec.unit(list(normal)))
+    if ends is None:
+        ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
+    if len(ends) != len(positions):
         return None
     body = _plain_body(timeline, item.get("index"))
     if not body:

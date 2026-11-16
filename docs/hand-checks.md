@@ -591,4 +591,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the cosmetic hole copies as a plain hole 5.035 mm across. In Paramability, change `Plate` to 40 mm: both threads
     still reach the bottom face. In Orca, the counterbore hole has a lead-in at the counterbore floor and at the
     bottom face. When a `span` is null or covers only part of the bore, note what `vertices` the side face of the
-    hole has. Afterwards the design is as before.
+    hole has. Then add a user parameter `HoleX` = -20 mm for the x of the simple through hole, and a box 10 mm high
+    on the top face over x -14..-6 and y -10..10, clear of the holes. Export again with `Plate` and `HoleX` ticked: the
+    thread of that hole is 30 mm long as a number, and `Plate` and `HoleX` are marked "may give unexpected results"
+    (the hole can move under the box, where Fusion's thread is 40 mm). Afterwards the design is as before.
