@@ -3,8 +3,10 @@
 Orca can round or chamfer only every edge of a face group of the part (all, top, bottom or side edges, see
 `finish_body`); it names single edges by its own numbering, which the copy cannot know. So a step is copied only when
 its picked edges are exactly one group of the part as the copy builds it, with one size (the size may follow
-variables). Orca stops the whole rebuild on a round it cannot make, so a step is also left out when the copy cannot
-tell the part's edges (`finish_body.body_of`), or when the size leaves too little of a face (`finish_body.room`).
+variables). A step whose sets have different sizes is made as one feature for each size, when each is such a group
+(a top and a bottom one). The sets are read by `design_model.steps.finish`. Orca stops the whole rebuild on a round
+it cannot make, so a step is also left out when the copy cannot tell the part's edges (`finish_body.body_of`), or
+when the size leaves too little of a face (`finish_body.room`).
 After a round or chamfer the edges change: a later one is copied only on the other end of the same part (top after
 bottom, or bottom after top), with the two sizes counted together.
 A step whose edges are all side edges of copied straight extrudes (the corners of their outlines) is drawn into those
@@ -17,13 +19,13 @@ bottom of the part. Both are left out with the reason.
 import math
 
 from ..capture_model import gap_hints
+from ..design_model.steps import finish as sets_of
+from ..design_model.values import Quantity
 from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, corner_hosts, finish_body, limits, outline_rounds
 from .skip import Skip
 
-SIZE_TOL = 1e-9
-EVEN_ANGLE_DEG = 45.0
 _ROUND_KINDS = {
     "variable": "Rounds with a changing radius are not copied to Orca.",
     "chordLength": "Rounds set by chord length are not copied to Orca.",
@@ -51,126 +53,137 @@ def _label(item):
     return item.get("name") or "the step"
 
 
-def _set_check(entry, kind):
+def _quantity(ctx, item):
+    """The `quantity(path, number, dim)` the set readers call: a size that may follow the design's sizes."""
+    def quantity(path, number, dim):
+        return ctx.quantity(item, path, float(number), dim)
+    return quantity
+
+
+def _set_check(one, kind):
     """A Skip for a set whose edges cannot be copied, else None."""
-    if "feature" in (entry.get("input_kinds") or []):
+    if one.follows_step:
         return Skip("A %s that follows another step's edges is not copied to Orca." % kind.noun)
-    edges = entry.get("edges") or []
-    if not edges or any(not e.get("points") for e in edges):
+    if not one.edges or one.unlocated:
         return Skip("The edges of this %s could not be located." % kind.noun)
-    if any(e.get("foreign") for e in edges):
+    if one.foreign:
         return Skip("This %s is on edges of another component, which is not copied." % kind.noun,
                     gap_hints.OTHER_COMPONENT)
     return None
 
 
-def _one_size(ctx, item, kind, sizes):
-    """The `Quantity` of the size every set shares (`sizes`: (param path, number) per set), or a Skip. Sets with their own
-    parameter keep the first set's: their sizes get the reason."""
-    first_path, first = sizes[0]
-    if any(abs(number - first) > SIZE_TOL for _, number in sizes[1:]):
-        return Skip("This %s has edges of different sizes, and Orca makes a %s of one size, so it is left out."
-                    % (kind.noun, kind.noun), gap_hints.ROUND_KIND if kind is ROUND else gap_hints.REFUSED)
-    value = ctx.quantity(item, first_path, first)
-    for path, number in sizes[1:]:
-        other = ctx.quantity(item, path, number)
-        if other.text != value.text:
-            ctx.doubt(other.reads, "%s: Orca makes every edge with the size of its first edges" % _label(item))
-    return value
+def _different_sizes(kind):
+    return Skip("This %s has edges of different sizes that are not each a whole group of edges, and Orca makes a %s "
+                "of one size on one group, so it is left out." % (kind.noun, kind.noun),
+                gap_hints.ROUND_KIND if kind is ROUND else gap_hints.REFUSED)
+
+
+def _by_size(ctx, item, sets, sizes):
+    """The edges of `sets` in parts of one size: [(`Quantity`, edge records)], in order of first appearance. Sets whose
+    numbers are equal are one part, made with the first set's size; the sizes of the others, when they follow other
+    variables, get the reason."""
+    parts = [sets_of.Part(Quantity(size.n), None, {}, one.edges, [one]) for one, size in zip(sets, sizes)]
+    found = []
+    for part in sets_of.merge(parts):
+        value = sizes[part.sets[0].index]
+        for one in part.sets[1:]:
+            other = sizes[one.index]
+            if other.text != value.text:
+                ctx.doubt(other.reads, "%s: Orca makes every edge with the size of its first edges" % _label(item))
+        found.append((value, part.edges))
+    return found
 
 
 def fillet(ctx, item):
     """The Orca round of a fillet step, or a Skip."""
     data = _data(item)
-    sets = data.get("sets") or []
+    sets = sets_of.round_sets(data)
     if not sets:
         return Skip("This round has no edges to copy.")
-    sizes = []
-    for n, entry in enumerate(sets):
-        kind = entry.get("kind")
-        if kind != "constant":
-            return Skip(_ROUND_KINDS.get(kind, "This kind of round is not copied to Orca."),
-                        gap_hints.ROUND_KIND if kind in _ROUND_KINDS else gap_hints.REFUSED)
-        if entry.get("continuity") == "curvature":
+    quantity = _quantity(ctx, item)
+    for one in sets:
+        if one.kind != sets_of.CONSTANT:
+            return Skip(_ROUND_KINDS.get(one.kind, "This kind of round is not copied to Orca."),
+                        gap_hints.ROUND_KIND if one.kind in _ROUND_KINDS else gap_hints.REFUSED)
+        if one.continuity == "curvature":
             return Skip("Rounds with curvature continuity are not copied to Orca.")
-        problem = _set_check(entry, ROUND)
+        problem = _set_check(one, ROUND)
         if problem:
             return problem
-        radius = entry.get("radius")
-        if not isinstance(radius, (int, float)) or not radius > 0:
+        if one.radius is None:
             return Skip("This round has no readable radius.")
-        sizes.append(("sets.%d.radius" % n, float(radius)))
-    drawn = outline_rounds.made(ctx, item, [outline_rounds.Pick(entry["edges"], ctx.quantity(item, path, number))
-                                            for entry, (path, number) in zip(sets, sizes)], False)
+    sizes = [one.size(quantity) for one in sets]
+    drawn = outline_rounds.made(ctx, item, [outline_rounds.Pick(one.edges, size) for one, size in zip(sets, sizes)],
+                                False)
     if drawn is not None:
         return drawn
-    value = _one_size(ctx, item, ROUND, sizes)
-    if isinstance(value, Skip):
-        return value
     notes = []
     if data.get("rolling_ball") is False:
         notes.append("%s: Fusion used setback corners; Orca uses rolling ball corners, so corners where three "
                      "rounded edges meet can look different." % _label(item))
-    return _finish(ctx, item, ROUND, [e for entry in sets for e in entry["edges"]], value, notes)
+    return _finish_parts(ctx, item, ROUND, _by_size(ctx, item, sets, sizes), notes)
 
 
-def _even_chamfer(ctx, item, n, entry):
-    """(param path, distance) of an even chamfer set, or a Skip. Two equal distances, or a distance and 45 degrees,
-    are even while they stay so: the second value's sizes get the reason."""
-    kind = entry.get("kind")
-    distance = entry.get("distance")
-    if not isinstance(distance, (int, float)) or not distance > 0:
+def _even_chamfer(ctx, item, one):
+    """The `Quantity` of the distance of an even chamfer set, or a Skip. Two equal distances, or a distance and 45
+    degrees, are even while they stay so: the second value's sizes get the reason."""
+    if one.distance is None:
         return Skip("This chamfer has no readable size.")
-    uneven = Skip("This chamfer has two different sizes, and Orca makes only even chamfers, so it is left out.")
-    if kind == "twoDistances":
-        other = entry.get("distance_two")
-        if not isinstance(other, (int, float)) or abs(other - distance) > SIZE_TOL:
-            return uneven
-        second = "sets.%d.distance_two" % n
-    elif kind == "distanceAngle":
-        angle = entry.get("angle_deg")
-        if not isinstance(angle, (int, float)) or abs(angle - EVEN_ANGLE_DEG) > 1e-6:
-            return uneven
-        second = "sets.%d.angle_deg" % n
-    elif kind == "equal":
-        second = None
-    else:
+    if one.problem == sets_of.UNKNOWN_KIND:
         return Skip("This kind of chamfer is not copied to Orca.")
-    if second is not None:
-        dim = "angle" if second.endswith("angle_deg") else "length"
-        held = ctx.quantity(item, second, float(entry.get("angle_deg") if dim == "angle" else entry["distance_two"]),
-                            dim)
+    if not one.even:
+        return Skip("This chamfer has two different sizes, and Orca makes only even chamfers, so it is left out.")
+    if one.held:
+        held = one.held.size(_quantity(ctx, item))
         ctx.doubt(held.reads, "%s: the chamfer stays even in Orca" % _label(item))
-    return "sets.%d.distance" % n, float(distance)
+    return one.size(_quantity(ctx, item))
 
 
 def chamfer(ctx, item):
     """The Orca chamfer of a chamfer step, or a Skip."""
     data = _data(item)
-    sets = data.get("sets") or []
+    sets = sets_of.chamfer_sets(data)
     if not sets:
         return Skip("This chamfer has no edges to copy.")
     sizes = []
-    for n, entry in enumerate(sets):
-        found = _even_chamfer(ctx, item, n, entry)
+    for one in sets:
+        found = _even_chamfer(ctx, item, one)
         if isinstance(found, Skip):
             return found
-        problem = _set_check(entry, CHAMFER)
+        problem = _set_check(one, CHAMFER)
         if problem:
             return problem
         sizes.append(found)
-    drawn = outline_rounds.made(ctx, item, [outline_rounds.Pick(entry["edges"], ctx.quantity(item, path, number),
-                                                                entry.get("kind") == "distanceAngle")
-                                            for entry, (path, number) in zip(sets, sizes)], True)
+    drawn = outline_rounds.made(ctx, item, [outline_rounds.Pick(one.edges, size, one.kind == sets_of.DISTANCE_ANGLE)
+                                            for one, size in zip(sets, sizes)], True)
     if drawn is not None:
         return drawn
-    value = _one_size(ctx, item, CHAMFER, sizes)
-    if isinstance(value, Skip):
-        return value
     notes = []
     if data.get("corner_type", "chamfer") != "chamfer":
         notes.append("%s: Fusion used another corner type; Orca uses its own." % _label(item))
-    return _finish(ctx, item, CHAMFER, [e for entry in sets for e in entry["edges"]], value, notes)
+    return _finish_parts(ctx, item, CHAMFER, _by_size(ctx, item, sets, sizes), notes)
+
+
+def _finish_parts(ctx, item, kind, parts, notes):
+    """The Orca features of a step whose edges are in parts of one size (`_by_size`): one round or chamfer for each
+    part, made one after the other, or a Skip. A step with several parts is copied only when each part is a group of
+    edges Orca makes (`_finish`); a part that is not leaves the whole step out. A part that is no group of edges, or
+    that cannot follow a part of the same step because Orca's groups change after it, gets the reason of the
+    different sizes."""
+    if len(parts) == 1:
+        value, records = parts[0]
+        return _finish(ctx, item, kind, records, value, notes)
+    features = []
+    for value, records in parts:
+        made = _finish(ctx, item, kind, records, value, notes if not features else [])
+        if isinstance(made, Skip):
+            own = made.cause in (causes.HAND_PICKED, causes.EDGES_NOT_ON_COPY) or (
+                features and made.cause == causes.EDGES_CHANGED)
+            return _different_sizes(kind) if own else made
+        features += made
+    ctx.notes.append("%s: the edges have different sizes, so the copy makes one %s for each size, one after the "
+                     "other." % (_label(item), kind.noun))
+    return features
 
 
 def _finish(ctx, item, kind, records, value, notes):

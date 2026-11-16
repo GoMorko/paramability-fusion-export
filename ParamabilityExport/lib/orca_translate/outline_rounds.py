@@ -38,6 +38,7 @@ from ..geometry.footprint import is_full, polyline
 from ..orca_recipe.feature import feature_refs
 from . import causes, corner_hosts, finish_body, left_corners
 from .skip import Skip
+from ..design_model.steps import finish as sets_of
 from ..design_model.values import Quantity
 from .sketches import entities_of
 from .solid import ADD, CUT, Moved, Prism, Solid, intersect, subtract, union
@@ -631,12 +632,11 @@ def note_left_out(ctx, item, chamfer):
     if not ctx.has_body or not data.get("sets"):
         return
     picks = []
-    for entry in data["sets"]:
-        edges = entry.get("edges") if isinstance(entry, dict) else None
-        size = left_corners.gap_size(entry, chamfer) if edges else None
-        if size is None or "feature" in (entry.get("input_kinds") or []) or any(e.get("foreign") for e in edges):
+    for one in (sets_of.chamfer_sets if chamfer else sets_of.round_sets)(data):
+        size = one.reach if one.edges else None
+        if size is None or one.follows_step or one.foreign:
             return
-        picks.append(Pick(edges, Quantity(size)))
+        picks.append(Pick(one.edges, Quantity(size)))
     corners = _find(ctx, picks)
     if not isinstance(corners, list) or any(c.mode not in (ADD, CUT) for c in corners):
         return

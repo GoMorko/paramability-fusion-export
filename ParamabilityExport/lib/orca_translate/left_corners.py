@@ -6,8 +6,6 @@ A step left out between an extrude and a round may have changed the edge in Fusi
 `clear_of_gaps` answers whether every step left out since an extrude is measured and apart from the corners of a new
 round. Pure geometry on the copy's shapes, no Fusion access.
 """
-import math
-
 from ..geometry import vec
 from . import finish_body
 
@@ -22,28 +20,6 @@ _PAST = 0.05
 # A left out round and a later round count as apart when their edges are farther apart than this many times the sum of
 # their reaches, plus `_PAST` (mm).
 _APART = 2.0
-
-
-def gap_size(entry, chamfer):
-    """The largest distance a set of a round or chamfer reaches along a face from its edge (mm), or None when the set
-    is of a kind whose reach is not known."""
-    def positive(v):
-        return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
-    if not chamfer:
-        radius = entry.get("radius")
-        ok = entry.get("kind") == "constant" and entry.get("continuity") != "curvature" and positive(radius)
-        return float(radius) if ok else None
-    distance, kind = entry.get("distance"), entry.get("kind")
-    if not positive(distance):
-        return None
-    if kind == "equal":
-        return float(distance)
-    if kind == "twoDistances" and positive(entry.get("distance_two")):
-        return float(max(distance, entry["distance_two"]))
-    angle = entry.get("angle_deg")
-    if kind == "distanceAngle" and positive(angle) and angle < 89.0:
-        return float(max(distance, distance * math.tan(math.radians(angle))))
-    return None
 
 
 def region(corner, shape, low, high):

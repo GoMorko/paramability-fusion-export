@@ -94,7 +94,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Tapped hole with a modeled thread (metric or Unified, right hand), simple only | Hole at the minor diameter, then an inside Thread per point, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth |
 | Thread, modeled, on one cylinder (a rod or a hole wall) | Thread, half a pitch inside each end, and a lead-in at each open end (a Hole in a hole, a ring cut on a rod) | `thread_height` (a set length) |
 | Thread, cosmetic | nothing (it changes no shape) | |
-| Fillet or chamfer of one size (an even chamfer) whose edges are exactly one of Orca's edge groups of the copied part | Fillet or Chamfer of that face group: all, top, bottom or side edges | `dressup_size` |
+| Fillet or chamfer (an even chamfer) whose edges are exactly one of Orca's edge groups of the copied part, or, with sets of different sizes, a top group and a bottom group | Fillet or Chamfer of that face group: all, top, bottom or side edges; one for each size | `dressup_size` |
 | Fillet or even chamfer whose edges all run along copied straight extrudes, at corners of two lines of their outlines (each set may have its own size) | the extrude's sketch drawn again: an arc tangent to both lines, or a line across the corner | no: the round keeps its number |
 | The same, on an outline whose sizes follow variables (built from plane cuts, or a rectangle whose width or height follows) | a corner tool per corner, cut from the outline's body before it goes into the part: a through all block cut by four planes (three for a chamfer), between two Transforms for a line that turns, less an Orca Hole at the arc centre, and a Boolean (see "Corner tools") | every corner and the round's size: `cut_offset`, `xf_angle_deg`, `hole_x`, `hole_y`, `hole_diameter` |
 | Rectangular pattern of features, one or two directions, to one side or both | the repeated steps as a tool body, one Pattern per direction (two tool bodies for a direction to both sides), a Boolean into the part | `pattern_count`, `pattern_spacing` |
@@ -268,9 +268,18 @@ not judged to meet material where Orca removes nothing.
 - A round or chamfer changes the edges. A later one is copied only on the other end of the same part (top after
   bottom, or bottom after top), with the two sizes counted together; after a cut, a hole or a thread, none is. A round
   drawn into an outline (below) leaves the copy's shape as Orca builds it, so a round of a face group may follow it.
-- One size only: sets of different sizes are left out. A chamfer with two equal distances, or a distance and 45
-  degrees, is even; the second value stays as it is (its sizes get the reason). Fusion's setback corners and other
-  chamfer corner types are noted.
+- One size for each Orca feature. The sets of a step are read by the shared layer (`design_model/steps/finish.py`)
+  and put in parts of one size. Sets with the same number are one part, made with the size of the first set (the sizes
+  of the others, when they follow other variables, get the reason). A step with one part is one Orca feature. A step
+  with sets of different sizes is copied as one feature for each size, one after the other, when each part is a whole
+  group of edges of the part and Orca can make the groups one after the other (a top group and a bottom group, with the
+  sizes counted together as below). Each feature has its own `dressup_size`. Fusion makes the sizes in one step, and
+  Orca one after the other; this gives the same part, because the top and the bottom edges do not meet. A part that is
+  not a whole group (hand-picked edges), or a group that cannot follow the first (a side group after a top group), leaves
+  the whole step out with the reason of the different sizes. A size that does not leave enough material together with
+  the other sizes leaves it out with the cause `noRoom`. A chamfer with two equal distances, or a distance and 45
+  degrees, is even; the second value stays as it is (its sizes get the reason). A chamfer with different sides is left
+  out. Fusion's setback corners and other chamfer corner types are noted.
 - Edges along an extrude (`orca_translate/outline_rounds.py`). A side edge of a straight extrude runs along the
   extrude at a corner of its outline. A round of it is the same part as an arc at that corner of the outline, tangent
   to both lines (`radius / tan(a / 2)` from the corner along each line, `a` the angle between the lines), and an even

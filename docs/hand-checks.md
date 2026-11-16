@@ -275,3 +275,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `volume_before` and `volume_after` (its own `intersect_model` is read on Body1 and does not count). The Orca copy
     cuts the shape that Fusion cuts (compare it with the Fusion part from above), and the result lists no step left
     out. If `body_states` is missing, the Cut is left out with the reason that the intersect rule is not known.
+
+28. OR2, one chamfer step with two sizes, for Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
+    origin. In one Chamfer step, pick the four top edges as one set with 1 mm and the four bottom edges as a second set
+    with 2 mm (Fusion shows two edge sets, each with its own distance).
+    Export: Export for Orca with the plate. The result lists the step as copied as 2 Orca features: a chamfer of the top
+    edges of 1 mm and a chamfer of the bottom edges of 2 mm, and a note that the copy makes one chamfer for each size.
+    In Orca the part has the volume of the Fusion part (7712 mm3). Pick one top edge with 1 mm and the other three with
+    2 mm instead: the step is left out with the reason of the different sizes.
