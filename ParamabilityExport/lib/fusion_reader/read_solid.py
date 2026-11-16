@@ -447,9 +447,15 @@ def _cylinder(face):
 
 
 def _sketch_points(feature, ctx):
-    """The sketch points of a hole placed on sketch points, else None."""
+    """The sketch points of a hole placed on sketch points, else None. Fusion gives a hole on one sketch point a
+    `SketchPointHolePositionDefinition` (`sketchPoint`), one on several a `SketchPointsHolePositionDefinition`
+    (`sketchPoints`)."""
     definition = geo.safe(lambda: feature.holePositionDefinition, None)
-    if "SketchPoints" not in geo.type_name(definition):
+    kind = geo.type_name(definition)
+    if kind == "SketchPointHolePositionDefinition":
+        point = geo.safe(lambda: definition.sketchPoint, None)
+        return [geo.native_input(point, ctx)] if point is not None else None
+    if "SketchPoints" not in kind:
         return None
     return [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
 
