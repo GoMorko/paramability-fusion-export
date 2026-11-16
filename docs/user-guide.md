@@ -264,6 +264,22 @@ helper parameters that only other formulas read. Parameters in other units than 
 time) are left out. In Export for Paramability, `report.json` says how many were
 listed and which were left out and why.
 
+## Export for Orca (experimental)
+
+Saves one body as an OrcaSlicer 2.5 project (`.3mf`). The Design tab of OrcaSlicer rebuilds the part, and your user
+parameters become its variables.
+
+1. Click **Export for Orca (experimental)**. It is the third button of the add-in, next to Export for Paramability
+   and Export size choices.
+2. Pick the body and tick the parameters you want as variables.
+3. Save the file. Open it in OrcaSlicer 2.5.
+
+This export is experimental. It copies fewer kinds of steps than Export for Paramability. A step it cannot copy is
+left out, and the result window says why. The plate always shows the body as it is in Fusion.
+
+A report is saved beside the `.3mf` file, named `<name>.report.json`. It lists the steps that were copied, the steps
+that were left out and the reasons. `docs/orca-output.md` gives the full description.
+
 ## Several bodies in one file
 
 Pick two or more bodies (up to 32) in the body picker of Export for Paramability to save them in one file. Paramability

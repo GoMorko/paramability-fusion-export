@@ -142,6 +142,7 @@ def record(gap, table, move):
         if moved is not None:
             out[key] = moved
     # The record keeps the step's data as read, trimmed to fit (`trimmed_data`).
-    out.update(data=data, trimmed=trimmed)
+    out["data"] = data
+    out["trimmed"] = trimmed
     out["finishing"] = is_finishing(gap.item.get("type"), read)
     return out
