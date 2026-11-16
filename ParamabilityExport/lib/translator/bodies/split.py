@@ -46,11 +46,6 @@ def _stop(reason):
     return Refusal(reason, stops=True)
 
 
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def _record(records, body):
     return next((r for r in records or () if isinstance(r, dict) and same_body(r, body)), None)
 
@@ -164,8 +159,8 @@ def _by_body(ctx, item, tool, parent, piece, others):
     return out
 
 
-def handle(item, ctx):
-    data = _data(item)
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     tool = data.get("tool")
     if not isinstance(tool, dict):
         return _stop(shared.SPLIT_TOOL_UNREAD)

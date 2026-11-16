@@ -174,7 +174,8 @@ def _diagnosis(capture, handlers, refusal):
 def _translate(capture, handlers=None, size_table=None, motion=None, timer=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
-    A handler is `handle(item, ctx) -> StepResult | Refusal` (result.py). An empty result means the item makes no step
+    A handler is `handle(ctx, step) -> StepResult | Refusal` (result.py), where `step` is the item's
+    `design_model.design.ResolvedStep`. An empty result means the item makes no step
     on purpose (verdict `skipped`, with the handler's notes). Items after the first refusal are not walked, so `items`
     holds the verdicts up to and including it.
 

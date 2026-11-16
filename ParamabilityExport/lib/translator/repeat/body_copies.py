@@ -150,15 +150,18 @@ def _of_bodies(item):
     return (item.get("data") or {}).get("entity_type") == "bodies"
 
 
-def rectangular(item, ctx):
+def rectangular(ctx, step):
+    item = step.brought
     return _in_walk(item, ctx, GRID_PATHS) if _of_bodies(item) else repeat.rectangular(item, ctx)
 
 
-def circular(item, ctx):
+def circular(ctx, step):
+    item = step.brought
     return _in_walk(item, ctx, TURN_PATHS) if _of_bodies(item) else repeat.circular(item, ctx)
 
 
-def mirror(item, ctx):
+def mirror(ctx, step):
+    item = step.brought
     if _of_bodies(item) and not (item.get("data") or {}).get("combine"):
         return _in_walk(item, ctx, ())
     return repeat.mirror(item, ctx)

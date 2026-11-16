@@ -208,8 +208,8 @@ def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     return _Sizes(diameter_q, depth_q, bore, sink)
 
 
-def hole(item, ctx):
-    data = item.get("data") or {}
+def hole(ctx, step):
+    item, data = step.brought, step.brought_data
     problem = facts.placed(data)
     if problem:
         return threads.refusal(problem)
@@ -328,9 +328,9 @@ def _moved_points(ctx, item, rows, moved):
     return points
 
 
-def thread(item, ctx):
+def thread(ctx, step):
     """A cosmetic thread changes no solid: it makes no step. A modeled one is `thread.feature`."""
-    if (item.get("data") or {}).get("modeled"):
-        return threads.feature(item, ctx)
+    if step.brought_data.get("modeled"):
+        return threads.feature(step.brought, ctx)
     ctx.note("The thread is not copied; the exported shape has none either.")
     return StepResult()

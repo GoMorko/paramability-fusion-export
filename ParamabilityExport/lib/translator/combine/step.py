@@ -208,8 +208,8 @@ def _whole_patterns(ctx, item, tools, combine):
     return results, left
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     combine = COMBINE.get(data.get("operation"))
     if combine is None:
         return Refusal("This combine works in a way that is not copied yet.")

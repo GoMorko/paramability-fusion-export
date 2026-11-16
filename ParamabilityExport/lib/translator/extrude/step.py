@@ -19,8 +19,8 @@ from .reach import sketch_origin, start_shift
 from .through import resolve_through
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Refusal("Extrudes that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)

@@ -244,8 +244,8 @@ def _axis_refusal(axis):
     return "The axis of this revolve is not a straight line that can be copied."
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Refusal("Revolves that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)

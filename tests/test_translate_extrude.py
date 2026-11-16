@@ -13,6 +13,7 @@ from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, t
 from tests.test_translate_start_from_face import as_extrude
 
 from lib.capture_model import gap_hints
+from lib.design_model import design
 from lib.translator import extrude, translate
 from lib.translator.result import StepResult
 
@@ -244,7 +245,7 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual([s["combine"] for s in result.recipe["features"]], ["new", "add"])
         item = load_capture("extrude_new_body_two_bodies")["items"][-1]
         item["bodies_after"] = []
-        self.assertIn("several bodies", extrude.handle(item, None).reason)
+        self.assertIn("several bodies", extrude.handle(None, design.as_read(item)).reason)
 
     def test_profiles_must_share_one_plane_and_facing(self):
         result = translate_fixture("extrude_profiles_two_planes")
@@ -494,7 +495,7 @@ class DriverGuardTest(unittest.TestCase):
         self.assertIsNotNone(translate(capture).recipe)
 
     def test_handler_with_no_steps_is_skipped_with_its_note(self):
-        def silent(item, ctx):
+        def silent(ctx, step):
             ctx.note("Nothing to copy.")
             return StepResult()
         capture = load_capture("extrude_plate")
@@ -528,8 +529,8 @@ class RepeatabilityTest(unittest.TestCase):
         """Ids of the steps the extrude handler marks as not repeatable by a pattern or mirror."""
         results = []
 
-        def recording(item, ctx):
-            results.append(extrude.handle(item, ctx))
+        def recording(ctx, step):
+            results.append(extrude.handle(ctx, step))
             return results[-1]
 
         self.assertIsNotNone(translate(load_capture(name), {"ExtrudeFeature": recording}).recipe)

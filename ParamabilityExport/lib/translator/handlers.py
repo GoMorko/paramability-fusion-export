@@ -1,5 +1,5 @@
 """The translator handler of each capture type: the function that copies one timeline item into recipe steps,
-`handle(item, ctx) -> StepResult | Refusal`. A type with no entry has no recipe step (`capture_model.step_kinds`
+`handle(ctx, step) -> StepResult | Refusal`, where `step` is the item's `design_model.design.ResolvedStep`. A type with no entry has no recipe step (`capture_model.step_kinds`
 gives its reason)."""
 from . import extrude
 from .bodies import move, paste, split

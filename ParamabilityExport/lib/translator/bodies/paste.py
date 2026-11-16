@@ -74,8 +74,8 @@ def _mark_place(ctx, item, source, tool):
                   % (item.get("name") or "A paste"))
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     sources, results = data.get("sources") or [], data.get("result_bodies")
     if not sources:
         return Refusal("The body this paste copies could not be read.")

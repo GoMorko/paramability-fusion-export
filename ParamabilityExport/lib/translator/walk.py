@@ -6,7 +6,8 @@ The same loop copies the exported body and each tool body of a Combine. The cont
 The walk reads the items as the shared layer resolves them (`design_model/design.py`): what each item is for the body
 (a sketch, an assembly item, a step of another component, a step of the body or of another body), the body before
 and after it, what about it cannot be read, and the item with the geometry of other components it can use brought
-in. The walk decides from these facts. An item the copy cannot hold either stops the copy or, when its effect stays
+in. The walk decides from these facts. A handler gets the resolved step (`handler(ctx, step)`) and reads the step
+through it (`brought`, `brought_data`). An item the copy cannot hold either stops the copy or, when its effect stays
 on the body and the rest of the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
 handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
 out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
@@ -48,13 +49,13 @@ def fix_construction(ctx, item):
             ctx.doubt(names, why)
 
 
-def run_handler(handler, item, ctx):
-    """Run a handler. The doubts and notes it records on the context go into its StepResult, ahead of any it joined
-    itself; a Refusal gets the doubts as `doubts`."""
+def run_handler(handler, step, ctx):
+    """Run a handler on `step`, a `design_model.design.ResolvedStep`. The doubts and notes it records on the context go
+    into its StepResult, ahead of any it joined itself; a Refusal gets the doubts as `doubts`."""
     with ctx.recording() as recorded:
-        outcome = handler(item, ctx)
+        outcome = handler(ctx, step)
     if not isinstance(outcome, (StepResult, Refusal)):
-        raise TypeError("The handler for %s returned %r, not a StepResult or a Refusal." % (item.get("type"), outcome))
+        raise TypeError("The handler for %s returned %r, not a StepResult or a Refusal." % (step.type, outcome))
     if isinstance(outcome, Refusal):
         outcome.doubts = recorded.doubts
     else:
@@ -233,7 +234,7 @@ def walk_items(ctx, result):
                              [gap.id for gap in picked], picks=True, cause=gap_hints.AFTER_GAP):
                 return False
             return None
-        outcome = run_handler(handler, item, ctx)
+        outcome = run_handler(handler, step, ctx)
         if isinstance(outcome, Refusal):
             if outcome.stops:
                 result.refusal_stop = outcome.stop

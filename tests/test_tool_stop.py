@@ -70,13 +70,13 @@ class ToolOfAToolTest(unittest.TestCase):
         Combine does inside a tool of another component): the outer tool names the round, not the inner Combine."""
         real = HANDLERS["CombineFeature"]
 
-        def combine(item, ctx):
-            made = real(item, ctx)
+        def combine(ctx, step):
+            made = real(ctx, step)
             if isinstance(made, Refusal) and ctx.outer is not None:
                 made.stops = True
             return made
 
-        def round_(item, ctx):
+        def round_(ctx, step):
             return Refusal("This round is not copied.", cause=gap_hints.ROUND_KIND, stops=ctx.outer is not None)
 
         result = translate(load_capture("combine_in_tool"), {"CombineFeature": combine, "FilletFeature": round_})

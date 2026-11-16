@@ -121,8 +121,8 @@ def _distance(ctx, item, distance):
     return q.json()
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     if data.get("read_error"):
         return Refusal("This step could not be read from Fusion.")
     distance = data.get("distance")

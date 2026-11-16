@@ -91,8 +91,8 @@ def _maybe_spiral(kind, refusal):
     return refusal
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     if "faces" not in data:
         return Refusal(limits.OLD_EXPORT, cause=limits.CAUSE_OTHER)
     params = data.get("params") or {}

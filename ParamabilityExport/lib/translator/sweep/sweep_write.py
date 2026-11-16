@@ -1,6 +1,7 @@
 """What a sweep is written as: the extrude or revolve it equals, or a `sweep` step with its twist, taper and placer."""
 import copy
 
+from ...design_model import design
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import extrude, placement
@@ -35,7 +36,7 @@ def as_extrude(item, data, profile, found, ctx, followed=None):
                  side_one={"kind": "distance", "distance": found.length, "taper_deg": 0.0,
                            "direction": 1 if forward else -1, "quantity": followed.length if followed else None},
                  side_two=None, symmetric=None)
-    return extrude.handle(dict(item, data=built), ctx)
+    return extrude.handle(ctx, design.as_read(dict(item, data=built)))
 
 
 def as_revolve(item, data, combine, profile, found, ctx, followed=None):
@@ -49,7 +50,7 @@ def as_revolve(item, data, combine, profile, found, ctx, followed=None):
                  extent={"kind": "angle", "angle_deg": found.angle_deg, "symmetric": False,
                          "quantity": followed.turn if followed else None},
                  start_face_normal=vec.scale(found.direction, toward))
-    return revolve.handle(dict(item, data=built), ctx)
+    return revolve.handle(ctx, design.as_read(dict(item, data=built)))
 
 
 def _doubt_angle(ctx, item, what, quantity, outline_reads):

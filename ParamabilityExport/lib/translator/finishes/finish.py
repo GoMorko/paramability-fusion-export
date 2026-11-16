@@ -190,8 +190,8 @@ def _fold_into_slot(ctx, item, folded):
     return StepResult()
 
 
-def fillet(item, ctx):
-    data = item.get("data") or {}
+def fillet(ctx, step):
+    item, data = step.brought, step.brought_data
     sets = sets_of.round_sets(data)
     if not sets:
         return Refusal(shared.ROUND_NO_EDGES)
@@ -263,8 +263,8 @@ def _chamfer_parts(ctx, item, sets, sides):
     return sets_of.merge(parts)
 
 
-def chamfer(item, ctx):
-    data = item.get("data") or {}
+def chamfer(ctx, step):
+    item, data = step.brought, step.brought_data
     sets = sets_of.chamfer_sets(data)
     if not sets:
         return Refusal(shared.CHAMFER_NO_EDGES)
@@ -298,8 +298,8 @@ def chamfer(item, ctx):
     return StepResult(entries)
 
 
-def shell(item, ctx):
-    data = item.get("data") or {}
+def shell(ctx, step):
+    item, data = step.brought, step.brought_data
     if (data.get("outside") or 0) > 0:
         return Refusal("Shells that grow outward are not copied yet.", cause=gap_hints.SHELL_KIND)
     if data.get("bodies_input"):
