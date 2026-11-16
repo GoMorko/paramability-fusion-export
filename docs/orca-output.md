@@ -66,7 +66,7 @@ The modules of `lib/orca_translate/`:
 - Helpers of the handlers: `extents.py` (To, From and taper of an extrude, as values that follow sizes), `hole_place.py` (where holes sit),
   `drilled.py` (circle holes of the first outline drilled as Orca holes), `sketch_sizes.py` (the sizes an outline
   sketch follows or keeps),
-  `sketches.py` and `splines.py` (outlines as Orca sketches), `outline_cuts.py` and `halfplanes.py` (outlines of
+  `sketches.py` and `splines.py` (outlines as Orca sketches), `sweep_splines.py` (splines of a sweep path, exactly), `outline_cuts.py` and `halfplanes.py` (outlines of
   straight lines whose corners follow sizes, built from plane cuts), `tools.py` (tool bodies for Combine, patterns and
   mirrors, also of other components), `finish_body.py`, `outline_rounds.py` and `left_corners.py` (the edges rounds and chamfers pick, and the
   measuring of left out rounds), `corner_tools.py` and `corner_hosts.py` (rounds and chamfers of side edges on
@@ -122,7 +122,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Revolve of one outline without holes, the axis in its sketch plane: a full turn, an angle, an angle to both sides | sketch entities with a construction line on the axis (`revolve_axis_entity`), Revolve | `revolve_angle` (not for both sides) |
 | Sweep along a straight path | Extrude of the outline, as long as the path | the outline's sizes |
 | Sweep along one arc or a full circle | Revolve of the outline about the arc's axis | no |
-| Sweep along lines and arcs in one plane that meet smoothly, open or closed, one outline without holes | the outline's sketch, a sketch of the path from the outline, Sweep | the outline's sizes (`width`, `height`, `radius`) |
+| Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed (a closed path without splines), one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
@@ -174,8 +174,8 @@ turned about its axis, sampled along each line), tapered extrudes (the outline m
 along each line in steps no longer than the distance to the nearest wall, so a thin slot or a thin wall is not
 stepped over; only a part of a line shorter than 1/4096 of its reach through the shape, next to a wall, can be
 missed), the copies of patterns and mirrors (the tool body moved), tool bodies joined, cut or intersected, a
-plane cut (half of space), a Move (the body moved), sweeps (the outline carried along each line and turned about the
-centre of each arc of the path) and lofts (the section at each height, `lofts.Lofted`), so a cut after any of them
+plane cut (half of space), a Move (the body moved), sweeps (the outline carried along each line, turned about the
+centre of each arc and carried along short chords of each spline of the path) and lofts (the section at each height, `lofts.Lofted`), so a cut after any of them
 is checked against what Orca builds. A loft is read along each line in steps no longer than the distance to its
 nearest wall, as a tapered extrude is. That distance is the distance to the section at that height: for two circles,
 the distance to the centre less the radius; for two outlines of straight lines, the distance to the edges of the
@@ -257,7 +257,11 @@ not judged to meet material where Orca removes nothing.
   `taper_gap` still holds, and the parameter's line says how far it may go ("keep lift_mm over 5 mm", "keep
   draft_deg between -44.8 and 79.9"). Every limit found is told, also one far from the current value, since past it
   Orca gives no error (the walk goes up to about 16000 times the value). A lower limit at zero or below is told only
-  for a value below zero (a taper angle): a size stays above zero anyway. When a limit cannot be worked out (the check
+  for a value below zero (a taper angle): a size stays above zero anyway. A field that sizes a shape (a sketch
+  `width`, `height` or `radius`, a round or chamfer size, a hole size, a thickness, a thread size: `limits.POSITIVE`)
+  never fits at zero or below, whatever the step's own check says, so the walk of a variable that drives one stops
+  where that field reaches zero, and that lower limit is told even when it is small ("keep wire between 0.01 and
+  18.5 mm" for the diameter of a swept circle, never a limit below zero). When a limit cannot be worked out (the check
   fails at the current values, or the variable has no parameter line), the field keeps its number and its sizes get
   the reason. The told limit is a `limits.Limit`: the words, with the variable and the low and high numbers.
 - The end faces of a copied extrude (`solid.Prism.ends`, which a later "To" follows) are set once its fields are
@@ -503,7 +507,7 @@ not judged to meet material where Orca removes nothing.
 
 ### Sweeps, lofts and splines
 
-`orca_translate/sweeps.py`, `lofts.py` and `splines.py`, checked against Orca 2.5.1 (`CadDocument::apply_feature`
+`orca_translate/sweeps.py`, `sweep_splines.py`, `lofts.py` and `splines.py`, checked against Orca 2.5.1 (`CadDocument::apply_feature`
 Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) and live.
 
 - Orca's Sweep makes a face of the outline sketch and runs it along the wire of a path sketch (OCCT
@@ -517,10 +521,22 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   face must match the outline and path (`design_model.steps.sweep`). A problem the planner finds leaves the sweep out
   with its own words and cause.
 - A straight path is an Extrude of the outline (holes included), one arc or a full circle a Revolve about its axis,
-  and lines and arcs in one plane that meet smoothly an Orca Sweep. The outline must leave its plane square to the
+  and lines, arcs and splines in one plane that meet smoothly an Orca Sweep. The outline must leave its plane square to the
   path (within a millionth): Orca's extrude runs along the outline's normal.
+- A spline of the path is written exactly, never as the recipe's fitted curve: Orca builds the path wire from the
+  same entities as an outline, so the spline is its Bezier pieces (see Splines below), turned round when the path
+  runs against the way it is drawn. The path sketch's curve gives the definition in its `flat` record (`nurbs`,
+  sketch 2D mm); `sweep_splines.with_exact_splines` puts it in the capture's coordinates and gives the spline its
+  exact end directions from its first and last poles, before the path is planned. The measured points give those
+  directions only to a fraction of a degree, and a spline that leaves a line smoothly would read as a sharp corner.
+  The tightest bend is read again along the Bezier pieces (the planner reads it along its fitted curve), and the
+  outline must stay clear of it. The shape for later cuts is a chain of prisms along chords of the measured points
+  (within 0.002 mm of them), each made longer at its joints to fill the gap a turn opens on the outer side.
 - Left out: a twist or a taper (cause `sweepShape`), an outline kept in one direction along a bend (`sweepShape`), a
-  path out of one plane or with a free curve (`sweepPath`), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
+  path out of one plane (`sweepPath`), a spline Orca cannot draw exactly (`sweepPath`: a body edge or a curve read
+  without its definition, one of the splines left out below, or a spline the planner cut open where a closed path
+  meets the outline), a closed path that holds a spline (`sweepPath`: live, Orca 2.5.1 crashed in OCCT's
+  `BRepFill_Pipe::MakeShape` while it built a closed track of two lines and two splines), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
   where Fusion's mitred wire has 384, and 202 for a closed square path against 439), holes along a bent path
   (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
   known, a path in another component and the outlines of
@@ -528,7 +544,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - The path keeps its numbers (Orca cannot tie a path sketch to a variable): the sizes behind the path's sketch and
   its plane, or for a path of body edges every size read before the sweep, are marked. A plain rectangle or circle
   outline follows its sizes, and the parameter's line says how far it may grow before it reaches the centre of the
-  tightest bend or another part of the path ("keep bar_w under 19.9 mm" for a bend of radius 10).
+  tightest bend or another part of the path ("keep bar_w between 0.01 and 19.9 mm" for a bend of radius 10; the
+  lower limit is where the outline vanishes, see "Limits").
 - Orca's Loft builds one wire per outline sketch and skins them (OCCT `BRepOffsetAPI_ThruSections`, ruled), which is
   what Fusion makes between two outlines with free ends. OCCT joins the points of the two loops its own way. Two
   circles join point to point at the same angle when both sketches have one plane normal, so the copy writes them
@@ -544,7 +561,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   knot inserted up to the degree), and each piece is one Orca entity of 4 poles (3 for degree two), the same curve.
   The pieces must start and end where Fusion's curve does and pass within 0.002 mm of every measured point. Left
   out: a closed (periodic) spline, differing weights, a degree over three, knots not clamped at both ends, a break
-  in the curve, and a spline read without its definition (older captures). Splines in a sweep path stay left out.
+  in the curve, and a spline read without its definition (older captures). The same pieces draw a spline of a sweep
+  path.
 - Live with OrcaSlicer 2.5.1 on 2026-11-16: the fixtures `sweep_pipe`, `sweep_far_end`, `sweep_closed_rim`,
   `sweep_ring`, `sweep_straight`, `sweep_edges`, `loft_two_squares` and `loft_on_plate` built with the capture's box
   and volume (1857.8, 1857.8, 420.5, 2261.9, 2400.0, the box only, 7000.0, 15000.0); the captures of
@@ -552,7 +570,13 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   and 5256.6 with `bar_h` 8, as worked out), a round groove along a bent path in a block (15681.4) with a pin cut
   below it after (15680.6), an oblique cone (3665.2, then 5110.3 with `top_d` 16), squares turned 0.5 degrees
   (6999.9), an arch of a two piece spline with uneven knots (1956.0), and a quarter bend of a round wire joined to a
-  block at its start, turning each way (277.4 both, the block showing the turn).
+  block at its start, turning each way (277.4 both, the block showing the turn). Sweeps along a spline: a round
+  wire of radius 2 along a line and a two piece spline with uneven knots (660.2 against 660.2471, drawn either way
+  round), and a 4 by 1.5 bar along a line and a three piece S spline with a turning point (479.9 against 479.9041,
+  the box 1.5 high, so the bar does not flip at the turning point), each with the capture's box. The same wire cut
+  out of a block that holds it (27339.8 against 27339.7529) and joined to a block at its start (1660.2 against
+  1660.2471), and with its diameter set by `wire` (660.2, then 1485.6 with `wire` 6 against 1485.56); the first
+  line's length `run`, a dimension of the path sketch, is marked and keeps its number.
 
 ### Which parameters follow
 

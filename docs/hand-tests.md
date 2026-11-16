@@ -1491,6 +1491,26 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       not used. At the values of the export, the Orca volume agrees with Fusion's (Inspect > Properties). Change
       `cut_at` to 20 in Fusion only: the cut moves in Fusion, and the Orca copy keeps it where it was, as the reason
       says.
+- [ ] OR25, a sweep along a spline. A user parameter `Wire` = 4 mm. On the XY plane draw a path: a 20 mm line from
+      the origin along X, then a control point spline from the line's end through control points (32, 0), (40, 14),
+      (52, -14), (60, 0) to (72, 0) mm, tangent to the line at their shared point. On the YZ plane draw a circle of
+      diameter `Wire` centred on the origin and sweep it along the whole path as a new body. Make a second body the
+      same way, with the path drawn the other way round (the spline from (72, 0) first, then the line back to the
+      origin). Make a third body with a fit point spline through (20, 0), (30, 5) and (40, 20) mm that is not tangent
+      to its 20 mm line. Make a fourth: a 70 by 40 by 10 mm block from (-10, -10, -5) to (60, 30, 5), then the
+      first sweep again as a cut of it; and a fifth: a 10 by 10 by 10 mm block from (-10, -5, -5) to (0, 5, 5), then
+      the first sweep again as a join to it. Make a sixth: on the XY plane a closed track of a 40 mm line from the
+      origin, a control point spline through (52, 0) and (52, 20) to (40, 20), a line back to (0, 20) and a control
+      point spline through (-12, 20) and (-12, 0) to the origin; sweep a 3 mm circle on the middle of the first line
+      once round it. Give the first line of the path its length as a dimension `Run` = 20 mm.
+      Export: each body for Orca with `Wire` and `Run` ticked. Expect: the first two, the fourth and the fifth copied
+      as one Orca sweep each (the fourth and fifth after their block extrude), the path sketch a line and B-spline
+      pieces starting at the outline, `Wire` follows with a limit whose lower end is above 0 ("keep Wire
+      between 0.01 and ..."), and `Run` stays a number with the reason "Orca
+      cannot tie the path of a sweep to a variable"; the third under "Left out" (sharp corner); the sixth under
+      "Left out" (a closed loop with a free curve). Each Orca body has the box and volume Fusion measures (Inspect >
+      Properties); set `Wire` to 6 in both and compare again. Send `report.json` when a spline path is left out with
+      "cannot draw exactly": its path curve must hold `flat` with `nurbs`.
 
 ## Thin extrudes
 

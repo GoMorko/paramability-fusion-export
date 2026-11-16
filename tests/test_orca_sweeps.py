@@ -14,13 +14,14 @@ from tests.translator_helpers import load_capture
 from lib.capture_model import gap_hints
 from lib.orca_recipe.enums import BooleanMode, EntityType, ExtrudeEnd, FeatureType, SketchShape
 from lib.orca_translate import FIXED, VARIABLE, causes
-from lib.orca_translate import splines
+from lib.orca_translate import splines, sweep_splines
 from lib.orca_translate.lofts import Lofted
 from lib.orca_translate.solid import Solid
 from lib.orca_translate.sweeps import carried
 from lib.design_model.paths import planner
 from lib.design_model.paths.model import PathOptions
 from lib.design_model.steps.sweep import profile_points
+from lib.geometry import spline_fit
 
 
 def types(result):
@@ -89,10 +90,10 @@ class SweepTest(unittest.TestCase):
         width, height = outcome(result, "bar_w"), outcome(result, "bar_h")
         self.assertEqual((width["outcome"], height["outcome"]), (VARIABLE, VARIABLE))
         # The bend has a radius of 10: the bar may grow to twice that across the path's plane, and freely along it.
-        # A limit below zero is told too: the copy cannot tell a width from a place that may go below zero.
-        self.assertAlmostEqual(limit_of(width).low, -20.0, delta=0.11)
+        # Neither side may reach zero, where the outline vanishes.
+        self.assertEqual(limit_of(width).low, 0.01)
         self.assertAlmostEqual(limit_of(width).high, 20.0, delta=0.11)
-        self.assertIsNone(limit_of(height))
+        self.assertEqual((limit_of(height).low, limit_of(height).high), (0.01, None))
 
     def test_sizes_that_move_the_outline_plane_are_marked(self):
         capture = sw.bar_along_bend()
@@ -233,6 +234,103 @@ class SplineTest(unittest.TestCase):
 
     def test_a_spline_read_without_its_definition_stays_out(self):
         self.assertEqual(left_causes(copy.deepcopy(load_capture("extrude_spline"))), [gap_hints.REFUSED])
+
+
+def _bezier_point(piece, t):
+    n = len(piece.ctrl) - 1
+    return [sum(math.comb(n, k) * (1 - t) ** (n - k) * t ** k * piece.ctrl[k][i] for k in range(n + 1))
+            for i in range(2)]
+
+
+class SplinePathTest(unittest.TestCase):
+    def test_a_spline_in_the_path_is_written_exactly_from_the_outline(self):
+        # Drawn from either end, the path sketch runs from the outline: the line, then the spline's Bezier pieces,
+        # which pass through the spline itself (the path frame is the XY plane here).
+        spec = sw.BEND_SPLINE
+        for drawn_back in (False, True):
+            with self.subTest(drawn_back=drawn_back):
+                result = run(sw.pipe_along_spline(drawn_back=drawn_back))
+                self.assertEqual(result.left_out, [])
+                self.assertEqual(types(result), [FeatureType.SKETCH, FeatureType.SKETCH, FeatureType.SWEEP])
+                path = result.recipe.features[1]
+                self.assertEqual([e.type for e in path.entities],
+                                 [EntityType.LINE, EntityType.BSPLINE, EntityType.BSPLINE])
+                self.assertAlmostEqual(math.dist(path.entities[0].p0, (0.0, 0.0)), 0.0, places=9)
+                for before, after in zip(path.entities, path.entities[1:]):
+                    self.assertAlmostEqual(math.dist(before.p1, after.p0), 0.0, places=6)
+                for u in (0.1, 0.3, 0.6, 0.9):
+                    piece, t = (path.entities[1], u / 0.3) if u <= 0.3 else (path.entities[2], (u - 0.3) / 0.7)
+                    want = sw.nurbs_point(3, spec["knots"], spec["poles"], u)
+                    self.assertAlmostEqual(math.dist(_bezier_point(piece, t), want), 0.0, places=9)
+
+    def test_the_shape_for_later_cuts_is_the_outline_carried_along_the_spline(self):
+        capture = sw.pipe_along_spline()
+        data = sweep_data(capture)
+        profile = data["profiles"][0]
+        found = planner.plan(sweep_splines.with_exact_splines(data["path"]), profile["frame"],
+                             profile_points(profile), PathOptions(splines=spline_fit))
+        loops = [loop["curves"] for loop in profile["loops"]]
+        box = Solid([("add", carried(profile["frame"], loops, found))]).box()
+        target = capture["target"]["box"]
+        for got, want in zip(box["min"] + box["max"], target["min"] + target["max"]):
+            self.assertAlmostEqual(got, want, delta=0.01)
+        # A pin down through the spline meets the pipe; the same pin 3 mm off the spline, past its radius, does not.
+        on, ahead = (sw.nurbs_point(3, sw.BEND_SPLINE["knots"], sw.BEND_SPLINE["poles"], u) for u in (0.5, 0.501))
+        size = math.dist(on, ahead)
+        across = (-(ahead[1] - on[1]) / size, (ahead[0] - on[0]) / size)
+        for off, cut in ((0.0, True), (3.0, False)):
+            with self.subTest(off=off):
+                capture = sw.pipe_along_spline()
+                at = [on[0] + off * across[0], on[1] + off * across[1], -5.0]
+                pin = sw.extrude(4, "Pin", [sw.profile("Pin sketch", dict(sw.UP, origin=at),
+                                                       sw.circle(0.5))], operation="cut",
+                                 side_one={"kind": "distance", "distance": 10.0, "taper_deg": 0.0},
+                                 end_offset=10.0, target_box_before=capture["target"]["box"])
+                capture["items"] += [sw.sketch_item(3, "Pin sketch"), pin]
+                self.assertEqual(left_causes(capture), [] if cut else [causes.MISSES_PART])
+
+    def test_a_spline_sweep_cuts_or_joins_an_existing_body(self):
+        for operation, mode in (("cut", BooleanMode.CUT), ("join", BooleanMode.ADD)):
+            with self.subTest(operation):
+                result = run(sw.block_and_spline_pipe(operation))
+                self.assertEqual(result.left_out, [])
+                self.assertEqual(result.recipe.features[-1].type, FeatureType.SWEEP)
+                self.assertEqual(result.recipe.features[-1].mode, mode)
+
+    def test_the_outline_follows_its_size_and_the_path_keeps_its_numbers(self):
+        result = run(sw.sized_spline_pipe())
+        wire, path = outcome(result, "wire"), outcome(result, "run")
+        self.assertEqual((wire["outcome"], path["outcome"]), (VARIABLE, FIXED))
+        self.assertTrue(path["reasons"])
+        # The wire may grow close to twice the radius of the spline's tightest bend, never past it.
+        bend = sweep_splines.tightest([sw.spline_curve(sw.BEND_SPLINE)])
+        self.assertEqual(limit_of(wire).low, 0.01)
+        self.assertLessEqual(limit_of(wire).high, 2.0 * bend)
+        self.assertGreater(limit_of(wire).high, 0.9 * 2.0 * bend)
+
+    def test_the_tightest_bend_is_read_along_the_exact_curve(self):
+        # The parabola y = x * x as a quadratic Bezier: its tightest bend, at the vertex, has a radius of one half.
+        parabola = {"kind": "other", "nurbs": {"degree": 2, "knots": [0, 0, 0, 1, 1, 1],
+                                               "poles": [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)], "rational": False,
+                                               "weights": None, "periodic": False}}
+        self.assertAlmostEqual(sweep_splines.tightest([parabola]), 0.5, places=6)
+
+    def test_splines_in_the_path_orca_cannot_draw_exactly_stay_out(self):
+        unread = sw.pipe_along_spline()
+        del sweep_data(unread)["path"]["curves"][1]["flat"]["nurbs"]
+        weighted = sw.pipe_along_spline()
+        sweep_data(weighted)["path"]["curves"][1]["flat"]["nurbs"].update(rational=True, weights=[1, 2, 1, 1, 1])
+        cornered = sw.pipe_along_spline()
+        spline = sweep_data(cornered)["path"]["curves"][1]
+        spline["flat"]["nurbs"]["poles"][1] = [28.0, 1.0]  # leaves the line at a slight angle, as its points do
+        bent = sw.spline_curve(dict(sw.BEND_SPLINE, poles=spline["flat"]["nurbs"]["poles"]))
+        spline.update(samples=[p + [0.0] for p in bent["samples"]], flat=bent)
+        cases = (("no definition", unread, causes.SWEEP_PATH), ("weights that differ", weighted, causes.SWEEP_PATH),
+                 ("a closed path", sw.ring_along_splines(), causes.SWEEP_PATH),
+                 ("a corner where the spline meets the line", cornered, gap_hints.SHARP_CORNER))
+        for name, capture, cause in cases:
+            with self.subTest(name):
+                self.assertEqual(left_causes(capture), [cause])
 
 
 if __name__ == "__main__":

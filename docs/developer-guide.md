@@ -2122,7 +2122,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     (the arc, circle, flat and corners forms), `closed.py` (closed chains), `tolerances.py` and `words.py` (the words
     and the code of each problem).
   The recipe caps stay in `translator/paths/path_limits.py`. The Orca output gives the same caps and the same spline
-  fit, so that it takes the same paths as the recipe output.
+  fit, so that it takes the same paths as the recipe output. The Orca output does not write the fitted curve. It
+  writes each spline of the path exactly, as the pieces of its definition. Before it plans the path, it gives each
+  spline its exact end directions (`orca_translate/sweep_splines.py`). Thus the check for sharp corners uses the
+  exact directions, and not the directions between two measured points.
 - `steps/`: one reader for each kind of step:
   - `sweep.py`: the settings of a sweep: `settings_problem` gives the problem of a guide surface, a guide rail, a
     setting that Fusion did not give, or an orientation that is not perpendicular or parallel, and `cover_problem`

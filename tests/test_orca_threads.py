@@ -200,8 +200,16 @@ class LimitsTest(unittest.TestCase):
 
     def test_a_variable_the_check_does_not_limit_has_no_range(self):
         thread = threads(translate(rod()))[0]
+        thread.expr = {"thread_x": "len - 1.25"}
+        self.assertEqual(limits.ranges(_Variables({"len": "6"}), [(thread, "thread_x")], lambda h: True), {})
+
+    def test_a_size_of_a_shape_stops_above_zero_whatever_the_check_says(self):
+        thread = threads(translate(rod()))[0]
         thread.expr = {"thread_height": "len - 1.25"}
-        self.assertEqual(limits.ranges(_Variables({"len": "6"}), [(thread, "thread_height")], lambda h: True), {})
+        found = limits.ranges(_Variables({"len": "6"}), [(thread, "thread_height")], lambda h: True)
+        self.assertAlmostEqual(found["len"][0], 1.25, places=6)
+        self.assertGreater(found["len"][0], 1.25)
+        self.assertIsNone(found["len"][1])
 
 
 if __name__ == "__main__":

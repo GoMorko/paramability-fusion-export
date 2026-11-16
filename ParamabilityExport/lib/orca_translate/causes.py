@@ -17,7 +17,7 @@ TAPER_SHAPE = "taperShape"
 TAPER_EXTENT = "taperExtent"
 
 # Sweeps: an outline Orca's sweep cannot shape the same way (a twist, a taper, one kept direction), and a path it
-# cannot follow the same way (out of one plane, free curves).
+# cannot follow the same way (out of one plane, free curves it cannot draw exactly).
 SWEEP_SHAPE = "sweepShape"
 SWEEP_PATH = "sweepPath"
 
