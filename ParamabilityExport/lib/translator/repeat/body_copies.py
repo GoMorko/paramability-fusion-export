@@ -302,7 +302,7 @@ def write(ctx, combine_item, group, combine, number):
                                "%s_%d_%d" % (combine_item["index"], number, place))
         if isinstance(tool, Refusal):
             return tool
-        refused = tool_refusal(tool.steps)
+        refused = tool_refusal(tool.steps) or tool_walk.unfinished(tool)
         if refused:
             return refused
         step_id = tool.ctx.id_prefix + "tool"
