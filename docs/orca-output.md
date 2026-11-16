@@ -49,7 +49,9 @@ The modules of `lib/orca_translate/`:
 - `other_components.py`: geometry of other components (see "Other components" below).
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
-  and chamfer) and `threads.py`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
+  and chamfer) and `threads.py`. `holes.py` and `threads.py` read the hole and the thread through the shared readers
+  `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
+  the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
   cause (`causes.py`).
 - Helpers of the handlers: `extents.py` (To, From and taper of an extrude), `hole_place.py` (where holes sit),
   `drilled.py` (circle holes of the first outline drilled as Orca holes), `sketch_sizes.py` (the sizes an outline
@@ -336,7 +338,7 @@ not judged to meet material where Orca removes nothing.
   about the bottom of the part. Both are left out.
 - Thread (`thread_major_nominal`): `thread_radius` is half the major diameter, `thread_depth` half the difference of
   the major and minor diameters, the plane's normal the direction the thread runs, `thread_height` its length. The
-  numbers come from Fusion's thread info (`translator.hole.thread.spec_of`). Orca's limits (radius at least 0.5 mm,
+  numbers come from Fusion's thread info (`design_model/steps/thread.py`, `spec_of`). Orca's limits (radius at least 0.5 mm,
   pitch over 0.1 mm, depth under 0.7 times the pitch and 0.45 times the radius, length over half a pitch, under 400
   turns) are kept with a margin; a thread outside them, a left hand thread, and one that does not meet the copied
   part are left out. A length that follows a variable gets its limits on the parameter's line ("keep len over

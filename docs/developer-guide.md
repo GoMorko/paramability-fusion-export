@@ -1683,7 +1683,8 @@ one folder per family of steps.
     `path_motion`, `path_model`, `path_limits`).
   - `loft/`: `step.py`, `loft_sections.py`, `loft_volume.py`.
   - `revolve/step.py`, `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
-    of a tapped hole, see 3.12).
+    of a tapped hole, see 3.12). They read the hole and the thread through `design_model/steps/hole.py` and
+    `thread.py`; they keep the caps of the recipe, the values that follow sizes and the refusals.
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
     the helix), `coil_section.py` (the wire's section from an end face), `coil_operation.py` (new body, join or cut from
     the volumes), `coil_values.py` (the sizes of the coil as formulas) and `coil_limits.py` (the caps and the refusal
@@ -1797,6 +1798,38 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     its sizes are marked when it is brought in. `item_reads` is the same for one timeline item.
     `construction_fixes` gives, for a step, the sizes behind the construction planes and axes that it uses itself.
   - The sizes that the probe has to try. `probed_sizes`, `placement_driven` and `reach_driven`.
+- `problem.py`: `Problem(code, words, cause)`. A reader of the shared layer gives its record, or a `Problem` when the
+  design cannot be read or placed. `words` is one plain sentence. `cause` is the cause of `gap_hints.py` that gives the
+  person a tip, or None. `code` names the problem, so a caller can tell two of them apart. The layer does not refuse a
+  step. The recipe translator turns a `Problem` into a `Refusal` with the same sentence and cause. The Orca output turns
+  it into a `Skip` (the cause `refused` when `cause` is None).
+- `steps/`: one reader for each kind of timeline step. A reader gives facts that any output needs. It has no value, no
+  range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. The readers for holes and
+  threads are here. The other kinds follow.
+  - `steps/thread.py`: the thread of a ThreadFeature and the thread of a tapped hole. `spec_of` gives the `Spec` (pitch,
+    major and minor diameter, hand) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
+    degree form (cause `threadProfile`), for a number that is missing and for a thread that has no usable depth. A
+    caller can pass the range of pitches that it copies (`pitches`). A pitch outside it is a `Problem` with the cause
+    `threadLimits`. `cylinder` gives the one `Cylinder` that the faces make (the point on the axis, the unit axis, the
+    radius, the span along the axis, and which side the material is), or a `Problem` for a face that is not a cylinder,
+    a face of another component, faces that are not one cylinder, and faces that do not touch. `is_full` and
+    `start_end` say if the thread runs the whole face and at which end it starts. `read_feature` does all of these and
+    the checks of the side and the size in order, and gives a `Feature`. For a tapped hole, `hole_spec` gives the
+    `Spec` and checks it against the measured bore, `hole_depth` gives how deep the thread runs (`Depth`), and
+    `measured_ends` gives the measured end of each position. These came from `translator/hole/thread.py` and
+    `orca_translate/threads.py`, which each had a copy.
+  - `steps/hole.py`: the HoleFeature. `placed` checks the position, the direction and the diameter. `kind_of` gives the
+    `Kind` (simple, counterbore or countersink, with its record), `tap_of` says if the tap is plain, tapped or
+    tapered, and `extent_of` gives the depth as a distance, through all or up to a face. `direction_of` gives the unit
+    direction of the hole into the material. The stored direction is turned round when a measured end lies behind the
+    position it belongs to, and the fact `flipped` says so. `drill_diameter` gives the measured drill size of a tapped
+    hole: the widest measured cylinder that is not wider than the stored size. `size_differs` says that the measured
+    cylinders disagree with the stored size. `end_shape` gives the measured end of the hole (cone, plane or mixed).
+    `reach_depth` gives the measured depth of a hole that ends at a face. `tapped_bore` gives the diameter at which
+    the bore is cut and the thread `Spec` (None for a cosmetic thread). These came from `translator/hole/step.py` and
+    `orca_translate/holes.py` and `threads.py`.
+  Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
+  the Orca output checks the limits of Orca and the part that it built.
 - `dimension_sizes.py`: the dimensions of a sketch graph as formulas of the sizes (`dimension_formulas`), the size
   settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
   setting (`size_values`, `size_env`). This came from `probe/derived_sizes.py`, and `near_values` and `size_values`
@@ -2640,7 +2673,9 @@ flag is true (1.10).
 the translator then leaves the thread out. It never guesses. Fusion keeps lengths in cm, and they leave the reader in mm.
 `threadAngle` is in degrees already.
 
-`hole/thread.py` (`feature`) checks these points in this order. A failed check is a refusal, so the thread is a gap:
+`hole/thread.py` (`feature`) checks these points in this order (`read_feature` in `design_model/steps/thread.py` does
+points 1 to 5; it gives a `Problem`, and `feature` turns it into a refusal with the same sentence and cause). A failed
+check is a refusal, so the thread is a gap:
 
 1. The profile. A given angle must be 60 degrees (within 0.01). The name must say metric or Unified. A name with acme,
    trapezoid, whitworth, BSP, NPT, pipe, buttress, square or taper in it is refused (cause `threadProfile`).
@@ -2672,7 +2707,7 @@ keeps its number, and its sizes are marked.
 #### A tapped hole
 
 A Hole step with a tapped thread that is modelled is written as two things: a hole at the minor diameter of the thread,
-and an internal `thread` step for each hole position (`hole.thread.hole_spec` and `hole_threads`). Before, such a hole was
+and an internal `thread` step for each hole position (`design_model/steps/thread.py` `hole_spec`, and `hole/thread.py` `hole_threads`). Before, such a hole was
 a gap. This path is unproven until hand check TD2 passes (see the end of this part). The depth of each thread:
 
 - a through hole: measured from the entry to the end faces (`end_points`);

@@ -28,7 +28,9 @@ package may import only packages above it in this list (not every one of them). 
   the body or of another body), the body before and after it, the measures of that body (`seen_on`) and the other
   pieces of a split; `words.py` the texts of these facts; `reach.py` which sizes may move a sketch, a plane, a face or
   a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
-  at; `values.py` the one value type, `Quantity` (a number and, when sizes move it, a formula), with `Sized` (the
+  at; `problem.py` the answer of a reader that cannot read the design (`Problem`); `steps/` one reader for each kind
+  of step (`hole.py` and `thread.py` so far: the kind, the direction, the measured sizes and the thread of a hole and of
+  a ThreadFeature); `values.py` the one value type, `Quantity` (a number and, when sizes move it, a formula), with `Sized` (the
   written form) and the helpers that work on them.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.

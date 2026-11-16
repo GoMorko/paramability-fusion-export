@@ -25,7 +25,7 @@ outside the part failed as often. Every thread that stays inside the part built.
 Orca stops the whole rebuild on a thread outside its limits (`orca_limits`) or one that removes nothing, so such a
 thread is left out, and so is a left hand thread (Orca makes right hand threads only); a thread whose length follows
 a variable gets the shortest length Orca makes on its parameter's line (`limits`). The numbers come from Fusion's
-thread info (`translator.hole.thread.spec_of`: metric and Unified threads only). A cosmetic thread changes no shape:
+thread info (`design_model/steps/thread.py`: metric and Unified threads only). A cosmetic thread changes no shape:
 a ThreadFeature writes nothing, and a tapped hole is drilled at its drill size.
 """
 import copy
@@ -35,17 +35,16 @@ from ..capture_model import gap_hints
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
-from ..translator.hole.thread import spec_of
-from ..translator.result import Refusal
 from . import causes, finish_body, limits
+from ..design_model.problem import Problem
+from ..design_model.steps import hole as hole_facts, thread as facts
 from ..design_model.values import Quantity
 from .sketches import entities_of
 from .solid import CUT, Prism
 from .skip import Skip
 
-# How far the cylinder may differ from the thread size (mm), and an end of the thread from its face (mm).
-DIAMETER_TOL = 0.3
-END_TOL = 0.01
+# The pitches (mm) the Orca copy writes a thread for.
+PITCHES = (0.2, 10.0)
 # Orca's thread limits (CadDocument, Thread), kept with this share of margin.
 LIMIT_MARGIN = 0.02
 # How far inside each end of Fusion's thread the Orca thread starts and stops, in pitches.
@@ -72,8 +71,9 @@ LEAD_NOTE = {True: " Where the thread runs out of the part, the hole is a little
                     "turn, so a nut still goes on."}
 
 
-def _skip(refusal):
-    return Skip(refusal.reason, refusal.cause or gap_hints.REFUSED)
+def skip(problem):
+    """The Skip of a read problem of the shared layer."""
+    return Skip(problem.words, problem.cause or gap_hints.REFUSED)
 
 
 def orca_limits(major, minor, pitch, height):
@@ -287,86 +287,17 @@ def _misses(ctx):
 
 # ---- ThreadFeature ---------------------------------------------------------------------------------------------
 
-def _cylinder(data):
-    """(origin, unit axis, radius, (low, high) span along the axis, outward) of the one cylinder the faces make, or a
-    Skip."""
-    faces = data.get("faces") or []
-    if not faces or any(f.get("surface") != "Cylinder" for f in faces):
-        return Skip("A thread on a face that is not a cylinder is not copied to Orca.", gap_hints.THREAD_PROFILE)
-    if any(f.get("foreign") for f in faces):
-        return Skip("This thread is on a face of another component, which is not copied.", gap_hints.OTHER_COMPONENT)
-    first = faces[0]
-    if not (first.get("origin") and first.get("axis") and first.get("radius")):
-        return Skip("The cylinder of this thread could not be read.")
-    origin, axis, radius = [float(c) for c in first["origin"]], vec.unit(first["axis"]), float(first["radius"])
-    spans = []
-    for face in faces:
-        parallel = face.get("axis") and abs(abs(vec.dot(vec.unit(face["axis"]), axis)) - 1.0) < 1e-6
-        off = vec.sub(face["origin"], origin) if face.get("origin") else None
-        on_line = off is not None and vec.length(vec.sub(off, vec.scale(axis, vec.dot(off, axis)))) < 1e-3
-        if not (parallel and on_line and abs(float(face.get("radius") or 0) - radius) < 1e-4 and face.get("span")):
-            return Skip("The faces of this thread are not one cylinder.")
-        shift = vec.dot(off, axis)
-        low, high = face["span"]
-        if vec.dot(vec.unit(face["axis"]), axis) < 0:
-            low, high = -high, -low
-        spans.append((low + shift, high + shift))
-    spans.sort()
-    reach = spans[0][1]
-    for low, high in spans[1:]:
-        if low > reach + 1e-3:
-            return Skip("The faces of this thread do not touch each other.")
-        reach = max(reach, high)
-    outward = {f.get("outward") for f in faces}
-    return origin, axis, radius, (spans[0][0], reach), (outward.pop() if len(outward) == 1 else None)
-
-
-def _start(data, span, pitch, full):
-    """0 when the thread starts at the low end of the span, 1 at the high end, or a Skip."""
-    if full:
-        return 0
-    made = data.get("made_span")
-    if not made:
-        return Skip("Where the thread over part of the length starts could not be read.")
-    low, high = abs(made[0] - span[0]), abs(span[1] - made[1])
-    if low <= pitch + 0.5 and low + END_TOL < high:
-        return 0
-    if high <= pitch + 0.5 and high + END_TOL < low:
-        return 1
-    return Skip("Where the thread over part of the length starts could not be told.")
-
-
 def thread(ctx, item):
     """The Orca thread of a ThreadFeature, nothing for a cosmetic one, or a Skip."""
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     if not data.get("modeled"):
         return []
     what = item.get("name") or "a thread"
-    spec = spec_of(data, what)
-    if isinstance(spec, Refusal):
-        return _skip(spec)
-    found = _cylinder(data)
-    if isinstance(found, Skip):
-        return found
-    origin, axis, radius, span, outward = found
-    internal = data.get("internal")
-    if internal is None and outward is not None:
-        internal = not outward
-    if internal is None or (outward is not None and internal == outward):
-        return Skip("It could not be told whether this thread is inside or outside.")
-    if abs(2.0 * radius - (spec.minor if internal else spec.major)) > DIAMETER_TOL:
-        return Skip("The size of this thread does not match its cylinder.")
-    offset, length = data.get("offset"), data.get("length")
-    if offset is None or abs(offset) > 1e-6:
-        return Skip("A thread that starts away from the end of its face is not copied to Orca.")
-    full = data.get("full_length")
-    if full is None and length is not None:
-        full = abs(length - (span[1] - span[0])) <= 1e-3
-    if full is None:
-        return Skip("How long this thread runs could not be read.")
-    start = _start(data, span, spec.pitch, full)
-    if isinstance(start, Skip):
-        return start
+    found = facts.read_feature(data, what, PITCHES)
+    if isinstance(found, Problem):
+        return skip(found)
+    spec, (origin, axis, radius, span, outward) = found.spec, found.cylinder
+    internal, full, length, start = found.internal, found.full, found.length, found.start
     if full:
         height = Quantity(span[1] - span[0])
     else:
@@ -402,47 +333,28 @@ def thread(ctx, item):
 def tapped(item, data):
     """(bore diameter, Spec or None) of a tapped hole, or a Skip: a cosmetic thread is drilled at the drill size and
     writes no thread; a modeled one is drilled at the thread's minor diameter and gets a thread (`hole_threads`)."""
-    what = item.get("name") or "a hole"
-    if data.get("tap_type") == "taperTapped":
-        return Skip("Tapered threads are not copied to Orca.", gap_hints.THREAD_PROFILE)
-    modeled = data.get("thread_modeled")
-    if modeled is None:
-        return Skip("The thread of this hole could not be read.")
-    limit = float(data["diameter"]) / 2.0 + 1e-3
-    radii = [float(c["radius"]) for c in data.get("side_cylinders") or []
-             if isinstance(c, dict) and isinstance(c.get("radius"), (int, float)) and float(c["radius"]) <= limit]
-    drill = 2.0 * max(radii) if radii else None
-    if not modeled:
-        if drill is None:
-            return Skip("The drill size of this tapped hole could not be measured.")
-        return drill, None
-    spec = spec_of(data.get("thread") or {}, what, major=data.get("diameter"), minor=drill)
-    if isinstance(spec, Refusal):
-        return _skip(spec)
-    if drill is not None and abs(drill - spec.minor) > DIAMETER_TOL:
-        return Skip("The thread size of %s does not match the hole that was measured." % what)
-    return spec.minor, spec
+    found = hole_facts.tapped_bore(data, item.get("name") or "a hole", PITCHES)
+    return skip(found) if isinstance(found, Problem) else found
 
 
 def hole_lengths(item, data, spec, positions, normal, depth, ctx):
     """The length of the thread of each hole of a tapped hole as Fusion has it (`Quantity`s), or a Skip. `depth` is the
     hole's depth `Quantity`, None for a hole through all (its length is then measured from the end faces)."""
-    info = data.get("thread") or {}
     if depth is None:
-        ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple))]
-        if len(ends) != len(positions):
-            return Skip("The depth of this threaded hole could not be measured.")
-        lengths = [Quantity(abs(vec.dot(vec.sub(list(e), list(p)), normal))) for p, e in zip(positions, ends)]
+        ends = facts.measured_ends(data, len(positions))
+        if isinstance(ends, Problem):
+            return skip(ends)
+        lengths = [Quantity(abs(vec.dot(vec.sub(e, list(p)), normal))) for p, e in zip(positions, ends)]
     else:
         lengths = [depth] * len(positions)
-    full = info.get("full_length")
-    if full is False and info.get("depth"):
-        part = ctx.quantity(item, "thread.depth", float(info["depth"]))
+    reach = facts.hole_depth(data)
+    if isinstance(reach, Problem):
+        return skip(reach)
+    if not reach.full:
+        part = ctx.quantity(item, "thread.depth", reach.length)
         if any(part.n > s.n + 1e-6 for s in lengths):
             return Skip("The thread is deeper than its hole.")
         lengths = [part] * len(positions)
-    elif full is not True:
-        return Skip("How deep the thread of this hole runs could not be read.")
     return lengths
 
 
