@@ -4276,8 +4276,16 @@ Thus the add-in does not take the place of a copy from the transform alone. The 
    pattern of faces, or the faces of the source bodies. With the marker after the pattern, it reads the faces that
    each element made (`PatternElement.faces`, the `faces` of the element). For each face, it writes the centroid
    (`BRepFace.centroid`, in mm) and the area (`BRepFace.area`, in mm2). It reads up to 32 faces of the original and
-   up to 8 faces of each element. A list that cannot be read is null. `data_in_component` carries the centroids into
-   the frame of the part, together with the frames.
+   up to 8 faces of each element. A list that cannot be read is null.
+   Each face costs Fusion a measure. Thus, in a pattern with more than 12 kept copies, the reader reads the faces of
+   12 kept copies only (`SAMPLED_ELEMENTS`): the first three, the last two, and copies spread evenly between them.
+   A suppressed copy gets no faces. The checks below then prove the places of the sampled copies only. The wrong
+   transforms that hand check CP1 found are wrong for every copy in the same way, so a sample shows them. The checks
+   of step 5 do not use faces, so they still cover every copy.
+   The faces are in the space of their own component. The reader reads a face seen through an occurrence as its
+   native face (`nativeObject`). The element transforms are in assembly space: the exports of a part placed 2400 mm
+   along Y (T19 in the test projects) show this. Thus `data_in_component` carries the frames into the frame of the
+   part, but not the faces.
 2. `agrees` checks one place. It moves the faces of the original to the place. At least one face of the copy, and
    at least half of the faces that the place moves, must land on a face of the original with the same area (to
    0.01 mm and 1 part in 1000). A face that the place does not move (a face on the axis of a turn) tells nothing. A
@@ -4722,7 +4730,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
-| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check every place against the faces (3.18). Rectangular, path and body patterns are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
+| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.18). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
