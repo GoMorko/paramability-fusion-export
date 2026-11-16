@@ -57,7 +57,6 @@ PRIVATE_REACHES_IN_TESTS = {
 # that moves to the facts of `design_model` leaves it, and no module joins it.
 RAW_STEP_DATA = {
     "export_plan/probe_flow/borrowed_view.py",
-    "geometry/combine_volume.py",
     "probe/plan/covered.py", "probe/plan/request.py",
     "translator/audit.py", "translator/bodies/move.py", "translator/bodies/paste.py", "translator/bodies/split.py",
     "translator/bodies/split_rules.py", "translator/coil/step.py", "translator/combine/step.py",

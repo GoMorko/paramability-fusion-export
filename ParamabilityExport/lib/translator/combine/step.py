@@ -28,7 +28,7 @@ import copy
 from ...capture_model import step_kinds, tool_items
 from ...design_model.values import Quantity, reads_in
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from ...design_model import refs, roles, tool_chains
+from ...design_model import design, refs, roles, tool_chains
 from ...design_model import words as shared
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
@@ -265,7 +265,8 @@ def write_tools(ctx, item, data, combine):
 
     flat = not patterns and all(_writes_flat(tool) for tool, _ in found) and (
         combine != "intersect" or (len(found) == 1 and len(found[0][0].entries) == 1))
-    if flat and combine != "intersect" and exceeds(data, [other for tool, _ in found for other in tool.chain]):
+    if flat and combine != "intersect" and exceeds(data, [design.as_read(other).data for tool, _ in found
+                                                          for other in tool.chain]):
         return Refusal("This combine changes the part by more than the steps of its tool body fill, so the tool "
                        "cannot be copied exactly.")
     if not flat and exceeds_tools(combine, data):

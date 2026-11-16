@@ -1610,7 +1610,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | Package | May import | What it owns |
 | --- | --- | --- |
 | `package` | nothing | The `.paramability` file: units, manifest builders and checks, caps, file names, zip writer, gaps file bytes. |
-| `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). |
+| `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). The volume checks take the data of the steps, not the timeline items: the caller reads the data through the shared layer (`design_model.design`). |
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
