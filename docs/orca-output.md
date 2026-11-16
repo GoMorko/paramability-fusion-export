@@ -115,6 +115,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Mirror of the body joined to it | Mirror of the part (Add) | no |
 | Combine: join, cut, intersect | each tool body from the steps that made it, then a Boolean (Add, Cut, Intersect) | as the tool's steps |
 | Combine with a tool body of another component | the tool from its steps in its component's coordinates, a Transform to its place, then the Boolean (see "Other components") | as the tool's steps, never only that: the sizes acting on that component are marked |
+| Split Face that leaves the solid as it was (the reader saw the part unchanged) | nothing: the step is skipped, as in the other export. A Split Face that may have changed the solid is left out | no |
 | Split Body by a plane or a flat face | Cut by that plane, keeping the part's side | no |
 | Split Body by a solid body | that body as a tool, then a Boolean (Intersect inside it, Cut outside it) | as the tool's steps |
 | Move of the body: a turn about an axis (a negative angle turns about the reversed axis) | Transform about that axis | `xf_angle_deg` |
@@ -127,7 +128,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
-ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component whose place is not known, ellipses and splines Fusion does not give exactly, cuts that split
+ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
