@@ -84,8 +84,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
 3. DR1, draft directions. Extrude a box from a sketch on the XY plane. Draft two side faces by 3 degrees from a user
    parameter, with the XY plane as the fixed plane. Make a second copy with the direction flipped and a third with a
    negative angle.
-   Export: each copy leans the same way as in Fusion. A "Symmetric" draft that crosses the plane is left out with a
-   reason.
+   Export: each copy leans the same way as in Fusion. (A "Symmetric" draft that crosses the plane is copied: see DR2.)
 
 4. TH2, a sketch with two solutions. Sketch a triangle: one corner on the origin, one 40 mm along X, the third
    placed only by two distances (`Arm` = 30 mm from the origin, 35 mm from the second corner), no other constraint,
@@ -617,3 +616,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     corners of the wall are round as in Fusion, and the volumes of the copy and the STEP agree within 1 percent. When
     they do not agree, note which of the two types differs and by how much: the rounded type of Fusion and of the
     app may round different edges. On the inside copy the shape that Fusion makes is the one to match.
+58. DR2, a Symmetric draft and a Two Sides draft across the plane. Add a user parameter `Lean` = 3 deg. Extrude a
+    40 x 20 mm rectangle 10 mm up from the XY plane. Add a construction plane parallel to the XY plane, offset 5 mm,
+    and use it as the fixed plane. Make three copies of the design. Copy one: Draft the four side faces, Draft Type
+    "Symmetric", angle `Lean`. Copy two: the same, with the angle -3 deg. Copy three: Draft Type "Two Sides" with Angle 1
+    = 3 deg and Angle 2 = 6 deg. In each copy, measure how wide the top face (z = 10), the middle (z = 5) and the bottom
+    face (z = 0) are along X, and write the numbers down. On a fourth copy use Two Sides with 3 deg and 3 deg.
+    Export: tick `Lean` for copy one. Expect copy one to be widest in the middle (note it if not: the copy relies on
+    both sides leaning alike), so material comes off on both sides; the draft is copied as one step with two equal angles of 3 degrees (recipe version 17), and in Paramability
+    the top and bottom faces are narrower than the middle exactly as in Fusion. Changing `Lean` changes both sides. In
+    copy two the box is narrowest in the middle, and both angles are -3. Copy three is left out with the reason that
+    each side has its own angle; note which angle (3 or 6) Fusion applied to the half above the plane (z 5 to 10)
+    and whether `isDirectionFlipped` changes it: the answer decides whether this case can be copied later. On the fourth
+    copy note whether the shape equals the Symmetric draft of copy one (the same widths); it is left out now. Afterwards
+    the design is as before.

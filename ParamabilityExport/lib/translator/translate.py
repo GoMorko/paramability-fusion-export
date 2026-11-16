@@ -36,6 +36,8 @@ SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 # Sweep step fields (and the flat path's `closed`) newer than RECIPE_VERSION, the same way.
 SWEEP_VERSIONS = {"twistDeg": 16, "taperDeg": 16, "orientation": 16}
 SWEEP_PATH_VERSIONS = {"closed": 16}
+# Draft step fields newer than RECIPE_VERSION, the same way.
+DRAFT_VERSIONS = {"angleTwoDeg": 17}
 # A shell that grows outward, rounds its corners or has no open faces needs this version.
 SHELL_VERSION = 17
 MAX_FEATURES = 400
@@ -513,6 +515,7 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     written = all_steps(ctx.steps)
     version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
                   + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})]
+                  + [DRAFT_VERSIONS.get(key, 0) for step in written if step["kind"] == "draft" for key in step]
                   + [_counts_version(step, ctx.table) for step in written]
                   + [_sweep_version(step) for step in written]
                   + [_shell_version(step) for step in written])

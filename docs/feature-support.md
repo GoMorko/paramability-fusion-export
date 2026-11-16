@@ -121,7 +121,7 @@ can be.
 | Chamfer: two distances, distance and angle | Copied | - | Left out | Needs Orca | Orca makes only even chamfers. Paramability: two distances need sides that the add-in could measure. |
 | Shell: inside, open faces | Copied | - | Left out | Needs Orca | Orca opens only a face that it picks by its own numbering. |
 | Shell: outward, closed, rounded corners | Copied | - | Left out | Needs Orca | Paramability: needs a Paramability release that reads recipe version 17. The part's volume must change as the shell says. A shell that grows both inward and outward is left out. |
-| Draft | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane. Two different angles are left out. |
+| Draft | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane; a Symmetric draft with faces on both sides is copied as two equal angles (recipe version 17). Two different angles are left out because Fusion does not say which angle leans which side; a hand check can settle it. |
 | Scale of bodies | Copied | - | Left out | Needs Orca | Paramability: the factors follow sizes. A point that sizes can move keeps its place, and those sizes are marked. Factors per axis in a component turned at an angle are left out. |
 | Scale of sketches, or of a body and a sketch together | Left out | Yes, add-in only | Left out | Needs Orca | |
 | Combine: join, cut, intersect | Copied | - | Copied | - | The tool bodies are copied from their steps, also from other components. Orca: an intersect with several tools that the add-in cannot work out is left out. |
@@ -198,7 +198,7 @@ Sorted by how many printing projects it helps:
 6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
    change).
 7. Coils with a taper or a spiral (app change), and half turns (add-in only).
-8. Drafts with two angles, and shells that grow both inward and outward (app change).
+8. Shells that grow both inward and outward (app change), and drafts with two different angles (add-in only, after a hand check of which side each angle leans).
 9. Emboss on a curved face (app change).
 10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
