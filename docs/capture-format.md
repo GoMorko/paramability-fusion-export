@@ -1819,6 +1819,11 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   (`round`, `floor`, `ceil`), or it is built from whole numbers, count sizes, `+ - *`, `min`, `max`, `abs`, `mod`, `pow`
   to a whole literal and choices with whole results (`docs/expressions.md`, "Counts"). Otherwise the sizes are fixed.
   An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
+- A free size is a `count` (whole numbers, `step` 1, range 1 to twice its value, at most 64) only when it has no unit,
+  its value is a whole number of 1 or more, and a pattern quantity reads it where a fraction would reach the quantity
+  (`defaults.count_names`). A parameter that the quantity reads only inside `round`, `floor` or `ceil`, or only in a
+  comparison (`ceil(Ratio * 4)`, `if(N > 2; 3; 5)`), can take a fraction in Fusion, so it is a `number` size with
+  decimals. Every other size with no unit is a `number` too, also when its value is whole.
 - Values that stay numbers while a size reaches them: construction geometry that a step uses itself (except the
   distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind

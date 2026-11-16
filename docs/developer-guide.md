@@ -376,7 +376,14 @@ body_scope.py` finds them from the capture alone:
   matched to a step or a sketch that the body does not use. Anything that cannot be matched stays. Names are matched
   together with the component token, because every component has its own `Sketch1`.
 - `quantity_refs(capture)`: the model parameters that set a pattern count. The user parameters behind them become
-  whole number sizes (kind `count`).
+  whole number sizes (kind `count`). `defaults.count_names` finds these user parameters. It starts at the quantity
+  parameters and follows the names that each formula reads. It does not follow a name inside `round`, `floor` or
+  `ceil`. It does not follow a name in a comparison. In these places a fraction cannot reach the quantity, so Fusion
+  accepts a fraction there. Thus `Ratio` in `ceil(Ratio * 4)` is not a count. It becomes a size of kind `number`, and
+  that size has decimals. A formula can be unreadable, or it can read a parameter that the capture does not hold. For
+  such a formula, the walk follows every name that Fusion lists as read (`Graph.reads`). Thus a parameter that can be
+  a count is never lost. A size of kind `count` must also have no unit and a whole value of 1 or more
+  (`defaults.size_kind`). Every other size with no unit is of kind `number`.
 - `body_links(capture)`: the geometry links of the body (a sketch drawn around another component, or a step that uses
   a plane of another component; see 3.3).
 
