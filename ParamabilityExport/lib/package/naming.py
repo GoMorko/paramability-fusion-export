@@ -3,6 +3,7 @@ import json
 import re
 
 EXTENSION = ".paramability"
+ORCA_EXTENSION = ".3mf"
 _VERSION_SUFFIX = re.compile(r"\s+v\d+$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _BAD_FILE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -33,14 +34,14 @@ def component_names(bodies):
     return names
 
 
-def package_file_name(title):
-    """Safe default file name with the package extension."""
+def package_file_name(title, extension=EXTENSION):
+    """Safe default file name with the package extension (or `extension`)."""
     base = _BAD_FILE_CHARS.sub("_", title or "").strip(" .")[:80] or "design"
-    return base + EXTENSION
+    return base + extension
 
 
-def with_extension(path):
-    return path if path.lower().endswith(EXTENSION) else path + EXTENSION
+def with_extension(path, extension=EXTENSION):
+    return path if path.lower().endswith(extension) else path + extension
 
 
 def writer_text(addin_version, fusion_version):

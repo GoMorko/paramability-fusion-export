@@ -60,8 +60,9 @@ def _on_event(args):
         old = ui.commandDefinitions.itemById(COMMAND_ID)
         if old:
             old.deleteMe()
+        view = _pending.get("view") or {}
         definition = ui.commandDefinitions.addButtonDefinition(
-            COMMAND_ID, COMMAND_NAME, "What the last export saved.", "")
+            COMMAND_ID, view.get("title") or COMMAND_NAME, "What the last export saved.", "")
         _handlers.clear()
         on_command_created(definition.commandCreated, _on_created, _handlers)
         definition.execute()

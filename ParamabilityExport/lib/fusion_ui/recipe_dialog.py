@@ -76,17 +76,25 @@ def _set_text(inputs, key, index, text):
 NO_SIZES_TEXT = "This design has no user parameters that can be sizes. The part is saved with fixed numbers."
 
 
-def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
+ORCA_NOTE_ID = "pm_orca_note"
+ORCA_NOTE = ("Experimental: the ticked parameters become variables in OrcaSlicer's Design tab where Orca can follow "
+             "them. Min and Max are not used.")
+
+
+def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None, orca=False):
     """Add the inputs. offers come from export_plan.size_offers.offers; body is the body or bodies already picked, or
     None.
 
     Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the
     unit the Min and Max cells use for lengths. `stop` is the warning for the body already picked
     (dialog_model.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is not at
-    the end (design_edit.marker.marker_note).
+    the end (design_edit.marker.marker_note). `orca` builds the dialog of Export for Orca: one body, a line about the
+    output, and none of the size try options.
     """
     inputs = command.commandInputs
-    add_body_inputs(inputs, body, marker_note, MAX_PARTS)
+    add_body_inputs(inputs, body, marker_note, 1 if orca else MAX_PARTS)
+    if orca:
+        inputs.addTextBoxCommandInput(ORCA_NOTE_ID, "", rows.escape(ORCA_NOTE), rows.text_rows([ORCA_NOTE]), True)
     warning = inputs.addTextBoxCommandInput(WARN_ID, "", "", 1, True)
     warning.isVisible = False
     button = inputs.addBoolValueInput(SHOW_ID, "Show in timeline", False, "", False)
@@ -94,6 +102,13 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     _safely("Button tooltip", lambda: setattr(
         button, "tooltip", "Selects the step in Fusion. The timeline marker does not move."))
     show_stop(inputs, stop)
+    if not orca:
+        _try_options(inputs)
+    _table_and_up(command, inputs, offers, up_axis, design_unit)
+
+
+def _try_options(inputs):
+    """The options of the size tries: faster tries, the time limit and lighter on memory."""
     faster = inputs.addBoolValueInput(FASTER_ID, rows.FASTER_TRIES, True, "", True)
     _safely("Faster tries tooltip", lambda: setattr(faster, "tooltipDescription", rows.FASTER_TRIES_TOOLTIP))
     limit = inputs.addDropDownCommandInput(TIME_LIMIT_ID, rows.TIME_LIMIT, adsk.core.DropDownStyles.TextListDropDownStyle)
@@ -105,6 +120,9 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     reminder = inputs.addTextBoxCommandInput(LIGHT_UNDO_NOTE_ID, "", rows.escape(rows.LIGHT_UNDO_REMINDER), 1, True)
     reminder.isVisible = False
 
+
+def _table_and_up(command, inputs, offers, up_axis, design_unit):
+    """The parameter table (or the line that there are none) and the up direction."""
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
         _build_table(inputs, offers, design_unit)
@@ -226,8 +244,7 @@ def _refresh_details(inputs, offers, index=None, over=False):
     if box is None:
         return
     ticks = _ticks(inputs, offers)
-    _, problem = rows.read_ranges(
-        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
+    _, problem = _read_ranges(inputs, offers, ticks)
     count = rows.count_line(sum(ticks), problem, over)
     index = _selected_index(inputs, offers) if index is None else index
     if index is None:
@@ -345,13 +362,13 @@ def restore_bodies(inputs, bodies):
 
 def read_form(inputs, offers):
     """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names),
-    ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine), up_axis and
+    ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine, and always in
+    the Orca dialog, which does not use the ranges), up_axis and
     faster_tries (the box that turns off unused timeline steps during the tries; on when the box is missing),
     probe_time_limit (seconds the size tries may take, None for no limit; the default when the list is missing) and
     light_undo (the box that leaves the tries out of Undo, `export_plan.undo_steps`)."""
     ticks = _ticks(inputs, offers)
-    ranges, problem = rows.read_ranges(
-        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
+    ranges, problem = _read_ranges(inputs, offers, ticks)
     up_item = inputs.itemById(UP_ID).selectedItem
     faster = inputs.itemById(FASTER_ID)
     light = inputs.itemById(LIGHT_UNDO_ID)
@@ -371,14 +388,22 @@ def read_form(inputs, offers):
     }
 
 
+def _read_ranges(inputs, offers, ticks):
+    """`(ranges, problem)` of the typed Min and Max cells. The Orca dialog (the one with the Orca note) does not use
+    them, so a range there is never a problem."""
+    ranges, problem = rows.read_ranges(
+        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
+    return (ranges, "") if inputs.itemById(ORCA_NOTE_ID) is not None else (ranges, problem)
+
+
 def allow_preselect(args):
     """Any solid body can be picked, also one inside a component."""
     args.isSelectable = is_pickable_body(args.selection.entity)
 
 
-def inputs_valid(inputs, offers):
+def inputs_valid(inputs, offers, limit=MAX_PARTS):
     bodies = picked_bodies(inputs)
-    if not 1 <= len(bodies) <= MAX_PARTS or not all(is_pickable_body(b) for b in bodies):
+    if not 1 <= len(bodies) <= limit or not all(is_pickable_body(b) for b in bodies):
         return False
     form = read_form(inputs, offers)
     return len(form["ticked"]) <= MAX_TICKED and not form["range_problem"]

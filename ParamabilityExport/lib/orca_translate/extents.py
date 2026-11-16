@@ -1,0 +1,539 @@
+"""Extrude extents of the Orca copy beyond a plain distance: an end on a face or plane ("To"), a start on a face or
+plane ("From"), and a taper. `steps.extrude` asks these; each answer is a value to write or a `Skip`.
+
+Orca's Extrude ends at a distance (blind, symmetric, two sides) or goes through all. Its "up to face" names a face by
+Orca's own numbering of the body it rebuilt, which the copy cannot know, so a face or plane becomes a distance:
+
+- To a face or plane (`reach`): a blind side as long as the measured distance from where the extrude starts to that
+  plane, plus Fusion's offset from it. When sizes move the plane in a way the copy follows (`plane_move`), the length
+  is a formula: the plane's move along the extrude is added to it, so the end stays where Fusion puts it. A plane
+  follows what it is built on: an origin plane stays, an offset plane moves with its own distance and with its base,
+  and a face follows the end of a copied extrude it lies on (`solid.Prism.ends`). Sizes that may move the plane in any
+  other way leave the length a number, and those sizes are marked.
+- From a face or plane (`start_shift`): the sketch plane is moved to that plane. Orca cannot move a sketch plane with
+  a variable, so the shift is a number and the sizes that move the face are marked.
+- Limits (`guard`): Orca variables have no ranges, and past some values Orca builds these extrudes wrong without an
+  error: a "To" length at zero or below extrudes the other way, and a taper that shrinks a side of its outline to
+  nothing builds a straight extrude. The parameter's line says how far each variable may go; a field whose limit
+  cannot be told keeps its number.
+- Taper (`taper`): Orca moves the outline in its plane by the length times the tangent of `taper_deg` and lofts the
+  two outlines, for a blind extrude of one loop without holes. Its move rounds the corners it pushes outward, and a
+  loft between arcs whose ends slide along them twists the wall. So a taper is copied only when Fusion's and Orca's
+  walls are the same (`taper_gap`): a full circle, or an outline whose sharp corners all join two lines and point
+  away from the move (convex corners when the outline shrinks, inward corners when it grows). Checked live with
+  OrcaSlicer 2.5.1: a shrinking rectangle and triangle, and a circle either way, gave the exact volumes; a growing
+  rectangle and two arcs meeting at corners did not.
+"""
+import math
+
+from ..capture_model import gap_hints
+from ..capture_model.capture import same_body
+from ..geometry import vec
+from ..geometry.footprint import arc_span, is_full, polyline
+from ..orca_recipe.enums import SketchShape
+from ..params.expressions.text import format_number
+from ..translator.extrude.checks import check_taper
+from ..translator.extrude.common import COMBINE, parallel
+from ..translator.extrude.side import SidePlan
+from ..translator.extrude.taper import FUSION_TAPER_SIGN
+from ..translator.sizes import construction_sizes, offset_param, on_part, placement_sizes, reach_sizes
+from . import causes, limits
+from .context import Value
+from .skip import Skip
+from .solid import Prism
+
+# A plane this close to where the extrude starts (mm) gives it no length.
+_SIGN_TOL = 1e-9
+# Two measured distances (mm) that agree within this are the same.
+_LENGTH_TOL = 1e-3
+# A plane offset this close (mm) to its measured distance from its base has that sign.
+_OFFSET_TOL = 1e-5
+# A junction of two curves whose directions differ by less than this (radians) is smooth, not a corner.
+_SMOOTH = 1e-4
+# Orca builds a straight extrude for a taper of 89 degrees or more; steeper than this is not copied.
+_TAPER_MAX = 80.0
+# An edge or arc of the moved outline at the far end must keep at least this size (mm).
+_KEEP = 0.05
+
+_UNREAD = "This extrude could not be read from Fusion."
+_AXES = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
+
+
+def _label(item):
+    return item.get("name") or "the step"
+
+
+# ---- values ------------------------------------------------------------------------------------------------------
+
+def plus(*values):
+    """The sum of `context.Value`s; the formula keeps up."""
+    number = sum(v.number for v in values)
+    if all(v.formula is None for v in values):
+        return Value(number)
+    parts = ["(%s)" % v.formula if v.formula is not None else format_number(v.number) for v in values
+             if v.formula is not None or v.number]
+    reads = dict.fromkeys(name for v in values for name in v.reads)
+    return Value(number, " + ".join(parts), tuple(reads))
+
+
+class Reach(Value):
+    """The length of a side that ends on a face or plane ("To"). Orca extrudes the other way when a variable takes
+    it to zero or below, where Fusion stops."""
+
+
+def change(value):
+    """How a value moves from its number now: zero, with the formula `value - number` when sizes move it."""
+    if value.formula is None:
+        return Value(0.0)
+    return Value(0.0, "(%s) - %s" % (value.formula, format_number(value.number)), value.reads)
+
+
+# ---- how a face or plane moves -------------------------------------------------------------------------------------
+
+def plane_move(ctx, item, record, z, what):
+    """How the face or plane `record` (a capture TARGET: an extrude's `start`, `side_one` or `side_two`) moves along
+    the unit sketch normal `z` when sizes change: a Value of zero whose formula is that move (none when it stays), or
+    None when sizes may move it in a way the copy cannot follow. Those sizes are then marked; `what` words the reason
+    ("reaches to", "starts from")."""
+    if ctx.table is None:
+        return Value(0.0)
+    found = _move(ctx, item, record, z)
+    if found is not None:
+        return found
+    names = reach_sizes(ctx.table, ctx.capture.get("items") or [], item, record)
+    if not names:
+        return Value(0.0)
+    ctx.doubt(names, "%s %s a face or plane that may move with it, and the Orca copy cannot follow that"
+              % (_label(item), what))
+    return None
+
+
+def _move(ctx, item, record, z):
+    if record.get("origin"):
+        return Value(0.0)
+    if record.get("foreign") or record.get("assembly"):
+        return None
+    kind = record.get("entity_type")
+    if kind == "ConstructionPlane":
+        return _plane(ctx, item, record, z)
+    if kind == "BRepFace":
+        return _face(ctx, item, record, z)
+    return None
+
+
+def _plane_of(record):
+    plane = record.get("plane") if isinstance(record.get("plane"), dict) else record
+    return plane.get("point"), plane.get("normal")
+
+
+def _plane(ctx, item, record, z):
+    """A construction plane: one made from parameters alone stays (unless a size sets one of them); an offset plane
+    moves with its base and with its own distance when one size sets it (`sizes.offset_param`). A record that does
+    not say what the plane is built on (an older capture) cannot be followed."""
+    if "definition" not in record and "built_on" not in record:
+        return None
+    # A plane without a token stands for every construction plane.
+    own = construction_sizes(ctx.table, "constructionPlane", record.get("token") or "")
+    if not _chain_sizes(ctx.table, record) and not on_part(record):
+        return Value(0.0)
+    base = record.get("built_on") or []
+    if "offset" not in (record.get("definition") or "").lower() or len(base) != 1:
+        return None
+    under = _move(ctx, item, base[0], z)
+    if under is None:
+        return None
+    param = offset_param(ctx.table, record)
+    if param is None:
+        return None if own else under
+    point, normal = _plane_of(record)
+    base_point = [0.0, 0.0, 0.0] if base[0].get("origin") else (
+        base[0].get("face_point") or _plane_of(base[0])[0])
+    if not point or not normal or not base_point:
+        return None
+    distance = float(param["value"]) * 10.0
+    measured = vec.dot(vec.sub(point, base_point), vec.unit(normal))
+    if abs(distance) <= _OFFSET_TOL:
+        return None
+    if abs(measured - distance) <= _OFFSET_TOL:
+        sign = 1.0
+    elif abs(measured + distance) <= _OFFSET_TOL:
+        sign = -1.0
+    else:
+        return None
+    own_item = {"name": item.get("name"), "data": {"params": {"plane.offset": {
+        "name": param["name"], "expression": param["expression"], "value": distance}}}}
+    q = ctx.quantity(own_item, "plane.offset", distance)
+    return plus(under, change(q).scaled(sign * vec.dot(vec.unit(normal), z)))
+
+
+def _chain_sizes(table, record):
+    """The ticked sizes behind a construction plane and the construction planes it is built on."""
+    found = set()
+    pending = [record]
+    while pending:
+        entry = pending.pop()
+        if isinstance(entry, dict) and entry.get("entity_type") == "ConstructionPlane":
+            found |= set(construction_sizes(table, "constructionPlane", entry.get("token") or ""))
+            pending.extend(entry.get("built_on") or ())
+    return found
+
+
+def _face(ctx, item, record, z):
+    """A flat face on an end face of a copied extrude follows that end's length (`solid.Prism.ends`)."""
+    point = record.get("face_point")
+    if record.get("surface") not in (None, "Plane") or not point:
+        return None
+    found = _cap(ctx, record, point)
+    if found is None:
+        return None
+    prism, end = found
+    k = vec.dot(prism.z, z)
+    if abs(abs(k) - 1.0) > 1e-9:
+        return None
+    if prism.plane_sizes:
+        ctx.doubt(prism.plane_sizes, "%s uses a face whose sketch plane moves with it, and Orca cannot move a sketch "
+                  "plane with a variable" % _label(item))
+    return change(end).scaled(1.0 if k > 0 else -1.0)
+
+
+def _cap(ctx, record, point):
+    """(prism, Value of the end) for the end face of a copied extrude that `point` lies on, when no later shape of
+    that body touches the point; else None."""
+    owner = record.get("body")
+    bodies = []
+    for body in list(ctx.scopes) + list(ctx.bodies):
+        if body in bodies:
+            continue
+        if owner is None and body is not ctx.scope:
+            continue
+        if owner is not None and not (body.target and same_body(body.target, owner)):
+            continue
+        bodies.append(body)
+    for body in bodies:
+        for _, shape in reversed(body.solid.pieces):
+            if isinstance(shape, Prism) and shape.ends is not None:
+                end = shape.cap_at(point)
+                if end is not None:
+                    return shape, shape.ends[end]
+            if _touches(shape, point):
+                break
+    return None
+
+
+def _touches(shape, point):
+    """True when `point` lies in or on `shape`."""
+    for axis in _AXES:
+        for t0, t1 in shape.span(point, axis):
+            if t0 - _LENGTH_TOL <= 0.0 <= t1 + _LENGTH_TOL:
+                return True
+    return False
+
+
+# ---- From and To --------------------------------------------------------------------------------------------------
+
+def _flat_target(record, z, what):
+    """The plane of a face or plane an extrude starts from or reaches to, or a Skip."""
+    if record.get("foreign"):
+        return Skip("This extrude %s a face or plane of another component, which the Orca copy does not follow yet."
+                    % what, gap_hints.OTHER_COMPONENT)
+    plane = record.get("plane")
+    if not isinstance(plane, dict) or not plane.get("point") or not plane.get("normal"):
+        return Skip("This extrude %s a surface that is not flat, which is not copied to Orca." % what,
+                    gap_hints.EXTRUDE_END_FACE)
+    if not parallel(plane["normal"], z):
+        return Skip("This extrude %s a tilted surface, which is not copied to Orca." % what,
+                    gap_hints.EXTRUDE_END_FACE)
+    return plane
+
+
+def start_shift(ctx, item, start, frame):
+    """How far along the sketch normal (mm) an extrude that starts from a face or plane starts from its sketch, or a
+    Skip. The sizes that move that face or plane are marked: Orca keeps the sketch plane in place."""
+    z = vec.unit(frame["z"])
+    plane = _flat_target(start, z, "starts from")
+    if isinstance(plane, Skip):
+        return plane
+    held = ((item.get("data") or {}).get("params") or {}).get("start.offset")
+    if isinstance(held, dict) and abs(float(held.get("value") or 0.0)) > _SIGN_TOL:
+        return Skip("This extrude starts at a distance from a face or plane, which is not copied to Orca yet.",
+                    gap_hints.EXTRUDE_END_FACE)
+    move = plane_move(ctx, item, start, z, "starts from")
+    if move is not None and move.formula is not None:
+        ctx.doubt(move.reads, "%s starts from a face or plane that moves with it, and Orca cannot move a sketch plane "
+                  "with a variable" % _label(item))
+    return vec.dot(vec.sub(plane["point"], frame["origin"]), z)
+
+
+def start(ctx, item, data, frame):
+    """How far along the sketch normal (mm) the extrude starts from its sketch plane, or a Skip."""
+    start = data.get("start") or {"kind": "profilePlane"}
+    kind = start.get("kind")
+    if kind in (None, "profilePlane"):
+        return 0.0
+    if kind == "offset":
+        shift = float(start.get("offset") or 0.0)
+        if shift:
+            ctx.doubt(ctx.quantity(item, "start.offset", shift).reads,
+                      "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))
+        return shift
+    if kind == "fromEntity":
+        return start_shift(ctx, item, start, frame)
+    return Skip("This extrude starts in a way that is not copied to Orca yet.")
+
+
+def taper_of(data, side, which):
+    """Fusion's taper of a side in degrees: from the side, else from its parameter (a side that reaches to a face
+    keeps it there); None when it cannot be read. Without an angle anywhere, the measured walls and end face must show
+    no taper."""
+    if "taper_deg" in (side or {}):
+        return side["taper_deg"]
+    held = (data.get("params") or {}).get(which + ".taper_deg")
+    if isinstance(held, dict):
+        return float(held.get("value") or 0.0)
+    leans = data.get("side_leans")
+    if isinstance(leans, list) and any(isinstance(n, (int, float)) and abs(n) > 1e-4 for n in leans):
+        return None
+    start, end = data.get("profile_area"), data.get("end_area")
+    if isinstance(start, (int, float)) and isinstance(end, (int, float)) and abs(end - start) > 1e-6 * abs(start):
+        return None
+    return 0.0
+
+
+def reach(ctx, item, which, side, origin, z, sign=None):
+    """`(sign, length)` of the side `which` ("side_one", "side_two") that reaches to a face or plane: the direction
+    along the unit sketch normal `z` and the length from `origin` (where the extrude starts) as a Value that follows
+    the plane where the copy can; or a Skip. A side whose direction is set by the other side passes `sign`."""
+    plane = _flat_target(side, z, "reaches to")
+    if isinstance(plane, Skip):
+        return plane
+    to = vec.dot(vec.sub(plane["point"], origin), z)
+    if abs(to) < _SIGN_TOL:
+        return Skip("This extrude ends on the plane it starts from.")
+    found = 1 if to > 0 else -1
+    if sign is not None and found != sign:
+        return Skip("Both sides of this extrude end on the same side of its sketch, which is not copied to Orca.",
+                    gap_hints.EXTRUDE_END_FACE)
+    if side.get("offset") is None:
+        return Skip(_UNREAD)
+    offset = ctx.quantity(item, which + ".offset", float(side["offset"]))
+    if not abs(to) + offset.number > 0:
+        return Skip("This extrude has no length.")
+    move = plane_move(ctx, item, side, z, "reaches to")
+    length = plus(Value(abs(to)), offset)
+    if move is not None:
+        length = plus(length, move.scaled(found))
+    return found, Reach(length.number, length.formula, length.reads)
+
+
+def measured_gap(data, shift, length, sign, operation, holds=None):
+    """A Skip when the measured end face of a one sided extrude (or of the side of a two sided one that it lies on)
+    is not where `length` (mm, from the start at `shift` along `sign`) puts it, else None.
+
+    A cut that leaves the part before its end makes no end face of its own: the face Fusion measures is then a wall it
+    cut through, nearer than `length`. A nearer face is accepted only where the cut leaves the part there:
+    `holds(low, high)` tells whether the part may have material inside the cut's outlines between two heights from
+    the start (negative heights against the normal), and it must find none past the measured face. Without `holds`,
+    and for a cut that ends inside material, the measured face must lie at `length`."""
+    end = data.get("end_offset")
+    if end is None:
+        return None
+    measured = (end - shift) * sign
+    if abs(measured - length) <= _LENGTH_TOL:
+        return None
+    if operation == "cut" and measured < length and holds is not None:
+        near = max(0.0, measured) + _LENGTH_TOL
+        if not holds(*((near, length) if sign > 0 else (-length, -near))):
+            return None
+    return Skip("The measured end of this extrude does not match its length, so it is not copied.")
+
+
+def sketch_plane_sizes(ctx, item, profile):
+    """Fusion names of the ticked sizes that may move the plane the sketch of `profile` sits on, or, for a face of
+    the body as the outline, that may move or change that face: every size read before the step."""
+    if ctx.table is None:
+        return ()
+    items = ctx.capture.get("items") or []
+    if profile.get("face"):
+        return tuple(reach_sizes(ctx.table, items, item, {"entity_type": "BRepFace"}))
+    return tuple(placement_sizes(ctx.table, items, profile, item.get("index")))
+
+
+# ---- limits -------------------------------------------------------------------------------------------------------
+
+def guard(ctx, sketch, feature, side, outer):
+    """Tell how far the variables of one written extrude may go before Orca builds it wrong without an error: a "To"
+    length (`Reach`) must stay above zero, and a tapered outline must keep every side (`taper_gap`). `sketch` is
+    the Orca sketch feature, `feature` the Orca extrude, `side` the `steps._Side` it was written from and `outer`
+    the outer loop drawn (capture curves). The outline follows the bound `width`, `height` or `radius` of a plain
+    rectangle or circle, else it keeps its curves."""
+    reaches = (isinstance(side.distance, Reach), isinstance(side.distance2, Reach))
+    tapered = bool(feature.taper_deg) or "taper_deg" in feature.expr
+    if not (any(reaches) or tapered):
+        return
+    name, drawn = feature.name, sketch.name
+    fields = [(feature, "distance", "%s distance" % name), (feature, "distance2", "%s second side" % name),
+              (feature, "taper_deg", "%s taper" % name), (sketch, "width", "%s width" % drawn),
+              (sketch, "height", "%s height" % drawn), (sketch, "radius", "%s radius" % drawn)]
+
+    def ok(numbers):
+        distance, distance2, taper_deg, width, height, radius = numbers
+        if reaches[0] and not distance > _SIGN_TOL or reaches[1] and not distance2 > _SIGN_TOL:
+            return False
+        if not tapered or not taper_deg:
+            return True
+        deg = -taper_deg if feature.flip else taper_deg
+        if abs(deg) >= _TAPER_MAX or distance <= 0:
+            return False
+        loop = drawn_loop(sketch, outer, width, height, radius)
+        return not isinstance(taper_gap(loop, deg > 0, distance * math.tan(math.radians(abs(deg)))), str)
+
+    limits.guard(ctx, fields, ok, "%s: the Orca copy cannot tell how far this may change before Orca builds the "
+                 "extrude wrong" % name)
+
+
+def drawn_loop(sketch, outer, width, height, radius):
+    """The outer loop Orca draws for `sketch` with these sizes: a plain rectangle or circle about its plane's origin,
+    else the drawn curves `outer`."""
+    if sketch.entities:
+        return outer
+    if sketch.shape == SketchShape.CIRCLE:
+        return [{"kind": "circle", "center": [0.0, 0.0], "radius": radius}]
+    hw, hh = width / 2.0, height / 2.0
+    corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
+    return [{"kind": "line", "start": list(corners[n]), "end": list(corners[(n + 1) % 4])} for n in range(4)]
+
+
+# ---- taper --------------------------------------------------------------------------------------------------------
+
+def taper(ctx, item, path, deg, flip, outline, length):
+    """The Orca `taper_deg` of a blind side whose Fusion taper is `deg` (degrees; positive widens the outline going
+    away from the sketch), as a Value; None for no taper; or a Skip. `flip` says the side runs against the sketch
+    normal (Orca then moves the outline the other way for the same angle), `outline` is the `sketches.Outline` and
+    `length` the side's length now (mm). A taper whose sign a size could turn keeps its number when the outline has
+    sharp corners, since Orca would then round them."""
+    if deg is None:
+        return Skip(_UNREAD)
+    if not deg:
+        return None
+    if abs(deg) >= _TAPER_MAX:
+        return Skip("The taper of this extrude is too steep to copy to Orca.", gap_hints.TAPER_STEEP)
+    if outline.holes:
+        return Skip("Orca cannot taper an outline with holes, so this extrude is left out.", causes.TAPER_SHAPE)
+    found = taper_gap(outline.outer, deg > 0, length * math.tan(math.radians(abs(deg))))
+    if isinstance(found, str):
+        return Skip(found, causes.TAPER_SHAPE)
+    q = ctx.quantity(item, path, float(deg), "angle")
+    if q.formula is not None and found:
+        ctx.doubt(q.reads, "%s: the taper stays a number in Orca, since the other way Orca would round the corners "
+                  "of its outline" % _label(item))
+        q = Value(float(deg))
+    return q.scaled(-1.0 if flip else 1.0)
+
+
+def taper_measured(data, sides, outlines):
+    """A Skip when the tapers of an extrude's sides (`steps._Side`: `taper` in Fusion's degrees, `flip`) disagree
+    with the walls Fusion measured (`side_leans`, else the end face area of one outline), or cannot be checked; else
+    None. The same check as for a recipe (`translator.extrude.checks.check_taper`)."""
+    if not any(side.taper for side in sides):
+        return None
+    plan = [SidePlan("oneSide", -1 if side.flip else 1, side.distance.number, FUSION_TAPER_SIGN * side.taper)
+            for side in sides]
+    refusal = check_taper(plan, data, COMBINE.get(data.get("operation"), "add"), outlines)
+    return Skip(refusal.reason) if refusal is not None else None
+
+
+def _ends(curve):
+    """(start, direction at start, end, direction at end) of a line or arc, in the order its points run."""
+    if curve["kind"] == "line":
+        a, b = curve["start"], curve["end"]
+        d = _unit2((b[0] - a[0], b[1] - a[1]))
+        return a, d, b, d
+    c, r = curve["center"], curve["radius"]
+    a0, sweep = arc_span(curve)
+    turn = 1.0 if sweep > 0 else -1.0
+    a1 = a0 + sweep
+    return ((c[0] + r * math.cos(a0), c[1] + r * math.sin(a0)), (-turn * math.sin(a0), turn * math.cos(a0)),
+            (c[0] + r * math.cos(a1), c[1] + r * math.sin(a1)), (-turn * math.sin(a1), turn * math.cos(a1)))
+
+
+def _unit2(d):
+    n = math.hypot(d[0], d[1])
+    return (d[0] / n, d[1] / n) if n > 0 else (0.0, 0.0)
+
+
+def _chain(curves):
+    """The curves of one closed loop in running order, each `(curve, reversed)`; None when a curve is not a line or
+    an arc, or the loop does not close."""
+    if any(c.get("kind") not in ("line", "arc") for c in curves):
+        return None
+    left = list(curves)
+    out = [(left.pop(0), False)]
+    while left:
+        last, back = out[-1]
+        here = _ends(last)[0 if back else 2]
+        for n, c in enumerate(left):
+            ends = _ends(c)
+            if math.dist(ends[0], here) <= 1e-5:
+                out.append((left.pop(n), False))
+                break
+            if math.dist(ends[2], here) <= 1e-5:
+                out.append((left.pop(n), True))
+                break
+        else:
+            return None
+    first, back = out[0]
+    last, last_back = out[-1]
+    if math.dist(_ends(first)[2 if back else 0], _ends(last)[0 if last_back else 2]) > 1e-5:
+        return None
+    return out
+
+
+def _oriented(curve, back):
+    """(start, direction at start, end, direction at end) of a curve run forward or backward."""
+    a, da, b, db = _ends(curve)
+    return (b, (-db[0], -db[1]), a, (-da[0], -da[1])) if back else (a, da, b, db)
+
+
+def taper_gap(loop, grows, move):
+    """Why Orca's taper would not build the walls Fusion builds for the outline `loop` (capture curves) moved by
+    `move` mm at the far end (outward when `grows`), as one plain sentence; else the number of sharp corners (0 means
+    the outline is smooth, and a taper either way gives the same walls)."""
+    if len(loop) == 1 and loop[0].get("kind") == "circle" or (len(loop) == 1 and is_full(loop[0])):
+        radius = float(loop[0]["radius"])
+        if not grows and radius - move < _KEEP:
+            return "The taper of this extrude would shrink its circle to nothing, so it is not copied to Orca."
+        return 0
+    chain = _chain(loop)
+    if chain is None:
+        return "Orca can taper only an outline of lines and arcs, so this extrude is left out."
+    points = [p for c, back in chain for p in (polyline(c)[::-1] if back else polyline(c))]
+    area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1])) / 2.0
+    ccw = 1.0 if area > 0 else -1.0
+    runs = [_oriented(c, back) for c, back in chain]
+    turns = []
+    for n, (curve, _) in enumerate(chain):
+        incoming, outgoing = runs[n - 1][3], runs[n][1]
+        cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
+        dot = incoming[0] * outgoing[0] + incoming[1] * outgoing[1]
+        angle = math.atan2(cross, dot) * ccw  # positive at a convex corner
+        sharp = abs(angle) > _SMOOTH
+        if sharp and (curve["kind"] != "line" or chain[n - 1][0]["kind"] != "line"):
+            return ("This tapered outline has a sharp corner at an arc, and Orca's taper twists the wall there, so "
+                    "it is not copied to Orca.")
+        if sharp and (angle > 0) == grows:
+            return ("This tapered outline has corners that Orca would round off, so it is not copied to Orca." if grows
+                    else "This tapered outline has inward corners that Orca would round off, so it is not copied to "
+                         "Orca.")
+        turns.append(angle if sharp else 0.0)
+    outward = move if grows else -move
+    for n, (curve, back) in enumerate(chain):
+        if curve["kind"] == "line":
+            kept = math.dist(curve["start"], curve["end"]) + outward * (
+                math.tan(turns[n] / 2.0) + math.tan(turns[(n + 1) % len(chain)] / 2.0))
+        else:
+            convex = (arc_span(curve)[1] > 0) != back
+            convex = convex if ccw > 0 else not convex
+            kept = float(curve["radius"]) + (outward if convex else -outward)
+        if kept < _KEEP:
+            return "The taper of this extrude would shrink a side of its outline to nothing, so it is not copied."
+    return sum(1 for t in turns if t)

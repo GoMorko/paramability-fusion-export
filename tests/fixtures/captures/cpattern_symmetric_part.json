@@ -1,5 +1,5 @@
 {
-  "_comment": "Symmetric circular pattern over 90 degrees, 5 copies: the original is the middle copy.",
+  "_comment": "Symmetric circular pattern over 90 degrees, 5 copies: the original is the middle copy. Synthetic: written by hand, not exported from Fusion. Its volume is 8000 less the five holes (radius 2, depth 4), 3.9 mm apart, so neighbours overlap a little.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
@@ -19,7 +19,7 @@
         10.0
       ]
     },
-    "volume_mm3": 7828.5
+    "volume_mm3": 7749.6
   },
   "items": [
     {

@@ -20,6 +20,7 @@ from ...lib.export_plan.time_limit import DEFAULT_SECONDS
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
+from ...lib.fusion_reader.body_mesh import read_body_mesh
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.probe_state import read_state
 from ...lib.fusion_reader.read_gap_reach import read_reach
@@ -126,6 +127,9 @@ class FusionPort:
 
     def export_step(self, path):
         export_body_step(self.design, self._current(), path)
+
+    def read_mesh(self):
+        return read_body_mesh(self.design, self._current())
 
     def read_capture(self):
         if self._captures is not None:

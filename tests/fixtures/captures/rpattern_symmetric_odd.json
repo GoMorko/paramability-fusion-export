@@ -1,5 +1,5 @@
 {
-  "_comment": "Symmetric direction, 5 copies, spacing 10: the original is the middle copy.",
+  "_comment": "Symmetric direction, 5 copies, spacing 10: the original is the middle copy. Synthetic: written by hand, not exported from Fusion. Its volume is 8000 less the three holes (radius 2, depth 4) that land on the part; the two outer copies on the left fall off it.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
@@ -19,7 +19,7 @@
         10.0
       ]
     },
-    "volume_mm3": 7898.9
+    "volume_mm3": 7849.2
   },
   "items": [
     {

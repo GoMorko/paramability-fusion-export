@@ -120,13 +120,14 @@ class FakePort(_Ported):
     fail_read_from: that read and every later one raise. drift: every read at the start values after the first comes
     back moved that far. fail_step_at: that STEP export fails. cancel_at: that progress step is cancelled.
     keeper(tokens): the sketch keeper to give (else none). reach(capture, gaps): the reach answer (else it raises).
+    mesh: what `read_mesh` gives (else a box of the part).
     """
 
     def __init__(self, capture=BOX, store=None, units=None, bad_when=None, fail_read_from=None, drift=0.0,
-                 fail_step_at=None, cancel_at=None, keeper=None, reach=None, reader=None):
+                 fail_step_at=None, cancel_at=None, keeper=None, reach=None, reader=None, mesh=None):
         super().__init__(_user(capture), store, units, bad_when, fail_read_from, fail_step_at, cancel_at, keeper,
                          reach, reader)
-        self.capture, self.drift = capture, drift
+        self.capture, self.drift, self.mesh = capture, drift, mesh
         self.start = dict(self.store.exprs)
         self.e0 = first_read(capture)
 
@@ -137,6 +138,24 @@ class FakePort(_Ported):
 
     def export_step(self, path):
         self._write_step(path, b"ISO-10303-21;")
+
+    def read_mesh(self):
+        """A box mesh of the part's box in root coordinates (the target's box through its placement); `mesh` when the
+        port was given one. A STEP failure set for the first export fails this read too."""
+        self.steps += 1
+        if self.fail_step_at == self.steps:
+            from lib.design_edit.errors import StepExportError
+            raise StepExportError("Fusion gave no mesh of the part.")
+        if self.mesh is not None:
+            return self.mesh
+        from lib.geometry import mesh, rigid
+        target = (self.capture if isinstance(self.capture, dict) else BOX)["target"]
+        placement = target.get("placement")
+        move = rigid.move_from_frame(placement["frame"]) if isinstance(placement, dict) and placement.get("frame") \
+            else rigid.Move(rigid.IDENTITY_ROWS)
+        vertices, triangles = mesh.box_mesh(target["box"])
+        return [tuple(sum(move.rows[i][k] * v[k] for k in range(3)) + move.offset[i] for i in range(3))
+                for v in vertices], triangles
 
     def read_capture(self):
         return self.capture

@@ -28,6 +28,7 @@ from ..body_scope import body_links, scope_inputs
 from ..part_names import tagged, unique_names
 from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
+from ..orca_export import PARAMABILITY
 from ..recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from ..size_offers import discovery_sizes, labels
 from .probe_run import ProbeRun
@@ -95,7 +96,9 @@ class PartsResult:
 def run_parts_pipeline(port, request, tmp):
     """The package of one export of several bodies. `tmp` is a folder that holds the STEP files until the package is
     written. Raises what a failing step raises; the parameters are back by then and `port.warn_unrestored` has named
-    any that are not."""
+    any that are not. The Orca output takes one body only, so a request for it raises ValueError."""
+    if request.output != PARAMABILITY:
+        raise ValueError("The Orca output takes one body.")
     return PartsPipeline(port, request, tmp).run()
 
 

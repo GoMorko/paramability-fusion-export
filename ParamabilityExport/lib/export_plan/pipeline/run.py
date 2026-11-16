@@ -10,6 +10,7 @@ from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
 from ..probe_flow import SizeProbe, covers_a_sketch, shadow_of, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
+from ..orca_export import ORCA, plan_orca_export
 from ..recipe_export import free_sizes, plan_single_export, translate_capture
 from ..size_offers import discovery_sizes, labels
 from .port import PipelineResult
@@ -53,6 +54,8 @@ class _Pipeline:
     # ---- stages -----------------------------------------------------------------------------------------------
 
     def _run(self):
+        if self.request.output == ORCA:
+            return self._run_orca()
         port, request = self.port, self.request
         timing = self.timing
         part_step = os.path.join(self.tmp, "part.step")
@@ -61,10 +64,7 @@ class _Pipeline:
         with timing.span("capture"):
             capture = port.read_capture()
         with timing.span("size_table"):
-            model, quantities = scope_inputs(capture, request.model_params)
-            self.table = size_tables.build(
-                request.parameters, request.ticked, model, request.design_unit, quantity_params=quantities,
-                ranges=request.ranges, links=body_links(capture))
+            self.table = self._size_table(capture)
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
@@ -83,6 +83,35 @@ class _Pipeline:
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
             translated=final, health=health, also=self.also, derived=shadow, timing=self.timing)
         return PipelineResult(manifest, files, report, self.table, health)
+
+    def _size_table(self, capture):
+        model, quantities = scope_inputs(capture, self.request.model_params)
+        return size_tables.build(
+            self.request.parameters, self.request.ticked, model, self.request.design_unit, quantity_params=quantities,
+            ranges=self.request.ranges, links=body_links(capture))
+
+    def _run_orca(self):
+        """The Orca output: the mesh of the part, the capture, the size table and one translation. No size tries:
+        Orca follows only what the steps' own values and the simple sketches say, so nothing is measured, and the
+        ranges of the dialog are not used. The design is put back and checked as for a recipe."""
+        port, request, timing = self.port, self.request, self.timing
+        with timing.span("step_export"):  # the mesh stands where the STEP of the part does
+            mesh = port.read_mesh()
+        with timing.span("capture"):
+            capture = port.read_capture()
+        with timing.span("size_table"):
+            self.table = self._size_table(capture)
+        final = None
+        if isinstance(capture, dict):
+            self.capture = capture
+            final = self._translation(capture, None, "translate_final")
+        self.put_back.settle(lambda: None, lambda: None)
+        health = health_module.make_health(self.put_back.health_inputs(self.probe_status, "", [], ()))
+        package = plan_orca_export(
+            capture if capture is not None else RuntimeError("The steps were not read."), mesh, request.title,
+            request.writer, request.up_axis, size_table=self.table, listing=self._listing(), health=health,
+            marker=request.marker, translated=final, timing=self.timing)
+        return PipelineResult(None, {}, package.report, self.table, health, orca=package)
 
     def _translate_and_measure(self, capture):
         """The stages that need a capture: the first translation, the sketch probe and the translation with the
@@ -125,7 +154,8 @@ class _Pipeline:
         None when the translator failed. Never raises. `phase` is the timing phase the time is added to."""
         try:
             with self.timing.span(phase):
-                result = translate_capture(capture, self.request.up_axis, self.table, motion, timer=self.timing)
+                result = translate_capture(capture, self.request.up_axis, self.table, motion, timer=self.timing,
+                                           output=self.request.output)
         except Exception as exc:
             self.port.log(f"translation failed: {exc!r}")
             return None

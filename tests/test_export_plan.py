@@ -183,9 +183,9 @@ class NamingTest(unittest.TestCase):
         self.assertEqual(design_title("  "), "Design")
 
     def test_file_title_names_the_body_component(self):
-        self.assertEqual(body_file_title("Aquarium v4", ["Light holder v2", "Light holder v2"]), "Light holder")
-        self.assertEqual(body_file_title("Aquarium v4", ["Lid", "Pipe"]), "Aquarium")
-        self.assertEqual(body_file_title("Aquarium v4", [None]), "Aquarium")
+        self.assertEqual(body_file_title("Desk set v4", ["Pen cup v2", "Pen cup v2"]), "Pen cup")
+        self.assertEqual(body_file_title("Desk set v4", ["Lid", "Pipe"]), "Desk set")
+        self.assertEqual(body_file_title("Desk set v4", [None]), "Desk set")
 
     def test_file_name_is_safe(self):
         self.assertEqual(package_file_name('a/b:c?'), "a_b_c_.paramability")
@@ -197,7 +197,7 @@ class NamingTest(unittest.TestCase):
 
     def test_addin_version_from_manifest_file(self):
         path = os.path.join(context.ADDIN_DIR, "ParamabilityExport.manifest")
-        self.assertRegex(addin_version(path), r"^\d+\.\d+\.\d+$")
+        self.assertRegex(addin_version(path), r"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$")
         self.assertEqual(addin_version("/no/such/file"), "unknown")
 
 

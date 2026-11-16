@@ -18,3 +18,8 @@ ROWS_COMMAND_NAME = "Export size choices"
 ROWS_COMMAND_TOOLTIP = "Save a body in several ready-made sizes, as a dropdown in Paramability."
 
 PACKAGE_EXTENSION = ".paramability"
+
+ORCA_COMMAND_ID = "ParamabilityExportOrcaCommand"
+ORCA_COMMAND_NAME = "Export for Orca (experimental)"
+ORCA_COMMAND_TOOLTIP = ("Save one body as an OrcaSlicer 2.5 project. Your user parameters become variables in "
+                        "Orca's Design tab where Orca can follow them.")

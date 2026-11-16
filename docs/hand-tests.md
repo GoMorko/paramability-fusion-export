@@ -1243,6 +1243,205 @@ Members of the running Fusion build to note in the same exports: whether `SweepF
 sweep type and the loft end condition classes exist (an absent one reads as null or `other` and the step is left
 out).
 
+## 14. Export for Orca (experimental)
+
+The button "Export for Orca (experimental)" in the Paramability panel saves one body as an OrcaSlicer 2.5 project
+(`docs/orca-output.md`). Use OrcaSlicer 2.5.1 with Preferences > General > Features > "CAD feature (experimental)" on
+(restart Orca after turning it on). Open the `.3mf` with File > Open (or by double click). Keep the `.3mf`: its
+`Metadata/paramability_report.json` holds the report.
+
+- [ ] OR1, the button. The panel shows "Export for Orca (experimental)" next to the other two buttons. The dialog
+      lets you pick one body only, shows the parameter table and the up direction, and has no Faster tries, time limit
+      or Lighter on memory options. The save dialog offers a `.3mf` name.
+- [ ] OR2, a plain box. A sketch on the XY plane with a centre rectangle 80 by 60 mm (the sides are user parameters
+      `Width` and `Depth`, the rectangle centred on the origin), extruded `Height` = 30 mm. Export with all three
+      ticked. Expect: the result window lists all three as "follows the Orca variable", no step left out. In Orca the
+      plate shows the box in the middle of the bed, the Design tab shows a sketch, an extrude and three variables;
+      change `Width` to 100: the Design body grows to 100 mm. Commit adds a second object; delete the old one.
+- [ ] OR3, a corner rectangle with a hole. A 2 point rectangle from the origin, `Width` by `Depth`, extruded 10 mm,
+      then a simple hole of `HoleD` = 6 mm through all, its centre dimensioned 10 mm from two edges. Expect: `Width` and
+      `Depth` "follow ... but not everywhere" (the rectangle grows about its centre in Orca, and the hole keeps its
+      place), `HoleD` follows; the box and the hole in Orca match Fusion at the current values.
+- [ ] OR4, steps left out. Add a fillet of one top edge and a shell to OR2. Expect: both under "Left out" with a reason, and the
+      parameters they read "stay a fixed number in Orca"; Orca opens the file and builds the box without them.
+- [ ] OR5, a body in a moved component and a Y up design. Export a body of a component that is moved and turned in
+      the assembly, then a Y up design with the dialog set to Y up. Expect: in Orca the part lies flat on the bed as it
+      does in Fusion's Z up view, centred on the bed; `report.json` `mesh_check.off` is under 0.2.
+- [ ] OR6, the mesh. In OR2, slice the plate object without committing the Design body. Expect: the same layers as an
+      STL export of the body from Fusion. Note `mesh_check` in the report; if it says the mesh and the part differ,
+      note the numbers.
+- [ ] OR7, put back. After each export the parameters and the timeline marker are as before, and no step shows a
+      new warning.
+- [ ] OR8, rounds and chamfers. To OR2 add a user parameter `Round` = 3 mm, a fillet of `Round` on the top face (pick
+      the face), then a 1 mm chamfer of the four bottom edges. Expect: both copied, with notes that they are Orca's
+      round of all top edges and chamfer of all bottom edges; `Round` follows. In Orca set `Round` to 5: the body
+      rebuilds with the bigger round. A fillet of one top edge stays under "Left out" (hand-picked edges).
+- [ ] OR9, a hole placed by a size. To OR2 add a user parameter `HoleX` = 20 mm and a sketch on the top face with one
+      point, `HoleX` from the origin along X and on the X axis, then a simple 6 mm hole through all at that point.
+      Expect: `HoleX` follows the Orca variable. In Orca set `HoleX` to 30: the hole moves 10 mm further out, as it
+      does in Fusion. `Height` follows "but not everywhere": the hole's sketch sits on the top face, which `Height`
+      moves. In `report.json` the hole has `reference` with kind `face`.
+- [ ] OR10, tapped holes. To OR2 add a tapped M6 hole through the part with "Modeled" on, one 15 mm deep with
+      "Modeled" on, and one with it off. Expect: the through hole is a hole, an Orca thread and two shallow wider
+      holes (one at each face); the blind one a hole, a thread and one wider hole at the top; the note says the
+      thread stays half a turn inside its ends and the hole is a little wider for that half turn; the third a plain
+      hole at the drill size. Orca builds the body without an error. In OrcaSlicer, slice it and look at the layers at
+      each face: the hole opens to the full thread size there, with no ring at the small size. Note any thread left
+      out and its reason.
+- [ ] OR11, a threaded rod. A body of its own: a circle of 8 mm diameter extruded 20 mm, then a modeled M8x1.25
+      thread over the whole cylinder; a second body: a 20 by 20 mm square 5 mm high with the same rod on top and the
+      thread on the rod. Expect: an Orca thread on each, a ring cut at each free end of a rod and none at the
+      square, and both bodies build; note the volume Orca shows against Fusion's (Orca's is a little smaller: the
+      ring cuts take the crests of the last half turn).
+- [ ] OR12, where a tapped counterbore starts its thread. To OR2 add a counterbore hole, 10 mm counterbore 3 mm deep,
+      tapped M6 with "Modeled" on, through the part. In Fusion, measure from the top face to where the thread's
+      helical faces begin. Expect: in the Orca export the hole is left out ("tapped hole has a counterbore"). Send the
+      measured start (at the top face, or at the counterbore floor) and `report.json`: it decides how the copy can
+      start such a thread.
+- [ ] OR13, a symmetric pattern whose count follows a size. To OR2 add a user parameter `Count` = 5, a 6 mm hole
+      near the centre of the top face, and a rectangular pattern of the hole along X with **Symmetric** on, spacing
+      10 mm, count `Count`. Export for Orca. In Orca set `Count` to 4, then 6. Do the same in Fusion. Expect: for each
+      count the holes in Orca sit where Fusion puts them, also the extra copy of an even count.
+- [ ] OR14, extrudes To and From a face or plane, and tapers. User parameters `Height` = 10 mm, `Lift` = 25 mm and
+      `Draft` = -10 deg. On the XY plane draw a 60 by 40 mm rectangle centred on the origin and extrude it `Height`.
+      On the XY plane draw a 10 by 10 mm square centred at (-20, 0) and extrude it (Join) with the extent "To" the
+      top face of the plate and an offset of 5 mm. Add an offset construction plane `Lift` above the XY plane; on the
+      XY plane draw a 10 by 10 mm square centred at (0, 0) and extrude it (Join) "To" that plane. On the XY plane draw
+      a 10 by 10 mm square centred at (20, 0) and extrude it (Join) 5 mm with the start "From" the top face of the
+      plate. On the top face draw a circle of 8 mm diameter at (20, 12) and extrude it (Join) 6 mm up with taper
+      `Draft`. Then a new body: a 20 by 10 mm rectangle extruded 8 mm with taper -5 deg, and a second new body of a
+      rectangle extruded 8 mm with taper +5 deg.
+      Export: the first body, all three parameters ticked. Expect: no step left out; `Height` follows but not
+      everywhere (the "From" square keeps its start, and the sketch on the top face keeps its place), `Lift` and
+      `Draft` follow. In Orca set `Height` to 20: the first post grows with the plate and still ends 5 mm above it;
+      set `Lift` to 35: the middle post grows to 35; set `Draft` to -5: the cone is wider at the top. Export the
+      second body: copied, with the taper as a number. Export the third body: its extrude is left out (Orca would
+      round the corners of a growing outline).
+- [ ] OR15, rounds and chamfers of upright edges. A user parameter `Height` = 15 mm. On the XY plane draw an L with
+      corners (0, 0), (60, 0), (60, 20), (20, 20), (20, 50), (0, 50) mm and extrude it `Height` (new body). Fillet the
+      upright edge at the inward corner (20, 20) and the upright edge at (60, 0) with 4 mm (one fillet step), and
+      chamfer the upright edge at (0, 50) with 3 mm (equal distance). On the XY plane draw a rectangle from (30, 5) to
+      (50, 15) mm and cut it through all; fillet its four upright edges with 5 mm (the short sides are taken whole: a
+      slot). Then fillet one top edge of the L with 1 mm.
+      Export: the body, `Height` ticked. Expect: the three fillets of upright edges and the chamfer copied, with notes
+      "copied as rounded corners of the outline" (and "cut corners" for the chamfer); the round of one top edge under
+      "Left out" (hand-picked edges); `Height` follows. In Orca the Design body has the rounded corners, the filled
+      inward corner, the cut corner and the slot where Fusion has them (these outlines are drawn by hand, no size of
+      them follows a variable). Suppress the top edge round in Fusion: Orca's
+      volume of the Design body equals Fusion's (Inspect > Properties). Set `Height` to 25 mm in both: the volumes
+      still agree.
+      Second body: a user parameter `Box` = 30 mm. On the XY plane draw a 2 point rectangle `Box` by 20 mm (`Box`
+      is the width dimension), extrude it 10 mm as a new body and fillet its four upright edges with 3 mm. Export
+      that body with `Box` ticked. Expect: the fillet is copied as corners cut from the outline ("copied as corners
+      cut from the outline"), and `Box` still follows. Set `Box` to 40 mm in both: the volumes agree (see OR21).
+- [ ] OR16, sweeps, lofts and spline outlines. User parameters `Wire` = 6 mm, `Top` = 10 mm. Make each part as a body
+      of its own:
+      (a) a pipe: on the XY plane a path of a 20 mm line along X, a sketch fillet of radius 10 mm turning to Y and a
+      30 mm line; on the YZ plane a circle of diameter `Wire` centred on the path start; sweep it along the path.
+      (b) a rim: on the XY plane a 40 by 20 mm rectangle with 5 mm sketch fillets on all corners; on a plane square
+      to the middle of its bottom side a 2 by 2 mm square on the path; sweep it once round.
+      (c) the same as (a) with no fillet (two lines meeting at a right angle).
+      (d) a frustum: a 20 mm square on the XY plane and a 10 mm square 30 mm above it, both centred on the Z axis;
+      loft the two, free ends. (e) a cone: a circle of 20 mm diameter on the XY plane and a circle of diameter `Top`
+      on a plane 20 mm above, its centre 6 mm along X; loft the two.
+      (f) an arch: on the XY plane a fit point spline through (0, 0), (8, 9), (22, 8) and (30, 0) mm, closed by a
+      line back to (0, 0), extruded 10 mm.
+      Export each body for Orca with both parameters ticked.
+      Expect: (a) one Orca sweep, `Wire` follows, the path sizes stay numbers; (b) one Orca sweep; (c) left out
+      (sharp corner); (d) and (e) one Orca loft each, `Top` follows;
+      (f) copied, the spline drawn as Orca B-spline pieces. Each Orca body has the box and volume Fusion measures
+      (Inspect > Measure, and the volume in Properties); in Orca set `Wire` to 8 and `Top` to 16 and compare with
+      Fusion at the same values. For (f) send `report.json`: its spline record must hold `nurbs` with a knot count of
+      poles plus degree plus one; a curve without `nurbs` stays left out.
+
+- [ ] OR17, a round left out beside outline rounds. A user parameter `Slot` = 10 mm. On the XY plane draw a 60 by
+      40 mm rectangle and extrude it 15 mm. On its top face draw a 30 mm long slot, `Slot` wide, through the wall
+      from the middle of one long side (a cut through all), with 2 mm fillets on the four edges of the slot at its
+      corners. Then add 4 mm fillets on the four upright edges of the wall's outline corners.
+      Export for Orca with `Slot` ticked.
+      Expect: the slot round under "Left out" (copying it would cost the size that follows `Slot`), the four outline
+      rounds copied as rounded corners of the outline, and the slot size still following `Slot` in Orca (set `Slot`
+      to 14 and compare the slot width with Fusion at the same value).
+- [ ] OR18, a distance between two lines keeps them parallel. The Orca copy marks every size that rests on this
+      (the result says "not confirmed in Fusion yet"); when this check passes, `DISTANCE_KEEPS_PARALLEL` in
+      `orca_translate/sketches.py` is set to True.
+      User parameters `Gap` = 5 mm and `Tilt` = 30 deg. On the XY plane:
+      1. Draw line A from the origin, 40 mm long, up and to the right. Add an angle dimension between line A and the
+         X axis (Sketch Dimension, click line A, then the X axis) and type `Tilt`. Add a length dimension of 40 mm on
+         line A.
+      2. Draw line B beside it: start about 5 mm from line A, near its middle, and draw about 30 mm in the same
+         direction. While you draw, keep the cursor off the parallel hint, so Fusion adds no constraint.
+      3. Look at the small constraint signs next to line B. Click each parallel, perpendicular or coincident sign on
+         line B and press Delete.
+      4. Make line B parallel for a moment: Constraints > Parallel, click line A, then line B.
+      5. Add the distance: Sketch Dimension, click line A, then line B, place the dimension and type `Gap`. Fusion
+         gives a distance (not an angle) only for parallel lines, which is why step 4 is needed.
+      6. Delete the parallel sign from step 4 (click it, press Delete). Keep the `Gap` dimension. If Fusion does not
+         let you delete it, or changes the dimension, stop and send what it showed.
+      7. Check that line B now has no parallel sign. It may be blue (not fully fixed); that is right.
+      Change `Tilt` to 50 deg (Modify > Change Parameters), then `Gap` to 9 mm, then `Tilt` to 10 deg.
+      After each change, Inspect > Measure: click line A, then line B, and read the angle.
+      Expect: the angle is 0.0 deg after each change, line B stays beside line A, and the `Gap` dimension shows the
+      new value. Send the angle after each change, and a screenshot if line B turned. If any angle is not 0, the Orca
+      copy must keep marking these sizes.
+- [ ] OR19, outlines whose corners follow sizes. User parameters `LegA` = 40 mm, `LegB` = 30 mm, `Wall` = 8 mm and
+      `Bend` = 120 deg. On the XY plane draw two legs `Wall` thick that meet at their outer corner on the origin: one
+      `LegA` long along the X axis, one `LegB` long at `Bend` from it (an angle dimension). Close each leg with an end
+      square to it. Tie the inner side of each leg to its outer side by a distance dimension `Wall` only (no parallel
+      constraint; make it as in OR18, steps 4 to 6). Extrude it 10 mm as a new body. On the XY plane draw a 2 point rectangle 10 by 6 mm whose lower left
+      corner is `LegA` / 2 from the origin along X and 1 mm up, and cut it 3 mm up into the body (a notch in its
+      bottom).
+      Export for Orca with all four ticked.
+      Expect: no step left out; `LegA`, `LegB`, `Wall` and `Bend` follow the Orca variable, each line with a "keep ...
+      between ..." limit. Until OR18 passes, `LegB`, `Wall` and `Bend` follow "but not everywhere", with the reason
+      that the two lines tied by a distance are not confirmed to stay parallel. The Design tab shows a block, cuts,
+      turns and tool bodies instead of the drawn sketch. In Orca set `Bend` to 90 and then 150, `Wall` to 5 and `LegA` to 60; set the same in Fusion. Expect: Orca's volume
+      of the Design body equals Fusion's (Inspect > Properties) at each value, and the notch moves with `LegA`. Set a
+      value past a told limit in both: Fusion's sketch fails or changes, and the Orca body is not Fusion's, as the
+      limit says.
+- [ ] OR20, a hole that moves with the plate around it. User parameters `Width` = 40 mm, `Depth` = 20 mm and
+      `Margin` = 5 mm. On the XY plane draw a 2 point rectangle from the origin, `Width` by `Depth`, and a circle of
+      4 mm diameter inside it whose centre is `Margin` from the right side and `Depth` / 2 up. Extrude the area
+      between them 10 mm up as a new body (the circle is a hole through the plate). Make a second design the same,
+      extruded 10 mm down (the other way), and a third one extruded symmetric, 10 mm in all.
+      Export each for Orca with all three ticked.
+      Expect: for the up and down plates, `Width`, `Depth` and `Margin` all follow the Orca variable; the Design tab
+      shows the plate built from cuts and an Orca Hole. In Orca set `Width` to 50, `Margin` to 1 and `Depth` to 3, and
+      the same in Fusion: Orca's volume equals Fusion's at each value (with `Margin` 1 the hole cuts the right side).
+      For the symmetric plate: no Orca Hole; `Width` follows "but not everywhere" and `Margin` stays a number, both
+      with the reason that the rectangle grows about its centre and the circle keeps its place.
+- [ ] OR21, rounds and chamfers on outlines whose sizes follow variables. User parameters `LegA` = 40 mm,
+      `Wall` = 8 mm, `Bend` = 70 deg, `Box` = 60 mm and `Round` = 3 mm. Make each part as a body of its own, each
+      extruded 10 mm up from the XY plane as a new body.
+      a) An L: its outer corner on the origin, a bar `LegA` long along X and a leg 30 mm long up Y, both `Wall`
+      thick (dimensions `LegA`, 30 mm, `Wall` and `Wall`). Fillet the upright edge at the inward corner and the
+      upright edge at (`LegA`, 0) with `Round` (one fillet step). Then chamfer the upright edge at (0, 30) with 3 mm
+      (equal distance). Last, fillet all top edges of the L with 0.5 mm.
+      b) A trapezoid: a base 40 mm long along X from the origin, a top side 20 mm above it, both slanted sides at
+      `Bend` to the base (two angle dimensions). Fillet the upright edge at (40, 0) with `Round`.
+      c) A center rectangle `Box` by 40 mm on the origin. Fillet its four upright edges with 4 mm. Draw a 2 point
+      rectangle 20 by 12 mm whose lower left corner is `Box` / 4 left of the origin and 6 mm below it, and cut it
+      through all. Fillet the four upright edges of that window with 2 mm. Then make a rectangular pattern of the
+      cut and its fillet: 2 copies, 22 mm apart along X.
+      Export each body for Orca with all its parameters ticked.
+      Expect: no step left out; every parameter follows the Orca variable, with a "keep ... between ..." limit on
+      its line where one applies (`Round` too, with a lower limit); the fillets and the chamfer of upright edges show
+      "copied as corners cut from the outline", and the round of the top edges of the L is Orca's round of all top edges. The Design tab shows, for each corner, a block, cuts, a Hole and a Boolean inside
+      the outline's steps. In Orca set `Round` to 5, `LegA` to 60, `Wall` to 5, `Bend` to 50 and then 110, and `Box`
+      to 70; set the same in Fusion. Expect: Orca's volume of each Design body equals Fusion's (Inspect >
+      Properties) at each value, and the window and its copy move with `Box`. Set a value past a told limit in both
+      (`Round` larger than the side it sits on): Fusion's fillet fails, and the Orca body is not Fusion's, as the
+      limit says.
+      d) A plate 60 by 40 by 6 mm. As a new body, a center rectangle `Box` / 4 by 8 mm on (30, 20), extruded 10 mm;
+      fillet its four upright edges with `Round` / 2; Combine (join) it into the plate. Then a rectangular pattern
+      of the rectangle's extrude, its fillet and the Combine: 2 copies, 25 mm apart along X.
+      e) A center rectangle `Box` by 40 mm on the origin, extruded 20 mm; fillet its four upright edges with `Round`,
+      then fillet all its top edges with 2 mm.
+      Export d) and e) for Orca with all parameters ticked. Expect for d): no step left out, and in Orca both copies
+      of the block have rounded corners; set `Box` to 50 and `Round` to 4 in both: the volumes agree. Expect for e):
+      `Round` has a lower limit above 2.2 mm on its line; set `Round` to 4 in both: the volumes agree; set `Round`
+      below its lower limit in Orca: Orca stops the rebuild, as the limit says.
+
 ## Thin extrudes
 
 A thin extrude of one closed outline is copied as an extrude with a wall. Send `report.json` from any thin extrude
@@ -1977,3 +2176,23 @@ every later step that picks geometry, so a wrong guess shows up as too many left
   `reach.moves` in `report.json` is the number of moves (the move back is not counted); note it with the
   seconds the export waits before the result window. A move that takes long in Fusion (a design that rebuilds
   slowly) is the number to report.
+
+## Fusion calls to watch (Export for Orca)
+
+Written from the API reference and checked only with fakes (`lib/fusion_reader/body_mesh.py`).
+
+- `NurbsCurve3D.getData()` of `ProfileCurve.geometry` for a spline: `(ok, poles, degree, knots, isRational, weights,
+  isPeriodic)` (`read_sketch._nurbs`). The knots are taken as the full vector (poles plus degree plus one) and a
+  trimmed spline as the definition of the trimmed piece. The Orca copy checks the pieces against the measured points,
+  so a different meaning leaves the outline out rather than drawing it wrong (OR16 f).
+- A hole on sketch points records `sketch_frame` from `Sketch.transform` of the points' sketch
+  (`read_solid._hole_sketch`). In OR9 the hole in Orca must sit where Fusion has it; a hole off its place means the
+  frame and the points' `worldGeometry` are not in the same coordinates.
+
+- `BRepBody.meshManager.createMeshCalculator()`, `setQuality(TriangleMeshQualityOptions.HighQualityTriangleMesh)`,
+  `calculate()`: `nodeCoordinatesAsDouble` (cm) and `nodeIndices`. For a body in a component the picked body is an
+  occurrence proxy; the reader compares the mesh's box with `BRepBody.boundingBox` and, when it lies at the
+  component's own origin, moves it by `assemblyContext.transform2`. Note which of the two the proxy gives.
+- When neither fits, the body is written with `ExportManager.createSTLExportOptions(body, path)` (binary,
+  `unitType` millimetres, high refinement) and read back; the reader tries mm, cm and inches against the box. A file
+  that still does not fit stops the export with "Fusion could not give the shape of the part as a mesh."

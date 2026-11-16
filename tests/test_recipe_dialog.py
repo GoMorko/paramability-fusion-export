@@ -196,6 +196,17 @@ class RangeTest(unittest.TestCase):
         self.assertIn("must sit between", count_text(inputs))
         self.assertFalse(recipe_dialog.inputs_valid(inputs, offers))
 
+    def test_a_bad_range_does_not_block_the_orca_dialog_which_does_not_use_ranges(self):
+        offers = [offer("wall")]
+        command = fakes.FakeCommand()
+        recipe_dialog.build(command, offers, None, "z", orca=True)
+        inputs = command.commandInputs
+        pick_body(inputs)
+        row(inputs, "min", 0).value = "nonsense"
+        recipe_dialog.handle_change(inputs, offers, row(inputs, "min", 0))
+        self.assertEqual(recipe_dialog.read_form(inputs, offers)["range_problem"], "")
+        self.assertTrue(recipe_dialog.inputs_valid(inputs, offers, limit=1))
+
     def test_a_row_that_is_not_ticked_is_not_checked(self):
         offers = [offer("wall")]
         _, inputs = make_dialog(offers)

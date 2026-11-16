@@ -15,6 +15,8 @@ class ExportPort(Protocol):
     undo_steps: the `undo_steps.UndoSteps` the tries call, or None; `undo_steps.attach` sets it.
     read_timer: the `timing.timer.Timer` that `ProbeRun` lends the probe reader while it reads, else None.
     export_step(path): write the STEP of the picked body as the design is now.
+    read_mesh(): `(vertices, triangles)` of the picked body as the design is now, in root coordinates and mm, for the
+      Orca output; raises `StepExportError` when Fusion gives no mesh.
     read_capture(): the capture dict of the picked body, or the exception that stopped the read.
     read_reach(capture, gaps): the `reach` of the capture when the steps at the timeline indexes `gaps` are left out
       of the copy (`read_gap_reach.read_reach`); raises `MarkerError` when the timeline marker cannot go back.
@@ -39,6 +41,8 @@ class ExportPort(Protocol):
     read_timer: object
 
     def export_step(self, path): ...
+
+    def read_mesh(self): ...
 
     def read_capture(self): ...
 
@@ -78,14 +82,19 @@ class ExportRequest:
     # The timeline steps before anything was read (`timeline_health.read_timeline`); None reads them when the export
     # starts.
     timeline_start: Optional[object] = None
+    # What the export writes: "paramability" (a recipe package) or "orca" (an OrcaSlicer project,
+    # `export_plan.orca_export`). The Orca output reads a mesh instead of a STEP and runs no size tries.
+    output: str = "paramability"
 
 
 @dataclass
 class PipelineResult:
-    """What `run_pipeline` made: the package parts, the report, and the size table the export ended with."""
+    """What `run_pipeline` made: the package parts, the report, and the size table the export ended with. The Orca
+    output has no manifest and no files: `orca` holds its `orca_export.OrcaPackage`."""
 
-    manifest: dict
+    manifest: Optional[dict]
     files: dict
     report: dict
     table: object
     health: dict = field(default_factory=dict)
+    orca: Optional[object] = None

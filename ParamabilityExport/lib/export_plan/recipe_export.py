@@ -21,6 +21,7 @@ from ..translator.notes import (
     translate_failure_note, used_several_times_note)
 from . import fixed_parts
 from .health import measuring_note
+from .orca_export import ORCA, PARAMABILITY, translate_for_orca
 from .messages import (
     MAX_NOTE, ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, cut_note, dropped_note, fixed_note, left_out_parts_note, loose_note,
     part_left_out_note, sizes_note, unchanged_note)
@@ -102,13 +103,18 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def translate_capture(capture, up_axis, size_table=None, motion=None, timer=None):
+def translate_capture(capture, up_axis, size_table=None, motion=None, timer=None, output=PARAMABILITY):
     """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
+
+    `output` switches the translator: "orca" gives the OrcaSlicer translation (`orca_export.translate_for_orca`),
+    which takes no motion and no timer.
 
     `motion` is what the size probe found about sketch values (`sketch_values.motion`), or `sketch_values.motion.OPTIMISTIC` for a
     first look that fixes nothing for sketches. A size that some value cannot follow stays free with a warning
     (`TranslateResult.loose`); the ranges are the table's. `timer` gets the time of the walk after a stop
     (`translator.translate`)."""
+    if output == ORCA:
+        return translate_for_orca(capture, up_axis, size_table)
     return translate(_with_up_axis(capture, up_axis), size_table=size_table, motion=motion, timer=timer)
 
 

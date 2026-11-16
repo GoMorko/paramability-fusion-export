@@ -15,6 +15,9 @@ LIB = os.path.join(context.ADDIN_DIR, "lib")
 TABLE = os.path.join(LIB, "capture_model", "step_kinds.py")
 READER_DIR = os.path.join(LIB, "fusion_reader")
 HANDLER_MAP = os.path.join(LIB, "translator", "handlers.py")
+# The Orca output keeps its own small maps of the types it copies: a `HANDLERS` dict in each of its handler modules.
+ORCA_HANDLER_MAP = os.path.join(LIB, "orca_translate", "steps.py")
+ORCA_DIR = os.path.dirname(ORCA_HANDLER_MAP)
 FEATURE_NAME = re.compile(r"[A-Z][A-Za-z]*Feature")
 
 
@@ -83,7 +86,7 @@ class StepKindTableTest(unittest.TestCase):
             if path == TABLE:
                 continue
             allowed = set(_registrations(tree)) if os.path.dirname(path) == READER_DIR else set()
-            if path == HANDLER_MAP:
+            if path == HANDLER_MAP or os.path.dirname(path) == ORCA_DIR:
                 allowed = set(_registrations(tree, "HANDLERS"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):

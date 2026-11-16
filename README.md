@@ -564,12 +564,16 @@ package may import only packages above it in this list (not every one of them). 
 - `geometry`: vector helpers, 2D helpers (distance to a segment, a point inside a ring, an arc drawn as the app draws it, `plane2d.py`), the rigid map of a frame, sketch outlines, volume checks and the tolerances for comparing two reads of the design (`tolerances.py`) that the translator, the probe and the reader share.
 - `capture_model`: what a capture and a recipe step are made of: the step kind table, capture checks, body lineage, gap causes and hints.
 - `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
+- `orca_recipe`: the OrcaSlicer 2.5 Design tab recipe (`Metadata/orca_cad.bin`): the cereal binary values, the
+  feature fields in Orca's order with its defaults, the recipe reader and writer, and a 3MF writer. Export for Orca
+  (experimental) writes it through `orca_translate`; see `docs/orca-output.md`.
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
-- `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion.
+- `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion. Export for Orca uses its extended reading (`extended=True`), which the recipe output does not use.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
+- `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
 - `fusion_reader`: reads the design with `adsk` into a capture.
@@ -609,6 +613,10 @@ Python 3.10 or newer, standard library only.
 
 The owner-capture checks (`tests/test_owner_captures.py`) need a local `tests/local/owner_captures.json` (git-ignored); without it they skip.
 Set `PARAMABILITY_OWNER_CAPTURES` to use another path and `PARAMABILITY_OWNER_REPORTS` for the folder with the packages.
+
+The byte check over OrcaSlicer's own sample recipes (`tests/test_orca_recipe_files.py`) reads `cad_recipe_v3.bin`,
+`v4` and `v5` from the folder in `ORCA_RECIPE_SAMPLES` (the OrcaSlicer repo's `tests/data`); without it they skip.
+The samples are not kept here.
 
 To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.
 The file that lists the steps left out of a copy is described in `docs/recipe-gaps.md`.
