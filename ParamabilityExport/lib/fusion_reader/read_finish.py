@@ -11,9 +11,17 @@ A chamfer with two distances, or a distance and an angle, also records at each e
 the edge's two faces (`sides`, before) and the normal of the chamfer face nearest to it (`cut_normals`, after). The
 API does not say which face takes the first distance; the chamfer face tells, since it leans towards the face with
 the longer distance.
+
+A round set by chord length, or one whose radius changes along the edge, also records on each edge the kind of its
+curve (`curve`) and `samples` at fixed places along it (`SAMPLE_FRACTIONS`): the point and the edge direction there,
+for a chord length set the outward normals of the edge's two faces (`sides`) and the faces themselves
+(`side_faces`). After the step each sample gets the radius of the round nearest to its point (`radius`), measured
+on the faces the step made, so the copy can check the radius it works out against what Fusion built.
 """
 import math
 
+from ..geometry import vec
+from ..package.units import cm_to_mm
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 
@@ -97,15 +105,16 @@ def expand_edges(entities, tangent_chain):
     return kinds, _unique(edges), _unique(faces), seeds
 
 
-def _edge_set(edge_set, ctx, tangent_default=True, sides=False):
+def _edge_set(edge_set, ctx, tangent_default=True, measure=None):
+    """The edges of a set as records. `measure(edge, record)` gives more keys for the record of each edge, or None."""
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
     kinds, edges, faces, seeds = expand_edges(strict_items(edge_set.edges), tangent_chain)
     records = [geo.edge_record(e, ctx) for e in edges]
-    if sides:
+    if measure is not None:
         for record, edge in zip(records, edges):
-            found = geo.safe(lambda: _edge_sides(geo.native_input(edge, ctx), record), None)
+            found = geo.safe(lambda: measure(geo.native_input(edge, ctx), record), None)
             if found:
-                record["sides"] = found
+                record.update(found)
     out = {"input_kinds": kinds, "edges": records, "tangent_chain": tangent_chain}
     if tangent_chain:
         for record, edge in zip(records, edges):
@@ -126,14 +135,60 @@ def _normal_at(face, point):
 
 
 def _edge_sides(edge, record):
-    """Per measured point of the edge, the outward normals of its two faces; None when they cannot be read."""
+    """{ sides }: per measured point of the edge, the outward normals of its two faces; None when they cannot be read."""
     faces = strict_items(edge.faces)
     if len(faces) != 2:
         return None
     points = [geo.point_at(edge, f) for f in geo.edge_fractions(record["closed"])]
     if any(p is None for p in points) or len(points) != len(record["points"]):
         return None
-    return [[_normal_at(face, p) for face in faces] for p in points]
+    return {"sides": [[_normal_at(face, p) for face in faces] for p in points]}
+
+
+# Where a round set by chord length or with a changing radius is measured along each edge: fractions of the edge's
+# parameter range (a closed edge leaves out 1, where it starts again).
+SAMPLE_FRACTIONS = (0.0, 0.25, 0.5, 0.75, 1.0)
+# The fillet set kinds whose edges carry samples.
+SAMPLED_KINDS = ("chordLength", "variable")
+
+
+def _side_face(face):
+    """A face of an edge: a point on it, the kind of its surface and its outward normal at that point."""
+    return {"face_point": geo.point(face.pointOnFace), "surface": geo.surface_kind(face),
+            "normal": geo.outward_normal(face)}
+
+
+def _samples(edge, record, sides=False):
+    """{ curve, samples } of an edge (see the module text), with the face normals and faces when `sides`; None when a
+    sample cannot be read."""
+    faces = strict_items(edge.faces) if sides else []
+    if sides and len(faces) != 2:
+        return None
+    evaluator = edge.evaluator
+    ok, low, high = evaluator.getParameterExtents()
+    if not ok:
+        return None
+    out = []
+    for fraction in SAMPLE_FRACTIONS[:-1] if record["closed"] else SAMPLE_FRACTIONS:
+        parameter = low + (high - low) * fraction
+        ok, p = evaluator.getPointAtParameter(parameter)
+        found, tangent = evaluator.getTangent(parameter)
+        if not ok or not found:
+            return None
+        sample = {"at": fraction, "point": geo.point(p), "tangent": geo.unit_vector(tangent)}
+        if sides:
+            sample["sides"] = [_normal_at(face, p) for face in faces]
+        out.append(sample)
+    found = {"curve": geo.type_name(geo.safe(lambda: edge.geometry, None)), "samples": out}
+    if sides:
+        side_faces = [geo.safe(lambda: _side_face(face), None) for face in faces]
+        if all(side_faces):
+            found["side_faces"] = side_faces
+    return found
+
+
+def _chord_samples(edge, record):
+    return _samples(edge, record, sides=True)
 
 
 def _fillet_set(edge_set, ctx):
@@ -142,11 +197,21 @@ def _fillet_set(edge_set, ctx):
     entry = {"kind": kind}
     if kind == "other":
         entry["type"] = name
-    if kind == "constant":
-        entry["radius"] = geo.length(edge_set.radius)
+    else:
         entry["continuity"] = _named(
             lambda: edge_set.continuity, "SurfaceContinuityTypes", _CONTINUITY, "other", "other")
-    entry.update(_edge_set(edge_set, ctx))
+    measure = None
+    if kind == "constant":
+        entry["radius"] = geo.length(edge_set.radius)
+    elif kind == "chordLength":
+        entry["chord_length"] = geo.safe(lambda: geo.length(edge_set.chordLength), None)
+        measure = _chord_samples
+    elif kind == "variable":
+        entry["start_radius"] = geo.safe(lambda: geo.length(edge_set.startRadius), None)
+        entry["end_radius"] = geo.safe(lambda: geo.length(edge_set.endRadius), None)
+        entry["mid_count"] = geo.safe(lambda: len(strict_items(edge_set.midPositions)), None)
+        measure = _samples
+    entry.update(_edge_set(edge_set, ctx, measure=measure))
     return entry
 
 
@@ -164,7 +229,40 @@ def fillet_before(feature, ctx):
     return with_params({
         "rolling_ball": geo.safe(lambda: bool(feature.isRollingBallCorner), True),
         "sets": [_fillet_set(s, ctx) for s in edge_sets],
-    }, _set_params(edge_sets, {"radius": ("radius", "length")}))
+    }, _set_params(edge_sets, {"radius": ("radius", "length"), "chord_length": ("chordLength", "length"),
+                               "start_radius": ("startRadius", "length"), "end_radius": ("endRadius", "length")}))
+
+
+def _round_radius(faces, sample):
+    """The radius (mm) of the round face nearest to the sample's point, across the edge: of the two main curvatures
+    there, the one whose direction lies more across the edge than along it. None when it cannot be measured."""
+    found = _nearest_on(faces, sample["point"])
+    if found is None:
+        return None
+    face, parameter = found
+    ok, largest_direction, largest, smallest = face.evaluator.getCurvature(parameter)
+    if not ok:
+        return None
+    along = abs(vec.dot(geo.unit_vector(largest_direction), sample["tangent"]))
+    curvature = abs(largest if along <= math.sqrt(0.5) else smallest)
+    if curvature <= 1e-9:
+        return None
+    return round(cm_to_mm(1.0 / curvature), 6) + 0.0
+
+
+def fillet_after(feature, ctx, data):
+    """`radius` on each sample of the edges of chord length and changing radius sets (see the module text)."""
+    sets = [entry for entry in data.get("sets") or [] if entry.get("kind") in SAMPLED_KINDS]
+    if not sets:
+        return {}
+    faces = [geo.native_input(f, ctx) for f in geo.collection_items(geo.safe(lambda: feature.faces, None))]
+    if not faces:
+        return {}
+    for entry in sets:
+        for record in entry.get("edges") or []:
+            for sample in record.get("samples") or []:
+                sample["radius"] = geo.safe(lambda: _round_radius(faces, sample), None)
+    return {"sets": data.get("sets") or []}
 
 
 def _chamfer_set(edge_set, ctx):
@@ -186,7 +284,7 @@ def _chamfer_set(edge_set, ctx):
             "angle_deg": geo.angle(edge_set.angle),
             "flipped": geo.safe(lambda: bool(edge_set.isFlipped), False),
         }
-    entry.update(_edge_set(edge_set, ctx, sides=entry["kind"] in UNEVEN_KINDS))
+    entry.update(_edge_set(edge_set, ctx, measure=_edge_sides if entry["kind"] in UNEVEN_KINDS else None))
     return entry
 
 
@@ -197,9 +295,9 @@ def _distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def _cut_normal(faces, p):
-    """The normal of the face of `faces` nearest to point `p` (mm), at the point nearest to `p`; None when none
-    can be measured. A face whose nearest point lies on it wins over one where it lies past its edges."""
+def _nearest_on(faces, p):
+    """(face, surface parameter) of the face of `faces` nearest to point `p` (mm), at the point nearest to `p`; None
+    when none can be measured. A face whose nearest point lies on it wins over one where it lies past its edges."""
     point = geo.point3d(p)
     best = None
     for face in faces:
@@ -208,14 +306,24 @@ def _cut_normal(faces, p):
         if not ok:
             continue
         ok, nearest = evaluator.getPointAtParameter(parameter)
-        found, normal = evaluator.getNormalAtParameter(parameter)
-        if not ok or not found:
+        if not ok:
             continue
         key = (not geo.safe(lambda: bool(evaluator.isParameterOnFace(parameter)), False),
                _distance(geo.point(nearest), p))
         if best is None or key < best[0]:
-            best = (key, geo.unit_vector(normal))
-    return best[1] if best else None
+            best = (key, face, parameter)
+    return best[1:] if best else None
+
+
+def _cut_normal(faces, p):
+    """The normal of the face of `faces` nearest to point `p` (mm), at the point nearest to `p`; None when none
+    can be measured."""
+    found = _nearest_on(faces, p)
+    if found is None:
+        return None
+    face, parameter = found
+    ok, normal = face.evaluator.getNormalAtParameter(parameter)
+    return geo.unit_vector(normal) if ok else None
 
 
 def chamfer_after(feature, ctx, data):
@@ -329,7 +437,7 @@ def draft_after(feature, ctx, data):
 
 # type name -> (before, after); either may be None
 READERS = {
-    "FilletFeature": (fillet_before, None),
+    "FilletFeature": (fillet_before, fillet_after),
     "ChamferFeature": (chamfer_before, chamfer_after),
     "ShellFeature": (shell_before, None),
     "DraftFeature": (draft_before, draft_after),

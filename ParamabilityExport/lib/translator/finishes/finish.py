@@ -6,8 +6,9 @@ A step that holds whole Fusion sets picked by faces picks the edges around those
 whole tangent chain sets picks one point per chain (`chain: tangent`), so edges that a size adds or splits are
 still picked.
 A chamfer with two distances, or a distance and an angle, says which face takes the first distance (`sizeOn`); the
-reader measures it per edge (`sides`, `cut_normals`). What the recipe has no words for is refused: changing radii,
-outside or rounded shells.
+reader measures it per edge (`sides`, `cut_normals`). Rounds set by chord length and rounds whose radius changes
+along the edge are worked out from what the reader measured along the edges (finishes/measured_rounds.py). What the
+recipe has no words for is refused: two radii, curvature continuity, outside or rounded shells.
 """
 from ...capture_model import gap_hints
 from ...design_model.steps import finish as sets_of
@@ -20,12 +21,13 @@ from ..faces import follow, picks
 from ..faces.placer_makers import ShellMaker
 from ..ranges import range_check
 from ..result import Entry, Refusal, StepResult
+from . import measured_rounds
 
 _FILLET_SET_REFUSALS = {
-    "variable": "Rounds with a changing radius are not copied yet.",
-    "chordLength": "Rounds set by chord length are not copied yet.",
     "asymmetric": "Rounds with two different radii are not copied yet.",
 }
+# The fillet set kinds the copy writes.
+_ROUND_KINDS = (sets_of.CONSTANT, sets_of.CHORD_LENGTH, sets_of.VARIABLE)
 
 
 def _split_note(ctx, entries):
@@ -194,30 +196,49 @@ def fillet(ctx, step):
     if not sets:
         return Refusal(shared.ROUND_NO_EDGES)
     for one in sets:
-        if one.kind != sets_of.CONSTANT:
+        if one.kind not in _ROUND_KINDS:
             return Refusal(_FILLET_SET_REFUSALS.get(one.kind, "This kind of round is not copied yet."),
                            cause=gap_hints.ROUND_KIND if one.kind in _FILLET_SET_REFUSALS else None)
         if one.follows_step:
             return Refusal("A round that follows another step's edges is not copied yet.")
         if one.continuity == "curvature":
             return Refusal("Rounds with curvature continuity are not copied yet.")
-        if one.radius is None:
+        if one.kind == sets_of.CONSTANT and one.radius is None:
             return Refusal(shared.ROUND_NO_RADIUS)
     edges = sets_of.edges_of(sets)
-    sizes = [one.size(_quantity(ctx, item)) for one in sets]
     if not edges or any(one.unlocated for one in sets):
         return Refusal("The edges of this round could not be located.")
+    quantity = _quantity(ctx, item)
+    extra = {}
+    if any(one.kind == sets_of.VARIABLE for one in sets):
+        found = measured_rounds.changing(ctx, item, sets, quantity)
+        if isinstance(found, Refusal):
+            return found
+        size, size_end = found
+        point_sizes = [size] * sets_of.point_count(edges)
+        if size_end is not None:
+            extra["sizeEnd"] = size_end.json()
+    else:
+        point_sizes = []
+        for one in sets:
+            found = (measured_rounds.chord_sizes(ctx, item, one, quantity) if one.kind == sets_of.CHORD_LENGTH
+                     else [one.size(quantity)] * sets_of.point_count(one.edges))
+            if isinstance(found, Refusal):
+                return found
+            point_sizes += found
     if any(one.continuity == "other" for one in sets):
         ctx.note("The smoothness of this round could not be read; a tangent round was used.")
     if data.get("rolling_ball") is False:
         ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
                  "three or more rounded edges meet can look different.")
-    point_sizes = [size for one, size in zip(sets, sizes) for edge in one.edges for _ in edge["points"]]
-    if len(sets) == 1:
+    if len(sets) == 1 and sets[0].kind == sets_of.CONSTANT:
         folded = _slot_outline(ctx, item, edges, point_sizes[0])
         if folded is not None:
             return _fold_into_slot(ctx, item, folded)
-    entries = _edge_steps(ctx, item, "round", edges, point_sizes, sets=sets)
+    # Fusion's own picks (faces, tangent chains) can take in edges at other sizes; only a round of one radius gives
+    # them the same size as Fusion does.
+    plain = all(one.kind == sets_of.CONSTANT for one in sets)
+    entries = _edge_steps(ctx, item, "round", edges, point_sizes, extra, sets=sets if plain else ())
     _split_note(ctx, entries)
     return StepResult(entries)
 

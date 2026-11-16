@@ -63,15 +63,14 @@ class FilletTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
 
     def test_refusals(self):
-        for name, word in (("fillet_variable", "changing radius"), ("fillet_g2", "curvature"),
-                           ("fillet_feature_input", "another step")):
+        for name, word in (("fillet_g2", "curvature"), ("fillet_feature_input", "another step")):
             result = translate_fixture(name)
             self.assertIsNotNone(left_out(result), name)
             self.assertIn(word, left_out(result)["reason"], name)
             self.assertEqual(left_out(result)["index"], 2)
 
     def test_other_set_kinds_and_bad_radius_refuse(self):
-        for label, edit in (("chord length", lambda d: d["sets"][0].update(kind="chordLength")),
+        for label, edit in (("chord length not read", lambda d: d["sets"][0].update(kind="chordLength")),
                             ("unknown kind", lambda d: d["sets"][0].update(kind="other")),
                             ("zero radius", lambda d: d["sets"][0].update(radius=0)),
                             ("edge without points", lambda d: d["sets"][0].update(

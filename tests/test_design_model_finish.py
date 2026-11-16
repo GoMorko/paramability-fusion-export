@@ -36,6 +36,53 @@ class RoundSetTest(unittest.TestCase):
         self.assertEqual((odd.unlocated, odd.foreign, odd.follows_step), (True, True, True))
 
 
+def sampled(radius_at=None, sides_at=None):
+    """An edge from (0, 0, 10) to (40, 0, 10) with samples at 0, 1/4, 1/2, 3/4 and 1: the radius `radius_at(at)`
+    and the face normals `sides_at(at)` there, when given."""
+    samples = []
+    for at in (0.0, 0.25, 0.5, 0.75, 1.0):
+        sample = {"at": at, "point": [40 * at, 0, 10], "tangent": [1, 0, 0]}
+        if radius_at:
+            sample["radius"] = radius_at(at)
+        if sides_at:
+            sample["sides"] = sides_at(at)
+        samples.append(sample)
+    return edge([20, 0, 10], samples=samples)
+
+
+def square(at):
+    return [[0, 0, 1], [0, -1, 0]]
+
+
+class MeasuredRoundTest(unittest.TestCase):
+    def test_the_face_angle_is_known_only_when_it_stays_the_same_along_the_edge(self):
+        self.assertAlmostEqual(finish.face_angle(sampled(sides_at=square)), 90.0)
+        leaning = sampled(sides_at=lambda at: [[0, 0, 1], [0, -math.cos(at), math.sin(at)]])
+        self.assertIsNone(finish.face_angle(leaning))
+        self.assertIsNone(finish.face_angle(sampled()))
+
+    def test_the_radius_of_a_chord_needs_faces_that_meet_at_a_corner(self):
+        self.assertAlmostEqual(finish.chord_radius(2.0, 90.0), math.sqrt(2))
+        self.assertAlmostEqual(finish.chord_radius(2.0, 60.0), 2.0)
+        self.assertIsNone(finish.chord_radius(2.0, 0.5))
+
+    def test_the_measured_radius_may_skip_the_ends_of_the_edge(self):
+        ends_differ = sampled(radius_at=lambda at: 1.5 if 0 < at < 1 else 3.0)
+        self.assertFalse(finish.matches_radius(ends_differ, lambda at: 1.5))
+        self.assertTrue(finish.matches_radius(ends_differ, lambda at: 1.5, ends=False))
+
+    def test_the_law_of_a_changing_radius_is_read_from_the_measured_radii(self):
+        cases = (("from the start", lambda at: 1 + 2 * at, finish.FROM_START),
+                 ("from the end", lambda at: 3 - 2 * at, finish.FROM_END),
+                 ("a smooth blend", lambda at: 1 + 2 * (3 * at ** 2 - 2 * at ** 3), None))
+        for name, radius_at, law in cases:
+            self.assertEqual(finish.law(sampled(radius_at=radius_at), 1.0, 3.0), law, name)
+        self.assertEqual(finish.law(sampled(radius_at=lambda at: 2.0), 2.0, 2.0), finish.LEVEL)
+        missing = sampled(radius_at=lambda at: 1 + 2 * at)
+        missing["samples"][2]["radius"] = None
+        self.assertIsNone(finish.law(missing, 1.0, 3.0))
+
+
 class ChamferSetTest(unittest.TestCase):
     def test_even_when_both_sides_have_the_same_size(self):
         cases = [(dict(kind="equal"), True), (dict(kind="twoDistances", distance_two=1.0), True),

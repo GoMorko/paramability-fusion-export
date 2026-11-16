@@ -1,5 +1,6 @@
 """Edges and faces of the part matched to the straight extrudes that made them: which sizes may turn a pattern
-direction taken from one, and which may change the thickness a tapped hole goes through.
+direction taken from one, which may change the angle between two faces, and which may change the thickness a tapped
+hole goes through.
 
 Both outputs write such a direction and such a thread length as numbers. In general every size read before the step
 may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The capture can show less, but only for a part
@@ -18,7 +19,8 @@ shows where its end caps lie. In a plain part:
   (`reach.placement_sizes`; of every extrude of the part, since an edge where two extrudes meet turns with both) and
   with the line, which keeps its direction at every size when the sketch solver gives its two ends a gap of zero
   across or along, or a constant gap (`sketch_solve`, default reading). A sketch graph that cannot be solved keeps
-  the general sizes;
+  the general sizes. Two such flat faces keep the angle between them at every size but the sizes of the sketch
+  planes;
 - when every extrude is one sided, makes or joins material along the hole and spans the same two planes, and each
   hole goes in at one of these planes and out at the other inside an outline, the part is that thick wherever a hole
   can go (outside every outline it cuts nothing). The thickness then changes only with the lengths and sketch planes
@@ -313,6 +315,29 @@ def direction_sizes(table, capture, item, which):
             found = _plane_sizes(table, timeline, body)
             return [name for name in table.ticked if name in found]
     return reach.direction_sizes(table, timeline, item, which)
+
+
+def angle_sizes(table, capture, item, faces):
+    """Fusion names of the ticked sizes that may change the angle between `faces`, in table order. `faces` are records
+    of faces of the part that the step `item` uses, each with `face_point`, `surface` and its outward `normal`. Flat
+    faces that straight extrudes of a plain part made (see the module text) turn only with the sketch planes of the
+    part's extrudes; any other face may turn with every size an item of the body's component reads before the step
+    (`reach.any_face_sizes`)."""
+    if table is None:
+        return []
+    timeline = capture.get("items") or []
+    body = _plain_body(timeline, item.get("index")) if faces else None
+    if body and all(_flat_face_match(capture, table, body, face) for face in faces):
+        found = _plane_sizes(table, timeline, body)
+        return [name for name in table.ticked if name in found]
+    return reach.any_face_sizes(table, timeline, item)
+
+
+def _flat_face_match(capture, table, body, face):
+    normal = face.get("normal") if isinstance(face, dict) else None
+    if not isinstance(normal, (list, tuple)) or len(normal) != 3 or vec.length(normal) <= 0:
+        return False
+    return _face_match(capture, table, body, face, list(normal))
 
 
 def through_sizes(table, timeline, item, data):
