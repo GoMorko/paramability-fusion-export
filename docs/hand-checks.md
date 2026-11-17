@@ -808,3 +808,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     where the wall would close the hole. The volume in Paramability matches Fusion's (Inspect > Properties) at the
     values now and with `PipeD` at 12 mm, `Wall` at 3 mm and `Run` at 50 mm. The corner of the third pipe is mitred
     (1413.717 mm3, as in Fusion). Afterwards each design is as before.
+
+71. CC9, a plane of the part built on the top level. Add user parameter `Width` = 40 mm. Make component Tray and
+    activate it. Sketch a `Width` x 30 mm rectangle on the XY plane of Tray and extrude it 10 mm. Activate the top
+    level. Move the Tray occurrence 20 mm up along Z (Move, then Position, Capture Position). Activate Tray. Make a
+    construction plane offset 45 mm from the XY plane of the top level (pick it under the Origin of the top level in
+    the browser, not under Tray). Sketch a 10 x 10 mm square on the top face and extrude it up to the new plane
+    (extent To Object), Join.
+    Export: pick the Tray body, tick `Width`. In `report.json` the plane of the second extrude (`side_one`) has no
+    `foreign`, and its `built_on` entry is `{ "foreign": true }` with `component` of the top level and `root: true`.
+    The second extrude is copied, not left out with "reaches into another component". `Width` is not marked
+    "may give unexpected results". In Paramability the post is 15 mm tall and ends 25 mm above the base of the tray,
+    as in Fusion. Afterwards the design is as before.

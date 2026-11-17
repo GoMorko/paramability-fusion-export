@@ -1,10 +1,11 @@
 """Tokens the capture records so the size probe can find sketch geometry again (docs/capture-format.md)."""
 import math
 import unittest
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, body, entry, feature, line, matrix
-from lib.fusion_reader import read_sketch
+from lib.fusion_reader import read_reference, read_sketch
 from lib.fusion_reader.capture import read_capture
 
 
@@ -57,6 +58,42 @@ class ProfileTokensTest(unittest.TestCase):
         for key in ("sketch_token", "reference"):
             self.assertNotIn(key, record)
         self.assertNotIn("entity", record["loops"][0]["curves"][0])
+
+
+class BuiltOnThroughAnOccurrenceTest(unittest.TestCase):
+    """A construction plane of the part's component, seen through its occurrence, and what its definition names."""
+
+    def setUp(self):
+        from tests.test_capture_reader_finish import plane_geometry
+        self.root = Obj(entityToken="cRoot", name="Box")
+        self.tray = Obj(entityToken="cTray", name="Tray")
+        self.lid = Obj(entityToken="cLid", name="Lid")
+        self.tray.xYConstructionPlane = Obj("fusion::ConstructionPlane", entityToken="xy_tray", component=self.tray)
+        self.root.xYConstructionPlane = Obj("fusion::ConstructionPlane", entityToken="xy_root", component=self.root)
+        self.ctx = SimpleNamespace(component=self.tray, root=self.root)
+        self.geometry = plane_geometry((0, 0, 9), (0, 0, 1))
+
+    def through(self, native, component):
+        """`native` seen through an occurrence of `component`."""
+        return Obj(native.objectType.split("::", 1)[1], entityToken=native.entityToken + "_proxy", nativeObject=native,
+                   assemblyContext=Obj(entityToken="occ_" + component.entityToken, component=component))
+
+    def built_on(self, base):
+        native = Obj("fusion::ConstructionPlane", entityToken="cp3", component=self.tray, geometry=self.geometry,
+                     definition=Obj("fusion::ConstructionPlaneOffsetDefinition", planarEntity=base))
+        return read_reference.reference_of(self.through(native, self.tray), self.ctx)["built_on"]
+
+    def test_an_origin_plane_of_the_parts_component_is_its_own_and_others_name_their_component(self):
+        lid_face = Obj("fusion::BRepFace", entityToken="f_lid", body=Obj(entityToken="b_lid", parentComponent=self.lid))
+        cases = ((self.through(self.tray.xYConstructionPlane, self.tray), [{"origin": True}]),
+                 (self.tray.xYConstructionPlane, [{"origin": True}]),
+                 (self.root.xYConstructionPlane,
+                  [{"foreign": True, "component": {"token": "cRoot", "name": "Box"}, "root": True}]),
+                 (self.through(lid_face, self.lid),
+                  [{"foreign": True, "component": {"token": "cLid", "name": "Lid"}}]))
+        for base, want in cases:
+            with self.subTest(base.entityToken):
+                self.assertEqual(self.built_on(base), want)
 
 
 def read_item(feature_pair):

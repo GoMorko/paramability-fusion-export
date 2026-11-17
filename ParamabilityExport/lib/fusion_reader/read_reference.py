@@ -12,11 +12,12 @@ construction geometry built on any of those. `reference_of` describes one such e
   descriptions of the entities that definition names.
 
 Every key is optional: a member Fusion does not give is left out, and the translator reads a missing key as unknown.
-An entity of another component stands in `built_on` as `{ "foreign": true }`. Construction geometry without
-`built_on` (none could be read, or the chain is deeper than `_DEPTH`) counts as built on the part.
+An entity of another component stands in `built_on` as `{ "foreign": true }`, with the `component` that owns it
+(`{ token, name }`) and `root: true` when that is the root component, as far as Fusion gives them. Construction
+geometry without `built_on` (none could be read, or the chain is deeper than `_DEPTH`) counts as built on the part.
 """
 from . import read_geometry as geo
-from .placement import ORIGIN_MEMBERS
+from .placement import ORIGIN_MEMBERS, owner_component
 from .read_sketch import sketch_place
 from .read_extent import construction_token
 from .read_solid import axis_of, axis_record
@@ -40,9 +41,22 @@ def _is_origin(entity, name, ctx):
                for member in ORIGIN_MEMBERS.get(name, ()))
 
 
+def _other_base(entity, ctx):
+    """`{ "foreign": true }` for an entity of another component that a construction plane or axis is built on, with
+    the `component` that owns it and `root` when that is the root component, when Fusion gives them."""
+    out = {"foreign": True}
+    owner = geo.safe(lambda: owner_component(entity), None)
+    token = geo.safe(lambda: owner.entityToken, "") if owner is not None else ""
+    if token:
+        out["component"] = {"token": token, "name": geo.safe(lambda: owner.name, "") or ""}
+        if geo.same_entity(owner, getattr(ctx, "root", None)):
+            out["root"] = True
+    return out
+
+
 def _built_on(entity, ctx, depth):
     """Descriptions of the entities a construction plane or axis is defined from; one of another component is
-    `{ "foreign": true }`."""
+    `_other_base`."""
     definition = geo.safe(lambda: entity.definition, None)
     found = []
     for member in _BUILT_ON_MEMBERS:
@@ -50,7 +64,7 @@ def _built_on(entity, ctx, depth):
         if source is None:
             continue
         source = geo.native_input(source, ctx)
-        found.append({"foreign": True} if geo.foreign(source, ctx) else reference_of(source, ctx, depth - 1))
+        found.append(_other_base(source, ctx) if geo.foreign(source, ctx) else reference_of(source, ctx, depth - 1))
     return found
 
 

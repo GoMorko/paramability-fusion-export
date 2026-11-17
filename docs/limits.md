@@ -125,6 +125,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A parameter of a joint, or of a move that places a component, counts as one that may move every such place, and every sketch of the part drawn around another component, since the export cannot tell which component it places. A hole placed
   on an edge of another component, and an extrude that starts from or reaches to a curved face of one, are left out of
   the copy.
+- A plane or axis of the part's own component that is built on another component (an offset from the XY plane of the
+  root, a plane on a face of another part) belongs to the part. A step that uses it is copied, also when the part
+  sits in an assembly. The export cannot tell which sizes move what the plane is built on. For a plane that an
+  extrude starts from or reaches to, the tries measure the plane with every size, and a size that the tries could
+  not measure is marked "may give unexpected results". The tries measure a sketch on such a plane the same way. For
+  a mirror plane or a pattern or revolve axis built so, every ticked size is marked.
 - A flat face of another body of the part (a helper body) that an extrude starts from or reaches to follows the sizes
   the tries measured. A face of this body that lies at the same place is never used instead. Where the tries could
   not measure the face, the sizes that the steps before the extrude use are marked "may give unexpected results",

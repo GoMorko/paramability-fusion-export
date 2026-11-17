@@ -1163,12 +1163,16 @@ tell whether sizes move them (`lib/fusion_reader/read_reference.py`). All keys b
   `ConstructionAxis...Definition` objects of the API: `planarEntity`, `planarEntityOne`, `planarEntityTwo`,
   `linearEntity`, `linearEntityOne`, `linearEntityTwo`, `tangentFace`, `circularFace`, `face`, `edgeEntity`,
   `pathEntity`, `point`, `pointEntity`, `pointEntityOne`, `pointEntityTwo`, `pointEntityThree`. An entity of another
-  component is `{ "foreign": true }` in `built_on` (older captures leave it out).
+  component is `{ "foreign": true }` in `built_on` (older captures leave it out), with the `component` that owns it
+  (`{ token, name }`) and `root: true` when that is the root component, as far as Fusion gives them (older captures
+  give `foreign` alone).
 
 A reader that cannot read one of these leaves it out. The translators read a missing key as unknown, and unknown counts
 as "may move": a plane or axis record without `origin` or `entity_type` may move with every size read before the step,
-and construction geometry without `built_on` (none could be read, or the chain is deeper than three levels), or with a
-`{ "foreign": true }` entry in it, counts as built on the part. The same keys describe a construction plane a sketch
+and construction geometry without `built_on` (none could be read, or the chain is deeper than three levels) counts
+as built on the part. Construction geometry with a `{ "foreign": true }` entry in its chain is still the part's own:
+a step that uses it does not reach into another component (`refs.is_foreign` does not look into `built_on`), and it
+may move with every ticked size (`reach.built_on_other`). The same keys describe a construction plane a sketch
 sits on and one an extrude starts from or reaches to (section 4 and TARGET); there a plane without them (an older
 capture) marks the sizes that may move it.
 

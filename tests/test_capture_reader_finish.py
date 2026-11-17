@@ -437,7 +437,7 @@ class CircularPatternTest(unittest.TestCase):
         straight = edge("e1", 5)
         straight.geometry = Obj("core::Line3D", startPoint=P(0, 0, 0), endPoint=P(10, 0, 0))
         corner = Obj("fusion::BRepVertex", entityToken="v1")
-        other = Obj("fusion::BRepFace", entityToken="f8", parentComponent=Obj(entityToken="lid"))
+        other = Obj("fusion::BRepFace", entityToken="f8", parentComponent=Obj(entityToken="lid", name="Lid"))
         cases = (("ConstructionAxisEdgeDefinition", {"edgeEntity": straight}, ["BRepEdge"]),
                  ("ConstructionAxisTwoPointDefinition", {"pointEntityOne": corner, "pointEntityTwo": corner},
                   ["BRepVertex", "BRepVertex"]),
@@ -454,7 +454,7 @@ class CircularPatternTest(unittest.TestCase):
                 self.assertEqual([entry.get("entity_type") for entry in built], kinds)
                 # An entity of another component is no place of the part, and not left out either.
                 self.assertEqual([entry for entry in built if "entity_type" not in entry],
-                                 [{"foreign": True}] * kinds.count(None))
+                                 [{"foreign": True, "component": {"token": "lid", "name": "Lid"}}] * kinds.count(None))
 
     def test_unreadable_axis_is_marked_other(self):
         data = read_pattern("CircularPatternFeature", [], inputEntities=Coll([source_feature(1)]),
