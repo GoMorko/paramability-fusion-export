@@ -60,15 +60,18 @@ def _sources(inputs, entity_type):
     return [entity.timelineObject.index for entity in inputs]
 
 
-# Faces read for each pattern element and for the original, to check where each copy sits
-# (`design_model/steps/pattern_places.py`).
+# Faces read for the original and for each sampled pattern element, to check where each copy sits
+# (`design_model/steps/pattern_places.py`). Each face costs Fusion a measure of its centroid and area, so a pattern of
+# many copies has the faces of only `SAMPLED_ELEMENTS` of its kept elements read (`_sampled`).
 ELEMENT_FACES = 8
 SOURCE_FACES = 32
+SAMPLED_ELEMENTS = 12
 
 
 def face_records(faces, limit):
     """`[{ "center", "area" }]` of the first `limit` faces of a list or collection (`BRepFace.centroid` in mm,
-    `BRepFace.area` in mm2), or None when a face cannot be read."""
+    `BRepFace.area` in mm2), or None when a face cannot be read. A face seen through an occurrence is read as its
+    native face, so the centres are in the space of the face's own component, as for every native face."""
     def read():
         if faces is None:
             return None
@@ -76,9 +79,21 @@ def face_records(faces, limit):
         for face in geo.iter_items(faces):
             if len(out) >= limit:
                 break
+            face = geo.native_object(face)
             out.append({"center": geo.point(face.centroid), "area": round(float(face.area) * 100.0, 6)})
         return out
     return geo.safe(read, None)
+
+
+def _sampled(count):
+    """The positions in a list of `count` kept elements whose faces are read: all of them up to SAMPLED_ELEMENTS,
+    else the first three, the last two and the rest spread evenly between them."""
+    if count <= SAMPLED_ELEMENTS:
+        return set(range(count))
+    picked = {0, 1, 2, count - 2, count - 1}
+    spread = SAMPLED_ELEMENTS - len(picked)
+    picked.update(2 + (count - 4) * (n + 1) // (spread + 1) for n in range(spread))
+    return picked
 
 
 def _source_faces(inputs, entity_type):
@@ -186,18 +201,20 @@ def _number(parameter, default):
 
 
 def pattern_elements(feature, faces=True):
-    """Every `PatternElement` as `{ id, suppressed, frame }`, with `faces` (`face_records`, null when unreadable) when
-    `faces` is set. The transform (`frame`) is not always right (`design_model/steps/pattern_places.py`)."""
-    out = []
-    for element in strict_items(feature.patternElements):
-        record = {
-            "id": int(element.id),
-            "suppressed": bool(geo.safe(lambda: element.isSuppressed, False)),
-            "frame": geo.frame_of(element.transform),
-        }
-        if faces:
-            record["faces"] = face_records(geo.safe(lambda: element.faces, None), ELEMENT_FACES)
-        out.append(record)
+    """Every `PatternElement` as `{ id, suppressed, frame }`. When `faces` is set, the kept elements that `_sampled`
+    picks get `faces` (`face_records`, null when unreadable); the others get none. The transform (`frame`) is not
+    always right (`design_model/steps/pattern_places.py`)."""
+    elements = strict_items(feature.patternElements)
+    out = [{
+        "id": int(element.id),
+        "suppressed": bool(geo.safe(lambda: element.isSuppressed, False)),
+        "frame": geo.frame_of(element.transform),
+    } for element in elements]
+    if faces:
+        kept = [n for n, record in enumerate(out) if not record["suppressed"]]
+        for k in _sampled(len(kept)):
+            element = elements[kept[k]]
+            out[kept[k]]["faces"] = face_records(geo.safe(lambda: element.faces, None), ELEMENT_FACES)
     return out
 
 

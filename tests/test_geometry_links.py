@@ -216,10 +216,10 @@ def _mm(store, name):
 
 
 def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None, apart_when=None):
-    """Fusion where the box outline (and the body's box) follows width and depth and the hole follows the pipe (unless
-    `still`). With `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when it holds for
-    the pipe diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the parameters away
-    from their start at every read."""
+    """Fusion where the box outline (and the body's box and volume) follows width and depth and the hole follows the
+    pipe (unless `still`). With `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when
+    it holds for the pipe diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the
+    parameters away from their start at every read."""
     def read(request):
         out = copy.deepcopy(port.e0)
         scale = {"s1": (_mm(port.store, "width_mm") / 40.0, _mm(port.store, "depth_mm") / 30.0),
@@ -234,6 +234,7 @@ def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None,
                         curve["radius"] *= sx
         port.varied.append({n for n in START if port.store.exprs[n] != START[n]})
         out["box"] = {"min": [0, 0, 0], "max": [_mm(port.store, "width_mm"), _mm(port.store, "depth_mm"), 10]}
+        out["volume_mm3"] = _mm(port.store, "width_mm") * _mm(port.store, "depth_mm") * 10
         if outline_when is not None and outline_when(_mm(port.store, "pipe_d_mm")):
             loops = out["sketches"]["s2"]["profiles"][0]["loops"]
             inner = copy.deepcopy(loops[0])

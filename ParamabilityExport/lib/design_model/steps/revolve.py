@@ -30,6 +30,11 @@ TRAVEL_TOL = 1e-3
 # Steps per full turn when the box an outline sweeps is sampled, and how far (mm) a made face may stand out of it.
 BOX_STEPS = 720
 BOX_TOL = 1e-2
+# How much larger (mm, plus a share of its largest side) a box Fusion gives may be than the shape it holds. Fusion does
+# not promise tight boxes for curved faces and bodies; a turn is ruled out only when a measured box stands out of its
+# swept box by more than this, so a loose box can only leave the turn unknown. Hand check RC1 measures the slack.
+BOX_LOOSE_MM = 0.5
+BOX_LOOSE_SHARE = 0.02
 
 
 def total_turn(angle_deg, symmetric):
@@ -106,7 +111,10 @@ def turned_box(points, axis_point, axis, total_deg):
 
 
 def _box_holds(outer, inner):
-    return all(outer[0][i] - BOX_TOL <= inner[0][i] and inner[1][i] <= outer[1][i] + BOX_TOL for i in range(3))
+    """False only when the measured box `inner` stands out of `outer` by more than a loose box may (`BOX_LOOSE_MM`,
+    `BOX_LOOSE_SHARE`)."""
+    slack = BOX_TOL + BOX_LOOSE_MM + BOX_LOOSE_SHARE * max(inner[1][i] - inner[0][i] for i in range(3))
+    return all(outer[0][i] - slack <= inner[0][i] and inner[1][i] <= outer[1][i] + slack for i in range(3))
 
 
 def _box(box):
@@ -139,8 +147,9 @@ def sense(data, turn, axis, total_deg, cut, points=None, axis_point=None, bodies
 
     `bodies` holds the boxes of the body before and after the step (`body_boxes`). A join adds material only where the
     outline sweeps, so the made faces and the body after it lie inside the box before together with the swept box of
-    the turn Fusion made. A box before that is looser than the body only lets more turns fit; when both turns fit, the
-    answer is None."""
+    the turn Fusion made. A box before that is looser than the body only lets more turns fit. A made box or a box after
+    that is looser than the shape rules out no turn as long as it is no looser than `_box_holds` allows. When both
+    turns fit, the answer is None."""
     measured = [_normal(data, "start_face_normal"), _normal(data, "end_face_normal")]
     fits = []
     for sign in (1.0, -1.0):

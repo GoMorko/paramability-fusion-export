@@ -22,7 +22,8 @@ solution = solve_sketch(record, settings=None, constants=(), tol=1e-6, extended=
   become numbers instead of measured inputs. `constants.constants_of(record, linked)` lists them: the projections of
   another component when no parameter reaches the sketch through that component (`linked` false), and the
   projections of the origin point, the origin axes and the origin planes of the sketch's own component (`origin` on
-  the reference, `own_origin`; an origin axis the reader did not mark is found by its place).
+  the reference, `own_origin`) when the caller says that no size moves the sketch plane (`fixed_plane`); an origin
+  axis the reader did not mark is found by its place.
 - `extended`: the reading the Orca copy uses (`orca_translate.sketches`); the recipe export and `probe.derived` keep
   the default, so their output does not change with it (`tests/test_sketch_solve_extended.py`). It reads a driving
   distance dimension between two lines as keeping them parallel, tests angle dimensions and the parallel lines of a

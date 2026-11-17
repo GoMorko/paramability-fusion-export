@@ -5,10 +5,14 @@ from dataclasses import dataclass, field
 from ..geometry.tolerances import BODY_TOLERANCE_MM
 
 # The parts of a read that a state keeps in `report.json`.
-REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "pieces", "refs", "faces", "patterns", "unread")
+REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "volume_mm3", "area_mm2", "pieces", "refs", "faces",
+                    "patterns", "unread")
 # Two reads of the volume of a body agree (mm3, or this share of the volume).
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
+# Two reads of the area of a body agree (mm2, or this share of the area).
+AREA_TOLERANCE_MM2 = 1e-4
+AREA_RELATIVE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,8 @@ class ProbeState:
     put_back: the read once a sketch left on its other solution was put back before the row ran, or None.
     again: True for a row run a second time from a checked start.
     changed: True when the row's own size changed a followed outline (set by `marked_states` for `plan`).
+    warned: True when Fusion built the part there but a step it is built from shows a new warning: the state counts as
+      one that did not build, `failed` names that step.
     """
 
     values: dict = field(default_factory=dict)
@@ -37,6 +43,7 @@ class ProbeState:
     again: bool = False
     changed: bool = False
     pieces: object = None
+    warned: bool = False
 
     @classmethod
     def from_json(cls, data):
@@ -46,7 +53,8 @@ class ProbeState:
                    e0=bool(data.get("e0")), failed=data.get("failed"),
                    start=start if isinstance(start, dict) else None,
                    put_back=put_back if isinstance(put_back, dict) else None,
-                   again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"))
+                   again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"),
+                   warned=bool(data.get("warned")))
 
     def json(self):
         """The state as `report.json` keeps it: the reads only with `REPORT_READ_KEYS`."""
@@ -55,6 +63,8 @@ class ProbeState:
             out["failed"] = self.failed
         if self.pieces:
             out["pieces"] = self.pieces
+        if self.warned:
+            out["warned"] = True
         if self.e0:
             out["e0"] = True
         if self.again:
@@ -81,16 +91,26 @@ def box_numbers(read):
     return numbers if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in numbers) else None
 
 
-def _volume(read):
-    value = read.get("volume_mm3") if isinstance(read, dict) else None
+def _number(read, key):
+    value = read.get(key) if isinstance(read, dict) else None
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def _differs(a, b, tolerance, relative):
+    return a is not None and b is not None and abs(a - b) > max(tolerance, relative * abs(a))
+
+
 def body_changed(before, now):
-    """True when the body reads differently in two probe states: its box moved, or its volume changed when both states
-    read it. False when they agree or the body cannot be compared (a state without a box)."""
+    """True when the body reads differently in two probe states: its box moved, or its volume or area changed when
+    both states read it. False when they agree or the body cannot be compared (a state without a box)."""
     a, b = box_numbers(before), box_numbers(now)
     if a is not None and b is not None and any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(a, b)):
         return True
-    va, vb = _volume(before), _volume(now)
-    return va is not None and vb is not None and abs(va - vb) > max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(va))
+    return (_differs(_number(before, "volume_mm3"), _number(now, "volume_mm3"), VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE)
+            or _differs(_number(before, "area_mm2"), _number(now, "area_mm2"), AREA_TOLERANCE_MM2, AREA_RELATIVE))
+
+
+def body_compared(before, now):
+    """True when two probe states read enough of the body to tell that it did not change: a box and a volume in
+    both. A box alone misses a change inside it (a deeper pocket, a wider hole)."""
+    return all(box_numbers(r) is not None and _number(r, "volume_mm3") is not None for r in (before, now))

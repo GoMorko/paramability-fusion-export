@@ -547,7 +547,9 @@ not judged to meet material where Orca removes nothing.
   back by the angle of one side and turns by the sum: the start face tells which side (`back_sides`), and both angles
   keep their numbers. When the start face fits both sides (one angle of 90 or 270 degrees), it is left out with the
   cause `revolveSides`. Left out: an axis off the sketch plane, an outline across the axis, an outline with holes,
-  several outlines. A cut is checked against the copied part like any cut.
+  several outlines. A cut is checked against the copied part like any cut. The outline and the axis keep their drawn
+  numbers in Orca (the sizes that move them are marked), so the outline cannot pass to the other side of the axis in
+  the copy; the recipe output cuts the ranges for that instead (developer guide 3.14, "The side of the axis").
 
 ### Sweeps, lofts and splines
 
@@ -658,7 +660,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`, `hole_place`,
   `reach.projection_sizes`, `SketchFormulas.follows_projection`, `sketches.reads_input`). The sketch's own dimensions
   come after its projections, so they are never marked for it and still follow. A projection of the origin point, an
-  origin axis or an origin plane of the sketch's own component is no input: it is fixed, like the sketch origin.
+  origin axis or an origin plane of the sketch's own component is no input when no ticked size moves or turns the
+  sketch plane (`reach.plane_fixed`): it is fixed, like the sketch origin. On a plane that a size moves, it is a
+  measured input and marks the sizes as above.
 - A hole centre follows when the capture holds the frame of its sketch (`sketch_frame`) and the sketch's graph: the
   hole's plane is the sketch plane, turned so that its normal is the drilling direction, and `hole_x`, `hole_y` are
   the point's sketch coordinates as formulas of the sizes (`orca_translate/hole_place.py`). A size that an earlier

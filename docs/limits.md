@@ -40,6 +40,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the sizes the size probe tried; each other size that may move or turn that line (a size of its sketch, of the plane
   or face that sketch sits on, or of part edges projected into it) is marked the same way, and with no tries every
   such size is.
+- Fusion turns a revolve toward one side of its sketch plane, also when a size moves the axis (or the outline) to the
+  other side of the outline. Then the turn about the axis reverses, and the copy turns one way only. So the range of
+  such a size stops just before the outline would reach the axis. An outline drawn on the axis may stay on it. When the
+  person typed the ranges of all the sizes that move it, the revolve is left out instead.
 - A revolve whose axis is not in the plane of its sketch (or is not square to that plane) is left out too, unless Fusion
   itself projects the axis onto the sketch plane.
 - A revolve to two sides with two angles is copied when its start face shows which side each angle turns to. When one
@@ -133,7 +137,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   distance from a face or plane when Fusion gives no start face that shows which way and the end of the extrude does
   not show it either, extrudes with two sides that
   both end on faces or planes on the same side of the sketch, an extrude whose stored direction Fusion's measured face
-  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join
+  does not confirm when that face is not the end of the extrude and the part it joined does not show the way, a join with one side whose stored direction points
+  away from where the part grew, a join
   up to a curved face when Fusion gives no end face and the part after it does not lie wholly on one side of where
   the extrude starts, a quarter turn revolve joined to the part when its ends do not show the way and the material it
   added lies inside the box of the part before it, a cut whose measured end lies short of its side when
@@ -323,4 +328,4 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.13.0-preview.11. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.13.0-preview.14. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.

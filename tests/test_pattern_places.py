@@ -6,12 +6,12 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.orca_sized import fixture
-from tests.test_capture_reader import Coll, Obj, P
+from tests.test_capture_reader import Coll, Obj, P, param
 from tests.test_capture_reader_finish import element as fake_element, read_pattern, rectangular as fake_rectangular
 from tests.translator_helpers import left_out, load_capture, steps_of, verdict_of
 
 from lib.design_model.steps import pattern_places
-from lib.design_model.steps.repeat import data_in_component
+from lib.fusion_reader import read_repeat
 from lib.orca_recipe.enums import FeatureType
 from lib.orca_translate import translate as orca_translate
 from lib.results.verdicts import LEFT_OUT
@@ -132,14 +132,18 @@ class RectangularPlacesTest(unittest.TestCase):
 
 
 class FaceCheckTest(unittest.TestCase):
-    def test_faces_are_carried_into_a_placed_component_with_the_frames(self):
-        place = {"origin": [100.0, 0.0, 0.0], "x": [0.0, 1.0, 0.0], "y": [-1.0, 0.0, 0.0], "z": [0.0, 0.0, 1.0]}
-        moved = dict(turn(0), origin=[0.0, 20.0, 0.0])
-        data = {"source_faces": [{"center": [110.0, 5.0, 0.0], "area": 4.0}], "elements": [
-            {"id": 1, "frame": moved, "faces": [{"center": [110.0, 25.0, 0.0], "area": 4.0}]}]}
-        carried = data_in_component(data, place)
-        self.assertTrue(pattern_places.agrees(pattern_places.source_faces(carried), carried["elements"][0],
-                                              carried["elements"][0]["frame"]))
+    def test_a_pattern_in_a_placed_component_checks_its_faces_in_the_component(self):
+        # Fusion gives the element transforms in assembly space and the faces of native objects in the component's
+        # own space (as the T19 exports of a component placed 2400 mm along Y show for the transforms).
+        shift = [0.0, 2400.0, 0.0]
+        capture = circular("cpattern_full", 6, 360.0, [n * 60 for n in range(6)], [n * 60 for n in range(6)])
+        capture["target"]["placement"] = {"frame": {"origin": shift, "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
+        for element in capture["items"][4]["data"]["elements"]:
+            frame = element["frame"]
+            turned = [sum(frame[n][i] * shift[k] for k, n in enumerate("xyz")) for i in range(3)]
+            frame["origin"] = [o + t - r for o, t, r in zip(frame["origin"], shift, turned)]
+        step = polar_of(capture)
+        self.assertEqual((step["polar"]["count"], step.get("skip")), (6, None))
 
     def test_a_face_the_place_leaves_where_it_is_tells_nothing(self):
         on_axis = [{"center": [20.0, 10.0, 3.0], "area": 9.0}]
@@ -152,7 +156,10 @@ class ReaderTest(unittest.TestCase):
         def face(x):
             return Obj("fusion::BRepFace", centroid=P(x, 0, 0), area=0.5)
         copies = [fake_element(0, (0, 0, 0)), fake_element(1, (10, 0, 0)), fake_element(2, (20, 0, 0))]
-        copies[0].faces, copies[1].faces = [face(1)], [face(11)]
+        # A face seen through an occurrence is read as its native face, in the component's own space.
+        copies[0].faces = [face(1)]
+        copies[1].faces = [Obj("fusion::BRepFace", centroid=P(999, 0, 0), area=0.5, assemblyContext=Obj(),
+                               nativeObject=face(11))]
         source = Obj("fusion::ExtrudeFeature", timelineObject=Obj(index=1), faces=Coll([face(1)]))
         data = read_pattern("RectangularPatternFeature", copies,
                             **fake_rectangular(inputEntities=Coll([source])))
@@ -160,6 +167,16 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual([e["faces"] for e in data["elements"]],
                          [[{"center": [1.0, 0.0, 0.0], "area": 50.0}], [{"center": [11.0, 0.0, 0.0], "area": 50.0}],
                           None])
+
+
+    def test_a_pattern_of_many_copies_has_the_faces_of_a_spread_sample_read(self):
+        copies = [fake_element(n, (n, 0, 0)) for n in range(30)]
+        for copy_ in copies:
+            copy_.faces = [Obj("fusion::BRepFace", centroid=P(1, 0, 0), area=0.5)]
+        data = read_pattern("RectangularPatternFeature", copies, **fake_rectangular(quantityOne=param(30.0)))
+        read = [e["id"] for e in data["elements"] if "faces" in e]
+        self.assertEqual(len(read), read_repeat.SAMPLED_ELEMENTS)
+        self.assertTrue({0, 1, 29} <= set(read))
 
 
 if __name__ == "__main__":

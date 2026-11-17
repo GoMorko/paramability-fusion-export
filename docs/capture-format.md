@@ -331,7 +331,9 @@ curves). A borrowed sketch is read through its native object, so its numbers are
   target's component, `other` one in another component, `none` a reference with no source (not parametric). A
   projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
   component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
-  the sketch's own component sits still in the sketch, whatever the sizes (`sketch_solve.constants.own_origin`).
+  the sketch's own component sits still in the sketch when no ticked size moves or turns the sketch plane
+  (`design_model.reach.plane_fixed`, `sketch_solve.constants.own_origin`); on a plane that a size moves, it stays a
+  measured input like other projected geometry.
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
   `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.
@@ -1029,7 +1031,10 @@ mm2 (`BRepFace.area`).
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame, and `faces`: up to 8 of the faces
-  that element made, `PatternElement.faces`, null when they cannot be read). The ids start at 0 (the original) and
+  that element made, `PatternElement.faces`, null when they cannot be read). Only up to 12 kept elements have
+  `faces`: all of them in a smaller pattern, else the first three, the last two and copies spread evenly between.
+  The face centroids are in the space of the face's own component (a face seen through an occurrence is read as its
+  native face); the frames are in assembly space. The ids start at 0 (the original) and
   follow the order of the copies. The transform is not always right: in Fusion 2706 the transform of each copy of a
   circular pattern after the original is one step ahead (hand check CP1). So the translators take the places of
   one-sided circular copies from their ids and check every place against the faces
@@ -1039,8 +1044,8 @@ mm2 (`BRepFace.area`).
   before the item: the faces each source feature made (`Feature.faces`), the source faces of a pattern of faces, or
   the faces of the source bodies. Null when they cannot be read, absent in older captures. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`), and the face centroids with
-  them. In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`). The face centroids stay as
+  they are. In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
@@ -1908,7 +1913,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
-    does not model, a face of another body than the one walked (its `body`, `follow._beyond_tool`), a plane built on
+    does not model, a face proven to be on another body than the one walked (its `body` is not that body and is not
+    one with that body's name under another token, `follow._another_body`), a plane built on
     such a face), or when the move they give differs from the probe's measure at a try that built, the probe's
     measure of it decides instead
     (`lib/translator/extrude/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
@@ -1968,7 +1974,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   reason. The ranges are the table's, with two cuts. First, on a side where the probe saw Fusion fail to rebuild
   the design with only that size changed, an untyped range stops at the farthest value that built
   (`tried_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
-  end). A failure counts only when its step is one the part is built from: an item of the target's component or a
+  end). A step of the part that shows a new warning at a try counts as a failure there (`spans.warned`, `Cut.warned`; the
+reason says "Fusion shows a warning on Revolve1 at 12.5"). A failure counts only when its step is one the part is built from: an item of the target's component or a
   step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
   capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
   a different outline with only that size changed, the range stops the same way at the farthest value that kept it
@@ -2114,13 +2121,16 @@ the highest value it was measured at; each such size with each other size of tho
 `series.curve_sizes`, since a partner of a turn may move no curved value at the sizes now); then every other size at
 the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
-first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
+first step that failed (`failed`). A row that built while a step of the part showed a warning it did not show before
+the tries is kept as a state that did not build, with that step in `failed` and `warned: true`. A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
-B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
-(and volume) read the same at every try that set it alone (`Motion.body_changes`, `probe.build.body_changes`; a try on
-another sketch solution, `apart`, or past an outline limit does not count). When the body changed at such a try, it is
-dropped with "it changes this part in a way the copy does not follow" (`used` true); when no such try read the body
-(an older motion file), it gets the plain "not used by any copied step" reason without `tried`. A size that reaches a sketch
+B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box,
+volume and area (`volume_mm3`, `area_mm2` in each state read) read the same at every try that set it alone
+(`Motion.body_changes`, `probe.build.body_changes`; a try on another sketch solution, `apart`, or past an outline limit
+does not count, and a try counts as "the same" only when it and the first read hold the box and the volume). When
+the body changed at such a try, it is dropped with "it changes this part in a way the copy does not follow" (`used`
+true); when no such try read the box and the volume (an older export), it gets the plain "not used by any copied
+step" reason without `tried`. A size that reaches a sketch
 or a measured place (`design_model.reach.probed_sizes`) and whose rows all failed to build was not measured: it is
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
@@ -2163,7 +2173,8 @@ tell, a read curve runs the way the captured one does along the loop), an arc's 
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
-(`probe.build.spans`), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
+(`probe.build.spans`), `warned`, the entries of `failed` where the step showed a new warning (only when there is
+one), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
 separate pieces (only when there is one, see "Probe states"), and `kept` and `changed` for a size whose own row changed a followed outline (see the
 different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
@@ -2375,8 +2386,8 @@ the part's coordinates like the capture. The sizes tried for it are every size a
 before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
 (`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure when the steps written
 before cannot place the face without a doubt, or when the move they give differs from the measure by more than 0.001 mm
-at a try that built and set the free sizes inside their ranges, or when the measure is stuck (`reach_motion.target_shift`,
-`_agrees`); then those same sizes get the three
+at a try that built and set the free sizes inside their ranges, when no such try is left to compare them, or when the
+measure is stuck (`reach_motion.target_shift`, `_agrees`); then those same sizes get the three
 answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
 | Reference | Keys | Meaning |
@@ -2434,6 +2445,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
 - `box`: the target body's box, as `target.box`.
+- `volume_mm3`, `area_mm2` (only with `box`): the target body's volume (`BRepBody.volume`, cm3 times 1000) and area
+  (`BRepBody.area`, cm2 times 100), each absent when it cannot be read. They show a change inside the box (a deeper
+  pocket, a wider hole) when the probe asks whether a size changed the body (`Motion.body_changes`).
 - `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), and `others`, the
   boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64). The
   app builds a part only in one piece, so the probe works out from them how many pieces the part is in

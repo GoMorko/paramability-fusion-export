@@ -24,19 +24,22 @@ class ConstantsTest(unittest.TestCase):
         found = constants_of(self.record(), linked=True)
         self.assertEqual(sorted(found), [("curve", 0), ("point", 1), ("point", 2)])
 
-    def test_a_projected_origin_of_the_sketchs_own_component_is_a_constant(self):
+    def test_a_projected_origin_of_the_sketchs_own_component_is_a_constant_on_a_fixed_plane(self):
         def record(reference, component=None):
             points = [{"id": 0, "xy": [0, 0], "origin": True}, {"id": 1, "xy": [0, 0], "reference": reference}]
             return dict({"points": points, "curves": []}, **({"component": component} if component else {}))
         own = {"source": "own", "component": "cP", "origin": True}
-        self.assertEqual(constants_of(record(own, {"token": "cP"}), linked=True), [("point", 1)])
-        self.assertEqual(constants_of(record(own), linked=True), [("point", 1)])
+        self.assertEqual(constants_of(record(own, {"token": "cP"}), True, fixed_plane=True), [("point", 1)])
+        self.assertEqual(constants_of(record(own), True, fixed_plane=True), [("point", 1)])
+        # On a plane that a size moves or turns, the projection moves in the sketch: it stays a measured input.
+        self.assertEqual(constants_of(record(own, {"token": "cP"}), True, fixed_plane=False), [])
         # The root origin projected into a sketch of the root that another component's step uses.
         root = {"source": "other", "component": "cR", "origin": True}
-        self.assertEqual(constants_of(record(root, {"token": "cR"}), linked=True), [("point", 1)])
+        self.assertEqual(constants_of(record(root, {"token": "cR"}), True, fixed_plane=True), [("point", 1)])
         # The origin of a third component moves with that component.
-        self.assertEqual(constants_of(record(root, {"token": "cP"}), linked=True), [])
-        self.assertEqual(constants_of(record({"source": "own", "component": "cP"}, {"token": "cP"}), linked=True), [])
+        self.assertEqual(constants_of(record(root, {"token": "cP"}), True, fixed_plane=True), [])
+        plain = {"source": "own", "component": "cP"}
+        self.assertEqual(constants_of(record(plain, {"token": "cP"}), True, fixed_plane=True), [])
 
 
 if __name__ == "__main__":

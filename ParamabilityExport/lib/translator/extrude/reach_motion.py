@@ -54,8 +54,9 @@ def target_shift(ctx, item, slot, record, direction, what="reaches to"):
 
 def _agrees(ctx, item, slot, record, direction, followed):
     """True when the move `followed` (along unit `direction`) is the probe's measured move of the face or plane at every
-    try that built and set free sizes inside their ranges. False when they differ at one try, or when the measured move
-    cannot be written (it is stuck) or the face is parallel to `direction`."""
+    try that built and set free sizes inside their ranges, or when neither moves. False when they differ at one try,
+    when no such try is left to compare them (nothing proves that they agree), when the measured move cannot be
+    written (it is stuck) or when the face is parallel to `direction`."""
     found = ref_motion.measured_offset(ctx, item, slot)
     cosine = vec.dot(vec.unit(record["plane"]["normal"]), direction)
     if found is None or abs(cosine) < 1e-9:
@@ -65,11 +66,12 @@ def _agrees(ctx, item, slot, record, direction, followed):
     start = _values(ctx.table, {}, followed, found)
     if start is None:
         return False
-    for setting in _settings(ctx):
+    settings = _settings(ctx)
+    for setting in settings:
         now = _values(ctx.table, setting, followed, found)
         if now is None or abs((now[0] - start[0]) - (now[1] - start[1]) / cosine) > AGREE_TOL:
             return False
-    return True
+    return bool(settings)
 
 
 def _settings(ctx):

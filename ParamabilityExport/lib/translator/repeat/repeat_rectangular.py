@@ -207,15 +207,6 @@ def _tried_places(axes, axis):
     return places_at
 
 
-def _listed(raw, data, ctx):
-    """The elements whose places must all differ: every element as Fusion listed it, or, when a direction spaces its
-    copies 0 apart (so copies sit on one another by design), the merged ones of `data`."""
-    for which in ("one", "two"):
-        if int(raw.get("quantity_" + which) or 1) > 1 and abs(float(raw.get("distance_" + which) or 0.0)) < 1e-9:
-            return data
-    return data_in_component(raw, ctx.component_frame())
-
-
 def rectangular(ctx, step, sources=None):
     """The pattern of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
     the pattern repeats."""
@@ -238,8 +229,8 @@ def rectangular(ctx, step, sources=None):
         if any(axis["symmetric"] for axis in axes):
             return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
         return Refusal(shared.PATTERN_ORIGINAL_LOST)
-    listed = _listed(step.brought_data, data, ctx)
-    found = places.grid_places(listed["elements"], [(a["dir"], a["step"]) for a in axes],
+    listed = places.listed_elements(step.brought_data, data, ctx.component_frame())
+    found = places.grid_places(listed, [(a["dir"], a["step"]) for a in axes],
                                math.prod(a["count"] for a in axes), data)
     if found is not None:
         return Refusal(found.words)

@@ -411,9 +411,8 @@ def rectangular(ctx, step):
     full = 1
     for _, _, n, _, _ in directions:
         full *= n
-    listed = data if any(int(raw.get("quantity_" + w) or 1) > 1 and abs(float(raw.get("distance_" + w) or 0.0)) < 1e-9
-                         for w in ("one", "two")) else data_in_component(raw, ctx.component_frame())
-    found = pattern_places.grid_places(listed["elements"], [(d[1], s) for d, s in zip(directions, steps)], full, data)
+    listed = pattern_places.listed_elements(raw, data, ctx.component_frame())
+    found = pattern_places.grid_places(listed, [(d[1], s) for d, s in zip(directions, steps)], full, data)
     if found is not None:
         return Skip(found.words, causes.COPIES_UNEVEN)
     source = pattern_places.source_faces(data)

@@ -23,7 +23,8 @@ learning only.
 
 1. The add-in reads the steps of the body in the Fusion timeline: sketches, extrudes, holes, fillets and more.
 2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
-   moves, and how much.
+   moves, and how much. Where a step does not rebuild, or shows a new warning, the range of that parameter stops
+   before that value.
 3. It sets all parameters back to their values. Your design does not change. A parameter that no copied step uses
    is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
@@ -41,6 +42,8 @@ Scale of a body is copied only when the body measured after it has the size and 
 Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.
+A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
+range of that parameter stops before the outline reaches the axis.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).
@@ -92,7 +95,7 @@ or if an error occurs.
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
-- This is version 0.13.0-preview.11. Use a current Paramability build to open its files.
+- This is version 0.13.0-preview.14. Use a current Paramability build to open its files.
 
 ## More information
 

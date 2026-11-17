@@ -307,6 +307,13 @@ def _settle(capture, handlers, size_table, motion, fixed, follow, cache):
     return _Settled(result, ctx, current, whys, ctx.depends)
 
 
+def _in_table_order(table, doubts):
+    """`doubts` ordered like the parameter table (names it does not hold last, by name), so the loose list does not
+    depend on the order sets were walked in."""
+    order = {e.name: i for i, e in enumerate(table.entries)}
+    return dict(sorted(doubts.items(), key=lambda item: (order.get(item[0], len(order)), item[0])))
+
+
 def _reasons(whys):
     return {name: fixed_reason(name, why) for name, why in whys.items()}
 
@@ -318,6 +325,7 @@ def _finish(settled, doubts, capture, motion):
     step reads that no handler named. A doubted size that no formula reads is not a size: it is listed in
     `result.dropped` with its reason, like every other ticked size that the recipe does not hold."""
     result, table, whys = settled.result, settled.table, dict(settled.whys)
+    doubts = _in_table_order(table, doubts)
     result.fixed = [{"name": name, "reason": fixed_reason(name, why)} for name, why in whys.items()]
     if result.recipe is None:
         result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()]
@@ -335,6 +343,7 @@ def _finish(settled, doubts, capture, motion):
         size = sizes.get(table.size_name(name))
         if size and wording.narrow_span(span, size["min"], size["max"]):
             doubts[name] = wording.with_span(doubts.get(name), span, size["min"], size["max"])
+    doubts = _in_table_order(table, doubts)
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
     result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion),
@@ -408,6 +417,10 @@ def _cut_notes(table, sizes, ctx):
                     if seen and hit and side in seen.failed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if failures:
             causes.append(wording.not_rebuilt_why(failures))
+        warnings = [seen.warned[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                    if seen and hit and side in seen.warned and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if warnings:
+            causes.append(wording.warned_why(warnings))
         changes = [seen.changed[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
                    if seen and hit and side in seen.changed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if changes:

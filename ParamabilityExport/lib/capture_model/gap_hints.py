@@ -48,6 +48,7 @@ REPLACE_FACE = "replaceFace"
 RIB_WEB = "ribWeb"
 PATH_PATTERN = "pathPattern"
 REVOLVE_SIDES = "revolveSides"
+REVOLVE_AXIS_SIDE = "revolveAxisSide"
 BOUNDARY_FILL = "boundaryFill"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
@@ -100,6 +101,8 @@ HINTS = {
     RIB_WEB: "Draw the rib or web outline in a sketch and extrude it.",
     PATH_PATTERN: "Use a rectangular or circular pattern, or a mirror.",
     REVOLVE_SIDES: "Make two revolves, one to each side of the sketch.",
+    REVOLVE_AXIS_SIDE: "Type size ranges that keep the outline on one side of the axis, or leave the ranges to the "
+                       "add-in.",
     BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",

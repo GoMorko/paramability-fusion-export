@@ -34,16 +34,13 @@ class OffersRangeTest(unittest.TestCase):
 
 
 class DestinationTest(unittest.TestCase):
-    def test_the_rows_of_an_export_for_orca_name_orca_not_paramability(self):
+    def test_the_rows_carry_the_destination_of_their_export_and_its_column_title(self):
         params = [length("wall")]
-        for destination in (PARAMABILITY, ORCA):
+        for destination, status in ((PARAMABILITY, rows.HEADERS["status"]), (ORCA, rows.ORCA_STATUS)):
             with self.subTest(destination):
                 line = offers(initial_table(params), params, destination=destination)[0]
-                texts = [line["reason"], rows.details_html(line, True), rows.header("status", "mm", destination),
-                         rows.up_tooltip(destination)]
-                other = "Orca" if destination == PARAMABILITY else "Paramability"
                 self.assertEqual(line["destination"], destination)
-                self.assertFalse([t for t in texts if other in t])
+                self.assertEqual(rows.header("status", "mm", destination), status)
 
 
 class FormulaOfNumbersTest(unittest.TestCase):

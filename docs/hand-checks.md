@@ -451,6 +451,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). The second is copied as a
     turn of 120 degrees (Fusion's angle is the turn to each side) with `Sweep` a fixed number; the volume equals
     Fusion's (7853.98 mm3). The third is a closed ring (23561.94 mm3).
+    Then measure how loose Fusion's boxes are: in the text commands window run a script that prints
+    `boundingBox` of the body and of each face of the first revolve, and compare it with the shape (the body is 0 to
+    40, -8 to 20, 0 to 10; the quarter round face is x 10 to 15, y -8 to 0, z 2 to 10). Expect each side to be within
+    0.5 mm plus 2 percent of the largest side of the box (`BOX_LOOSE_MM`, `BOX_LOOSE_SHARE` in
+    `design_model/steps/revolve.py`). If a box is looser, raise those numbers.
 
 43. CP1, where Fusion says the copies of a circular pattern are. On the XY plane make a disc of 60 mm diameter, 5 mm
     high. Sketch a point at (20, 0) on its top face and drill a simple 5 mm hole there, through all. Make a circular
@@ -688,13 +693,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the origin. Drill a simple 5 mm hole through all at (10, 10). Make a rectangular pattern of the hole: direction
     one along X, quantity 4, distance 20 mm, spacing; direction two along Y, quantity 3, distance 15 mm. On a copy of
     the design, tick Symmetric in direction one and set its quantity to 5, with the hole at (50, 10). On another copy,
-    suppress the copy at (50, 25).
+    suppress the copy at (50, 25). On a last copy, make the plate in a new component and move that component 100 mm
+    along Y and turn it 90 degrees about Z, then make a circular pattern of the hole about the Z axis of the
+    component: Full, quantity 4.
     Export: Export for Paramability and Export for Orca. In `report.json`, for each element compare the shift of its
     `frame` (`origin`) with the move from the original's `source_faces` to the element's `faces`. Expect them to
     agree, and the holes at x 10, 30, 50, 70 and y 10, 25, 40. Each pattern is copied (the suppressed copy as a
     skip in the recipe; Orca leaves that one out) and matches the STEP. If a pattern is left out with "Fusion gives a
     place for a copy of this pattern that is not where the faces of that copy are", note the ids, frames and face
-    centres: the transforms of rectangular patterns are wrong too.
+    centres: the transforms of rectangular patterns are wrong too. In the moved component, the frames are in
+    assembly space and the face centres in the component's space (the original hole near (10, 10), not near (-10, 110)); both patterns
+    are copied. If they are left out with that reason, note the frames and face centres: the spaces differ from
+    what the reader expects.
 64. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
     its corner at the origin. Sketch a circle of radius 20 mm centred at (30, 30) on the top face, and a circle of
     radius 2 mm at (50, 30); cut the small circle through all. Make a Pattern on Path of the cut along the large
@@ -729,3 +739,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: Export for Orca, tick all four. `HoleX` is a variable of the hole place, not fixed, and no size has the
     reason "placed by geometry projected into Sketch2". In Orca, change `HoleX` to 30 mm: the hole moves like in
     Fusion. Afterwards the design is as before.
+
+68. RV7, a revolve about an axis that a size moves past the outline. Add a user parameter `Height` = 10 mm. On the XY
+    plane make a 40 x 20 mm box with its corner at the origin, extruded `Height` up. Sketch on its top face a line on
+    the top front edge (y = 0, from x = 0 to 40), coincident with that edge. On the XZ plane draw a rectangle from
+    x = 0 to 10, z = 12 to 15. Revolve it 90 degrees about the line, Join, toward +Y (the ends lie on the top face).
+    Export: tick `Height`. The range of `Height` stops at 11.99 or lower, and the revolve is copied. The reason is
+    "the outline of Revolve1 would reach its axis", or "Fusion shows a warning on Revolve1 at ..." when a try near
+    12 mm made Revolve1 show a warning (`probe.states` has `warned: true` there). In Paramability set `Height` to 11.99: the copy matches Fusion at that
+    value. In Fusion set `Height` to 15 and to 20: the revolve turns into the box, which is why the range stops. Then
+    export again with the range of `Height` typed as 4 to 20 mm: the revolve is left out with the tip "Type size
+    ranges that keep the outline on one side of the axis, or leave the ranges to the add-in." Afterwards the design
+    is as before.

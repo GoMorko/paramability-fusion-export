@@ -21,12 +21,14 @@ def sketch_formulas(ctx, profile):
     record = graph_for(ctx.capture, profile)
     if record is None:
         return None
-    if id(record) not in ctx.sketch_formulas:
+    fixed = reach.plane_fixed(ctx.table, ctx.capture.get("items") or [], profile, None)
+    key = (id(record), fixed)
+    if key not in ctx.sketch_formulas:
         try:
-            ctx.sketch_formulas[id(record)] = SketchFormulas(ctx.table, record)
+            ctx.sketch_formulas[key] = SketchFormulas(ctx.table, record, fixed)
         except Exception:  # a sketch that cannot be solved keeps its numbers
-            ctx.sketch_formulas[id(record)] = None
-    found = ctx.sketch_formulas[id(record)]
+            ctx.sketch_formulas[key] = None
+    found = ctx.sketch_formulas[key]
     if found is not None:
         found.why = ""
         ctx.doubt(found.unconfirmed, UNCONFIRMED % (profile.get("sketch") or "a sketch"))

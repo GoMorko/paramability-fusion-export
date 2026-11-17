@@ -41,7 +41,8 @@ def read_at(count=3, cube=10, off=5, height=20, with_hole=True, turned=False):
     sketches.update(sketch_state("sk2", [{"loops": lid_profile(height)["loops"]}],
                                  frame=lid_profile(height, (1, 0, 0) if turned else (0, 0, 1))["frame"]))
     params = {W: w / 10, "d1": w / 10, "d2": height / 10, "d3": off / 10, "height": height / 10, "off": off / 10}
-    return read(sketches, params=params, box={"min": [0, 0, 0], "max": [w, 20, height]})
+    return dict(read(sketches, params=params, box={"min": [0, 0, 0], "max": [w, 20, height]}),
+                volume_mm3=w * 20 * height - 12.566)
 
 
 def at(**sizes):
@@ -235,6 +236,12 @@ class ProblemStateTests(unittest.TestCase):
     def test_the_body_change_of_each_size_tried_alone_is_kept_and_a_try_on_another_solution_tells_nothing(self):
         # The box follows the width (count, cube) and the height; the hole offset moves only the hole.
         self.assertEqual(self.motion().body_changes, {"count": True, "cube": True, "off": False, "height": True})
+        # A deeper hole: the box stays, the volume does not. Without a volume read the body does not tell.
+        deeper = dict(read_at(off=10), volume_mm3=read_at()["volume_mm3"] - 5)
+        boxed = {k: v for k, v in read_at(off=10).items() if k != "volume_mm3"}
+        self.assertTrue(self.motion(s3=state({"off": 10}, deeper)).body_changes["off"])
+        unread = self.motion(s3=state({"off": 10}, boxed), s7=state({"off": 2.5}, boxed))
+        self.assertNotIn("off", unread.body_changes)
         # The lid on its other solution at a try of off and one of count: those reads do not count for off.
         wider = dict(self.lid_flipped(off=10), box={"min": [0, 0, 0], "max": [50, 20, 20]})
         motion = self.motion(s3=state({"off": 10}, wider), s5=state({"count": 1}, self.lid_flipped(count=1)))

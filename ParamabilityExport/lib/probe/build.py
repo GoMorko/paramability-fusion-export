@@ -28,14 +28,14 @@ records the limits (`kept`) and the values that changed an outline (`changed`), 
 (`design_model.tried_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
 stays stuck, and `kept` is the value now at both ends.
 
-`Motion.body_changes` says, per size set alone in a try, whether the body's box (or volume) changed there
+`Motion.body_changes` says, per size set alone in a try, whether the body's box, volume or area changed there
 (`body_changes`). The translator calls a size that no formula reads "unchanging" only when it did not.
 """
 from ..design_model.dimension_sizes import size_values
 from . import columns as cols
 from . import match, plan, ref_fit
 from .series import fit_series, moved as _moved
-from .state import ProbeState, as_states, body_changed, box_numbers
+from .state import ProbeState, as_states, body_changed, body_compared
 from ..geometry.tolerances import SAME_SIZE
 from ..sketch_values import coverage
 from ..sketch_values.motion import SHAPE, UNREAD, Motion
@@ -345,6 +345,8 @@ def _state_record(state):
     out = {"values": state.values, "built": state.built}
     if state.failed:
         out["failed"] = state.failed
+    if state.warned:
+        out["warned"] = True
     patterns = (state.read or {}).get("patterns")
     if state.built and isinstance(patterns, dict) and patterns:
         out["patterns"] = patterns
@@ -353,27 +355,29 @@ def _state_record(state):
 
 def body_changes(run, current):
     """`Motion.body_changes` of a `StateRun`: per size that a built state sets alone, True when the body read there
-    differs from E0 in one such state, False when it reads the same in all of them. A state tells nothing when it has
-    no box read, when its read shows a size at another value than its row set (`mislabelled`), when a sketch landed on
-    another solution there (`apart`) or when it sets a size past the values where its outlines hold (`outside`): the
-    body change there does not come from the size alone, or lies outside the range the copy keeps."""
+    differs from E0 in one such state (box, volume or area), False when it reads the same in all of them. A state tells
+    that the body stayed only when it and E0 read the box and the volume (`body_compared`). A state tells nothing when
+    its read shows a size at another value than its row set (`mislabelled`), when a sketch landed on another solution
+    there (`apart`) or when it sets a size past the values where its outlines hold (`outside`): the body change there
+    does not come from the size alone, or lies outside the range the copy keeps."""
     out = {}
-    if box_numbers(run.base) is None:
-        return out
     for at in range(1, len(run.states)):
         state, varied = run.states[at], run.varied(at, current)
-        if (not state.built or len(varied) != 1 or box_numbers(state.read) is None or at in run.apart
-                or at in run.outside or run.mislabelled(at)):
+        if (not state.built or len(varied) != 1 or at in run.apart or at in run.outside or run.mislabelled(at)):
             continue
         name = next(iter(varied))
-        out[name] = out.get(name, False) or body_changed(run.base, state.read)
+        if body_changed(run.base, state.read):
+            out[name] = True
+        elif body_compared(run.base, state.read):
+            out.setdefault(name, False)
     return out
 
 
 def spans(states, current):
     """`Motion.spans`: per size a state sets to another value than `current` has, the lowest and highest value of the
     states that built (the current value included), `[value, step]` for each state that set it alone and did not
-    build, and `split`: `[value, pieces]` for each state that set it alone and left the part in several pieces (only
+    build, `warned`: the same `[value, step]` again for those where the step showed a new warning (only when there is
+    one), and `split`: `[value, pieces]` for each state that set it alone and left the part in several pieces (only
     when there is one). `states` are `ProbeState` records."""
     out = {}
     for state in states:
@@ -387,6 +391,8 @@ def spans(states, current):
                 span.setdefault("split", []).append([value, state.pieces])
             elif len(moved) == 1:
                 span["failed"].append([value, state.failed or ""])
+                if state.warned:
+                    span.setdefault("warned", []).append([value, state.failed or ""])
     return out
 
 

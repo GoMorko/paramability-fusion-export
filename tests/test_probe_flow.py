@@ -1,4 +1,5 @@
 """The size probe of one export, run against a simulated Fusion: recompute rows, motion, restore."""
+import copy
 import re
 import unittest
 
@@ -10,6 +11,7 @@ from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
 from lib.export_plan.probe_flow.reasons import NOT_TRIED_TIME
 from lib.design_edit.runner import RowExport
+from lib.design_model.tried_ranges import built_ranges
 from lib.probe import plan
 from lib.sketch_values import coverage
 from lib.sketch_values.motion import Motion
@@ -54,6 +56,32 @@ def run(fusion, probe, sizes):
     results = job.run(rows, "", lambda *a: True, tolerate_build_errors=True)
     probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in rows], results, reads))
     return rows, results
+
+
+class WarnedTryTest(unittest.TestCase):
+    """A try where a step of the part shows a warning it did not have at the start counts as a try that did not build,
+    so the range stops before it."""
+
+    def ranges_after(self, step):
+        """The range cuts after the tries of `off`, with `step` in warning once `off` is above 5.5 mm."""
+        capture = copy.deepcopy(CAPTURE)
+        for item in capture["items"]:
+            item["in_target_component"] = True
+        fusion = Fusion()
+        fusion.store.warns = lambda exprs: [(6, step)] if number(exprs["off"]) > 5.5 else []
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(capture, tbl, fusion.read)
+        run(fusion, probe, [size(tbl, "off", "mm")])
+        probe.finish(probe.read_now(), {})
+        return built_ranges(tbl, probe.motion, capture)
+
+    def test_a_warning_on_a_step_of_the_part_cuts_the_range_before_the_try(self):
+        cut = self.ranges_after("Extrude6")["off"]
+        self.assertEqual(cut[1], 5.0)
+        self.assertEqual(cut.warned["high"][1], "Extrude6")
+
+    def test_a_warning_on_a_step_the_part_is_not_built_from_cuts_nothing(self):
+        self.assertNotIn("off", self.ranges_after("Extrude9"))
 
 
 class SizeProbeTest(unittest.TestCase):

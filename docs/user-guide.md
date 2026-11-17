@@ -117,7 +117,8 @@ time, Fusion rebuilds only the timeline up to the last step the part needs while
 there, and goes back when they end; `report.json` says how many items each try rebuilt, `probe.timeline`). Steps of
 other components that come after that point are not rebuilt, also when a sketch of the part is tied to another
 component: a step only uses what comes before it in the timeline. A try that
-Fusion cannot build is dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half
+Fusion cannot build is dropped; no size is fixed for it. A try where Fusion builds the part but a step of the part shows
+a warning that it did not show before the tries counts the same way, since Fusion may have built another shape there. The add-in then tries that size nearer to its value now (half
 way, then a quarter, then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer
 try builds, the size follows between the values that built. Where one value built and a farther one did not, the add-in
 also tries the values between them, halving up to four times, so the last value that builds is found closely. A
@@ -125,7 +126,7 @@ value past one that did not build is not tried at all, since the range stops bef
 side where Fusion did not rebuild, the range on the form stops at the last value that built, unless you typed that end
 in the dialog or the failing step belongs to another component than the part; on a side the tries did not reach, the
 size says "it was followed between A and B". Each cut range has one line in the result window ("range cut" with the
-value and the step where Fusion did not rebuild), a reason in `report.json` (`sizes.cut`) and the same reason in the
+value and the step where Fusion did not rebuild or showed a warning), a reason in `report.json` (`sizes.cut`) and the same reason in the
 file's `cuts` list, where Paramability shows it as a quiet note next to the size, not as a warning. In a file with several bodies a size that more than one body
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
 any value tried is not a size, and the reason names the values and the step Fusion stopped at. When a try leaves the

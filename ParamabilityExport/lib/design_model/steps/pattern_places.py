@@ -21,7 +21,7 @@ import math
 from ...geometry import vec
 from .. import words
 from ..problem import Problem, is_problem
-from .repeat import FIT_TOL_MM, is_identity_rotation, solve_lattice
+from .repeat import FIT_TOL_MM, data_in_component, is_identity_rotation, solve_lattice
 
 # Centroids within this distance (mm) and areas within this share of the larger one are the same face.
 CENTER_TOL_MM = 1e-2
@@ -95,6 +95,16 @@ def listed_places(places, count, data):
     if not left_out(data) and len(places) != count:
         return UNFILLED
     return None
+
+
+def listed_elements(raw, merged, place):
+    """The elements of a rectangular pattern whose places must all differ: every element as Fusion listed it (`raw`,
+    the data of the step, carried into the component frame `place`), or, when a direction spaces its copies 0 apart
+    so copies sit on one another by design, the merged ones of `merged`."""
+    for which in ("one", "two"):
+        if int(raw.get("quantity_" + which) or 1) > 1 and abs(float(raw.get("distance_" + which) or 0.0)) < 1e-9:
+            return merged["elements"]
+    return data_in_component(raw, place)["elements"]
 
 
 def grid_places(elements, axes, count, data):

@@ -8,7 +8,7 @@ file. Paramability opens that file as a part. The part has sizes that come from 
 The guide is for a developer who knows Fusion as a user and knows Python. The developer did not write the add-in. The
 goal is that the developer can find and fix a problem alone.
 
-The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.11.
+The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.14.
 The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:
@@ -743,6 +743,10 @@ named parameters, the body's box, the measured references (`probe_refs.py`) and 
 Every value is in the component's coordinates, like the capture. A part that cannot be read has no key. Nothing
 raises.
 
+With the box, a state also holds the volume and the area of the body (`volume_mm3` from `BRepBody.volume`,
+`area_mm2` from `BRepBody.area`). The box alone does not show a change inside the body, for example a deeper pocket
+or a wider hole. The volume and the area show it (`probe.state.body_changed`).
+
 A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
 (`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
 there are more than 64 of them (`MAX_OTHER_BODIES`). Reading them recomputes nothing. The reason for this read: the app
@@ -1181,6 +1185,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
+| `revolveAxisSide` | a revolve whose outline would reach or cross its axis inside size ranges that the person typed (3.14) | Type size ranges that keep the outline on one side of the axis, or leave the ranges to the add-in. |
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
@@ -1260,15 +1265,17 @@ steps"), and a size that the probe tried and that changed nothing in the part ("
 changes nothing in this part").
 
 The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
-set that size alone (`Motion.body_changes`, `translate._dropped`):
+set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box, the volume and the
+area of the body with the first read. A try tells that the body stayed the same only when it and the first read hold
+the box and the volume (`probe.state.body_compared`).
 
 - The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
   changes nothing in this part" (`used` false, `tried` true).
 - The body changed at one such try, and no written formula reads the size. Then the copy cannot follow the size. The
   size is dropped with "it changes this part in a way the copy does not follow" (`used` true). The copy keeps the
   value now, so the part is correct at that value.
-- The probe did not read the body at such a try (an older motion file). Then the size gets the plain reason "is not
-  used by any copied step" (`used` false, no `tried`).
+- The probe did not read the box and the volume at such a try (an older export). Then the size gets the plain
+  reason "is not used by any copied step" (`used` false, no `tried`).
 
 A try where a sketch landed on another solution (`apart`), or where a size is past the values where its outlines
 hold (`outside`), does not count. The body change there does not come from the size alone.
@@ -1797,7 +1804,8 @@ one folder per family of steps.
     and `path_rebuilt.py` the rules of a path read back from written numbers, for the checks over the size ranges.
   - `loft/`: `step.py`, `loft_sections.py`. The volume of the corner pairing is in `design_model/steps/loft.py`.
   - `revolve/step.py` (see 3.14; which side each angle of a revolve to two sides turns to is in
-    `design_model/steps/revolve.py`), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
+    `design_model/steps/revolve.py`) with `revolve/axis_side.py` (the ranges where the outline stays on its side of
+    the axis), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
     of a tapped hole, see 3.12). They read the hole and the thread through `design_model/steps/hole.py` and
     `thread.py`; they keep the caps of the recipe, the values that follow sizes and the refusals.
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
@@ -2116,8 +2124,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
     or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
     origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
-    reader marks it with `origin: true` in the sketch graph. The sketch solver then keeps it as a fixed number
-    (`sketch_solve/constants.py`, `own_origin`), as it keeps the origin of the sketch.
+    reader marks it with `origin: true` in the sketch graph. When no ticked size moves or turns the sketch plane
+    (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`, `own_origin`), as it
+    keeps the origin of the sketch. When a size moves or turns the plane, the projection moves in the sketch. Then it
+    stays a measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
+    plane are also among the sizes of the plane (`placement_sizes`), so a line of such a sketch still gets them.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
     construction plane or axis and behind the construction geometry that it is built on. A record without a token
@@ -2332,6 +2343,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
     and the measured face usually decides. A face that is not an end cap cannot decide. When the body that a join made
     shows the direction (`joined_side`), that direction is used. Else the extrude is a problem (`WAY_UNSURE`).
+    For all other extrudes with one side, the direction from the stored data, a face or the measured end face must
+    agree with `joined_side` when it gives a direction. Else the extrude is a problem (`WAY_UNSURE`). Example. A join
+    merges its end cap into the part, so there is no measured end face, and the stored direction says up. The body
+    after the step lies wholly below the start plane. The two do not agree, so the step is left out.
   - `joined_side(data, bodies, origin, z)` gives the side of the start plane that a join with one side went to, or
     None. `bodies` is the body before and after the step (`target_before` and `target_after` of the timeline item,
     with `box` and `volume_mm3`). The callers give it to `read_sides` (`bodies`). A join merges all its material
@@ -2754,6 +2769,18 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 
 - Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component, or a step
   that built a tool body. A failure in another component cuts nothing.
+- A row that Fusion builds can still be wrong. A step can show a warning: for example, a revolve whose outline crosses
+  its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
+  counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
+  `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
+  first try (the baseline) does not count. When a step reads in warning after a rebuild of only the changed steps,
+  the design is recomputed in full once and read again, as for errors. The result of the row then has `warned`, the
+  names of those steps. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
+  run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
+  the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
+  since Fusion shows a warning on Revolve1 at 12.5." (`Cut.warned`, `notes.warned_why`). A warning on a step of
+  another component changes nothing.
 - A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
   it could not be tried".
 - A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
@@ -2876,10 +2903,13 @@ Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the
 `Body2` starts 3 mm above the top face of `Body1` (`Lift`).
 
 - The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
-- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
-  body that the walk builds (`Context.is_target`), the face is never "on this body" (`follow._beyond_tool`). This
-  is also true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step
-  uses.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is proven to
+  be another body, the face is never "on this body" (`follow._another_body`, `follow._beyond_tool`). This is also
+  true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step uses.
+- "Proven" means two things. The body is not the body that the walk builds (`Context.is_target`, also through the
+  lineage). And the body does not have the name of that body under another token. Fusion can give the exported body
+  a new token along the timeline (`capture.renamed_target`). Such a face can be on the exported body, so the
+  translator places it on the slabs as before.
 - No slab places the face. Thus every size that the items before the step read can move it
   (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
 - When the probe measured the face, the measured move is written instead (see the next part). In the example, the
@@ -2896,7 +2926,8 @@ translator uses the move of the slabs only when these two conditions are true (`
 
 1. The slabs place the face without a doubt.
 2. The move of the slabs is equal to the measured move at each try that built and that set the free sizes inside
-   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`).
+   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`). At least one such try must be available,
+   unless neither move follows a size. Without a try, nothing proves that the two moves agree.
 
 When one condition is false, the translator writes the measured move (`_measured_shift`). It also writes the
 measured move when the measured move is stuck, because then the two answers cannot be compared. Thus a move that
@@ -3858,6 +3889,14 @@ When the two directions fit, the material that the revolve added is inside the b
 the boxes do not show the direction. The revolve is then left out. A box that is larger than the body before the
 step lets more directions fit. Thus it cannot give the wrong direction: it can only cause the revolve to be left out.
 
+Fusion does not promise that the box of a curved face or a curved body is tight. The box can be larger than the
+shape. A box that is too large can stand out of the swept box of the correct direction. Then the code could rule out
+the correct direction and keep the wrong direction. Thus `_box_holds` rules out a direction only when a measured box
+stands out of its swept box by more than a margin: 0.5 mm plus 2 percent of the largest side of the measured box
+(`BOX_LOOSE_MM`, `BOX_LOOSE_SHARE`). The code assumes that the boxes of Fusion are not larger than the shape by more
+than this margin. Hand check RC1 measures this. When the part grows by less than the margin, the two directions fit,
+and the revolve is left out.
+
 A symmetric revolve looks the same in the two directions. `symmetric_ok` checks only that each measured cap sits at the
 angle before or after the sketch plane. This check also shows that Fusion counts the angle on each side. When a cap is
 at another place, the revolve is left out ("The turn of this symmetric revolve does not match its measured ends.").
@@ -3904,6 +3943,42 @@ The handler then puts the start of the turn back by the angle before the sketch.
 An intersect of several outlines keeps the part only where any of the outlines turns. Thus the handler does not write
 one intersect for each outline. It writes one `toolBody` step with `combine: "intersect"`. In that step, the first
 outline makes a new body and the other outlines join it.
+
+#### The side of the axis
+
+Fusion turns a revolve toward one side of the sketch plane. Fusion keeps that side when the outline is on the other
+side of the axis. Thus, when the outline passes to the other side of the axis, the turn about the axis reverses. When
+the outline touches the axis or crosses it, Fusion can build the step with a warning. The recipe writes one turn about
+the axis by the right hand rule, and this turn does not change. The app refuses an outline that crosses its axis.
+Thus the copy is correct only while the outline stays on the side of the axis where it is now.
+
+Example. A box is 40 x 20 mm, and its height is a size. A line on the top front edge of the box is the axis. The
+outline is a 10 x 3 mm rectangle on the XZ plane, from z = 12 to z = 15. The revolve turns it 90 degrees toward the
+box. At the height 10, the axis is below the outline. At the height 15, the axis is on the top edge of the outline.
+At the height 20, the axis is above the outline. Fusion then turns the outline into the box, but a copy with one
+turn would turn it out of the box.
+
+`revolve/axis_side.py` (`keep_side`) does this check after the handler writes the steps. The check uses each written
+`revolve` step: its outline and its axis point, as numbers or formulas. When no size moves the outline or the axis,
+there is nothing to check. Else the check calculates the distance of the outline from the axis, across the axis, at
+these size settings:
+
+- the ends and the corners of the ranges of the sizes that the step reads (`range_check.corners`);
+- the inner settings too, when a formula is more than sums and products (`range_check.needs_inner`).
+
+A line gives its two ends. An arc gives its two ends, and the point nearest to the axis or farthest from it when that
+point is on the arc. A circle and an ellipse give their nearest and farthest points. A free curve gives its samples.
+
+At the current sizes, the outline is on one side of the axis. The rule is that the outline stays on that side, more
+than 0.0001 mm (`SIDE_TOL_MM`) away from the axis. An outline that touches the axis now (for example a vase drawn
+from its centre line) can stay on the axis, but it must not pass it. When the rule fails at a setting, the check
+finds the shorter ranges where it holds (`kept_ranges.holding_ranges_where`) and cuts the ranges there
+(`Context.cut`, with the reason "the outline of ... would reach its axis"). In most designs the outline and the axis
+move in a straight line with the sizes. Then the halvings find the place where the outline reaches the axis, and the
+range stops at the step of the form before it. In the example, the range of the height stops at 11.99.
+
+When no shorter ranges keep the rule, the step is left out with the cause `revolveAxisSide`. This occurs when every
+size that the step reads has a range that the person typed.
 
 The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
@@ -4513,8 +4588,16 @@ Thus the add-in does not take the place of a copy from the transform alone. The 
    pattern of faces, or the faces of the source bodies. With the marker after the pattern, it reads the faces that
    each element made (`PatternElement.faces`, the `faces` of the element). For each face, it writes the centroid
    (`BRepFace.centroid`, in mm) and the area (`BRepFace.area`, in mm2). It reads up to 32 faces of the original and
-   up to 8 faces of each element. A list that cannot be read is null. `data_in_component` carries the centroids into
-   the frame of the part, together with the frames.
+   up to 8 faces of each element. A list that cannot be read is null.
+   Each face costs Fusion a measure. Thus, in a pattern with more than 12 kept copies, the reader reads the faces of
+   12 kept copies only (`SAMPLED_ELEMENTS`): the first three, the last two, and copies spread evenly between them.
+   A suppressed copy gets no faces. The checks below then prove the places of the sampled copies only. The wrong
+   transforms that hand check CP1 found are wrong for every copy in the same way, so a sample shows them. The checks
+   of step 5 do not use faces, so they still cover every copy.
+   The faces are in the space of their own component. The reader reads a face seen through an occurrence as its
+   native face (`nativeObject`). The element transforms are in assembly space: the exports of a part placed 2400 mm
+   along Y (T19 in the test projects) show this. Thus `data_in_component` carries the frames into the frame of the
+   part, but not the faces.
 2. `agrees` checks one place. It moves the faces of the original to the place. At least one face of the copy, and
    at least half of the faces that the place moves, must land on a face of the original with the same area (to
    0.01 mm and 1 part in 1000). A face that the place does not move (a face on the axis of a turn) tells nothing. A
@@ -4644,8 +4727,8 @@ nothing in the part changed.
 | Key | Meaning |
 | --- | --- |
 | `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
-| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
-| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed` or `new_errors`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
 | `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
 | `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
 | `motion` | The motion file (below). |
@@ -4661,7 +4744,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |
@@ -4959,8 +5042,9 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
-| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check every place against the faces (3.21). Rectangular, path and body patterns are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
+| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
+| `BRepBody.volume`, `BRepBody.area` | `probe_state.py` | Read at each try with the box (`volume_mm3`, `area_mm2`). Without them, a try does not show that the body stayed the same. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
 Every read is wrapped in `geo.safe`, so a failed read gives null and never a guess. The risky part is the writes.

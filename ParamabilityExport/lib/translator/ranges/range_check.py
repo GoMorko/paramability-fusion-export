@@ -201,6 +201,16 @@ def _reads(node):
         any(_reads(x) for c in node[1:] if isinstance(c, list) for x in c)
 
 
+def needs_inner(formula):
+    """True when a formula (recipe formula text) is more than sums and products of sizes, so its extremes or the place
+    where a rule fails can lie inside the ranges (`sweep` then tests inner settings too). A formula that cannot be
+    read counts as nonlinear."""
+    try:
+        return _terms(parse_formula(formula), [])
+    except ExpressionError:
+        return True
+
+
 def value_of(tree, env):
     """The number of a parsed formula (`parse_formula`) at `env`, for a rule worked out at many settings."""
     return evaluate_tree(tree, env)
