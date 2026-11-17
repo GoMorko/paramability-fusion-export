@@ -1154,7 +1154,8 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
 | `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
-| `throughAllAdds` | a join or a new body extruded through all (`extrude/through.py`; the Orca output gives the same cause) | Give the extrude a distance, or end it on a face or plane. |
+| `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
+| `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
@@ -2509,6 +2510,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `probe_state.py`, `probe_refs.py`, `read_face.py`, `probe_patterns.py`: the reads at each probe row.
 - `read_gap_reach.py`: the reach read.
 - `read_face_rays.py`: the rays from the outlines of an extrude to a curved face it ends on (`outline_hits_face`).
+- `read_flat_faces.py`: the flat faces of the target body square to the sketch of a join through all, with the marker
+  before the step (`target_flat_faces`).
 - `rows.py`: `DesignParameterStore` (set expressions, rebuild, health, marker roll, suppression). It has every member of
   `ParameterStore` and of the timeline controls.
 - `sketch_keep.py`: `SketchKeeper`. `step_export.py`: the STEP file.
@@ -4137,6 +4140,67 @@ the same plane, so they touch. The recipe writes the two sides as one `toolBody`
 (recipe version 15). Its first step makes a new body with side one. Its second step joins side two. A tool step
 that is already nested as deep as the cap (`tool_walk.MAX_DEPTH`) cannot hold one more level, so the step is left
 out. An intersect with more than one outline is left out.
+
+#### A join through all
+
+Fusion can join an extrude "through all" (the extent "All"). Fusion then ends the extrude at the far side of the
+body that the extrude joins (its participant body). The far side is the plane through the farthest point of the body
+along the direction of the extrude. Hand checks in Fusion (TA1 and TA2) showed this:
+
+- A join "All" with one body as its only participant ends at the top of that body, not at the top of a taller body
+  next to it.
+- On a body with a step, a square under the low part ends at the top of the tall part. It does not end where the
+  square leaves the body.
+- On a curved far side (a cylinder that lies on its side), a join "All" adds nothing and has no end face.
+- A join "All" that joins two bodies can end at the top of the body under it, not at the top of the taller body
+  beside it. The add-in does not know the rule for this case.
+
+The app has an extent for this: an extrude with `combine: "add"` or `"new"`, `extent: "through"` and no `distance`
+(recipe version 17). The app extrudes the outline from the sketch plane along the sketch normal to the far side of
+the part that it built so far. The app finds the far side exactly: it measures the gap between the part and a plane
+past the part. The recipe walk builds one body. Thus "the part" in the app is the copy of the target body before
+the step (or, in a `toolBody`, the copy of the tool body before the step).
+
+`extrude/through.py` (`_join_far_side`) writes this extent only when the capture shows that Fusion and the app end
+the extrude at the same plane. The add-in checks these conditions, in this order:
+
+1. The target body is the only participant body (`participants`, read with `ctx.is_target`). When Fusion joins more
+   bodies, the add-in cannot tell where Fusion ends the extrude, and the app knows only the target body. The cause
+   of this gap is `throughAllBodies`. When the capture has no participant bodies, the add-in cannot tell, and the
+   cause is `throughAllAdds`.
+2. The extrude has one side, no taper and no thin wall. The app does not accept a taper or a thin wall with this
+   extent, and a join through all both ways has no extent in the recipe.
+3. The capture has the box of the target body before the step (`target_box_before`) and a measured end face that
+   is an end cap (`end_offset` and `end_is_cap`).
+4. The end cap lies on the far side of the box. The add-in calculates the farthest corner of the box along the
+   direction of the extrude, from the start of the extrude. The measured end must be at that distance, within
+   `LENGTH_TOL`.
+5. The body had material on the plane of the end before the step (`_reaches_end`). One of these shows it:
+   - The reader found a flat face of the body on that plane, and its outward normal points along the extrude
+     (`target_flat_faces`). The reader reads these faces only for a join or new body through all.
+   - The end face that Fusion measured is larger than the end caps of all the outlines together (`end_area` against
+     the outline areas, with `CAP_RELATIVE_TOL` and `CAP_ABSOLUTE_TOL`). A join merges its end cap with a face of
+     the body on the same plane.
+
+Condition 5 is necessary because a box can be larger than its body. For example, the box of a body with a curved
+top can be higher than the body. If Fusion used the box and the app used the body, the two ends would not agree.
+When the body has material on the plane of the end, the body reaches the plane, and the box does not go farther
+than the plane (condition 4). Thus the far side of the body is on that plane, and the app ends the extrude at the
+same plane as Fusion. A join onto a curved far side has no end cap in Fusion, so condition 3 leaves it out.
+
+When a condition is not true, the step is left out with a reason. A new body through all has no target body before
+the step, so it is always left out.
+
+The app finds the far side again each time that it builds the part, so the end follows the sizes. But the add-in can
+check the far side only at the sizes of the export. At other sizes, a different part of the body can become the
+farthest part, for example a curved face. The add-in cannot check that Fusion and the app find the same far side
+there. Thus the add-in marks these sizes ("may give unexpected results", with the step named): the sizes that the
+steps written before it read (`ctx.written_reads`), and the sizes that move its outlines
+(`sketch_motion.outline_movers`). A taper of zero that follows a size is pinned, as for a cut through all both ways.
+
+The written step has no slab, so later picks on its faces do not follow it. Its length follows the part, so it is not
+repeatable: a pattern or a mirror of the step is left out. The Orca output still leaves a join through all out
+(`throughAllAdds`).
 
 ### 3.16 How a round by chord length or with a changing radius is translated
 

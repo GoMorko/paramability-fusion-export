@@ -9,7 +9,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from ..geometry import vec
 from . import read_geometry as geo
-from . import read_extent, read_face_rays, read_intersect
+from . import read_extent, read_face_rays, read_flat_faces, read_intersect
 from .param_refs import Params, with_params
 from .placement import from_assembly
 from .read_bodies import tool_ref
@@ -148,6 +148,8 @@ def extrude_before(feature, ctx):
     }
     if thin:
         data["thin_wall"] = _thin_wall(feature)
+    if operation in ("join", "newBody") and (side_one or {}).get("kind") in ("throughAll", "all") and profiles:
+        data["target_flat_faces"] = read_flat_faces.target_flat_faces(ctx, profiles[0].get("frame"))
     if _holds_free_outline(profiles):
         data["areas"] = areas
         data["volume_before"] = 0.0 if operation == "newBody" else geo.target_volume(ctx)

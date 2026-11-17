@@ -695,6 +695,13 @@ against `samples`.
   `taperAngle`, so the translator writes a cut through all both ways. A cut through all both ways with a taper, or with
   a taper that cannot be read, is left out; an untapered one marks the sizes behind its taper.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
+- `target_flat_faces` (only for a join or new body through all to one side; optional): `[[offset, facing], ...]`,
+  one pair per flat face of the target body, with the marker before the item, whose outward normal is parallel to the
+  first outline's sketch normal: `offset` is its signed distance (mm) along that normal from the sketch origin,
+  `facing` +1 when its outward normal points along the normal, -1 when against it. Null when the body or a face cannot
+  be read (`BRepBody.faces`, `BRepFace.geometry`, `pointOnFace`, `evaluator.getNormalAtPoint`;
+  `fusion_reader/read_flat_faces.py`). The translator copies a join through all only when the body has material on
+  the plane of the measured end (`translator/extrude/through.py`).
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to `pointOnFace` of the
   measured end face, or null. The measured end face is the first face of `endFaces` whose normal is parallel to the
   sketch normal (an end cap), else the first face. Captures made before `end_normal` was read always measured the

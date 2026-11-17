@@ -751,3 +751,21 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     export again with the range of `Height` typed as 4 to 20 mm: the revolve is left out with the tip "Type size
     ranges that keep the outline on one side of the axis, or leave the ranges to the add-in." Afterwards the design
     is as before.
+
+69. TA2, a join through all onto a body with a step. Add user parameters `Low` = 10 mm and `Tall` = 30 mm. On the XY
+    plane draw a rectangle from (0, 0) to (60, 20) and extrude it `Low` up as a new body (Body1). On the XY plane draw
+    a rectangle from (40, 0) to (60, 20) and extrude it Join, distance `Tall`, so Body1 has a low part and a tall part.
+    On the XY plane draw a rectangle from (80, 0) to (100, 20) and extrude it 50 mm up as a new body (Body2). On the
+    XY plane draw three squares: A from (10, 5) to (20, 15) under the low part, B from (35, 5) to (45, 15) across the
+    step, C from (45, 5) to (55, 15) under the tall part. Extrude each square alone, Join, extent All, direction up,
+    with Body1 as the only body it joins (three extrudes, in the order B, C, A).
+    Export: pick Body1, tick `Low` and `Tall`. In `report.json` all three end at 30 (`end_offset`), the top of the
+    whole body; `end_area` is 450 for B and C and 100 for A. A, B and C are copied as extrudes to the far side of the
+    part (`"extent": "through"`, no distance, recipe version 17), and `Low` and `Tall` are marked "may give unexpected
+    results" with an extrude named. In Paramability set `Tall` to 40 and `Low` to 15: A, B and C end at the top of
+    the tall part, as in Fusion with the same values. Then add Body2 to the bodies that B joins and export again:
+    Fusion still ends B at 30, and B is left out with the tip "Let the extrude join only this body, or give it a
+    distance." Afterwards the design is as before.
+    A curved far side: make a cylinder of radius 10 mm along X as its own body, a 10 x 10 mm square on a plane
+    through its axis tilted 20 degrees, Join, extent All, the cylinder the only body it joins. Fusion adds nothing
+    and lists no end face (`end_offset` null). The export never copies that join as `"extent": "through"`.

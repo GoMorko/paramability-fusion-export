@@ -265,6 +265,15 @@ class ValueKindsTest(unittest.TestCase):
         self.assertIsNone(left_out(self.tapered_through("-4", -4.0), 3))
         self.assertIsNotNone(left_out(self.tapered_through("-5", -5.0), 3))
 
+    def test_a_join_through_all_marks_the_sizes_that_move_the_part_before_it(self):
+        def edit(data):
+            data.update(operation="join", end_offset=40.0, end_normal=[1.0, 0.0, 0.0], end_area=200.0)
+        capture, ticked = on_fixture("extrude_cut_through_one", edit)
+        capture["items"][1]["data"]["params"] = {"side_one.distance": param("d1", "wall_mm * 5", 10.0)}
+        result, _ = run(capture, ticked)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["extent"], "through")
+        self.assertEqual([f["name"] for f in result.loose], ["wall_mm"])
+
     def narrowing(self):
         """A motion where the cut's outline is 2 * wall_mm + 2 mm high: it narrows as wall_mm goes down."""
         return Motion.from_json({"version": 1, "box_max": {"min": [0, 0, 0], "max": [40, 20, 10]}, "states": [],

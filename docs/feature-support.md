@@ -55,7 +55,7 @@ can be.
 | Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. Both: with Chain Faces on, only when the outline lands on the face alone, and the sizes that may move the face or the outline are marked. |
 | Extrude: To object, tilted or curved | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one side, no taper, no offset, a face of the same body; with Chain Faces on, a tilted flat face only when the outline lands on it alone. A face that a size may move is followed only when a copied extrude made it, else the step is left out. Orca names a face by its own numbering. |
 | Extrude: All, cut or intersect | Copied | - | Copied | - | Orca: a one way cut with material behind its sketch is a 1000 mm cut. |
-| Extrude: All, join or new body | Left out | Yes, needs an app change | Left out | Needs Orca | Fusion ends it where the part ends. |
+| Extrude: All, join or new body | Partly | - | Left out | Needs Orca | Fusion ends it where the part ends. Paramability: one way, no taper, no thin wall, the picked body the only body it joins, and Fusion's end on the far side of that body; the sizes that may change the body before it or move its outline are marked. A new body has no body before it, so it is left out. |
 | Extrude: start offset | Copied | - | Partly | Needs Orca | Orca: the offset keeps its number. |
 | Extrude: start From object | Copied | - | Partly | Needs Orca | Orca: the sketch plane moves to the face, but does not follow it. |
 | Extrude: start From object with an offset | Copied | - | Left out | Yes, add-in only | Paramability: the start face that Fusion measured shows which way the offset goes; without it the step is left out. |
@@ -194,7 +194,7 @@ Sorted by how many printing projects it helps:
    Fillet and Full Round Fillet.
 2. Thin extrudes of an open line, Rib and Web (add-in only): walls, brackets and stiffeners.
 3. Box, Cylinder, Sphere, Torus and Pipe (add-in only), and sweeps that make a new component (add-in only).
-4. Join or new body extrudes through all (app change).
+4. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
 6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
    change).
