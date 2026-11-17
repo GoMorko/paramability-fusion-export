@@ -3,6 +3,8 @@ import traceback
 
 import adsk.core
 
+from ..timing import trail
+
 TITLE = "Paramability export"
 
 
@@ -11,6 +13,8 @@ def _app():
 
 
 def log(text):
+    """Write `text` to Fusion's Text Commands window and to the export trail."""
+    trail.line("log: %s" % text)
     try:
         _app().log(f"{TITLE}: {text}")
     except Exception:

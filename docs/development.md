@@ -12,7 +12,9 @@ package may import only packages above it in this list (not every one of them). 
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
 - `geometry`: vector helpers, 2D helpers (distance to a segment, a point inside a ring, an arc drawn as the app draws it, `plane2d.py`), the rigid map of a frame, sketch outlines (and `closed_chain`, the curves of a loop in order), the app's spline and the fit of free curves to it (`spline_fit.py`), volume checks and the tolerances for comparing two reads of the design (`tolerances.py`) that the translator, the probe and the reader share.
 - `capture_model`: what a capture and a recipe step are made of: the step kind table, capture checks, body lineage, gap causes and hints.
-- `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
+- `timing`: stopwatch helpers, the `timing` block of `report.json` (where an export spends its time), and the export
+  trail (`trail.py`): a file in the temp folder with one line for each thing the export does in Fusion, kept for a
+  crash.
 - `orca_recipe`: the OrcaSlicer 2.5 Design tab recipe (`Metadata/orca_cad.bin`): the cereal binary values, the
   feature fields in Orca's order with its defaults, the recipe reader and writer, and a 3MF writer. Export for Orca
   (experimental) writes it through `orca_translate`; see `docs/orca-output.md`.

@@ -95,6 +95,12 @@ The three buttons are in the **Utilities** tab, in the **Paramability** panel.
 After each export, the add-in sets your parameters back to their values. This also occurs if you cancel the export
 or if an error occurs.
 
+### When something goes wrong
+
+Each export writes a short trail of what it does in Fusion to the file `export-trail.log`, in the folder
+`ParamabilityExport` of your temporary folder (`%TEMP%\ParamabilityExport` on Windows). The file is kept when
+Fusion closes suddenly. Send it with your bug report (`docs/user-guide.md`, "The export trail, for a bug report").
+
 ## Main limits
 
 - The design must have history (a parametric design).

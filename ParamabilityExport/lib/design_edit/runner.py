@@ -2,6 +2,7 @@
 import os
 
 from ..package.caps import check_step_size, check_total_size
+from ..timing import trail
 from .apply import RowBuildError, apply_row_values, measure_baseline, new_errors, new_warnings
 from .errors import StepExportError
 from .restore import restore_parameters
@@ -73,6 +74,7 @@ class RowExport:
         """Put the parameters back to their saved expressions and recompute before the next row, so a row never builds
         on the values of the one before it: a sketch with two solutions can flip under a row and stay flipped.
         A parameter that cannot be put back is listed in restore_failures, and the run goes on."""
+        trail.line("parameters back before the next try")
         failed = restore_parameters(self.store, self._saved)
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
@@ -127,6 +129,7 @@ class RowExport:
                 if self.before_row is not None:
                     self.before_row(row)
                 self._last, self._last_failed = row.get("label") or row["name"], False
+                trail.line("try %d of %d %r: %s" % (index, count, self._last, row["values"]))
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline,
                                               full=row.get("step") is not False)

@@ -262,7 +262,24 @@ shows a short line with the same step (Fusion decides how long it stays):
   when the part comes out of it as one piece and no later step changes another piece together with it: the copy
   follows the body it was split from and removes the other side, also for a tool body that a Combine takes. A split
   along a construction plane offset by a size follows that size. A split along a curved surface still stops the copy;
-- a recipe that is too large to open, or a list of left out steps that cannot be written.
+- a recipe that is too large to open, or a list of left out steps that cannot be written;
+- an error in the add-in while it copies a step. The message then says "This step could not be copied because of an
+  error in the add-in. Please report it." This is a bug in the add-in, not a problem in your design.
+
+## The export trail, for a bug report
+
+While an export runs, the add-in writes a short line for each thing it does in Fusion to the file
+`export-trail.log`. The file is in the folder `ParamabilityExport` in the temporary folder of your computer. On
+Windows, type `%TEMP%\ParamabilityExport` in the address bar of File Explorer. On a Mac, the temporary folder is
+the one that the command `echo $TMPDIR` in Terminal shows.
+
+The file holds only the last export. When you pick a body in the dialog, the read of its steps starts a new file
+too. Each line goes to the disk at once. Thus, if Fusion closes suddenly during an export, the last lines show the last thing the add-in did,
+and the file also holds the place in the add-in where Python stopped.
+
+If an export stops with an error, or Fusion closes during an export, send this file with your bug report, together
+with the `report.json` from the saved file when there is one. The file holds the names of your timeline steps and the
+values of the parameters that the tries set. It does not hold the shape of your design.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's
 user parameters (up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps

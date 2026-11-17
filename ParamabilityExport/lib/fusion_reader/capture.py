@@ -26,6 +26,7 @@ import importlib
 from ..capture_model import step_kinds
 from ..design_edit.marker import put_back, read_marker
 from ..geometry.tolerances import BODY_TOLERANCE_MM
+from ..timing import trail
 from ..timing.capture_timer import CaptureTimer
 from ..timing.timer import span_on
 from . import helper_pass
@@ -150,6 +151,7 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     if is_proxy:
         item["entity_context"] = "proxy"
     items[index] = item
+    trail.line("start item %d %s %r" % (index, item["type"], item["name"]))
     if entity is None:
         return
     component = _owner_component(geo.safe(lambda: obj.entity, None), entity, item["type"])
@@ -171,11 +173,13 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         item["bodies_before"] = bodies_before
     before = (readers.get(item["type"]) or (None, None))[0]
     if before is not None and item["in_target_component"]:
+        trail.line("read before %d %s" % (index, item["type"]))
         try:
             with span_on(ctx, "readers"):
                 item["data"] = before(entity, ctx)
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
+            trail.line("read before %d failed: %r" % (index, exc))
 
 
 def _bodies_after(item, entity):
@@ -241,8 +245,10 @@ def _measure_run(timeline, ctx, items, run, start, end_state, position):
     # None with the target on neither side: it did not exist yet, and a step of another component cannot make it.
     if len(run) > 1 and (changed or (changed is None and (start[0] or end_state[0]))):
         for n, index in enumerate(run[1:], start=1):
+            trail.line("marker to %d (measure)" % index)
             timeline.markerPosition = index
             states[n] = _target_state(ctx)
+        trail.line("marker to %d" % position)
         timeline.markerPosition = position
     for n, index in enumerate(run):
         item = items.get(index)
@@ -258,6 +264,7 @@ def _finish_item(timeline, ctx, readers, index, items):
     item = items.get(index)
     if item is None:
         return
+    trail.line("finish item %d %s %r" % (index, item["type"], item["name"]))
     obj = timeline.item(index)
     item["health"] = geo.safe(lambda: geo.health_name(obj.healthState), "ok")
     item["message"] = geo.safe(lambda: obj.errorOrWarningMessage or "", "")
@@ -268,11 +275,13 @@ def _finish_item(timeline, ctx, readers, index, items):
     item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
+        trail.line("read after %d %s" % (index, item["type"]))
         try:
             with span_on(ctx, "readers"):
                 item["data"].update(after(entity, ctx, item["data"]) or {})
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
+            trail.line("read after %d failed: %r" % (index, exc))
 
 
 def _check_groups(timeline, end, count, items, group_indices):
@@ -412,6 +421,7 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
         for k in range(end + 1):
             # Moving the marker to k builds step k - 1, so its cost counts for that step.
             with timer.step(k - 1):
+                trail.line("marker to %d" % k)
                 with timer.span("marker_moves"):
                     timeline.markerPosition = k
                 # Between two steps of other components the target is not measured (see the module docstring).
@@ -429,12 +439,14 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
             if k < end:
                 with timer.step(k):
                     _start_item(timeline, ctx, readers, k, items, group_indices)
+        trail.line("tool bodies of other components")
         with timer.span("helper_pass"):
             tool_components = geo.safe(
                 lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity,
                                                  _component_bodies),
                 [])
     finally:
+        trail.line("marker back to %d" % end)
         with timer.span("restore_marker"):
             restore_marker(timeline, end)
     for index, item in items.items():
@@ -456,6 +468,7 @@ def _finish_capture(design, ctx, timeline, end, count, items, group_indices, too
         parameters, design_units = _parameters(design, ctx)
         _add_tool_parameters(parameters, tool_components)
     ordered = [items[i] for i in sorted(items)]
+    trail.line("read the sketch links and graphs")
     with timer.span("tail_links"):
         links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])
     with timer.span("tail_graphs"):

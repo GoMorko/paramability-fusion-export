@@ -5,6 +5,7 @@ from ..design_edit.errors import StepExportError
 from ..design_edit.marker import put_back, read_marker
 from ..design_edit.temp_copy import remove_temporary_copy, timeline_state
 from ..package.units import cm_to_mm
+from ..timing import trail
 
 COPY_TOLERANCE_MM = 1e-3
 
@@ -98,6 +99,14 @@ def export_body_step(design, body, path, route=None):
     The root export is used when the body is the only solid body in the design. Otherwise the body is copied into a
     temporary component, written, and the copy is deleted. Fusion places the copy's timeline items at the marker;
     afterwards the marker goes back to where it was."""
+    trail.line("STEP file: start")
+    try:
+        _export_body_step(design, body, path, route)
+    finally:
+        trail.line("STEP file: end")
+
+
+def _export_body_step(design, body, path, route):
     route = route or MULTI_BODY_ROUTE
     root = design.rootComponent
     if count_solid_bodies(root) == 1:

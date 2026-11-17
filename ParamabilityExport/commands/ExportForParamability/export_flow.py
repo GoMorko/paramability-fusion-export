@@ -34,20 +34,23 @@ from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui.notice import status_notice
 from ...lib.package.writer import write_package
 from ...lib.timing.capture_timer import CaptureTimer
+from ...lib.timing import trail
 from ...lib.timing.export_timing import ExportTiming
 from .. import export_common
 
 
 def _read_capture(design, current, timer=None):
     """The capture, or the exception that stopped it. Only a lost timeline marker is not swallowed. `timer` is the
-    `CaptureTimer` that gets the time of the read."""
-    try:
-        return read_capture(design, current, timer=timer, addin=export_common.addin_release())
-    except MarkerError:
-        raise
-    except Exception as exc:
-        log(f"capture failed: {exc!r}")
-        return exc
+    `CaptureTimer` that gets the time of the read. The read runs in a session of the export trail (`timing.trail`), so a
+    crash in the dialog's read of a picked body is in the trail too."""
+    with trail.session("read the steps"):
+        try:
+            return read_capture(design, current, timer=timer, addin=export_common.addin_release())
+        except MarkerError:
+            raise
+        except Exception as exc:
+            log(f"capture failed: {exc!r}")
+            return exc
 
 
 def _timed_capture(design, current, timing, part=None):

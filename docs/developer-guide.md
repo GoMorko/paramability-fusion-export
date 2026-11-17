@@ -1711,11 +1711,11 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), a region inside another (`region_inside`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). The volume checks take the data of the steps, not the timeline items: the caller reads the data through the shared layer (`design_model.design`). |
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
-| `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
+| `timing` | nothing | Stopwatch helpers, the `timing` block of `report.json`, and the export trail (`trail.py`, see 4.8). |
 | `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links do not read the data of a step. They get the measured references of the steps and the names of the parameters that can place an occurrence as plain values from `design_model/step_links.py`. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
-| `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
+| `design_edit` | `package`, `params`, `timing` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
 | `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `results`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
@@ -1724,7 +1724,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `orca_recipe`, `orca_translate`, `package`, `params`, `probe`, `results`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
 | `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
-| `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
+| `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package`, `timing` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
 | `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The three buttons, their flows and the panel. |
 
 Only `fusion_reader`, `fusion_ui` and `commands` use `adsk`. Everything else is pure Python and runs without Fusion.
@@ -5375,6 +5375,37 @@ put back that failed, a marker roll or suppression that failed, the reach read r
 parameters that could not be restored, steps that would not turn back on, a "Lighter on memory" call that stopped
 ("keeping the tries out of Undo stopped: ..."), and the full traceback of an unexpected error. An unexpected error also shows a
 message box with the traceback (`error_box`).
+
+The export trail (`lib/timing/trail.py`) is a second record, on disk, for a crash of Fusion. The log of Fusion is
+lost when Fusion closes suddenly. The trail is not lost. Its rules are:
+
+- The file is `export-trail.log` in the folder `ParamabilityExport` of the temp folder (`tempfile.gettempdir()`;
+  `%TEMP%` on Windows). `trail.path()` gives it.
+- `trail.session(title)` (or `start` and `end`) marks a session. `run_guarded` in `commands/export_common.py` runs
+  every export in a session. `_read_capture` in `commands/ExportForParamability/export_flow.py` runs every capture
+  read in a session, also the read of the dialog when the person picks a body. Only the outermost session empties
+  the file. Thus the file holds the last export, or the last read of the dialog when it came later.
+- The outermost session also turns on `faulthandler` with the trail file. When the process crashes, Python writes
+  the stack of each thread to the file. At the end of the session, `faulthandler` goes back to how it was.
+- `trail.line(text)` writes one line with the time. It calls `flush()` and `os.fsync()` before it returns, so the line
+  is on the disk when Fusion crashes in the next call. A line outside a session goes to the end of the file.
+- No call raises. When the file cannot be written, the trail stops and the export goes on.
+- The tests write the trail to a temp folder of their own (`tests/context.py` sets `trail.ROOT`).
+
+The lines come from these places:
+
+| Place | Lines |
+| --- | --- |
+| `fusion_ui/log.py`, `log` | each log line, after "log:" (also each traceback of `error_box`) |
+| `fusion_reader/capture.py` | each marker move, the start and the finish of each item (index, type, name), each call of a before or after reader (index, type), a reader that failed, the tool pass, the read of the sketch links and graphs, and the marker back |
+| `fusion_reader/helper_pass.py` | each marker move for the tool bodies of other components |
+| `fusion_reader/read_gap_reach.py` | each marker move of the reach read |
+| `fusion_reader/rows.py`, `DesignParameterStore` | the start and the end of each recompute, and each parameter value that it sets |
+| `design_edit/runner.py`, `RowExport` | each try (number, name, values) and the parameters set back before the next try |
+| `fusion_reader/step_export.py`, `export_body_step` | the start and the end of each STEP file |
+
+A line costs one write to the disk. The lines are short and come one or a few per Fusion call, so the cost is small
+next to the Fusion call itself.
 
 To debug code in Fusion: change the file, then in Scripts and Add-Ins click Stop and Run on the add-in. `stop` drops
 the add-in modules from Python's cache, so Run loads your change. Fusion can also attach a Python debugger (VS Code)
