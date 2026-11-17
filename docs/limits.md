@@ -309,8 +309,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   sizes may give unexpected results.
 - A thin extrude of an open line of straight lines (a fence, a divider, a rib along a plate) is copied with square
   ends and sharp corners, as Fusion builds it. The wall thickness and the sizes that move the line are sizes. The side
-  of the wall is checked against the faces that Fusion made. When they do not show one side, the step is left out.
-  This can occur when a face of the wall merges with a face of the part (a wall flush with the edge of a plate). Draw
+  of the wall is checked against the faces that Fusion made, also where a face of the wall merged with a face of the
+  part (a wall flush with the edge of a plate). When they do not show one side, the step is left out. Draw
   the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
   leaves the step out. A range stops before a corner takes a whole line or two lines come too near.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and

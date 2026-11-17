@@ -152,6 +152,8 @@ def extrude_before(feature, ctx):
         from .read_sweep import path_record  # read_sweep imports this module
 
         data["path"] = geo.safe(lambda: path_record(feature.profile, ctx), None)
+        if operation in ("join", "cut"):
+            data["target_faces_before"] = _target_faces(ctx)
     if _holds_free_outline(profiles):
         data["areas"] = areas
         data["volume_before"] = 0.0 if operation == "newBody" else geo.target_volume(ctx)
@@ -212,6 +214,7 @@ def _start_offset(feature, z, origin):
 
 
 MAX_WALL_FACES = 64
+MAX_TARGET_FACES = 512
 
 
 def _wall_face(face):
@@ -220,6 +223,17 @@ def _wall_face(face):
     return {"surface": geo.safe(lambda: geo.surface_kind(face), None),
             "point": geo.safe(lambda: geo.point(face.pointOnFace), None),
             "normal": _face_normal(face)}
+
+
+def _target_faces(ctx):
+    """The faces of the target body before a thin extrude of an open line joins or cuts it, as `_wall_face` records: a
+    face of the wall that Fusion merges with one of them lies on its plane. Null when the body or its faces cannot be
+    read or it has more than MAX_TARGET_FACES."""
+    body = ctx.find_target()
+    faces = geo.safe(lambda: geo.sequence_items(body.faces), None) if body is not None else None
+    if faces is None or len(faces) > MAX_TARGET_FACES:
+        return None
+    return [_wall_face(face) for face in faces]
 
 
 def _wall_faces(feature, ctx):

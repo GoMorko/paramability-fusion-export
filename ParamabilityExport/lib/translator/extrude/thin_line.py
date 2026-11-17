@@ -10,12 +10,13 @@ the line). The copy takes a path of one sketch whose lines run one after the oth
 before, none of them against the path. Arcs and free curves, and lines that run against the path, are refused: the
 side Fusion puts the wall on is measured for lines that run along the path only.
 
-The side. Fusion names it side one, side two or center. Measured on extrudes that go along the sketch normal, side
-one is the left of the path direction and side two the right (`RULE`). Fusion lists no start or end faces for such an
-extrude, so the copy reads the wall from the faces it made (`wall_faces`): each face must be flat and lie on a face of
-the wall that a side and a direction give (`fits`). Exactly one side that Fusion's location allows, and one direction,
-must fit. It must be the direction the extrude reader found, and, along the sketch normal, the side `RULE` names.
-Else the step is left out.
+The side. Fusion names it side one, side two or center. Side one is the left of the path direction and side two the
+right (`RULE`), whichever way the extrude goes: measured along the sketch normal, against it and both ways. Fusion
+lists no start or end faces for such an extrude, so the copy also reads the wall from the faces it made
+(`wall_faces`): each face must be flat and lie on a face of the wall that a side and a direction give (`fits`). A
+face whose point lies off the wall counts only when Fusion merged it with a face of the part (`merged`), as for a wall
+flush with the edge of a plate. Exactly one side that Fusion's location allows, and one direction, must fit. It must
+be the direction the extrude reader found and the side `RULE` names. Else the step is left out.
 
 The line at other sizes. Its points follow the probe's values for the path (`sketch_values.keys.path`). The wall
 must keep its shape over the size ranges (`keep_line_valid`): each line longer than what its corners take from it,
@@ -228,40 +229,79 @@ def _vector(v):
     return isinstance(v, list) and len(v) == 3 and all(is_number(c) for c in v)
 
 
-def fits(footprint, faces, frame, start, span):
-    """True when each face of `faces` (`wall_faces` records) lies on the wall whose outline is `footprint` in `frame`,
-    running `span` (low, high, mm) along the sketch normal from `start`: a flat face across the normal at an end of the
-    span on the outline, or a flat face along the normal on a side of the outline."""
+def _on_wall(footprint, face, frame, start, span):
+    """True when a flat face (a `wall_faces` record) lies on the wall whose outline is `footprint` in `frame`, running
+    `span` (low, high, mm) along the sketch normal from `start`: across the normal at an end of the span on the
+    outline, or along the normal on a side of the outline."""
+    point, normal = face["point"], face["normal"]
     z = vec.unit(frame["z"])
     low, high = span
-    for face in faces:
-        point, normal = face.get("point"), face.get("normal")
-        if face.get("surface") != "Plane" or not _vector(point) or not _vector(normal):
-            return False
-        h = vec.dot(vec.sub(point, start), z)
-        if not low - FACE_TOL <= h <= high + FACE_TOL:
-            return False
-        uv = vec.frame_to_local(frame, point)[:2]
-        along = vec.dot(vec.unit(normal), z)
-        if abs(abs(along) - 1.0) <= NORMAL_TOL:
-            on_end = min(abs(h - low), abs(h - high)) <= FACE_TOL
-            if not on_end or not (footprint.covers(uv) or footprint.nearest_curve(uv)[1] <= FACE_TOL):
-                return False
-        elif abs(along) <= NORMAL_TOL:
-            n, gap = footprint.nearest_curve(uv)
-            curve = footprint.curves[n]
-            d = _unit(curve["start"], curve["end"])
-            across = [vec.dot(normal, frame["x"]), vec.dot(normal, frame["y"])]
-            if gap > FACE_TOL or abs(across[0] * d[0] + across[1] * d[1]) > NORMAL_TOL:
-                return False
-        else:
-            return False
-    return True
+    h = vec.dot(vec.sub(point, start), z)
+    if not low - FACE_TOL <= h <= high + FACE_TOL:
+        return False
+    uv = vec.frame_to_local(frame, point)[:2]
+    along = vec.dot(vec.unit(normal), z)
+    if abs(abs(along) - 1.0) <= NORMAL_TOL:
+        on_end = min(abs(h - low), abs(h - high)) <= FACE_TOL
+        return on_end and (footprint.covers(uv) or footprint.nearest_curve(uv)[1] <= FACE_TOL)
+    if abs(along) > NORMAL_TOL:
+        return False
+    n, gap = footprint.nearest_curve(uv)
+    curve = footprint.curves[n]
+    d = _unit(curve["start"], curve["end"])
+    across = [vec.dot(normal, frame["x"]), vec.dot(normal, frame["y"])]
+    return gap <= FACE_TOL and abs(across[0] * d[0] + across[1] * d[1]) <= NORMAL_TOL
 
 
-def decide(line, location, thickness, faces, start, entry):
+def _flat(face):
+    return (isinstance(face, dict) and face.get("surface") == "Plane" and _vector(face.get("point"))
+            and _vector(face.get("normal")))
+
+
+def _same_plane(face, point, normal):
+    """True when the flat `face` lies on the plane through `point` with the unit outward `normal`, facing the same
+    way."""
+    return (vec.dot(vec.unit(face["normal"]), normal) >= 1.0 - NORMAL_TOL
+            and abs(vec.dot(vec.sub(face["point"], point), normal)) <= FACE_TOL)
+
+
+def _wall_planes(footprint, frame, start, span):
+    """`(point, unit outward normal)` of each face of the wall: one per side of its outline, and both ends."""
+    z = vec.unit(frame["z"])
+    out = [(vec.add(start, vec.scale(z, span[0])), vec.scale(z, -1.0)),
+           (vec.add(start, vec.scale(z, span[1])), z)]
+    for n, curve in enumerate(footprint.curves):
+        middle = [(curve["start"][i] + curve["end"][i]) / 2.0 for i in range(2)]
+        outward = footprint.outward(n, middle)
+        if outward is not None:
+            out.append((vec.frame_apply(frame, middle + [0.0]),
+                        vec.unit([outward[0] * frame["x"][i] + outward[1] * frame["y"][i] for i in range(3)])))
+    return out
+
+
+def merged(footprint, face, frame, start, span, before):
+    """True when a flat face Fusion lists for the wall, whose point lies off the wall, is a face of the wall that
+    Fusion merged with a face of the part: it lies on the plane of a face of the target body before the step
+    (`before`, `target_faces_before`) and on the plane of a face of the wall, both facing the way it faces."""
+    normal = vec.unit(face["normal"])
+    if not any(_flat(other) and _same_plane(other, face["point"], normal) for other in before or []):
+        return False
+    return any(_same_plane(face, point, outward) for point, outward in _wall_planes(footprint, frame, start, span))
+
+
+def fits(footprint, faces, frame, start, span, before=None):
+    """True when each face of `faces` (`wall_faces` records) is flat and lies on the wall (`_on_wall`), or is a face
+    of the wall merged with a face of the part (`merged`), and at least one lies on the wall."""
+    if not all(_flat(face) for face in faces):
+        return False
+    on = [_on_wall(footprint, face, frame, start, span) for face in faces]
+    return any(on) and all(ok or merged(footprint, face, frame, start, span, before) for ok, face in zip(on, faces))
+
+
+def decide(line, location, thickness, faces, start, entry, before=None):
     """The side of the wall in the line's own sketch frame (`inside`, `outside` or `middle`), or a Refusal. `faces`
-    are the `wall_faces` Fusion measured, `start` where the extrude starts and `entry` its planned `RecipeSide`."""
+    are the `wall_faces` Fusion measured, `start` where the extrude starts, `entry` its planned `RecipeSide` and
+    `before` the faces of the target body before the step (`target_faces_before`), for faces Fusion merged."""
     if not isinstance(faces, list) or not faces:
         return Refusal("The wall of this thin extrude could not be measured, so it is not copied.")
     length = entry.distance
@@ -273,13 +313,13 @@ def decide(line, location, thickness, faces, start, entry):
     for side in SIDES[location]:
         corners = band(line.points, *reaches(side, thickness))
         footprint = Footprint(band_profile(line.frame, corners))
-        found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span)]
+        found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
     if len(found) > 1:
         return Refusal(UNSURE)
     if not found:
         return Refusal(NOT_MATCHING)
     side, way = found[0]
-    if entry.extent != "symmetric" and (way != entry.sign or (way > 0 and RULE.get(location, side) != side)):
+    if (entry.extent != "symmetric" and way != entry.sign) or RULE.get(location, side) != side:
         return Refusal(NOT_MATCHING)
     return side
 
@@ -303,7 +343,8 @@ def wall_step(ctx, item, data, wall, line, drawn, start, entry):
     thickness = wall["thickness"]
     # The line alone first: a line that turns back on itself has no wall to compare the faces with.
     problem = line_problem(line.points, 0.0, 0.0)
-    side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry) if not problem else None
+    side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry,
+                  data.get("target_faces_before")) if not problem else None
     if isinstance(side, Refusal):
         return side
     problem = problem or line_problem(line.points, *reaches(side, thickness))

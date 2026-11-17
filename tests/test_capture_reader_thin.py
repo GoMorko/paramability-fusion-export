@@ -24,8 +24,9 @@ def thickness(cm=0.2, name="d3", expression="wall"):
     return Obj(value=cm, name=name, expression=expression)
 
 
-def read(profile=None, thin=True, location="Side1ThinExtrudeWallLocation", broken=False, **members):
+def read(profile=None, thin=True, location="Side1ThinExtrudeWallLocation", broken=False, target_faces=(), **members):
     target = body()
+    target.faces = Coll(target_faces)
     extra = dict(members)
     if thin:
         extra.update(isThinExtrude=True, thinExtrudeWallLocationOne=location,
@@ -99,6 +100,14 @@ class OpenLineReaderTest(unittest.TestCase):
                          [([0, 0], [30, 0], False), ([30, 0], [30, 20], False)])
         self.assertEqual(data["wall_faces"], [{"surface": "Plane", "point": [15, 0, 7.5], "normal": [0, -1, 0]},
                                               {"surface": "Plane", "point": [15, 1, 15], "normal": [0, 0, 1]}])
+
+    def test_a_join_reads_the_faces_of_the_part_before_it(self):
+        plate = [flat_face((0, 20, 1.5), (-1, 0, 0))]
+        data = read(profile=open_line(), endFaces=Coll([]), faces=Coll([]), target_faces=plate,
+                    operation="JoinFeatureOperation")
+        self.assertEqual(data["target_faces_before"], [{"surface": "Plane", "point": [0, 20, 1.5],
+                                                         "normal": [-1, 0, 0]}])
+        self.assertNotIn("target_faces_before", read(profile=open_line(), endFaces=Coll([]), faces=Coll([])))
 
     def test_too_many_faces_to_read_give_no_wall_faces(self):
         faces = [flat_face((15, 0, 7.5), (0, -1, 0))] * (read_solid.MAX_WALL_FACES + 1)
