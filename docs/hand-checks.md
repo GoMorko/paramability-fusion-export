@@ -853,4 +853,5 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `report.json` has no `steps_changed`, no `outlines_changed` and no `body_changed`. Undo is still offered when the
     tries stopped, unless the end check found the design changed or could not confirm it; then the export is undone
     (see RB1). `body_changed` must not show for a design that came back: a difference with no other change is at most
-    `body_unconfirmed`.
+    `body_unconfirmed`. When a flip was brought back, `probe.recovery.attempts` in `report.json` lists each attempt
+    with the row and the values set, and the attempt that brought the triangle back has `back: true`.

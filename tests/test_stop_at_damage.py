@@ -5,6 +5,7 @@ import copy
 import dataclasses
 import tempfile
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.fakes import FakePort, FakeStore
@@ -12,6 +13,7 @@ from tests.probe_helpers import circle, line, loop, table
 from tests.test_probe_flow import START, UNITS, Fusion, TwoSolutionFusion, keyed, number, on_other_solution, size_row
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, read_at
 
+from lib.design_edit import walk_back
 from lib.design_edit.runner import RowExport
 from lib.export_plan import health as health_module
 from lib.export_plan import undo_steps
@@ -273,6 +275,67 @@ class WalkBackTest(unittest.TestCase):
         self.assertFalse(fusion.flipped)
         self.assertEqual(fusion.store.exprs, START)
 
+
+def from_below(before, now):
+    return number(before["height"]) < 20 and now == START
+
+
+def back_from_tall(fusion_rows, flips_on, settles=from_below):
+    """A run whose lid sketch flips when `flips_on(before, now)` holds and comes back when `settles(before, now)` holds
+    (by default when the height returns from below its start value); no keeper. Returns the fusion, the run and the
+    probe once `fusion_rows` ran."""
+    fusion = TwoSolutionFusion(flips_on, settles)
+    probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+    run = ProbeRun(FakePort(store=fusion.store, units=UNITS), "", probe)
+    run.run_rows(fusion_rows)
+    return fusion, run, probe
+
+
+def pair_row(key, values):
+    return {"name": key, "key": key, "values": dict(values), "varied": list(values), "state": dict(values),
+            "step": False}
+
+
+def from_tall_to_start(before, now):
+    return number(before["height"]) == 40 and now == START
+
+
+class WalkBackTargetTest(unittest.TestCase):
+    """The walk back targets the rows run since a sketch last read as at its start, not only the row run last."""
+
+    def test_a_flip_first_seen_two_rows_later_is_walked_back_with_the_size_of_the_row_that_made_it(self):
+        # The tall row reads the first outline; the flip comes as the values go back and shows only in the next row.
+        fusion, run, probe = back_from_tall(rows(("cube", 20.0), ("height", 40.0), ("off", 8.0), ("cube", 21.0)),
+                                            from_tall_to_start)
+        last = next(s for s in probe.states if s.values == {"cube": 21.0})
+        self.assertEqual((probe.off_start(last.start), probe.off_start(last.put_back)), (["sk2"], []))
+        brought = [w for w in run.job.walks if w.get("back")]
+        self.assertEqual([(w["row"], list(w["set"][0])) for w in brought], [("r1", ["height"])])
+        self.assertFalse(probe.off_outline(last.read))
+
+    def test_after_the_tries_each_size_of_the_last_rows_is_walked_back_alone_until_the_sketch_is_back(self):
+        def height_alone(before, now):  # the height comes back from below with every other size at its start
+            return from_below(before, now) and number(before["off"]) == 5
+
+        plan = keyed(size_row("cube", 20.0), pair_row("pair", {"off": 8.0, "height": 40.0}))
+        fusion, run, probe = back_from_tall(plan, from_tall_to_start, height_alone)
+        run.settle()
+        self.assertFalse(fusion.flipped)
+        self.assertTrue(run.end.back)
+        self.assertEqual(fusion.store.exprs, START)
+        attempts = probe.recovery["attempts"]
+        self.assertEqual([(a["at"], list(a["set"][0]), a["back"]) for a in attempts],
+                         [("end", ["off"], False), ("end", ["height"], True)])  # the cube is not tried
+
+    def test_the_walks_after_the_tries_stop_at_their_bound(self):
+        plan = keyed(size_row("cube", 20.0), size_row("off", 8.0), size_row("height", 40.0), size_row("cube", 5.0))
+        fusion, run, probe = back_from_tall(plan, lambda before, now: False, lambda before, now: False)
+        fusion.flipped = True  # a flip no walk brings back
+        with mock.patch.object(walk_back, "END_TRIES", 3):
+            run.settle()
+        self.assertEqual(run.job.recoveries, 3)
+        self.assertFalse(run.end.back)
+        self.assertEqual(fusion.store.exprs, START)
 
 class PendingCheckTest(unittest.TestCase):
     """The damage of the row run last is checked before any Undo drop and before the discovery baseline."""

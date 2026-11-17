@@ -2723,8 +2723,9 @@ moved (the keeper matches the points by their entity token and skips a point tha
 the state's `put_back`. Put backs that do not bring a sketch back are counted per sketch: when every sketch off its
 start had two in a row, no more are tried for them, and a sketch that cannot be put back does not stop the put backs of
 the others. A sketch with the same curves under other entity tokens, in another order or direction, is not off its
-start (`probe.same_shape`). A sketch still off its start after the put back is brought back once the way the try before
-took it away (`design_edit.walk_back`, as above), and the read after that is the state's `put_back`. A row that needs its
+start (`probe.same_shape`). A sketch still off its start after the put back is brought back once the way the tries
+took it away (`design_edit.walk_back`, as above): each try run since the sketch last read as at its start, the last
+first, at most three tries. The read after that is the state's `put_back`. A row that needs its
 start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines
 (sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row
 before it ended right) and after which the sketch was found on its other solution (the row read another outline or did not build, and the next read with the values back shows
@@ -2733,10 +2734,15 @@ left out of the states. The second run carries `again`; another outline there is
 again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it, a full read) and
 once after the tries, so the design is left on the solution it had; that last put back also runs when the tries fail or
 are cancelled, and after tries that failed `health.sketch_gap_mm` and `health.sketch_drift` still say whether a sketch
-stayed away from its first read. After the tries, a sketch the put back does not bring back is brought back the way
-the try after which it was first seen off took it away (`walk_back`). `probe.recovery` (`{ put_backs, again,
-walked_back? }`, only when one happened) counts the extra rebuilds: one per put back, two per row run again (the row
-and its restore), and in `walked_back` the attempts of `walk_back`.
+stayed away from its first read. After the tries, a sketch the put back does not bring back is walked back one size
+at a time: each size that the tries since the sketch last read as at its start moved, the last first, a small step
+past its start value on the other side and back, at most 16 walks (`walk_back`). `probe.recovery` (`{ put_backs,
+again, walked_back?, attempts? }`, only when one happened) counts the extra rebuilds: one per put back, two per row
+run again (the row and its restore), and in `walked_back` the attempts of `walk_back`. `attempts` lists the first 24
+attempts in the order they ran: `{ row, kind, set, at, failed?, back? }`, the key of the row walked back, `other side`
+or `walk`, the values set in turn (by Fusion name, in each parameter's unit), where it ran (the key of the row about to
+run, `steps` for the check after a row, or `end`), the walk steps Fusion refused or could not build, and whether the
+sketches read as at their start after it.
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed

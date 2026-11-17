@@ -12,8 +12,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   outline came back after it. Such a size keeps its range up to the last value tried that kept the outline (the
   add-in halves toward it, as for a value that does not rebuild); only when no other value works is it not a size,
   and the reason says why. The tries made while a sketch stayed on its other solution count against no size, and
-  the result window says so in one line. A sketch that stays on its other solution is brought back the way the try
-  took it away: the size set a little past its value on the other side and back, or walked back in small steps.
+  the result window says so in one line. A sketch that stays on its other solution is brought back the way the tries
+  took it away: the sizes set a little past their values on the other side and back, or walked back in small steps.
+  The tries walked back are those made since the sketch last read as it was, not only the last one. At the end of the
+  tries, each size those tries changed is walked back alone, at most 16 times in all.
   When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop
   there; only the tries before it are used, and the sizes not tried yet are marked. When the sketch still reads
   another outline after the export, or the body has another volume or size than before, the result window says that

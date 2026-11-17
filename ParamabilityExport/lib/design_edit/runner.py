@@ -83,6 +83,7 @@ class RowExport:
         self._check_others = False  # the row run last showed only new warnings that do not count (`_others_left`)
         self.back_clean = True  # False while the last check found a step worse than in the baseline
         self.recoveries = 0  # attempts made to bring the design back the way a row took it away (`walk_back`)
+        self.walks = []  # the first `walk_back.KEPT` of those attempts, for the report (`walk_back`)
         self._saved = None
         self._baseline = None
         self._steps = None  # the timeline steps read with the baseline (`timeline_health.read_timeline`)
@@ -170,10 +171,12 @@ class RowExport:
             pass
         return self._worse_now()
 
-    def walk_back(self, row, attempt):
+    def walk_back(self, row, attempt, at=None):
         """Attempt number `attempt` to bring the design back the way `row` took it away (`walk_back.settings`): its
         sizes set from the other side of their start values, or in steps from the values tried, then every parameter
-        put back. False, with nothing changed, when the attempt has nothing to set or the job has not run a row."""
+        put back. False, with nothing changed, when the attempt has nothing to set or the job has not run a row.
+        The first `walk_back.KEPT` attempts are kept in `walks` (`walk_back.record`), with `at`, where the attempt
+        ran, when given, and `failed`, the steps Fusion refused or could not build."""
         if self._saved is None or not row:
             return False
         values = row.get("values") or {}
@@ -181,11 +184,16 @@ class RowExport:
         if not steps:
             return False
         self.recoveries += 1
+        entry = walk_back.record(row.get("key", row.get("name")), attempt, steps, at)
+        if len(self.walks) < walk_back.KEPT:
+            self.walks.append(entry)
         trail.line("bringing the design back after %r, attempt %d" % (row.get("label") or row.get("name"), attempt + 1))
         try:
-            walk_back.walk(self.store, self.units, steps, self._baseline)
+            failed = walk_back.walk(self.store, self.units, steps, self._baseline)
         finally:
             self._back_to_current()
+        if failed:
+            entry["failed"] = failed
         return True
 
     def _recover(self, worse):
@@ -194,7 +202,7 @@ class RowExport:
         no step is worse and the followed sketches read as at the start (`at_start`). Returns the steps still worse, or
         None when the last read of the steps failed."""
         for attempt in range(walk_back.ATTEMPTS):
-            if not self.walk_back(self._last_row, attempt):
+            if not self.walk_back(self._last_row, attempt, walk_back.AT_CHECK):
                 break
             worse = self._worse()
             if worse == [] and (self.at_start is None or self.at_start()):
