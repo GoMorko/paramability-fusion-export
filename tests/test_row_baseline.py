@@ -162,9 +162,9 @@ class BatchDesign(FakeDesign):
 class WarningRowTest(unittest.TestCase):
     """A try that builds with a step newly in warning says which step; a warning the design had before does not."""
 
-    def run_try(self, warns):
-        store = FakeStore({"w": "5 mm"}, warns=warns)
-        job = RowExport(store, UNITS, lambda path: None)
+    def run_try(self, warns, store=None, counts=None):
+        store = store or FakeStore({"w": "5 mm"}, warns=warns)
+        job = RowExport(store, UNITS, lambda path: None, **({"counts_warning": counts} if counts else {}))
         return job.run([{"name": "A", "values": {"w": 7.0}, "step": False}], "", lambda *a: True,
                        tolerate_build_errors=True)[0]
 
@@ -176,6 +176,32 @@ class WarningRowTest(unittest.TestCase):
     def test_a_warning_the_design_had_before_the_tries_is_not(self):
         result = self.run_try(lambda exprs: [(4, "Revolve1")])
         self.assertNotIn("warned", result)
+
+    def test_a_warning_that_the_full_recompute_turns_into_an_error_fails_the_try(self):
+        seen = []
+
+        def warns(exprs):
+            if exprs["w"] != "5 mm":
+                seen.append(exprs["w"])
+                return [(4, "Revolve1")]
+            return []
+
+        def recompute(store):
+            if seen:
+                store.errors = [(4, "Revolve1")]
+
+        store = FakeStore({"w": "5 mm"}, errors=[], warns=warns, on_recompute=recompute)
+        result = self.run_try(None, store)
+        self.assertIsNone(result["values"])
+        self.assertEqual(result["detail"]["items"], ["Revolve1"])
+
+    def test_a_warning_on_a_step_that_does_not_count_is_not_named_and_costs_no_recompute(self):
+        quiet = FakeStore({"w": "5 mm"})
+        self.run_try(None, quiet)
+        store = FakeStore({"w": "5 mm"}, warns=lambda exprs: [(9, "Other")] if exprs["w"] != "5 mm" else [])
+        result = self.run_try(None, store, counts=lambda name: name == "Revolve1")
+        self.assertNotIn("warned", result)
+        self.assertEqual(store.recomputes, quiet.recomputes)
 
 
 class FormulaOfNumbersTest(unittest.TestCase):

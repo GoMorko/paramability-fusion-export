@@ -99,7 +99,8 @@ class ProbeRun:
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
         self.undo = port.undo_steps
-        self.job = RowExport(port.store, port.units, self._export, self._before_row, self._out_of_time)
+        self.job = RowExport(port.store, port.units, self._export, self._before_row, self._out_of_time,
+                             counts_warning=self.probe.counts_warning)
         self.probe.note_time_limit({"limit_seconds": time_limit, "hit": False})
 
     def _now(self):
@@ -447,6 +448,8 @@ class ProbeRun:
             return []
         if tries and self._left() and self.before_discovery is not None:
             self.before_discovery()
+            # Items that were off for the tries are back on, with any warning or error they had all along.
+            self.job.rebase()
         base = self._read_now({})
         back = self._put_back(full=True) if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)

@@ -23,7 +23,6 @@ new outer wall of a shell that grows outward is placed on no step (`Placer.claim
 a face that an offsetFaces step moved through the face before the move (faces/offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (faces/crossings.py).
 """
-from ...capture_model.capture import renamed_target
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
@@ -237,15 +236,13 @@ def reads_with_outer(ctx, item):
 
 
 def _another_body(ctx, body):
-    """True when the body record `body` is proven to be another body than the one the walk builds: it is not that
-    body (`Context.is_target`), and it is not a body with that body's name under another token, which may be the same
-    body after Fusion gave it a new token (`capture.renamed_target`)."""
-    if not body or ctx.is_target(body):
-        return False
-    held = [ctx.target]
-    if ctx.lineage and ctx.current is not None:
-        held += list(ctx.lineage_at(ctx.current.get("index", 0)))
-    return not any(renamed_target(body, b) for b in held if b)
+    """True when the body record `body` is not the body the walk builds (`Context.is_target`, through the lineage).
+
+    A body with that body's name under another token counts as another body too. A name proves nothing: a copy, a split
+    piece or a renamed body can have it while the part exists. And a part that Fusion gave a new token cannot reach
+    here: the walk stops at the first step that lists the part's name under another token (`roles.lost`), so no step
+    before this one showed such a token."""
+    return bool(body) and not ctx.is_target(body)
 
 
 def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):

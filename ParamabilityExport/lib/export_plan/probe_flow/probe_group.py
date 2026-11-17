@@ -68,6 +68,10 @@ class ProbeGroup:
                                mine(rest[1] if len(rest) > 1 else None, number))
                               for values, result, reads, *rest in entries])
 
+    def counts_warning(self, step):
+        """True when a new warning on `step` counts for any part (`SizeProbe.counts_warning`)."""
+        return any(probe.counts_warning(step) for probe in self.probes)
+
     def followed_sketches(self):
         """Tokens of the sketches any part reads at every row."""
         return list(dict.fromkeys(t for probe in self.probes for t in probe.followed_sketches()))

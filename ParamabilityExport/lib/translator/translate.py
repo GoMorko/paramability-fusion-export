@@ -329,10 +329,10 @@ def _finish(settled, doubts, capture, motion):
     step reads that no handler named. A doubted size that no formula reads is not a size: it is listed in
     `result.dropped` with its reason, like every other ticked size that the recipe does not hold."""
     result, table, whys = settled.result, settled.table, dict(settled.whys)
-    doubts = _in_table_order(table, doubts)
     result.fixed = [{"name": name, "reason": fixed_reason(name, why)} for name, why in whys.items()]
     if result.recipe is None:
-        result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()]
+        result.loose = [{"name": name, "reason": loose_reason(name, why)}
+                        for name, why in _in_table_order(table, doubts).items()]
         return result
     checked = audit(capture, settled.ctx, table, set(whys) | set(doubts), motion)
     for name, why in checked.forgotten.items():

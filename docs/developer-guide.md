@@ -743,9 +743,10 @@ named parameters, the body's box, the measured references (`probe_refs.py`) and 
 Every value is in the component's coordinates, like the capture. A part that cannot be read has no key. Nothing
 raises.
 
-With the box, a state also holds the volume and the area of the body (`volume_mm3` from `BRepBody.volume`,
-`area_mm2` from `BRepBody.area`). The box alone does not show a change inside the body, for example a deeper pocket
-or a wider hole. The volume and the area show it (`probe.state.body_changed`).
+With the box, a state also holds the volume of the body (`volume_mm3`, from `BRepBody.volume`). The box alone does not
+show a change inside the body, for example a deeper pocket or a wider hole. The volume shows it
+(`probe.state.body_changed`). The area of the body is not read: it would cost a second computation of the body at
+each try. It would show only a change that keeps the box and the volume exactly as they were. Such a change is rare.
 
 A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
 (`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
@@ -1268,8 +1269,8 @@ steps"), and a size that the probe tried and that changed nothing in the part ("
 changes nothing in this part").
 
 The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
-set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box, the volume and the
-area of the body with the first read. A try tells that the body stayed the same only when it and the first read hold
+set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box and the volume of the
+body with the first read. A try tells that the body stayed the same only when it and the first read hold
 the box and the volume (`probe.state.body_compared`).
 
 - The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
@@ -2107,7 +2108,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `reach.py`: which ticked sizes can move something that a step uses. Each
   function reads the size table and the capture only. No function says what a copy does about a size. The recipe
   output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
-  - The sizes behind the model parameters of the design. `sketch_params` and `sketch_sizes` give the sizes behind the
+  - The sizes behind the model parameters of the design. These functions are in `param_reach.py`, and `reach.py`
+    gives the same names. `sketch_params` and `sketch_sizes` give the sizes behind the
     dimensions of a sketch. `linked_sizes` gives the sizes that reach the sketch through the geometry of another
     component (`table.links`). `construction_sizes` gives the sizes behind construction planes or axes.
     `joint_reasons` gives the sizes that a joint reads. `text_sizes` gives the sizes that set the height of a sketch
@@ -2135,10 +2137,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
     or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
     origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
-    reader marks it with `origin: true` in the sketch graph. When no ticked size moves or turns the sketch plane
-    (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`, `own_origin`), as it
-    keeps the origin of the sketch. When a size moves or turns the plane, the projection moves in the sketch. Then it
-    stays a measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
+    reader marks it with `origin: true` in the sketch graph. When the export can show that no ticked size moves or
+    turns the sketch plane (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`,
+    `own_origin`), as it keeps the origin of the sketch. `plane_fixed` shows this for an origin plane, for a
+    construction plane with no ticked size behind it or behind what it is built on, and for a plane on the part when
+    the sketch item is found and no step before it reads a ticked size. In every other case, the answer is "not
+    fixed": a sketch without a reference, a sketch item that is not found, an outline that follows a face, or a sketch
+    of another component. When a size can move or turn the plane, the projection moves in the sketch. Then it stays a
+    measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
     plane are also among the sizes of the plane (`placement_sizes`), so a line of such a sketch still gets them.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
@@ -2786,9 +2792,13 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
   counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
   `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
-  first try (the baseline) does not count. When a step reads in warning after a rebuild of only the changed steps,
-  the design is recomputed in full once and read again, as for errors. The result of the row then has `warned`, the
-  names of those steps. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  first try (the baseline) does not count. Only a step that the part is built from counts (`counts_warning` of the
+  probe, which the runner gets). When such a step reads in warning after a rebuild of only the changed steps, the
+  design is recomputed in full once and read again, as for errors. A step that is in error after that recompute makes
+  the row a row that did not build. A warning on any other step costs no recompute. The result of the row then has
+  `warned`, the names of those steps. The trim turns some timeline items off for the tries, and these items show no
+  warning while they are off. Thus, when the items come back on before the discovery rows, the runner measures the
+  baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
   of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
   run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
   the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
@@ -2916,13 +2926,14 @@ Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the
 `Body2` starts 3 mm above the top face of `Body1` (`Lift`).
 
 - The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
-- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is proven to
-  be another body, the face is never "on this body" (`follow._another_body`, `follow._beyond_tool`). This is also
-  true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step uses.
-- "Proven" means two things. The body is not the body that the walk builds (`Context.is_target`, also through the
-  lineage). And the body does not have the name of that body under another token. Fusion can give the exported body
-  a new token along the timeline (`capture.renamed_target`). Such a face can be on the exported body, so the
-  translator places it on the slabs as before.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
+  body that the walk builds (`Context.is_target`, also through the lineage), the face is never "on this body"
+  (`follow._another_body`, `follow._beyond_tool`). This is also true when a slab of `Body2` has a face at the same
+  place. That slab face is not the face that the step uses.
+- A body with the name of the exported body under another token is also another body. A name does not prove that
+  it is the same body: a copy, a split piece or a renamed body can have that name. Fusion can give the exported body a
+  new token along the timeline, but then the walk stops at the first step that shows the new token (`roles.lost`).
+  So such a face never reaches this rule.
 - No slab places the face. Thus every size that the items before the step read can move it
   (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
 - When the probe measured the face, the measured move is written instead (see the next part). In the example, the
@@ -3496,6 +3507,11 @@ The facts of a pipe are in `lib/design_model/steps/pipe.py`. Hand check PI1 gave
 A circle that moves along a path makes the same shape from each end of the path. Along a closed path, it makes the
 same shape from each point. Thus the start only tells the sweep which end face is the start face and which is the end
 face. The end face check of the sweep (3.8) compares this with the end faces that Fusion made.
+
+But the start must be an end of the path, never a joint inside it. When Fusion does not give `opposed` for the first
+curve, the start is the end of the first curve that the second curve does not touch. This rule applies unless the
+path is known to be closed (`closed` true); a path whose `closed` could not be read counts as open. When both ends or
+no end of the first curve touch the second curve, the start is not known and the pipe is left out.
 
 The handler writes the section as a profile record: one circle, and a second circle for the hole of a hollow pipe.
 The plane of the profile is square to the path at its start. The sweep handler then writes an extrude for a straight
@@ -5324,7 +5340,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
-| `BRepBody.volume`, `BRepBody.area` | `probe_state.py` | Read at each try with the box (`volume_mm3`, `area_mm2`). Without them, a try does not show that the body stayed the same. |
+| `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
 Every read is wrapped in `geo.safe`, so a failed read gives null and never a guess. The risky part is the writes.

@@ -331,8 +331,8 @@ curves). A borrowed sketch is read through its native object, so its numbers are
   target's component, `other` one in another component, `none` a reference with no source (not parametric). A
   projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
   component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
-  the sketch's own component sits still in the sketch when no ticked size moves or turns the sketch plane
-  (`design_model.reach.plane_fixed`, `sketch_solve.constants.own_origin`); on a plane that a size moves, it stays a
+  the sketch's own component sits still in the sketch when the export can show that no ticked size moves or turns
+  the sketch plane (`design_model.reach.plane_fixed`, `sketch_solve.constants.own_origin`); otherwise it stays a
   measured input like other projected geometry.
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
@@ -1972,8 +1972,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
-    does not model, a face proven to be on another body than the one walked (its `body` is not that body and is not
-    one with that body's name under another token, `follow._another_body`), a plane built on
+    does not model, a face of another body than the one walked (its `body` is not that body, also when it has that
+    body's name under another token, `follow._another_body`), a plane built on
     such a face), or when the move they give differs from the probe's measure at a try that built, the probe's
     measure of it decides instead
     (`lib/translator/extrude/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
@@ -2183,8 +2183,8 @@ ones at their value now, so the formula over those sizes is checked by a state t
 first step that failed (`failed`). A row that built while a step of the part showed a warning it did not show before
 the tries is kept as a state that did not build, with that step in `failed` and `warned: true`. A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
-B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box,
-volume and area (`volume_mm3`, `area_mm2` in each state read) read the same at every try that set it alone
+B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
+and volume (`volume_mm3` in each state read) read the same at every try that set it alone
 (`Motion.body_changes`, `probe.build.body_changes`; a try on another sketch solution, `apart`, or past an outline limit
 does not count, and a try counts as "the same" only when it and the first read hold the box and the volume). When
 the body changed at such a try, it is dropped with "it changes this part in a way the copy does not follow" (`used`
@@ -2504,9 +2504,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
 - `box`: the target body's box, as `target.box`.
-- `volume_mm3`, `area_mm2` (only with `box`): the target body's volume (`BRepBody.volume`, cm3 times 1000) and area
-  (`BRepBody.area`, cm2 times 100), each absent when it cannot be read. They show a change inside the box (a deeper
-  pocket, a wider hole) when the probe asks whether a size changed the body (`Motion.body_changes`).
+- `volume_mm3` (only with `box`): the target body's volume (`BRepBody.volume`, cm3 times 1000), absent when it cannot
+  be read. It shows a change inside the box (a deeper pocket, a wider hole) when the probe asks whether a size changed the body (`Motion.body_changes`).
 - `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), and `others`, the
   boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64). The
   app builds a part only in one piece, so the probe works out from them how many pieces the part is in
