@@ -80,6 +80,10 @@ class ProbeGroup:
         """True when a part's followed sketch reads otherwise than at its E0 (`SizeProbe.left_start`)."""
         return any(probe.left_start(read) for probe, read in zip(self.probes, reads or []))
 
+    def off_start(self, reads):
+        """Tokens of the sketches any part reads otherwise than at its E0 (`SizeProbe.off_start`)."""
+        return list(dict.fromkeys(t for probe, read in zip(self.probes, reads or []) for t in probe.off_start(read)))
+
     def note_recovery(self, record):
         for probe in self.probes:
             probe.note_recovery(record)
@@ -167,6 +171,16 @@ class ProbeGroup:
     def restore_unchecked(self):
         """What the restore check could not compare, led by the part."""
         return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.restore_unchecked]
+
+    @property
+    def restore_changed(self):
+        """The sketches the restore check found on another outline, led by the part."""
+        return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.restore_changed]
+
+    def measure_body(self):
+        """What differs of each part's body from its E0 once the design is back (`SizeProbe.measure_body`), led by the
+        part."""
+        return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.measure_body()]
 
     @property
     def motions(self):

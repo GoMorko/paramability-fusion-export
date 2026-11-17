@@ -159,7 +159,7 @@ class PartsPipeline:
 
         finals = self._translate_and_measure()
 
-        self.put_back.settle(self._restore_gap, self._outline_gap)
+        self.put_back.settle(self._restore_gap, self._outline_gap, self._body_check)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         timeline = self.put_back.timeline_record
         if timeline is not None:
@@ -170,10 +170,11 @@ class PartsPipeline:
             shadows = self.group.derived_records(port.log) if self.group is not None else []
         derived_of = dict(zip(self.probed, shadows))
         unchecked = self.group.restore_unchecked if self.group is not None else []
+        changed = self.group.restore_changed if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
         health = health_module.make_health(self.put_back.health_inputs(
-            self.probe_status, self.probe_error, unchecked, flipped))
+            self.probe_status, self.probe_error, unchecked, flipped, changed))
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
@@ -383,3 +384,8 @@ class PartsPipeline:
         if self.group is None:
             return None
         return self.group.measure_restore(self.group.read_now(outline=True))
+
+    def _body_check(self):
+        """What of each part's body differs from its first read once the design is back, or nothing without a
+        probe."""
+        return self.group.measure_body() if self.group is not None else []

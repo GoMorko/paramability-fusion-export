@@ -820,3 +820,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     The second extrude is copied, not left out with "reaches into another component". `Width` is not marked
     "may give unexpected results". In Paramability the post is 15 mm tall and ends 25 mm above the base of the tray,
     as in Fusion. Afterwards the design is as before.
+
+72. FD1, a try that flips a sketch with steps built on it. Add a user parameter `Arm` = 30 mm. On the XY plane sketch
+    a triangle: one corner on the origin, one corner 40 mm along X, the third corner placed only by two distances
+    (`Arm` from the origin, 35 mm from the second corner), with no other constraint, so the third corner can flip below
+    the X axis. Extrude it 10 mm as a new body. On the XZ plane start a second sketch, project the slanted top edge of
+    the extrude from the origin to the third corner (Create > Project), and draw a 4 mm circle centred on the end
+    point of the projected line. Cut through all with that circle.
+    Export: tick `Arm` with a range of 5 to 80. When a try flips the triangle, the result window either has no line
+    about it (the flip was brought back) or says "The tries stopped early: after trying Arm at ..., these steps stayed
+    changed even with your values back" and names the second sketch. Only the tries before it are used. Afterwards
+    the triangle is on the same side as before, the second sketch and the cut have no warning, and `health` in
+    `report.json` has no `steps_changed`, no `outlines_changed` and no `body_changed`. Undo is still offered when the
+    tries stopped.

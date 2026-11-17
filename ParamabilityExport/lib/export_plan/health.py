@@ -48,6 +48,9 @@ class HealthInputs:
       there was no such rebuild or read.
     left_off: timeline items turned off for the tries that are still off (`TryTimeline.left_off`).
     undo_dropped: True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps`).
+    outlines_changed: the followed sketches the restore check found on another outline or a turned plane, compared
+      by their curves (`SizeProbe.restore_changed`), one text per sketch.
+    body_changed: what of the part's body differs from the start once the design is back (`SizeProbe.measure_body`).
     """
 
     unrestored: Sequence = ()
@@ -63,6 +66,8 @@ class HealthInputs:
     gap_after_mm: Optional[float] = None
     left_off: Sequence = ()
     undo_dropped: bool = False
+    outlines_changed: Sequence = ()
+    body_changed: Sequence = ()
 
 
 def make_health(inputs):
@@ -84,6 +89,8 @@ def make_health(inputs):
     if inputs.stopped:
         stopped = inputs.stopped
         out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])[:MAX_LISTED]}
+        if stopped.get("steps"):
+            out["tries_stopped"]["steps"] = [dict(step) for step in stopped["steps"][:MAX_LISTED]]
     broken = steps.broken if steps is not None and not steps.unread else inputs.broken
     if broken:
         out["broken"] = list(dict.fromkeys(broken))[:MAX_LISTED]
@@ -96,6 +103,10 @@ def make_health(inputs):
         out["left_off"] = list(dict.fromkeys(inputs.left_off))[:MAX_LISTED]
     if inputs.undo_dropped:
         out["undo_dropped"] = True
+    if measured and inputs.outlines_changed:
+        out["outlines_changed"] = list(dict.fromkeys(inputs.outlines_changed))[:MAX_LISTED]
+    if inputs.body_changed:
+        out["body_changed"] = list(dict.fromkeys(inputs.body_changed))[:MAX_LISTED]
     return out
 
 
@@ -108,9 +119,11 @@ def any_worse(health):
 
 
 def design_changed(health):
-    """True when the design may differ from before the export: a parameter not put back, sketches that moved, steps in
-    a worse state than before, or a sketch left with its compute deferred."""
+    """True when the design may differ from before the export: a parameter not put back, sketches that moved or read
+    another outline, a body that differs, steps in a worse state than before, or a sketch left with its compute
+    deferred."""
     return bool(health and (health.get("unrestored") or health.get("sketch_drift") or health.get("broken")
+                            or health.get("outlines_changed") or health.get("body_changed")
                             or any_worse(health) or health.get("deferred_left")))
 
 
@@ -184,6 +197,28 @@ def steps_line(health):
     return text % clip(shown, max(40, MAX_LINE - len(text) + 2))
 
 
+def _stopped_line(stopped):
+    """The line about tries that stopped because a try left steps worse than before even with the values back: which
+    try, and which steps in what state."""
+    after = stopped.get("after") or "a value"
+    steps = stopped.get("steps") or []
+    if steps and any(step.get("after") != steps_module.ERROR for step in steps):
+        shown = ", ".join(_step_text(step) for step in steps[:MAX_LISTED])
+        text = ("The tries stopped early: after trying %s, these steps stayed changed even with your values back: %s. "
+                "Only the tries before it were used." % (after, shown))
+    else:
+        text = ("The tries stopped early: after trying %s, Fusion could not rebuild %s even with your values back. Only "
+                "the tries before it were used." % (after, _names(stopped.get("items") or []) or "the design"))
+    return clip(text, MAX_LINE)
+
+
+def _changed_line(text, found, health):
+    """`text` with the things found that changed, then that the design is changed and what to do. The list is cut,
+    not the advice after it."""
+    tail = " Your design is changed. " + _undo(health)
+    return clip(text % "; ".join(found), max(60, MAX_LINE - len(tail))) + tail
+
+
 def health_lines(health):
     """Plain sentences for the result window, most important first. Empty when all is well."""
     if not health:
@@ -200,6 +235,12 @@ def health_lines(health):
         lines.append(clip(
             "After the export these steps of your design show an error they did not have before: %s. Your design is "
             "changed. %s" % (_names(health["broken"]), _undo(health)), MAX_LINE))
+    if health.get("outlines_changed"):
+        lines.append(_changed_line("These sketches did not come back to their first shape after the tries: %s.",
+                                   health["outlines_changed"], health))
+    if health.get("body_changed"):
+        lines.append(_changed_line("The part did not come back as it was after the tries: %s.",
+                                   health["body_changed"], health))
     if health.get("sketch_drift"):
         lines.append(
             "The sketches did not come back to their first shape after the tries (largest gap %.4g mm). "
@@ -221,10 +262,7 @@ def health_lines(health):
                           MAX_LINE))
     stopped = health.get("tries_stopped")
     if stopped:
-        lines.append(clip(
-            "The tries stopped early: after trying %s, Fusion could not rebuild %s even with your values back. Only the "
-            "tries before it were used." % (stopped.get("after") or "a value", _names(stopped.get("items") or [])
-                                            or "the design"), MAX_LINE))
+        lines.append(_stopped_line(stopped))
     if health.get("probe") == FAILED:
         lines.append(
             "The sketches could not be measured, so sizes that move a sketch may give unexpected results.")

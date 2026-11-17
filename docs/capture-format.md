@@ -2615,22 +2615,38 @@ always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored; its `timeline`
 says how many timeline items each try rebuilt, section 5), `marker` and
 `health`. `health.restore_unverified` is true when a followed sketch could not be compared with its first read after
-the parameters were put back; `health.unchecked` then names each such sketch and why ("reads another outline",
-"could not be read", "lies on a turned plane"), and the result window says so (`probe.restore_unchecked` too).
+the parameters were put back; `health.unchecked` then names each such sketch and why ("could not be read"), and the
+result window says so (`probe.restore_unchecked` too). A followed sketch whose profile does not match its first read
+by its entity tokens is compared by its curves (`probe.same_shape.shape_gap`: each profile, loop and curve paired
+within 0.05 mm, in any order and either direction). When the curves pair, their gap counts in `sketch_gap_mm`. When
+they do not, or the plane turned, `health.outlines_changed` names the sketch and why ("reads another outline", "lies
+on a turned plane"; `probe.restore_changed` too), and the design counts as changed. Once every value, timeline item
+and the marker are back, the target body is read once more (its box, volume and pieces) and compared with its first
+read: `health.body_changed` (and `probe.restore_body`) lists what differs ("its volume (1601.25 mm3 before, 1618.42
+mm3 now)", "its size or place", "the number of its pieces (1 before, 2 now)", "the other bodies of its component"),
+and the design counts as changed.
 `health.flipped` names the sketches that stayed on their other outline after a restore during the rows (`Motion.flipped`);
 the result window says that the tries made then were not used to judge any size. After a row that did not build, or
 whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
-A try can leave the design broken: a step that lost its input stays in error after the values are put back. Every
-later try would then fail for that reason, not for its own values, and cut ranges it does not own. So after a try that
-did not build, with the values back and before the design is read again, the steps in error are compared with the
-baseline (`RowExport`). A step in error after the change that put the values back is first given one full recompute
-(that change rebuilds only the steps it touches; a try's own change is judged the same way); when a step is still in error that was not, the tries stop there and
-the broken design is not read again (no start read, no sketch put back, no discovery tries, whose parameters are kept
-as not tried). A size that moves a sketch and whose own tries were planned but did not run is listed in
-`probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing. `probe.stopped` (`{ after, items }`: the label of the try run last and the
-steps in error) and `health.tries_stopped` (the same) say so, and the motion is built from the tries before. At the end
+A try can leave the design changed after the values are put back: a step that lost its input stays in error, or a
+sketch left on its other solution makes a later projection lose its source (a new warning). Every later try would then
+run on a changed design. So after a try that did not build, showed a new warning on any step, or read a followed
+sketch on another outline, with the values back and before the design is read again, the timeline steps (health and
+message) are compared, step by step, with their read before the first try (`RowExport`). A warning or an error that
+was there before the tries does not count. A step that is worse is first given one full recompute (the change that put
+the values back rebuilds only the steps it touches). When a step is still worse, the export tries, at most twice, to
+bring the design back the way the try took it away (`design_edit.walk_back`): the sizes of the try set a small step
+past their start values on the other side and back, then the sizes walked from the try's values to the start values
+in four steps. Only parameters change, and they are put back after each attempt. When a step is still worse, the
+tries stop there and the changed design is not read again (no start read, no sketch put back, no discovery tries,
+whose parameters are kept as not tried). A size that moves a sketch and whose own tries were planned but did not run
+is listed in `probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing.
+`probe.stopped` (`{ after, items, steps? }`: the label of the try run last, the steps still worse and, in `steps`,
+`{ name, before, after }` of each) and `health.tries_stopped` (the same) say so, and the motion is built from the
+tries before. The Undo data of the tries is dropped (Lighter on memory) only before a try that starts with no step
+worse and every followed sketch as at its first read, and after the tries only when the same holds. At the end
 of every export the timeline steps are compared with the start (`design_edit.timeline_health`), see "Timeline steps
 after the export" below; `health.broken` names the steps in error that were fine before (at most 5).
 
@@ -2694,7 +2710,11 @@ own restore leaves about a hundredth), every kept point more than 0.0001 mm from
 with its sketch's compute deferred and then set back to what it was when kept, and read again (a sketch whose points
 are all in place is not touched), and the design is rebuilt once, also when no point
 moved (the keeper matches the points by their entity token and skips a point that is gone); the read after that is
-the state's `put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
+the state's `put_back`. Put backs that do not bring a sketch back are counted per sketch: when every sketch off its
+start had two in a row, no more are tried for them, and a sketch that cannot be put back does not stop the put backs of
+the others. A sketch with the same curves under other entity tokens, in another order or direction, is not off its
+start (`probe.same_shape`). A sketch still off its start after the put back is brought back once the way the try before
+took it away (`design_edit.walk_back`, as above), and the read after that is the state's `put_back`. A row that needs its
 start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines
 (sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row
 before it ended right) and after which the sketch was found on its other solution (the row read another outline or did not build, and the next read with the values back shows
@@ -2703,8 +2723,10 @@ left out of the states. The second run carries `again`; another outline there is
 again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it, a full read) and
 once after the tries, so the design is left on the solution it had; that last put back also runs when the tries fail or
 are cancelled, and after tries that failed `health.sketch_gap_mm` and `health.sketch_drift` still say whether a sketch
-stayed away from its first read. `probe.recovery` (`{ put_backs, again }`, only when
-either happened) counts the extra rebuilds: one per put back and two per row run again (the row and its restore).
+stayed away from its first read. After the tries, a sketch the put back does not bring back is brought back the way
+the try after which it was first seen off took it away (`walk_back`). `probe.recovery` (`{ put_backs, again,
+walked_back? }`, only when one happened) counts the extra rebuilds: one per put back, two per row run again (the row
+and its restore), and in `walked_back` the attempts of `walk_back`.
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed

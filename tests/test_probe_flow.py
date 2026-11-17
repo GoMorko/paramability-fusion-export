@@ -238,17 +238,21 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(self.probe.discovery[0]["failed"], "Chamfer3")
         self.assertEqual(self.probe.also_changes, [])
 
-    def test_the_restore_check_names_the_sketch_it_could_not_compare_and_the_person_is_told(self):
-        from lib.export_plan.health import HealthInputs, health_lines, make_health
-        self.assertIsNone(self.probe.measure_restore(self.flipped()))
-        self.assertEqual(len(self.probe.restore_unchecked), 1)
-        self.assertIn("Sketch2", self.probe.restore_unchecked[0])
-        health = make_health(HealthInputs(gap_mm=None, probe="measured", unchecked=self.probe.restore_unchecked))
+    def test_a_sketch_on_another_outline_at_the_end_is_a_change_and_one_not_read_is_unchecked(self):
+        from lib.export_plan.health import HealthInputs, design_changed, health_lines, make_health
+        self.assertEqual(self.probe.measure_restore(self.flipped()), 0.0)
+        self.assertEqual((len(self.probe.restore_changed), self.probe.restore_unchecked), (1, []))
+        self.assertIn("Sketch2", self.probe.restore_changed[0])
+        health = make_health(HealthInputs(gap_mm=0.0, probe="measured", outlines_changed=self.probe.restore_changed))
+        self.assertTrue(design_changed(health))
+        self.assertFalse(health["restore_unverified"])
         self.assertTrue(any("Sketch2" in line for line in health_lines(health)))
-        stayed = make_health(HealthInputs(gap_mm=0.0, probe="measured", flipped=["Sketch2"]))
-        self.assertEqual(sum("Sketch2" in line for line in health_lines(stayed)), 1)
+        unread = read_at()
+        del unread["sketches"]["sk2"]
+        self.assertIsNone(self.probe.measure_restore(unread))
+        self.assertEqual((self.probe.restore_changed, len(self.probe.restore_unchecked)), ([], 1))
         self.assertEqual(self.probe.measure_restore(read_at()), 0.0)
-        self.assertEqual(self.probe.restore_unchecked, [])
+        self.assertEqual((self.probe.restore_unchecked, self.probe.restore_changed), ([], []))
 
 
 def runner_port(fusion, keeper=None):

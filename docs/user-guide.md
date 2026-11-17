@@ -46,7 +46,10 @@ Nothing is typed in Fusion.
    - `# More sizes`: parameters you did not tick that also change the part, or that could not be tried. Tick them and
      export again to get them as sizes.
    - `# Check your design`: shown first, and only when something is wrong: a parameter that did not go back, sketches
-     that did not come back to their first shape, or sketches that could not be measured.
+     that did not come back to their first shape or came back on another outline, a part whose volume or size is not
+     as before, timeline steps with a new warning or error, or sketches that could not be measured. When a try left
+     a step changed and the add-in could not bring it back, it says that the tries stopped early, after which try,
+     and which step. Use Undo in Fusion when this section says your design is changed.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
    box.
