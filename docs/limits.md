@@ -203,11 +203,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   a sweep marks every size written before it.
 - A pipe is copied when its section is a circle, solid or hollow, and it runs once along its whole path. It is
   written as the sweep of that circle (a ring when hollow), square to the path where the path starts and centred on
-  it, so the sweep rules above hold for its path. The section size follows a size as the circle's diameter, and the
-  wall of a hollow pipe goes inward. A size that moves the start of the path is marked "may give unexpected
-  results", since the copy keeps the section where it was measured. These pipes are left out: a square or triangle
-  section (Fusion does not say which way the section turns), a pipe along only part of its path, and a path with a
-  sharp corner (how Fusion builds a pipe there is not known yet). The Orca output leaves every pipe out.
+  it, so the sweep rules above hold for its path; sharp corners are mitred, as Fusion builds them. The section size
+  follows a size as the circle's diameter, and the wall of a hollow pipe goes inward; the ranges stop where the
+  wall would close the hole. A size that moves the start of the path is marked "may give unexpected results", since
+  the copy keeps the section where it was measured. These pipes are left out: a square or triangle section (Fusion
+  does not say which way the section turns), a pipe along only part of its path, and a closed path that starts on a
+  sharp corner (a closed path of lines only always does). The Orca output leaves every pipe out.
 - A loft is copied when it joins two closed outlines with free ends and no rails or centre line. An outline is a
   sketch outline, a closed loop of edges in one plane or a flat face; a loop of edges or a face is copied as measured,
   and the sizes that may move it are marked. It is written
