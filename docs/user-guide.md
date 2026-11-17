@@ -134,7 +134,9 @@ design broken (a step stays in error even with your values back), the tries stop
 fail for that reason; the result window says so. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
 tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
-the sizes behind its taper and its outline, and those ranges stop where the cut would close.
+the sizes behind its taper and its outline, and those ranges stop where the cut would close. A length or a count
+that is a formula of sizes (for example a join of `Tall - Low`) gets the same kind of range: the ranges stop where the
+length would reach zero or the count would go under 1, and the formula stays.
 
 The box "Faster tries" under the body picker is on to start with. The tries then also turn off the timeline steps of
 other components that the body does not use, so each try rebuilds less. Every step is turned back on when the tries

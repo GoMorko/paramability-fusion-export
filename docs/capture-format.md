@@ -1806,7 +1806,10 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - A value is written as `{ "expr": formula }` (never `{ "size": ... }`) when its expression translates, reads at least
   one free size and equals the measured number within 1e-6 once scaled to the unit of the field (a plain number in a
   length is read in the parameter's unit or the design's, whichever gives Fusion's number). Lengths written as absolute
-  values (extrude and hole depths, spacing) must also stay above zero over the size range; counts at least 1.
+  values (extrude and hole depths, spacing) must also stay above zero over the size range; counts at least 1. When
+  one does not, the ranges of the untyped sizes it reads are cut where it does (above 0.005 mm, a count at least 1)
+  and the formula is kept ("would leave its working range"); only when no cut keeps it is it a number with its sizes
+  marked (`values._kept_above`).
   A negative parameter is written negated.
 - Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole
   tip outlines and counterbore or countersink sizes follow sizes point by point.
@@ -2304,7 +2307,7 @@ values are the answer. A motion file without `unmeasured` (written by hand) says
 - An angle the step needs above zero (a draft, a revolve) that reaches zero inside the size ranges cuts the ranges
   of the untyped sizes it reads where it stays above 0.005 degrees ("needs an angle above zero"), since the default
   range of an angle under 45 degrees starts at 0; only when no cut keeps it are they marked. A length or count that
-  leaves its working range still marks its sizes.
+  leaves its working range is cut the same way.
 
 ### Measured references in the motion file (`lib/probe/ref_fit.py`)
 
