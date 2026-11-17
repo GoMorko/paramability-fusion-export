@@ -42,6 +42,18 @@ class TrailTest(unittest.TestCase):
             self.assertTrue(faulthandler.is_enabled())
         self.assertEqual(faulthandler.is_enabled(), was)
 
+    def test_a_slow_stage_writes_its_start_and_its_end_with_the_seconds_also_when_it_fails(self):
+        with trail.session("export"):
+            with trail.stage("end check"):
+                self.assertEqual(_lines()[-1], "end check: start")
+            with self.assertRaises(ValueError):
+                with trail.stage("full compute"):
+                    raise ValueError("x")
+        lines = _lines()
+        self.assertRegex(lines[2], r"^end check: end, \d+\.\d s$")
+        self.assertEqual(lines[3], "full compute: start")
+        self.assertRegex(lines[4], r"^full compute: end, \d+\.\d s$")
+
     def test_a_trail_that_cannot_be_written_never_stops_the_export(self):
         trail.ROOT = os.path.join(self.folder, "missing")
         open(trail.ROOT, "w").close()  # a file where the folder should be

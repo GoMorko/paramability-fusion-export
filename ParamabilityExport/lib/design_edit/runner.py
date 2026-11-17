@@ -138,11 +138,12 @@ class RowExport:
             self._check_next = self._others_left()
         if self.not_back is None and self._check_next:
             self._check_next = self._check_others = False
-            if self.before_check is not None:
-                self.before_check()
-            worse = self._worse()
-            if worse:
-                worse = self._recover(worse)
+            with trail.stage("check after a row"):
+                if self.before_check is not None:
+                    self.before_check()
+                worse = self._worse()
+                if worse:
+                    worse = self._recover(worse)
             self.back_clean = worse == []  # None: the steps could not be read
             if worse:
                 self.not_back = {"after": self._last, "items": [c["name"] for c in worse],
@@ -158,6 +159,7 @@ class RowExport:
             return None
         return [c for c in changes(self._steps, now) if is_worse(c)]
 
+    @trail.staged("read steps against the baseline")
     def _worse(self):
         """The steps worse than in the baseline with the parameters back, read again after one full recompute when
         any is: a rebuild of only the changed steps can leave a state that a full one clears. None when the steps
@@ -171,6 +173,7 @@ class RowExport:
             pass
         return self._worse_now()
 
+    @trail.staged("walk back")
     def walk_back(self, row, attempt, at=None):
         """Attempt number `attempt` to bring the design back the way `row` took it away (`walk_back.settings`): its
         sizes set from the other side of their start values, or in steps from the values tried, then every parameter
@@ -196,6 +199,7 @@ class RowExport:
             entry["failed"] = failed
         return True
 
+    @trail.staged("recover steps")
     def _recover(self, worse):
         """Try to bring the design back the way the row run last took it away (`walk_back`), at most
         `walk_back.ATTEMPTS` times, the parameters put back after each attempt. Stops at the first attempt after which
