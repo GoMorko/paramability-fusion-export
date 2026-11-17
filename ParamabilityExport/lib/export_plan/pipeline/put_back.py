@@ -5,6 +5,7 @@ import dataclasses
 from ...design_edit.restore import restore_parameters
 from ...design_edit.timeline_health import FULL_COMPUTE, VALUES_AGAIN, read_timeline, settle_timeline
 from ...geometry.tolerances import RESTORE_TOLERANCE_MM
+from ...timing import trail
 from .. import health as health_module
 from ..timeline_trim import TryTimeline
 from ..undo_steps import drop_after
@@ -109,7 +110,8 @@ class PutBack:
         self._tries_back = run
         self.keeper = run.keeper
         try:
-            self.restore()
+            with trail.stage("put back values after the tries"):
+                self.restore()
         except Exception as exc:
             self.port.log(f"putting the design back after the tries failed: {exc!r}")
         # The check the last try asked for compares with the baseline of the tries, read with the same items off.
@@ -129,14 +131,14 @@ class PutBack:
         a probe), `read_body()` what of the body differs from its start (`states.BodyCheck`, None when it cannot be
         compared; not given without a probe). The body is read once the marker is back, before the end check, and
         again after it when the end check rebuilt the whole design (`_body_after`)."""
-        with self.timing.span("restore"):
+        with self.timing.span("restore"), trail.stage("put back values at the end"):
             self.restore()
             self.end_trim()
-        with self.timing.span("probe"):
+        with self.timing.span("probe"), trail.stage("read sketches at the end"):
             gap = read_gap()
-        with self.timing.span("restore"):
+        with self.timing.span("restore"), trail.stage("put back the marker at the end"):
             self._end_roll()
-        with self.timing.span("probe"):
+        with self.timing.span("probe"), trail.stage("read body before the end check"):
             before = self._body(read_body)
         with self.timing.span("restore"):
             self._settle_steps()
@@ -152,7 +154,8 @@ class PutBack:
             return
         end = before
         if self.settled is not None and FULL_COMPUTE in self.settled.actions:
-            end = self._body(read_body)
+            with trail.stage("read body after the end rebuild"):
+                end = self._body(read_body)
             if end is not None and before is not None and not before.texts and end.texts:
                 self.body_unconfirmed = end.texts
                 return
@@ -190,7 +193,8 @@ class PutBack:
         if settled is None or not any(a in (FULL_COMPUTE, VALUES_AGAIN) for a in settled.actions):
             return gap, None
         try:
-            after = measure()
+            with trail.stage("read sketches after the end rebuild"):
+                after = measure()
         except Exception as exc:
             self.port.log(f"reading the sketches after the end rebuild failed: {exc!r}")
             return gap, None
@@ -271,7 +275,8 @@ class PutBack:
         self._note_undo()
         self._note_health(lambda: health)
         self.restore()
-        self._end_roll()
+        with trail.stage("put back the marker"):
+            self._end_roll()
         self._warn_left_off()
         drop_after(self.port.undo_steps, health)
 

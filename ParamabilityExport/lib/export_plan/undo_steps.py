@@ -9,6 +9,7 @@ command's current step without undo data and starts a new one. The tries call it
 Fail safe: when the call is missing, raises or answers False, no further call is made and the export goes on as
 without the experiment. `record` is the `timing.undo` block of `report.json` (docs/capture-format.md).
 """
+from ..timing import trail
 from . import health as health_module
 
 
@@ -33,6 +34,7 @@ class UndoSteps:
         except Exception:
             pass
 
+    @trail.staged("drop undo data")
     def drop(self):
         """End the command's current step without undo data. Never raises."""
         if self._begin is None:

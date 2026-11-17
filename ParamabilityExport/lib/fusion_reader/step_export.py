@@ -99,11 +99,8 @@ def export_body_step(design, body, path, route=None):
     The root export is used when the body is the only solid body in the design. Otherwise the body is copied into a
     temporary component, written, and the copy is deleted. Fusion places the copy's timeline items at the marker;
     afterwards the marker goes back to where it was."""
-    trail.line("STEP file: start")
-    try:
+    with trail.stage("STEP file"):
         _export_body_step(design, body, path, route)
-    finally:
-        trail.line("STEP file: end")
 
 
 def _export_body_step(design, body, path, route):

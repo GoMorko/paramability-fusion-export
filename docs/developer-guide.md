@@ -5702,6 +5702,11 @@ lost when Fusion closes suddenly. The trail is not lost. Its rules are:
   the stack of each thread to the file. At the end of the session, `faulthandler` goes back to how it was.
 - `trail.line(text)` writes one line with the time. It calls `flush()` and `os.fsync()` before it returns, so the line
   is on the disk when Fusion crashes in the next call. A line outside a session goes to the end of the file.
+- `trail.stage(name)` (or the decorator `trail.staged(name)`) wraps a slow part of the export. It writes the line
+  `name: start` before the part and `name: end, N.N s` after it, also when the part raises. When the file shows a
+  `start` line with no `end` line after it, the export is in that part or Fusion stopped in it. The table below
+  lists the stages. They cover the work after the tries and at the end of the export; a gap in time between two lines
+  that is not inside a stage means the missing part has no stage yet.
 - No call raises. When the file cannot be written, the trail stops and the export goes on.
 - The tests write the trail to a temp folder of their own (`tests/context.py` sets `trail.ROOT`).
 
@@ -5713,9 +5718,15 @@ The lines come from these places:
 | `fusion_reader/capture.py` | each marker move, the start and the finish of each item (index, type, name), each call of a before or after reader (index, type), a reader that failed, the tool pass, the read of the sketch links and graphs, and the marker back |
 | `fusion_reader/helper_pass.py` | each marker move for the tool bodies of other components |
 | `fusion_reader/read_gap_reach.py` | each marker move of the reach read |
-| `fusion_reader/rows.py`, `DesignParameterStore` | the start and the end of each recompute, and each parameter value that it sets |
+| `fusion_reader/rows.py`, `DesignParameterStore` | the stages "recompute", "turn off N timeline items", "turn on N timeline items", "turn on N timeline items (end check)", and "marker A to B (roll, unroll, return or keep)" (only when the marker reads elsewhere); each parameter value that it sets |
 | `design_edit/runner.py`, `RowExport` | each try (number, name, values) and the parameters set back before the next try |
-| `fusion_reader/step_export.py`, `export_body_step` | the start and the end of each STEP file |
+| `fusion_reader/step_export.py`, `export_body_step` | the stage "STEP file" |
+| `design_edit/timeline_health.py` | the stages "read timeline", "end check" (`settle_timeline`), "full compute" (the rebuild of the end check) and "values again" |
+| `design_edit/runner.py`, `RowExport` | the stages "check after a row", "read steps against the baseline", "recover steps" and "walk back" |
+| `export_plan/pipeline/put_back.py`, `PutBack` | the stages "put back values after the tries", "put back values at the end", "read sketches at the end", "put back the marker at the end", "put back the marker", "read body before the end check", "read sketches after the end rebuild" and "read body after the end rebuild" |
+| `export_plan/pipeline/probe_run.py`, `ProbeRun` | the stages "check after the last try", "put sketches back after the tries", "read outlines after the tries", "walk back after the tries" and "put sketches back" |
+| `export_plan/probe_flow/size_probe.py`, `SizeProbe` | the stages "compare sketches with the start", "read body start" and "read body at the end" |
+| `export_plan/undo_steps.py`, `UndoSteps.drop` | the stage "drop undo data" |
 
 A line costs one write to the disk. The lines are short and come one or a few per Fusion call, so the cost is small
 next to the Fusion call itself.

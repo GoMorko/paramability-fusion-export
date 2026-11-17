@@ -6,6 +6,7 @@ from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
 from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, same_shape, series
 from ...probe.state import ProbeState
+from ...timing import trail
 from ...design_model.tried_ranges import part_step
 from ...sketch_values.motion import SHAPE, UNREAD
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
@@ -540,6 +541,7 @@ class SizeProbe:
         against the states this probe read. None when the capture has no sketch graphs."""
         return derived.shadow(self.capture, self.table, self.states, self.motion)
 
+    @trail.staged("compare sketches with the start")
     def _gap(self, after):
         """Largest difference in mm between E0 and a read after the restore, over the covered values and the places of
         the measured references (one that cannot be read again is left out). A followed sketch whose outline does not
@@ -578,6 +580,7 @@ class SizeProbe:
         self.restore_changed = list(dict.fromkeys(self.restore_changed))
         return None if self.restore_unchecked else gap
 
+    @trail.staged("read body start")
     def keep_body_start(self):
         """Read the target body now and keep it as the start of the end check (`measure_body`). Called once, after the
         first rebuild of the tries with every value at its start: E0 is read before any rebuild, and a rebuild alone
@@ -589,6 +592,7 @@ class SizeProbe:
         if isinstance(read, dict) and MARKER_LOST not in (read.get("unread") or {}) and body_compared(read, read):
             self.body_start = read
 
+    @trail.staged("read body at the end")
     def measure_body(self):
         """Read the target body now and compare it with its start (`body_start`, else E0): its box, its volume and
         the number of its solids, and the other bodies of its component against E0, which reads every timeline item

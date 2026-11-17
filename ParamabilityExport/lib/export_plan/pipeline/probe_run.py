@@ -8,6 +8,7 @@ from ...design_edit.runner import ExportCancelled, RowExport, row_key
 from ...design_edit.store import timeline_control
 from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
+from ...timing import trail
 from ...timing.timer import Timer, rounded
 from .. import messages
 from ..time_limit import limit_text
@@ -313,6 +314,7 @@ class ProbeRun:
             self.port.log(f"size probe read failed: {exc!r}")
             return None
 
+    @trail.staged("put sketches back")
     def _put_back(self, key=None, last=False, full=False, off=()):
         """Move every point of the kept sketches that left its place back to it and rebuild once, then read the
         outlines again (the whole state with `full`); the read is kept in `backs` under `key`. The rebuild runs also
@@ -505,6 +507,7 @@ class ProbeRun:
             self._check_reads()
         self.probe.add_states(self.probe_states(done))
 
+    @trail.staged("check after the last try")
     def check_pending(self):
         """Run the check of the timeline steps that the row run last asked for (`RowExport.check_pending`), with every
         value back. A step that stays worse stops the tries there, and the probe is told (`note_stop`). Never raises: a
@@ -517,6 +520,7 @@ class ProbeRun:
             self.job.back_clean = False
             self.port.log(f"checking the steps after the last try failed: {exc!r}")
 
+    @trail.staged("put sketches back after the tries")
     def settle(self):
         """Run the check the last row asked for (`check_pending`), then put the followed sketches back when they read
         otherwise than at E0 now, with the values back, so the design is left on the solution it had: the keeper first,
@@ -527,7 +531,8 @@ class ProbeRun:
         self.check_pending()
         self.end = EndRead()
         try:
-            read = self._mark(self._read_now({}, outline=True))
+            with trail.stage("read outlines after the tries"):
+                read = self._mark(self._read_now({}, outline=True))
             if self.probe.left_start(read):
                 read = self._put_back(last=True, off=self.probe.off_start(read)) or read
                 read = self._walk_back(read)
@@ -541,6 +546,7 @@ class ProbeRun:
         if self.end.back is True and self.job.back_clean and self.job.not_back is None:
             self._drop_undo()
 
+    @trail.staged("walk back after the tries")
     def _walk_back(self, read):
         """After the tries: for the sketches still off their start in `read`, walk back alone each size that the rows
         run since they last read as at E0 moved (`walk_back.one_size_moves`: once per side of its start value, the last

@@ -47,6 +47,11 @@ class DesignParameterStore:
             pass
 
     def suppress_items(self, items):
+        """Suppress the timeline items until `unsuppress_items`, in a trail stage (`_suppress_items`)."""
+        with trail.stage("turn off %d timeline items" % len(items)):
+            return self._suppress_items(items)
+
+    def _suppress_items(self, items):
         """Suppress the timeline items `items` ((index, name) pairs) until `unsuppress_items`, then rebuild once.
         Returns how many read suppressed after. Nothing is touched, and 0 is returned, when one of them is not as the
         capture saw it: another name at that index, suppressed already, a group, or unreadable."""
@@ -77,6 +82,11 @@ class DesignParameterStore:
         return count
 
     def unsuppress_items(self):
+        """Turn the suppressed items back on, in a trail stage (`_unsuppress_items`)."""
+        with trail.stage("turn on %d timeline items" % len(self._suppressed)):
+            return self._unsuppress_items()
+
+    def _unsuppress_items(self):
         """Turn the items `suppress_items` suppressed back on, last first, then rebuild once. Items that were
         suppressed before are never touched. Returns the names that still read suppressed."""
         left = []
@@ -98,6 +108,11 @@ class DesignParameterStore:
         return left
 
     def turn_on(self, steps):
+        """Turn the listed items on, in a trail stage (`_turn_on`)."""
+        with trail.stage("turn on %d timeline items (end check)" % len(steps)):
+            return self._turn_on(steps)
+
+    def _turn_on(self, steps):
         """Unsuppress the timeline items `steps` ((index, name) pairs) that read suppressed, skipping an index that now
         holds another name. Returns the names that still read suppressed. The caller rebuilds."""
         left = []
@@ -115,7 +130,20 @@ class DesignParameterStore:
 
     def _keep_marker(self):
         if self.marker is not None:
-            put_back(self.design.timeline, self.marker)
+            self._put_marker(self.marker, "keep")
+
+    def _put_marker(self, marker, what):
+        """`put_back` of the marker to `marker` (`marker.put_back`), in a trail stage when the marker reads elsewhere."""
+        timeline = self.design.timeline
+        try:
+            now = timeline.markerPosition
+            there = timeline.count if at_end(marker) else marker["position"]
+        except Exception:
+            return put_back(timeline, marker)
+        if now == there:
+            return put_back(timeline, marker)
+        with trail.stage("marker %s to %s (%s)" % (now, there, what)):
+            return put_back(timeline, marker)
 
     def return_marker(self):
         """Put the marker back where the store keeps it when it reads elsewhere: "" when it was there or cannot be
@@ -129,7 +157,7 @@ class DesignParameterStore:
                 return ""
         except Exception:
             return ""
-        return "moved" if put_back(timeline, self.marker) else "lost"
+        return "moved" if self._put_marker(self.marker, "return") else "lost"
 
     def keep_marker(self):
         """Move the marker back to where the store holds it, when a read left it earlier. True when it reads there (or
@@ -137,7 +165,7 @@ class DesignParameterStore:
         if self.marker is None:
             return True
         try:
-            return put_back(self.design.timeline, self.marker)
+            return self._put_marker(self.marker, "keep")
         except Exception:
             return False
 
@@ -158,7 +186,7 @@ class DesignParameterStore:
             return False
         self._home, self.marker = self.marker, {"position": position, "count": self.marker["count"]}
         self._rolled_with = self._expressions()
-        if put_back(self.design.timeline, self.marker):
+        if self._put_marker(self.marker, "roll"):
             return True
         self.unroll_marker()
         return False
@@ -170,7 +198,7 @@ class DesignParameterStore:
         if self._home is None:
             return True
         self.marker, self._home = self._home, None
-        moved = put_back(self.design.timeline, self.marker)
+        moved = self._put_marker(self.marker, "unroll")
         before, self._rolled_with = self._rolled_with, None
         if before is None or self._expressions() != before:
             self._rebuild()
@@ -227,11 +255,10 @@ class DesignParameterStore:
         return self.design.userParameters.itemByName(name).value
 
     def recompute(self):
-        trail.line("recompute: start")
         try:
-            return self.design.computeAll()
+            with trail.stage("recompute"):
+                return self.design.computeAll()
         finally:
-            trail.line("recompute: end")
             self._keep_marker()
 
     def error_entries(self):

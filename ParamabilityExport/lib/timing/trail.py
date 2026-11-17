@@ -4,7 +4,7 @@ file still tells the last step when Fusion crashes in the middle of an export.
 The file is `<temp folder>/ParamabilityExport/export-trail.log` (`path()`). An export, and the dialog's read of a
 picked body, run inside `session(title)`: the outermost session empties the file first, so the file holds only the
 last one, and turns on `faulthandler`, which writes the Python stack of every thread to the same file when the
-process crashes. `line(text)` adds one line, with the time, and pushes it to the disk before it returns. A line
+process crashes. `stage(name)` wraps a slow part with a start line and an end line with its seconds. `line(text)` adds one line, with the time, and pushes it to the disk before it returns. A line
 outside a session is added to the file of the last session. Nothing here raises: when the file cannot be written, the
 trail is dropped and the export goes on.
 
@@ -12,6 +12,7 @@ The trail is one file per process, so its state is kept at module level, unlike 
 """
 import contextlib
 import faulthandler
+import functools
 import os
 import tempfile
 import time
@@ -93,6 +94,29 @@ def _close():
             handle.close()
     except Exception:
         pass
+
+
+@contextlib.contextmanager
+def stage(name):
+    """A slow part of the export: the line "`name`: start" before the block and "`name`: end, N.N s" after it (also
+    when it raises), so the file tells where the time went when a part is slow."""
+    line("%s: start" % name)
+    began = time.monotonic()
+    try:
+        yield
+    finally:
+        line("%s: end, %.1f s" % (name, time.monotonic() - began))
+
+
+def staged(name):
+    """A decorator that runs the function in `stage(name)`."""
+    def wrap(function):
+        @functools.wraps(function)
+        def run(*args, **kwargs):
+            with stage(name):
+                return function(*args, **kwargs)
+        return run
+    return wrap
 
 
 @contextlib.contextmanager

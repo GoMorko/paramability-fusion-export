@@ -14,6 +14,7 @@ the steps in error (`apply.error_entries`); the other steps then count as fine.
 """
 from .apply import error_entries, set_all
 from .restore import restore_parameters
+from ..timing import trail
 from .store import timeline_control
 
 OK, WARNING, ERROR = "ok", "warning", "error"
@@ -51,6 +52,7 @@ def _step(entry):
     }
 
 
+@trail.staged("read timeline")
 def read_timeline(store):
     """The steps as they are now (`TimelineRead`), or None when they cannot be read. Never raises."""
     full = timeline_control(store, "timeline_health")
@@ -126,6 +128,7 @@ def _recompute(store, log):
         log(f"rebuilding the design after the export failed: {exc!r}")
 
 
+@trail.staged("values again")
 def _values_again(store, saved, log):
     """Set every parameter to its start expression once more, in one change when the store can, then rebuild the whole
     design. Never raises."""
@@ -178,6 +181,7 @@ class TimelineSettle:
         return [c["name"] for c in self.changed if c["after"] == ERROR and c["before"] != ERROR]
 
 
+@trail.staged("end check")
 def settle_timeline(store, start, saved, log=lambda text: None):
     """Compare the steps now with `start` (`read_timeline` at the start of the export) once everything else is put
     back, and bring back what can be brought back. Never raises.
@@ -200,7 +204,8 @@ def settle_timeline(store, start, saved, log=lambda text: None):
     if first:
         if _turn_on(store, first, log):
             actions.append(TURNED_ON)
-        _recompute(store, log)
+        with trail.stage("full compute"):
+            _recompute(store, log)
         actions.append(FULL_COMPUTE)
         now = read_timeline(store) or now
         if any(is_worse(c) for c in changes(start, now)):
