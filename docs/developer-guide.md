@@ -2099,7 +2099,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `reach.py`: which ticked sizes can move something that a step uses. Each
   function reads the size table and the capture only. No function says what a copy does about a size. The recipe
   output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
-  - The sizes behind the model parameters of the design. `sketch_params` and `sketch_sizes` give the sizes behind the
+  - The sizes behind the model parameters of the design. These functions are in `param_reach.py`, and `reach.py`
+    gives the same names. `sketch_params` and `sketch_sizes` give the sizes behind the
     dimensions of a sketch. `linked_sizes` gives the sizes that reach the sketch through the geometry of another
     component (`table.links`). `construction_sizes` gives the sizes behind construction planes or axes.
     `joint_reasons` gives the sizes that a joint reads. `text_sizes` gives the sizes that set the height of a sketch
@@ -2127,10 +2128,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
     or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
     origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
-    reader marks it with `origin: true` in the sketch graph. When no ticked size moves or turns the sketch plane
-    (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`, `own_origin`), as it
-    keeps the origin of the sketch. When a size moves or turns the plane, the projection moves in the sketch. Then it
-    stays a measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
+    reader marks it with `origin: true` in the sketch graph. When the export can show that no ticked size moves or
+    turns the sketch plane (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`,
+    `own_origin`), as it keeps the origin of the sketch. `plane_fixed` shows this for an origin plane, for a
+    construction plane with no ticked size behind it or behind what it is built on, and for a plane on the part when
+    the sketch item is found and no step before it reads a ticked size. In every other case, the answer is "not
+    fixed": a sketch without a reference, a sketch item that is not found, an outline that follows a face, or a sketch
+    of another component. When a size can move or turn the plane, the projection moves in the sketch. Then it stays a
+    measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
     plane are also among the sizes of the plane (`placement_sizes`), so a line of such a sketch still gets them.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a

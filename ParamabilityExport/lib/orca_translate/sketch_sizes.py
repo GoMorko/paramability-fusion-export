@@ -13,6 +13,13 @@ def _label(item):
     return item.get("name") or "the step"
 
 
+def _plane_key(profile):
+    """What `reach.plane_fixed` reads of a profile, as a key: profiles of one sketch with the same key share it."""
+    reference = profile.get("reference") if isinstance(profile.get("reference"), dict) else {}
+    return (profile.get("sketch"), reference.get("kind"), reference.get("token"), bool(reference.get("origin")),
+            tuple(bool(profile.get(k)) for k in ("foreign", "borrowed", "face", "on_start_face")))
+
+
 def sketch_formulas(ctx, profile):
     """The `SketchFormulas` of a profile's sketch, or None when its graph is missing or cannot be solved. Each sketch
     is solved once per translation (`Context.sketch_formulas`)."""
@@ -21,10 +28,10 @@ def sketch_formulas(ctx, profile):
     record = graph_for(ctx.capture, profile)
     if record is None:
         return None
-    fixed = reach.plane_fixed(ctx.table, ctx.capture.get("items") or [], profile, None)
-    key = (id(record), fixed)
+    key = (id(record), _plane_key(profile))
     if key not in ctx.sketch_formulas:
         try:
+            fixed = reach.plane_fixed(ctx.table, ctx.capture.get("items") or [], profile, None)
             ctx.sketch_formulas[key] = SketchFormulas(ctx.table, record, fixed)
         except Exception:  # a sketch that cannot be solved keeps its numbers
             ctx.sketch_formulas[key] = None
