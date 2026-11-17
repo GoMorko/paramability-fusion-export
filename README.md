@@ -33,7 +33,7 @@ learning only.
    When a change leaves a step in a new warning or error, or a sketch on its other solution, also with the values
    back, the add-in tries to bring the design back. If it cannot, it stops the changes there and tells you which
    step. At the end it compares the sketches and the volume and size of the body with the start, and tells you when
-   they differ.
+   they differ. A very small difference with nothing else changed counts as "not confirmed", not as a change.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
    Fusion made it.
 5. Paramability builds the part from the steps and compares it with the STEP shape.

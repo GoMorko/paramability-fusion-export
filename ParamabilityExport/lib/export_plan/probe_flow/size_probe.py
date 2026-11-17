@@ -16,7 +16,7 @@ from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME
                       UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
-from .states import BODY_REQUEST, body_changed, body_difference, box_numbers, marked_states, same_numbers
+from .states import BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, same_numbers
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
 OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
@@ -52,7 +52,8 @@ class SizeProbe:
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
         self.restore_unchecked = []  # "<sketch> <why>" for each sketch the restore check could not compare
         self.restore_changed = []  # "<sketch> <why>" for each sketch the restore check found on another outline
-        self.restore_body = []  # what of the body differs from E0 once the design is back (`measure_body`)
+        self.restore_body = []  # what of the body differs from its start once the design is back (`measure_body`)
+        self.body_start = None  # the body read after the first rebuild of the tries (`keep_body_start`)
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
         self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
         self._unrun = []  # the sizes of the rows planned that did not run because the tries stopped
@@ -577,17 +578,30 @@ class SizeProbe:
         self.restore_changed = list(dict.fromkeys(self.restore_changed))
         return None if self.restore_unchecked else gap
 
+    def keep_body_start(self):
+        """Read the target body now and keep it as the start of the end check (`measure_body`). Called once, after the
+        first rebuild of the tries with every value at its start: E0 is read before any rebuild, and a rebuild alone
+        can change how Fusion reports the body. Never raises; a read without a box or a volume is not kept."""
+        try:
+            read = self.read(dict(BODY_REQUEST))
+        except Exception:
+            read = None
+        if isinstance(read, dict) and MARKER_LOST not in (read.get("unread") or {}) and body_compared(read, read):
+            self.body_start = read
+
     def measure_body(self):
-        """Read the target body now (`read_body`) and compare it with E0: its box, its volume and the other bodies of
-        its component (`body_difference`). Called once every value, timeline item and the timeline marker are back.
-        Keeps and returns the texts of what differs (`restore_body`); empty when the body is as at E0 or cannot be
-        compared."""
+        """Read the target body now and compare it with its start (`body_start`, else E0): its box, its volume and
+        the number of its solids, and the other bodies of its component against E0, which reads every timeline item
+        (`body_difference`). Called once every value, timeline item and the timeline marker are back. Returns the
+        `BodyCheck`, and keeps its texts (`restore_body`); None when the two reads cannot be compared."""
         try:
             now = self.read(dict(BODY_REQUEST))
         except Exception:
             now = None
-        self.restore_body = body_difference(self.e0, now)
-        return list(self.restore_body)
+        before = self.body_start if self.body_start is not None else self.e0
+        found = body_difference(before, now, self.e0)
+        self.restore_body = found.texts if found is not None else []
+        return found
 
     def report(self):
         """The record kept in `report.json`: what was asked, what was read, and what was found."""

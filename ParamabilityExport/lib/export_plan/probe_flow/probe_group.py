@@ -5,7 +5,7 @@ from ...probe import plan
 from ..part_names import tagged
 from .row_schedule import RowSchedule
 from .shadow import shadow_of
-from .states import marked_states
+from .states import BodyCheck, marked_states
 
 
 class ProbeGroup:
@@ -177,10 +177,19 @@ class ProbeGroup:
         """The sketches the restore check found on another outline, led by the part."""
         return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.restore_changed]
 
+    def keep_body_start(self):
+        """Keep the body of each part as the start of its end check (`SizeProbe.keep_body_start`)."""
+        for probe in self.probes:
+            probe.keep_body_start()
+
     def measure_body(self):
-        """What differs of each part's body from its E0 once the design is back (`SizeProbe.measure_body`), led by the
-        part."""
-        return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.measure_body()]
+        """What differs of each part's body from its start once the design is back (`SizeProbe.measure_body`), led by
+        the part; None when one part cannot be compared."""
+        checks = [probe.measure_body() for probe in self.probes]
+        if any(check is None for check in checks):
+            return None
+        return BodyCheck([tagged([name], why) for name, check in zip(self.names, checks) for why in check.clear],
+                         [tagged([name], why) for name, check in zip(self.names, checks) for why in check.small])
 
     @property
     def motions(self):

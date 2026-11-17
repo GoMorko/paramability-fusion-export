@@ -830,9 +830,11 @@ show a change inside the body, for example a deeper pocket or a wider hole. The 
 (`probe.state.body_changed`). The area of the body is not read: it would cost a second computation of the body at
 each try. It would show only a change that keeps the box and the volume exactly as they were. Such a change is rare.
 
-A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
+A state also holds `pieces`: `{ lumps, others, names }`. `lumps` is the number of solids that the picked body holds
 (`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
-there are more than 64 of them (`MAX_OTHER_BODIES`). Reading them recomputes nothing. The reason for this read: the app
+there are more than 64 of them (`MAX_OTHER_BODIES`). `names` gives the name of each of these bodies (`BRepBody.name`)
+in the same order. It is left out when a name is missing or two bodies have the same name. The end check of the body
+uses the names to compare each body with the same body. Reading them recomputes nothing. The reason for this read: the app
 builds a part only while it is one connected solid. Fusion also builds a part in several pieces. A body can hold several
 solids. A cut can cut the body in two. A join whose new material does not touch the body makes a new body beside it.
 
@@ -1654,12 +1656,16 @@ fixed points. The order is the same for one body and for several bodies:
 2. `hold_timeline`: before the tries, hold the marker early and turn off the items the tries do not use
    (`TryTimeline.begin`). The try runner calls `end_trim` before the discovery rows, since those rows look for links
    to other components.
-3. `tries_done(run)` after the tries, and `tries_ended(run)` on every way out of them: the values and the items go
-   back, and a sketch left on another solution is put back (`ProbeRun.settle`), before the probe's last read.
+3. `tries_done(run)` after the tries, and `tries_ended(run)` on every way out of them: the values go back, the check of
+   the steps that the last try asked for runs (`ProbeRun.check_pending`, see "The check after a row, and the stop"),
+   the items go back, and a sketch left on another solution is put back (`ProbeRun.settle`), before the probe's last
+   read. `ProbeRun.end` (`EndRead`) keeps what the last read of `settle` found: whether the followed sketches read as
+   at the start (`back`: True, False, or None when the read failed), and when they do not, the gap and the sketches
+   on another outline.
 4. `settle(read_gap, read_outline_gap, read_body)` once the export is made: the values and the items back, the sketch
-   gap read, the marker back, the end check of the timeline steps (next part), the outlines read again when the end
-   check rebuilt the design, and, last, the body compared with its start (`read_body`, see "The end check of the
-   body").
+   gap read, the marker back, the body compared with its start (`read_body`), the end check of the timeline steps
+   (next part), and the outlines and the body read again when the end check rebuilt the whole design (see "The end
+   check of the body").
 5. `close(health)` when the export is made. It gives the health to the outcome (`rollback.ExportOutcome`). It puts the
    values and the marker back once more, names the items that
    stayed off (`_warn_left_off`) and, as its last call, drops the last Undo step when the health record says the design
@@ -1787,18 +1793,42 @@ only the steps that the end check does not name already.
 
 A sketch read does not see every change. A fully constrained sketch can solve to its other solution with the same
 points and curves, only moved, and the steps built on it change the part. So the end of the export also measures the
-part itself, independent of the sketches:
+part itself, independent of the sketches.
+
+The start of the check. E0 is read before the design is rebuilt for the first time. A rebuild alone can change how
+Fusion reports the body. So the probe reads the body again before the first row of the tries
+(`ProbeRun._before_row` calls `Probe.keep_body_start`), after the baseline rebuild of the tries, with every value at
+its start. It keeps the read as `SizeProbe.body_start`. The other bodies of the component are compared with E0 instead,
+because the faster tries can turn off the steps that build them. When no row ran, the start is E0.
+
+The check, step by step:
 
 1. `SizeProbe.measure_body` reads the target body alone (`states.BODY_REQUEST`: no sketch, no parameter, the box, the
-   volume and the pieces). It runs last in `PutBack.settle`, once every value, every timeline item and the timeline
-   marker are back, so the read and E0 see the same timeline.
-2. It compares the read with E0 (`states.body_difference`): the volume (within 0.0001 mm3 or a millionth of the
-   volume), the box (within 0.0001 mm), the number of solids of the body, and the boxes of the other bodies of its
-   component.
-3. Each difference is one plain text ("its volume (1601.25 mm3 before, 1618.42 mm3 now)"). The texts go to
-   `health.body_changed` (led by the part for several bodies). The design counts as changed
-   (`health.design_changed`), so `back_as_it_was` is false, no Undo step is dropped, and the result window says so.
-4. A read that has no box, or fails, gives no difference: the check cannot tell.
+   volume and the pieces). `PutBack.settle` calls it once every value, every timeline item and the timeline marker are
+   back, before the end check of the timeline.
+2. It compares the read with the start (`states.body_difference`): the volume, the box, the number of solids of the
+   body, and the boxes of the other bodies of its component. It compares the other bodies by name when both reads name
+   them (`pieces.names`), else in the order of their boxes. The result is a `states.BodyCheck` with two lists of plain
+   texts ("its volume (1601.25 mm3 before, 1618.42 mm3 now)"):
+   - `clear`: a box that moved more than 0.01 mm (`END_BODY_BOX_MM`), a volume that changed by more than a thousandth
+     (`END_BODY_VOLUME_SHARE`), another number of solids, or another set of other bodies. A rebuild of the same shape
+     stays far below these limits. A sketch point that moved a few tenths of a mm goes past them.
+   - `small`: a difference past the tight tolerances of a read (0.0001 mm for the box, `BODY_TOLERANCE_MM`; 0.0001 mm3
+     or a millionth of the volume, `probe.state`) but under the clear limits. A real change can be this small: a
+     changed emboss outline was seen to change a volume by about two millionths.
+3. When the end check of the timeline rebuilt the whole design (`FULL_COMPUTE`), the body is read and compared again
+   after it (`PutBack._body_after`). When the body read as at its start before that rebuild, and differs only after it,
+   the difference goes to `health.body_unconfirmed`: the rebuild brought it, and the add-in cannot say that the tries
+   did.
+4. In the health record (`health.make_health`), `clear` goes to `health.body_changed` (led by the part for several
+   bodies). `small` goes to `body_changed` too when something else shows the design changed: a parameter, a sketch, a
+   step, a sketch left deferred, or tries that stopped on a damaged design. Else it goes to `body_unconfirmed`.
+5. `body_changed` counts as a changed design (`health.design_changed`). `body_unconfirmed` does not, but the design is
+   then not confirmed back (`health.back_as_it_was` is false). In both cases no Undo step is dropped and the export is
+   undone (`rollback.decide`); the window words the second case as "could not confirm".
+6. A read that has no box or no volume, or fails, cannot be compared (`measure_body` gives None). Then
+   `health.body_unchecked` is true. This matters only after tries that stopped on a damaged design: the end check must
+   then compare the sketches and the body before the design counts as back.
 
 The hand tests TH1 to TH6 in `docs/hand-tests.md` check this in Fusion: a fillet that only just fits, a sketch with
 two solutions, a chamfer that meets a fillet, a step that already shows a warning, a cancelled and a failed export,
@@ -1824,8 +1854,10 @@ How it works (`lib/export_plan/undo_steps.py`):
    afterwards. This is why the dialog shows a line that reminds the person to save first.
 4. After the export, one more call drops the Undo data of the last part of the export (`undo_steps.drop_after`,
    called by `PutBack.close` as its last call, not by the command). This happens only when the end check confirms the design is as it was (`health.back_as_it_was`): every value back, no
-   sketch drift, no step worse or left off, nothing left deferred, the steps read, the sketches compared and the
-   marker back. On any doubt the data is kept, so Undo can still help.
+   sketch drift, no step worse or left off, nothing left deferred, no difference of the body, the steps read, the
+   sketches compared and the marker back. After tries that stopped on a damaged design, the sketches and the body must
+   also have been compared. The stop alone does not keep the data when the end check confirms all of this, but the
+   window still says that the tries stopped early and why. On any doubt the data is kept, so Undo can still help.
 
 The drop rule is fail safe. When the call is missing, raises or answers False, no further call is made, and the export
 goes on as with the box off.
@@ -5325,8 +5357,10 @@ that Fusion could not build that value.
 | `sketch_drift` | True when that gap is over 0.0001 mm. The design may be changed. |
 | `restore_unverified` | True when the probe measured, but the restore could not be compared. `unchecked` says which sketch and why ("could not be read"). |
 | `outlines_changed` | Followed sketches that came back on another outline, or on a turned plane, compared by their curves (at most 5). The design is changed. |
-| `body_changed` | What of the part differs from the start once the design is back: its volume, its size or place, the number of its pieces, the other bodies of its component (at most 5). The design is changed. |
-| `tries_stopped` | `{ after, items, steps? }`: the try after which a step stayed worse with the values back, the names of those steps, and `steps`, `{ name, before, after }` of each. |
+| `body_changed` | What of the part differs from the start once the design is back: its volume, its size or place, the number of its pieces, the other bodies of its component (at most 5). A small difference is here only when something else changed too (1.11, "The end check of the body"). The design is changed. |
+| `body_unconfirmed` | Small differences of the part with nothing else changed, or differences that only the end rebuild brought (at most 5). The design is not confirmed back. |
+| `body_unchecked` | True when the part could not be compared at the end. |
+| `tries_stopped` | `{ after, items, steps? }`: the try after which a step stayed worse with the values back, the names of those steps, and `steps`, `{ name, before, after }` of each. The design counts as back only when the end check also compared the sketches and the part. |
 | `probe` | `measured`, `not needed` (no sketch to follow) or `failed`. |
 | `probe_error` | The exception of a failed probe. |
 | `flipped` | Sketches that stayed on their other solution for a while during the tries. |
@@ -5828,6 +5862,8 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    `health.outlines_changed`: a sketch came back on another outline. The design is changed. Use Undo.
    `health.body_changed`: the part has another volume, size or number of pieces than at the start, although every
    sketch read may look the same. The design is changed. Use Undo, then look for a sketch with two solutions.
+   `health.body_unconfirmed`: the part differs only a little, or only after the end rebuild. The export was undone as
+   a design that is not confirmed back.
    `health.tries_stopped` with `steps`: a try left these steps worse, and the attempts to bring the design back did
    not help (`probe.recovery.walked_back`).
 7. `probe.timeline.suppressed.left_off` and `health.left_off`: timeline items that stayed suppressed after "Faster
@@ -5867,6 +5903,7 @@ When the design is not as the person left it, the cause is in the end of the exp
    | `deferred_left` | `PutBack.deferred_left` (`SketchKeeper.deferred_left`) |
    | `tries_stopped` | `ProbeRun.stopped`, kept by `PutBack.tries_ended` |
    | `undo_dropped` | `PutBack.undo_dropped` (`undo_steps.UndoSteps.record`) |
+   | `body_changed`, `body_unconfirmed`, `body_unchecked` | `PutBack.settle` and `PutBack._body_after` (`SizeProbe.measure_body`), sorted in `make_health` |
    | `probe`, `probe_error`, `flipped`, `unchecked` | The probe. The pipeline hands them to `PutBack.health_inputs`. |
 
 4. All these go into one record, `health.HealthInputs`. `health.make_health(HealthInputs(...))` makes the `health` of

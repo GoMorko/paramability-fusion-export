@@ -851,4 +851,6 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     changed even with your values back" and names the second sketch. Only the tries before it are used. Afterwards
     the triangle is on the same side as before, the second sketch and the cut have no warning, and `health` in
     `report.json` has no `steps_changed`, no `outlines_changed` and no `body_changed`. Undo is still offered when the
-    tries stopped.
+    tries stopped, unless the end check found the design changed or could not confirm it; then the export is undone
+    (see RB1). `body_changed` must not show for a design that came back: a difference with no other change is at most
+    `body_unconfirmed`.

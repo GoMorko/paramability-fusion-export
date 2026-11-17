@@ -112,7 +112,14 @@ class PiecesTest(unittest.TestCase):
         surface = body("b3")
         surface.isSolid = False
         got = state(self.design(2, [piece, surface]), target=True)["pieces"]
-        self.assertEqual(got, {"lumps": 2, "others": [{"min": [50, 0, 0], "max": [60, 10, 10]}]})
+        self.assertEqual(got, {"lumps": 2, "others": [{"min": [50, 0, 0], "max": [60, 10, 10]}], "names": ["Body1"]})
+
+    def test_other_bodies_are_not_named_when_two_share_a_name(self):
+        pieces = [body("b2", name="Body2"), body("b3", name="Body2")]
+        for piece in pieces:
+            piece.isSolid = True
+        got = state(self.design(1, pieces), target=True)["pieces"]
+        self.assertEqual((len(got["others"]), "names" in got), (2, False))
 
     def test_a_target_whose_lumps_cannot_be_read_has_no_pieces(self):
         self.assertNotIn("pieces", state(Design({}), target=True))

@@ -17,6 +17,7 @@ from lib.export_plan import health as health_module
 from lib.export_plan import undo_steps
 from lib.export_plan.pipeline import ProbeRun, run_pipeline
 from lib.export_plan.probe_flow import SizeProbe
+from lib.export_plan.probe_flow.states import body_difference
 from lib.geometry.tolerances import FLIP_TOLERANCE
 from lib.probe.same_shape import shape_gap
 
@@ -348,24 +349,87 @@ class WalkErrorTest(unittest.TestCase):
         self.assertEqual(store.exprs, START)
 
 
+def body_read(volume, box=(10, 10, 10), others=None):
+    found = {"box": {"min": [0, 0, 0], "max": list(box)}, "volume_mm3": volume, "pieces": {"lumps": 1}}
+    if others is not None:
+        found["pieces"].update(others=[{"min": [20, 0, 0], "max": [30, h, 10]} for _, h in others],
+                               names=[name for name, _ in others])
+    return found
+
+
+class BodyDifferenceTest(unittest.TestCase):
+    def test_a_rebuild_of_the_same_shape_is_no_difference_and_a_real_change_is_clear(self):
+        same = body_difference(body_read(1601.25), body_read(1601.25 * (1 + 1e-9), box=(10, 10, 10 + 1e-6)))
+        self.assertEqual((same.clear, same.small), ([], []))
+        moved = body_difference(body_read(1601.25), body_read(1618.42, box=(10, 10, 10.35)))
+        self.assertEqual((len(moved.clear), moved.small), (2, []))
+
+    def test_a_tiny_volume_change_is_small_not_clear(self):
+        found = body_difference(body_read(58384.6), body_read(58384.7))
+        self.assertEqual((found.clear, len(found.small)), ([], 1))
+
+    def test_other_bodies_are_compared_by_name_not_by_order(self):
+        a = body_read(1000.0, others=[("Lid", 5), ("Pin", 8)])
+        b = body_read(1000.0, others=[("Pin", 8), ("Lid", 5)])
+        self.assertEqual(body_difference(a, b).texts, [])
+        gone = body_read(1000.0, others=[("Pin", 8), ("Clip", 5)])
+        self.assertEqual(len(body_difference(a, gone).clear), 1)
+
+    def test_a_read_without_a_box_or_a_volume_cannot_be_compared(self):
+        self.assertIsNone(body_difference(body_read(1000.0), {"volume_mm3": 1000.0}))
+        self.assertIsNone(body_difference(body_read(1000.0), dict(body_read(1000.0), volume_mm3=None)))
+
+
 class EndCheckTest(unittest.TestCase):
-    def test_a_body_that_differs_at_the_end_is_a_changed_design_with_a_warning(self):
+    def export(self, volumes, store=None, steps=None):
+        """The health of one export whose body reads in turn `volumes` (mm3; the last one repeats) after its E0."""
         from tests.test_pipeline import request
-        port = None
+        port, seen = None, []
 
         def reader(request):
             found = dict(port.e0, box={"min": [0, 0, 0], "max": [10, 10, 10]}, volume_mm3=1000.0)
-            if request.get("target") and not request.get("sketches"):  # the body read after the export
-                found["volume_mm3"] = 1010.0
+            if request.get("target") and not request.get("sketches"):  # a read of the body alone
+                found["volume_mm3"] = volumes[min(len(seen), len(volumes) - 1)]
+                seen.append(found["volume_mm3"])
             return found
 
-        port = FakePort(reader=reader)
+        port = FakePort(reader=reader, store=store)
         with tempfile.TemporaryDirectory() as tmp:
-            health = run_pipeline(port, dataclasses.replace(request(), faster_tries=False), tmp).health
-        self.assertTrue(health["body_changed"])
+            return run_pipeline(port, dataclasses.replace(request(), faster_tries=False), tmp).health
+
+    def test_a_body_that_differs_at_the_end_is_a_changed_design_with_a_warning(self):
+        health = self.export([1000.0, 1010.0])
+        self.assertEqual(len(health["body_changed"]), 1)
         self.assertTrue(health_module.design_changed(health))
         self.assertFalse(health_module.back_as_it_was(health))
-        self.assertTrue(any("1010" in text for text in health_module.health_lines(health)))
+        self.assertTrue(health_module.health_lines(health))
+
+    def test_the_start_of_the_body_is_read_after_the_first_rebuild(self):
+        # E0 reads 1000 before any rebuild; every read of the body alone after it reads 1001.
+        health = self.export([1001.0])
+        self.assertTrue(health_module.back_as_it_was(health))
+
+    def test_a_tiny_difference_alone_is_not_confirmed_and_with_a_changed_outline_is_a_change(self):
+        alone = make_health_with(body_small=["its volume"])
+        self.assertNotIn("body_changed", alone)
+        self.assertFalse(health_module.design_changed(alone))
+        self.assertFalse(health_module.back_as_it_was(alone))
+        backed = make_health_with(body_small=["its volume"], outlines_changed=["Sketch2 reads another outline"])
+        self.assertEqual(backed["body_changed"], ["its volume"])
+
+    def test_tries_that_stopped_are_back_when_the_end_check_confirms_every_part(self):
+        stopped = {"after": "off (max)", "items": ["Sketch5"]}
+        confirmed = make_health_with(stopped=stopped, gap_mm=0.0)
+        self.assertTrue(health_module.back_as_it_was(confirmed))
+        self.assertTrue(health_module.health_lines(confirmed))  # the stop is still told
+        for missing in ({"gap_mm": None}, {"gap_mm": 0.0, "body_unchecked": True}):
+            with self.subTest(missing=missing):
+                self.assertFalse(health_module.back_as_it_was(make_health_with(stopped=stopped, **missing)))
+
+
+def make_health_with(**inputs):
+    inputs.setdefault("gap_mm", 0.0)
+    return health_module.make_health(health_module.HealthInputs(probe=health_module.MEASURED, **inputs))
 
 
 if __name__ == "__main__":

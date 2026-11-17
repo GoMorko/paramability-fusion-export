@@ -15,6 +15,7 @@ from tests.test_timeline_trim import trim_capture
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
 from lib.export_plan import undo_steps
+from lib.export_plan import health as health_module
 from lib.export_plan.pipeline import ProbeRun, run_parts_pipeline, run_pipeline
 
 # Store calls made before every read; they say nothing about the order of the put back.
@@ -203,6 +204,9 @@ START_TWO = ["store.saved_expressions", "store.timeline_health", "read(full)", "
              "read(full)", "read(full)", "store.suppress_items([6, 7])", "read(full)", "read(full)"]
 # The end check with nothing changed: the marker back, then the steps compared with the start.
 END_CHECK = ["store.unroll_marker", "store.return_marker", "store.timeline_health"]
+# The same with a probe: the body is read once the marker is back, before the steps are compared (once per body).
+END_BODY = ["store.unroll_marker", "read(full)", "store.return_marker", "store.timeline_health"]
+END_TWO = ["store.unroll_marker", "read(full)", "read(full)", "store.return_marker", "store.timeline_health"]
 # The end check found a changed step: a full rebuild, then the steps and the marker read again.
 FULL_COMPUTE = ["store.recompute", "store.timeline_health"]
 VALUES_AGAIN = ["store.set_expressions(8 values)", "store.current_expressions", "store.recompute",
@@ -221,8 +225,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "read(full)",  # the discovery base
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",  # tries done
             "read(full)",  # the probe's last read
-            "store.current_expressions", "read(full)", *END_CHECK,
-            "read(full)",  # the body compared with its start
+            "store.current_expressions", "read(full)", *END_BODY,  # the body compared with its start
             "store.current_expressions", "undo.drop",  # closed
         ])
         self.assertTrue(health["undo_dropped"])
@@ -235,9 +238,9 @@ class SingleBodyOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "log(steps still turned off)", "read(outline)",
             "undo.drop",
             "read(full)",
-            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, "store.return_marker",
+            "store.current_expressions", "read(full)", *END_BODY, *FULL_COMPUTE, "store.return_marker",
             "read(outline)",  # the sketches after the end rebuild
-            "read(full)",  # the body compared with its start
+            "read(full)",  # the body again after the end rebuild
             "store.current_expressions", "port.warn_left_off(['Lid sketch'], True)",  # closed, no Undo drop
         ])
         self.assertEqual(health["end_actions"], ["full_compute"])
@@ -249,7 +252,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "read(full)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
             "read(full)",
-            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, *VALUES_AGAIN,
+            "store.current_expressions", "read(full)", *END_BODY, *FULL_COMPUTE, *VALUES_AGAIN,
             "store.return_marker", "read(outline)", "read(full)",
             "store.current_expressions",
         ])
@@ -262,7 +265,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "read(outline)",
             "log(putting a sketch back after the tries failed)",  # not read back: the Undo data is kept
             "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
-            *END_CHECK, "read(full)",
+            *END_BODY,
             "store.current_expressions",
         ])
         self.assertEqual(health["probe"], "failed")
@@ -311,7 +314,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "rows", "read(outline)", "rows",
             "store.current_expressions", "store.unsuppress_items", "read(outline)",  # a step worse: no Undo drop
             "read(full)",
-            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, *VALUES_AGAIN,
+            "store.current_expressions", "read(full)", *END_BODY, *FULL_COMPUTE, *VALUES_AGAIN,
             "store.return_marker", "read(outline)", "read(full)",
             "store.current_expressions",
         ])
@@ -321,6 +324,35 @@ class SingleBodyOrderTest(unittest.TestCase):
         calls, _ = export(order_port(OrderStore(), fail_step_at=1))
         self.assertEqual(calls, ["store.saved_expressions", "store.timeline_health",
                                  "store.current_expressions", "store.return_marker", "store.timeline_health"])
+
+
+class EndRebuildBodyTest(unittest.TestCase):
+    def health(self, volumes):
+        """The health of an export whose end check rebuilds the whole design (Fillet1 differs, then heals) and whose
+        body reads in turn `volumes`: at the start of the tries, before the end check and after it."""
+        port = order_port(OrderStore(changed="Fillet1"))
+        read, seen = port.reader, []
+
+        def reader(request):
+            found = dict(read(request), box={"min": [0, 0, 0], "max": [10, 10, 10]}, volume_mm3=1000.0)
+            if request.get("target") and not request.get("sketches"):
+                found["volume_mm3"] = volumes[min(len(seen), len(volumes) - 1)]
+                seen.append(found["volume_mm3"])
+            return found
+
+        port.reader = reader
+        return export(port)[1]
+
+    def test_a_difference_only_the_end_rebuild_brought_is_not_confirmed(self):
+        health = self.health([1000.0, 1000.0, 1010.0])
+        self.assertEqual(health["end_actions"], ["full_compute"])
+        self.assertNotIn("body_changed", health)
+        self.assertEqual(len(health["body_unconfirmed"]), 1)
+        self.assertFalse(health_module.back_as_it_was(health))
+
+    def test_a_difference_before_and_after_the_end_rebuild_is_a_change(self):
+        health = self.health([1000.0, 1010.0, 1010.0])
+        self.assertEqual(len(health["body_changed"]), 1)
 
 
 class SeveralBodiesOrderTest(unittest.TestCase):
@@ -333,7 +365,7 @@ class SeveralBodiesOrderTest(unittest.TestCase):
             "read(full)", "read(full)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "read(outline)", "undo.drop",
             "read(full)", "read(full)",
-            "store.current_expressions", "read(full)", "read(full)", *END_CHECK, *FULL_COMPUTE,
+            "store.current_expressions", "read(full)", "read(full)", *END_TWO, *FULL_COMPUTE,
             "store.return_marker", "read(outline)", "read(outline)", "read(full)", "read(full)",
             "store.current_expressions", "undo.drop",
         ])
@@ -358,7 +390,7 @@ class SeveralBodiesOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "read(outline)",
             "log(putting a sketch back after the tries failed)",
             "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
-            *END_CHECK, "read(full)", "read(full)",
+            *END_TWO,
             "store.current_expressions",
         ])
         self.assertEqual(health["probe"], "failed")

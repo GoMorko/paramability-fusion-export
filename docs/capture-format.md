@@ -2495,7 +2495,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
-  "pieces": { "lumps": 1, "others": [{ "min": [..], "max": [..] }] },
+  "pieces": { "lumps": 1, "others": [{ "min": [..], "max": [..] }], "names": ["Body2"] },
   "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
   "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } },
   "patterns": { "17": { "count": [7, 1], "elements": [{ "id": 3, "suppressed": false, "frame": FRAME }, ...] } }
@@ -2514,8 +2514,10 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `box`: the target body's box, as `target.box`.
 - `volume_mm3` (only with `box`): the target body's volume (`BRepBody.volume`, cm3 times 1000), absent when it cannot
   be read. It shows a change inside the box (a deeper pocket, a wider hole) when the probe asks whether a size changed the body (`Motion.body_changes`).
-- `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), and `others`, the
-  boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64). The
+- `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), `others`, the
+  boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64), and
+  `names`, the name of each of `others` in the same order (`BRepBody.name`; left out when a name is missing or two
+  bodies share one; the end check compares the other bodies by them). The
   app builds a part only in one piece, so the probe works out from them how many pieces the part is in
   (`lib/probe/pieces.py`): the lumps, plus the other bodies whose box comes within 1 mm of the target's box at this
   state or at E0, less as many as did so at E0 (a cut that cuts a body in two, or a join that does not reach it, leaves
@@ -2621,10 +2623,16 @@ by its entity tokens is compared by its curves (`probe.same_shape.shape_gap`: ea
 within 0.05 mm, in any order and either direction). When the curves pair, their gap counts in `sketch_gap_mm`. When
 they do not, or the plane turned, `health.outlines_changed` names the sketch and why ("reads another outline", "lies
 on a turned plane"; `probe.restore_changed` too), and the design counts as changed. Once every value, timeline item
-and the marker are back, the target body is read once more (its box, volume and pieces) and compared with its first
-read: `health.body_changed` (and `probe.restore_body`) lists what differs ("its volume (1601.25 mm3 before, 1618.42
-mm3 now)", "its size or place", "the number of its pieces (1 before, 2 now)", "the other bodies of its component"),
-and the design counts as changed.
+and the marker are back, the target body is read once more (its box, volume and pieces) and compared with its read
+before the first try (E0 when no try ran; the other bodies of the component always with E0, by name when both reads
+name them): `probe.restore_body` lists what differs ("its volume (1601.25 mm3 before, 1618.42 mm3 now)", "its size or
+place", "the number of its pieces (1 before, 2 now)", "the other bodies of its component"). A clear difference (a box
+moved more than 0.01 mm, a volume changed by more than a thousandth, another number of pieces, another set of other
+bodies) goes to `health.body_changed`, and the design counts as changed. A smaller difference, past 0.0001 mm or a
+millionth of the volume, goes to `health.body_changed` when a parameter, a sketch, a step or a stop of the tries also
+shows a change, else to `health.body_unconfirmed`. When the end check rebuilt the whole design, the body is read again
+after it; a difference that only that rebuild brought goes to `health.body_unconfirmed` too. `health.body_unconfirmed`
+means the design is not confirmed back. `health.body_unchecked` is true when the body could not be compared.
 `health.flipped` names the sketches that stayed on their other outline after a restore during the rows (`Motion.flipped`);
 the result window says that the tries made then were not used to judge any size. After a row that did not build, or
 whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
@@ -2693,6 +2701,8 @@ when it has something to say:
 | `steps_unread` | True when the steps could not be compared (the timeline could not be read). |
 | `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
 | `left_off` | Items turned off for the tries that are still off (`TryTimeline.left_off`, at most 5). |
+| `body_unconfirmed` | Small differences of the target body with nothing else changed, or differences that only the end rebuild brought (at most 5). The design is not confirmed back. |
+| `body_unchecked` | True when the target body could not be compared at the end. After tries that stopped (`tries_stopped`) the design then counts as not confirmed back. |
 | `undo_dropped` | True when Fusion forgot Undo data during the export (Lighter on memory, `timing.undo.applied`). The lines about a changed design then say to close the design without saving and open the saved version instead of using Undo. |
 | `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.put_back.PutBack.settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
 

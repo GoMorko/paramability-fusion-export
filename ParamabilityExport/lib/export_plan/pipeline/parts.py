@@ -159,7 +159,8 @@ class PartsPipeline:
 
         finals = self._translate_and_measure()
 
-        self.put_back.settle(self._restore_gap, self._outline_gap, self._body_check)
+        self.put_back.settle(self._restore_gap, self._outline_gap,
+                             self._body_check if self.group is not None else None)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         timeline = self.put_back.timeline_record
         if timeline is not None:
@@ -386,6 +387,5 @@ class PartsPipeline:
         return self.group.measure_restore(self.group.read_now(outline=True))
 
     def _body_check(self):
-        """What of each part's body differs from its first read once the design is back, or nothing without a
-        probe."""
-        return self.group.measure_body() if self.group is not None else []
+        """What of each part's body differs from its start once the design is back (`ProbeGroup.measure_body`)."""
+        return self.group.measure_body()

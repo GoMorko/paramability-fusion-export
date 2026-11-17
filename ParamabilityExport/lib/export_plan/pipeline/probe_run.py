@@ -220,10 +220,15 @@ class ProbeRun:
         not build or read a followed sketch on another outline, and always before a row run again; put the sketch
         back when that read shows it on another solution. A row may bring a sketch back as well as move it away, so
         each such row reads its own start, also once put backs are given up. The undo data is dropped when the
-        design is known to be as at the start (`_drop_undo`)."""
+        design is known to be as at the start (`_drop_undo`). Before the first row the body is read for the end check
+        (`Probe.keep_body_start`)."""
         self._home()
         key = row_key(row)
         previous, self._previous = self._previous, key
+        if previous is None and self.read_failure is None:
+            # The first row starts after the baseline rebuild with every value at its start: the start of the end
+            # check of the body is read here, in the state the end check reads it in.
+            self.probe.keep_body_start()
         back = self._start_of(row, key, previous) if self.read_failure is None else False
         if back and self.job.back_clean:
             self._drop_undo()

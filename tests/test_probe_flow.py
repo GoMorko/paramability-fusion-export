@@ -472,7 +472,8 @@ class ReadTimerTest(unittest.TestCase):
         run = ProbeRun(port, "", probe)
         run.run_rows(keyed(size_row("off", 10.0), size_row("height", 40.0)))
         probe.read_now()
-        self.assertEqual(lent, [False] + [True] * run.timer.count("read") + [False])
+        # E0 and the body start of the end check before the first row are not timed, nor the read after the tries.
+        self.assertEqual(lent, [False, False] + [True] * run.timer.count("read") + [False])
 
 
 class SolverFlipTest(unittest.TestCase):

@@ -17,7 +17,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop
   there; only the tries before it are used, and the sizes not tried yet are marked. When the sketch still reads
   another outline after the export, or the body has another volume or size than before, the result window says that
-  your design is changed. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
+  your design is changed, and the add-in asks Fusion to undo the export. A very small difference of the body with
+  nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the
+  add-in could not confirm the design; the export is undone then too. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
   recomputes; the add-in then compares the curves themselves, so this is not taken for another outline.
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.

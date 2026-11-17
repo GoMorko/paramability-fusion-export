@@ -23,8 +23,8 @@ class PutBack:
     - `tries_done(run)` once the tries ran and `tries_ended(run)` on every way out of them: the values and the items go
       back and a sketch left on another solution is put back (`ProbeRun.settle`) before the probe's last read;
     - `settle(read_gap, read_outline_gap, read_body)` once the export is made: values and items back, the sketch gap
-      read, the marker back, the end check, the outlines read again when the end check rebuilt the design, and the
-      body compared with its start;
+      read, the marker back, the body compared with its start, the end check, then the outlines and the body read
+      again when the end check rebuilt the design;
     - `close(health)` when the export is made, `close_failed()` when it stops: the values and the marker go back once
       more and the person is told what did not; a made export then drops its last Undo step when the design is as it
       was.
@@ -41,7 +41,10 @@ class PutBack:
         self.settled = None  # `TimelineSettle` of the end check
         self.gap_mm = None
         self.gap_after_mm = None
-        self.body_changed = []  # what of the body differs from the start once the design is back
+        self.body_changed = []  # what of the body clearly differs from its start once the design is back
+        self.body_small = []  # small differences of the body (`states.BodyCheck.small`)
+        self.body_unconfirmed = []  # differences of the body that only the end rebuild brought
+        self.body_unchecked = False  # the body could not be compared at the end
         self._tries_back = None  # the try run the design was put back after
         self.outcome = getattr(request, "outcome", None)  # the `rollback.ExportOutcome` this export fills in
 
@@ -123,8 +126,9 @@ class PutBack:
     def settle(self, read_gap, read_outline_gap, read_body=None):
         """Bring the design back once the export is made. `read_gap()` is the sketch gap after the restore (None when
         it cannot be told; never raises), `read_outline_gap()` the gap from a read of the outlines only (None without
-        a probe), `read_body()` what of the body differs from its start, read last, once the marker and every step
-        are back (empty without a probe)."""
+        a probe), `read_body()` what of the body differs from its start (`states.BodyCheck`, None when it cannot be
+        compared; not given without a probe). The body is read once the marker is back, before the end check, and
+        again after it when the end check rebuilt the whole design (`_body_after`)."""
         with self.timing.span("restore"):
             self.restore()
             self.end_trim()
@@ -132,20 +136,40 @@ class PutBack:
             gap = read_gap()
         with self.timing.span("restore"):
             self._end_roll()
+        with self.timing.span("probe"):
+            before = self._body(read_body)
+        with self.timing.span("restore"):
             self._settle_steps()
         with self.timing.span("probe"):
             self.gap_mm, self.gap_after_mm = self._gap_after_settle(gap, read_outline_gap)
-            self.body_changed = self._body(read_body)
+            self._body_after(read_body, before)
+
+    def _body_after(self, read_body, before):
+        """Keep what of the body differs at the end: from `before`, or from a read after the end check when it rebuilt
+        the whole design. A difference that the rebuild alone brought, with the body read as at its start before it,
+        is kept as not confirmed (`body_unconfirmed`), not as a change. Without `read_body` nothing is kept."""
+        if read_body is None:
+            return
+        end = before
+        if self.settled is not None and FULL_COMPUTE in self.settled.actions:
+            end = self._body(read_body)
+            if end is not None and before is not None and not before.texts and end.texts:
+                self.body_unconfirmed = end.texts
+                return
+        if end is None:
+            self.body_unchecked = True
+            return
+        self.body_changed, self.body_small = list(end.clear), list(end.small)
 
     def _body(self, read_body):
-        """What `read_body()` finds changed in the body, or nothing without it. Never raises."""
+        """The `BodyCheck` that `read_body()` gives, or None without it or when it fails. Never raises."""
         if read_body is None:
-            return []
+            return None
         try:
-            return list(read_body() or [])
+            return read_body()
         except Exception as exc:
             self.port.log(f"reading the body after the export failed: {exc!r}")
-            return []
+            return None
 
     def _settle_steps(self):
         """Compare the timeline steps with the start and bring back what differs (`timeline_health.settle_timeline`),
@@ -204,7 +228,8 @@ class PutBack:
             unrestored=self.unrestored, gap_mm=self.gap_mm, probe=probe, probe_error=probe_error, unchecked=unchecked,
             flipped=flipped, stopped=self.stopped, steps=self.settled, deferred_left=self.deferred_left(),
             gap_after_mm=self.gap_after_mm, left_off=self.left_off(), undo_dropped=self.undo_dropped(),
-            outlines_changed=changed, body_changed=self.body_changed)
+            outlines_changed=changed, body_changed=self.body_changed, body_small=self.body_small,
+            body_unconfirmed=self.body_unconfirmed, body_unchecked=self.body_unchecked)
 
     def _note_tries(self):
         """Tell the outcome that the tries changed the design from here on (`rollback.ExportOutcome.touched`)."""
