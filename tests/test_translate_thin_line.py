@@ -111,7 +111,45 @@ class ThinLineCopyTest(unittest.TestCase):
                          [ADD, ADD, None, None])
 
 
+FLUSH = "thin_line_flush"
+WALL = 3
+
+
+def flush_result(edit=None):
+    capture = load_capture(FLUSH)
+    if edit:
+        edit(capture["items"][WALL]["data"])
+    result = translate(capture)
+    return result, next(v for v in result.items if v["index"] == WALL)
+
+
+class ThinLineFlushTest(unittest.TestCase):
+    def test_a_wall_flush_with_the_edge_of_a_plate_is_copied(self):
+        result, verdict = flush_result()
+        self.assertEqual(verdict["verdict"], "translated")
+        self.assertEqual(steps_of(result.recipe, "extrude")[1]["thin"]["side"], "inside")
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_face_off_the_wall_that_no_face_of_the_part_explains_leaves_the_wall_out(self):
+        def unread(data):
+            data.pop("target_faces_before")
+
+        def facing_in(data):
+            data["target_faces_before"][2]["normal"] = [1, 0, 0]
+
+        for name, edit in (("no faces of the part", unread), ("a face of the part facing the other way", facing_in)):
+            with self.subTest(name):
+                verdict = flush_result(edit)[1]
+                self.assertEqual((verdict["verdict"], verdict["note"]), ("leftOut", thin_line.NOT_MATCHING))
+
+
 class ThinLineRefusalTest(unittest.TestCase):
+    def test_against_the_sketch_normal_side_one_must_still_be_the_left(self):
+        def down_on_the_right(data):
+            wall("side1", OUTSIDE, -HEIGHT, 0.0)(data)
+            data["side_one"]["distance"] = -HEIGHT
+        self.assertEqual(reason_of(with_edit(down_on_the_right)), thin_line.NOT_MATCHING)
+
     def test_faces_on_the_other_side_than_side_one_gives_refuse(self):
         self.assertEqual(reason_of(with_edit(wall("side1", OUTSIDE))), thin_line.NOT_MATCHING)
 

@@ -762,9 +762,13 @@ against `samples`.
   so `end_offset` and `end_area` stay null. The translator builds the wall for each side Fusion's location allows
   and each direction, and copies the step only when exactly one of them holds every face: each face flat, between
   the two ends of the wall, a face across the sketch normal at an end and on the wall's outline, a face along it on
-  a side of the outline and square to that side (within 1e-3 mm and a sine of 1e-4). That direction must be the
-  one the extrude reader found and, along the sketch normal, side one must be the left of the line and side two its
-  right.
+  a side of the outline and square to that side (within 1e-3 mm and a sine of 1e-4). A face that is not so counts
+  when it lies on the plane of a face in `target_faces_before` and of a face of the wall, both facing its way (a face
+  Fusion merged), and at least one face must be on the wall. That direction must be the one the extrude reader found,
+  and side one must be the left of the line and side two its right, whichever way the extrude goes (Fusion 2706).
+- `target_faces_before` (only with `path`, for a join or a cut; null when the target body or its faces cannot be
+  read or it has more than 512 faces): the faces of the target body before the step (`BRepBody.faces`), as
+  `wall_faces` records.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of the measured end face (see
   `end_offset`). Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive

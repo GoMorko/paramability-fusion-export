@@ -4292,6 +4292,9 @@ What the reader reads:
 - Fusion lists no start faces and no end faces for this extrude. Thus `extrude_after` reads all the faces that the
   extrude made (`ExtrudeFeature.faces`) into `wall_faces`. For each face, it reads the type of surface, a point on
   the face and the normal at that point.
+- For a join or a cut, `extrude_before` also reads the faces of the target body before the step
+  (`target_faces_before`), in the same form. A face of the wall that Fusion merges with a face of the part lies on
+  the plane of one of these faces.
 
 The table entry of `ExtrudeFeature` has `PATH`. Thus the size probe follows the curves of the line, as it does for
 a sweep path.
@@ -4312,8 +4315,9 @@ the extrude is thin and its outline is a `Path`. Then:
 The side of the wall. The app puts an `inside` wall on the left of the line. You look along the line from its start,
 and you look from the front of the sketch (along its normal). An `outside` wall is on the right. A `middle` wall has
 half of the thickness on each side. Fusion names the side "side one", "side two" or "center". Tests in Fusion showed
-this for extrudes that go along the sketch normal: side one is on the left of the path, and side two is on the
-right (`RULE`). When the line goes the other way, the wall goes to the other side.
+that side one is on the left of the path, and side two is on the right (`RULE`). This is true when the extrude goes
+along the sketch normal, against it, or to the two sides. When the line goes the other way, the wall goes to the
+other side.
 
 The add-in does not use the rule alone. It compares the wall with the faces that Fusion made (`fits`). For each side
 that the location in Fusion permits, and for each direction, it makes the outline of the wall (`band`). Then each
@@ -4324,19 +4328,31 @@ measured face must agree with that wall:
 - A face across the sketch normal must be at one end of the wall, and its point must be on the outline of the wall
   or in it.
 - A face along the sketch normal must be on a side of the outline, and its normal must be square to that side.
+- At least one face must agree in this way.
+
+A face that does not agree in this way can be a face that Fusion merged (`merged`). The add-in accepts it only when
+these two conditions are true:
+
+- The face is on the plane of a face of the target body before the step (`target_faces_before`), and the two faces
+  point to the same side.
+- The face is on the plane of a face of the wall, and the two faces point to the same side.
 
 Exactly one side and one direction must agree. The direction must be the direction that the extrude reader found.
-When the extrude goes along the sketch normal, the side must also be the side that `RULE` gives. If one of these
-conditions is false, the add-in leaves the step out.
+The side must also be the side that `RULE` gives. If one of these conditions is false, the add-in leaves the step
+out.
 
 Example. The line goes from (0, 0) to (30, 0) to (30, 20). The wall is 2 mm thick on side one and 15 mm high. The
 left wall has the outline (0, 2), (28, 2), (28, 20), (30, 20), (30, 0), (0, 0). The right wall has the outline
 (0, 0), (30, 0), (30, 20), (32, 20), (32, -2), (0, -2). Fusion made a face at y = 2, and its normal is along y. Only
 the left wall has a side there. Thus the side is `inside`.
 
-A join can merge a face of the wall with a face of the part. For example, the wall is flush with the edge of a
-plate. Then the point of the merged face can be out of the wall. No side agrees, and the add-in leaves the step out.
-This is safe, because the add-in does not guess.
+A join can merge a face of the wall with a face of the part. Example: the plate is 60 x 40 x 3 mm, and the line
+starts at the corner of the plate, on its top face. The wall is flush with the front edge and the left edge of the
+plate. Fusion merges the start end of the wall with the left face of the plate. It lists one face at (0, 20, 1.5)
+with its normal toward -x. That point is on the plate, not on the wall. The plate had a face on the plane x = 0 with
+its normal toward -x, and the start end of the wall is on that plane with its normal toward -x. Thus the face is a
+merged face, and the side is found from the other faces. When the add-in has no faces of the part (an older
+capture, a new body), or no face of the part explains the face, the add-in leaves the step out.
 
 An extrude that goes against the sketch normal is written on the reversed sketch plane, and its loop is mirrored
 (`flip_y`). Then the left of the line becomes the right. Thus `LineWall.written` changes `inside` to `outside`, and

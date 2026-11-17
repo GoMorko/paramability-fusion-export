@@ -421,14 +421,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     open line as the profile: Thin Extrude on, Wall Location "Side 1", Thickness `Wall`, distance `Height`, Operation
     New Body. Make two more designs the same with Wall Location "Side 2" and "Center". A fourth design: a 60 x 40 x
     3 mm plate on the XY plane, and on its top face the same two lines starting at (10, 10), extruded up as a Join
-    with Side 1.
+    with Side 1. A fifth design: the same plate and join, with the lines starting at the corner (0, 0) of the plate,
+    so the wall is flush with the plate's front and left edges.
     Export: tick `Leg`, `Height` and `Wall` and export each body. Expect the extrude copied, not left out, and the
     copy to match the Fusion body: Side 1 inside the corner (1440 mm3 at the start sizes), Side 2 outside it (1560
     mm3), Center half on each side (1500 mm3), the ends square and the outer corner sharp. In Paramability set `Leg`
     to 50 and `Wall` to 4: the wall follows as in Fusion. In `report.json` the extrude item has `data.path` with two
-    lines (`opposed` false) and `data.wall_faces` with 8 flat faces for a new body. If a copy leaves the step out,
-    send `report.json` and the reason; for the plate also note whether a face listed in `wall_faces` lies outside
-    the wall.
+    lines (`opposed` false) and `data.wall_faces` with 8 flat faces for a new body. The flush wall is copied too (8640
+    mm3 with the plate): its `data.wall_faces` lists a face with its point on the plate, and
+    `data.target_faces_before` lists the plate's 6 faces. If a copy leaves the step out, send `report.json` and the
+    reason.
 41. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
     plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
     about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with

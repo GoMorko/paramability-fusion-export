@@ -1584,9 +1584,10 @@ calls to watch (thin extrude)".
       normal: `ExtrudeFeature.profile` is a `Path` of `PathEntity` items (each `isOpposedToEntity` false),
       `startFaces` and `endFaces` are empty, side one puts the wall on the left of the path (seen from the front of
       the sketch), side two on the right, center half each way; the ends are square and the corners sharp. The copy
-      writes such a wall now (`docs/hand-checks.md`, T2-open). Still open: the side for an extrude that goes against
-      the sketch normal or both ways (the copy takes it from the faces Fusion made), whether `ExtrudeFeature.faces`
-      lists a face that a join merged with a face of the part, and the side for a line with arcs (left out).
+      writes such a wall now (`docs/hand-checks.md`, T2-open). Against the sketch normal and both ways the side is the
+      same (HC40). A join flush with the plate edges lists the merged faces in `ExtrudeFeature.faces`, one with its
+      point on the plate (HC40e); the copy accepts it by the faces of the plate before the step. Still open: the side
+      for a line with arcs (left out).
 - [ ] **T3 Wall as a size.** Tick the parameter behind the wall thickness and the one behind the height, export, and
       change both in Paramability: the wall and the height follow. Set the range of the wall so it can reach zero:
       the wall is then not a size, with the reason in the result window.
@@ -2260,8 +2261,10 @@ thin extrude tests above and read the capture in `report.json`.
   `isOpposedToEntity`, `curve`).
 - `ExtrudeFeature.faces` (the `Feature` member) for a thin extrude of an open line, read into `wall_faces`: for each
   face `BRepFace.geometry` (its type, `Plane` for a flat face), `pointOnFace` and `evaluator.getNormalAtPoint`. Check
-  that the faces of a new body wall are its sides, its two ends and its two caps (8 for one corner), and note for a
-  join whether a face that merged with a face of the part is listed and where its point lies.
+  that the faces of a new body wall are its sides, its two ends and its two caps (8 for one corner).
+- `BRepBody.faces` of the target body before a join or cut of an open line (`target_faces_before`), with the same
+  three members per face. Check for a wall flush with a plate edge (hand check 40, flush design) that the plate's
+  side faces are listed with outward normals.
 
 ## Capture reader calls to watch (spline outlines and sketch text)
 
