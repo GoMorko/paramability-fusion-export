@@ -7,6 +7,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_sketch_motion import motion_of, run
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
+from lib.capture_model import gap_hints
 from lib.design_model.values import Quantity
 from lib.translator import translate
 from lib.translator.extrude import thin_line
@@ -14,6 +15,7 @@ from lib.translator.faces.placer import ADD
 from lib.translator.faces.thin_wall import ThinWall
 
 LINE = "thin_line_corner"
+TIP = gap_hints.HINTS[gap_hints.THIN_OUTLINE]
 EXTRUDE = 1
 SIZES = ["length_mm", "height_mm", "wall_mm"]
 HEIGHT = 15.0
@@ -62,10 +64,11 @@ def only_step(result):
     return step
 
 
-def reason_of(result):
+def left_out(result):
+    """The tip of the thin extrude a translation stops at; it fails when the extrude was copied."""
     assert result.recipe is None, "the thin extrude was copied"
     assert result.refusal["index"] == EXTRUDE
-    return result.refusal["reason"]
+    return result.refusal.get("hint")
 
 
 class ThinLineCopyTest(unittest.TestCase):
@@ -139,33 +142,54 @@ class ThinLineFlushTest(unittest.TestCase):
 
         for name, edit in (("no faces of the part", unread), ("a face of the part facing the other way", facing_in)):
             with self.subTest(name):
-                verdict = flush_result(edit)[1]
-                self.assertEqual((verdict["verdict"], verdict["note"]), ("leftOut", thin_line.NOT_MATCHING))
+                result, verdict = flush_result(edit)
+                self.assertEqual((verdict["verdict"], result.gaps[0]["hint"]), ("leftOut", TIP))
+
+
+    def test_faces_of_another_body_than_the_one_the_walk_builds_prove_no_merge(self):
+        def tool_walk(data):
+            data["target_faces_body"] = {"token": "t2", "name": "Tool"}
+        result, verdict = flush_result(tool_walk)
+        self.assertEqual((verdict["verdict"], result.gaps[0]["hint"]), ("leftOut", TIP))
 
 
 class ThinLineRefusalTest(unittest.TestCase):
+    def test_a_corner_sharper_than_a_square_corner_is_left_out(self):
+        tip = [30.0 - 20.0 * 0.5 ** 0.5, 20.0 * 0.5 ** 0.5]
+
+        def sharp(data):
+            data["path"]["curves"][1]["flat"]["end"] = tip
+            data["wall_faces"] = faces_of(thin_line.band([[0, 0], [30, 0], tip], 2.0, 0.0))
+        self.assertEqual(left_out(with_edit(sharp)), TIP)
+
+    def test_lines_within_twice_the_corner_tip_of_the_wall_come_too_near(self):
+        # A U turned left twice, its wall on the right: the tips of its square corners reach 2 / cos 45 mm.
+        u_line = [[0, 0], [20, 0], [20, 5], [0, 5]]
+        self.assertIsNotNone(thin_line.line_problem(u_line, 0.0, 2.0))
+        self.assertIsNone(thin_line.line_problem(u_line, 2.0, 0.0))
+
     def test_against_the_sketch_normal_side_one_must_still_be_the_left(self):
         def down_on_the_right(data):
             wall("side1", OUTSIDE, -HEIGHT, 0.0)(data)
             data["side_one"]["distance"] = -HEIGHT
-        self.assertEqual(reason_of(with_edit(down_on_the_right)), thin_line.NOT_MATCHING)
+        self.assertEqual(left_out(with_edit(down_on_the_right)), TIP)
 
     def test_faces_on_the_other_side_than_side_one_gives_refuse(self):
-        self.assertEqual(reason_of(with_edit(wall("side1", OUTSIDE))), thin_line.NOT_MATCHING)
+        self.assertEqual(left_out(with_edit(wall("side1", OUTSIDE))), TIP)
 
     def test_faces_that_fit_both_sides_refuse(self):
         def on_the_line_only(data):
             data["wall_faces"] = [{"surface": "Plane", "point": [15, 0, 7.5], "normal": [0, 1, 0]},
                                   {"surface": "Plane", "point": [15, 0, HEIGHT], "normal": [0, 0, 1]}]
-        self.assertEqual(reason_of(with_edit(on_the_line_only)), thin_line.UNSURE)
+        self.assertEqual(left_out(with_edit(on_the_line_only)), TIP)
 
     def test_faces_on_the_other_way_than_the_stored_direction_refuse(self):
-        self.assertEqual(reason_of(with_edit(wall("side1", INSIDE, -HEIGHT, 0.0))), thin_line.NOT_MATCHING)
+        self.assertEqual(left_out(with_edit(wall("side1", INSIDE, -HEIGHT, 0.0))), TIP)
 
     def test_a_round_face_refuses(self):
         def rounded(data):
             data["wall_faces"][2]["surface"] = "Cylinder"
-        self.assertEqual(reason_of(with_edit(rounded)), thin_line.NOT_MATCHING)
+        self.assertEqual(left_out(with_edit(rounded)), TIP)
 
     def test_a_line_the_copy_cannot_hold_refuses(self):
         def curves(data):
@@ -203,7 +227,7 @@ class ThinLineRefusalTest(unittest.TestCase):
                  "unread": unread, "no faces": no_faces, "too sharp": sharp, "shorter than its corner": short}
         for name, edit in cases.items():
             with self.subTest(name):
-                self.assertTrue(reason_of(with_edit(edit)))
+                self.assertEqual(left_out(with_edit(edit)), TIP)
 
 
 class ThinLineSizesTest(unittest.TestCase):

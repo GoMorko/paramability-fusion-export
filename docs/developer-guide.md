@@ -1155,7 +1155,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
 | `throughAllAdds` | a join or a new body extruded through all (`extrude/through.py`; the Orca output gives the same cause) | Give the extrude a distance, or end it on a face or plane. |
-| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a wall that does not keep its shape) | Draw one closed outline for the wall, or shell a solid body. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 90 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
@@ -4157,8 +4157,8 @@ What the reader reads:
   extrude made (`ExtrudeFeature.faces`) into `wall_faces`. For each face, it reads the type of surface, a point on
   the face and the normal at that point.
 - For a join or a cut, `extrude_before` also reads the faces of the target body before the step
-  (`target_faces_before`), in the same form. A face of the wall that Fusion merges with a face of the part lies on
-  the plane of one of these faces.
+  (`target_faces_before`), in the same form, and which body that is (`target_faces_body`). A face of the wall that
+  Fusion merges with a face of the part lies on the plane of one of these faces.
 
 The table entry of `ExtrudeFeature` has `PATH`. Thus the size probe follows the curves of the line, as it does for
 a sweep path.
@@ -4218,6 +4218,13 @@ its normal toward -x, and the start end of the wall is on that plane with its no
 merged face, and the side is found from the other faces. When the add-in has no faces of the part (an older
 capture, a new body), or no face of the part explains the face, the add-in leaves the step out.
 
+The faces of the part must be the faces of the body that the walk builds (`ctx.is_target` of `target_faces_body`).
+The reader reads the faces of the exported body. In the walk of a tool body of a Combine, the walk builds the tool,
+not the exported body. A face of the exported body does not prove that a face of the tool merged. Thus in that walk
+the add-in accepts no merged face, and a wall flush with the edge of the tool is left out.
+
+Each refusal of the open line has the cause `thinOutline`, so the gap shows its tip.
+
 An extrude that goes against the sketch normal is written on the reversed sketch plane, and its loop is mirrored
 (`flip_y`). Then the left of the line becomes the right. Thus `LineWall.written` changes `inside` to `outside`, and
 `outside` to `inside`.
@@ -4226,11 +4233,14 @@ The shape of the wall at other sizes. The app and Fusion build the same wall onl
 `line_problem` gives a problem in these conditions:
 
 - A line is 0.001 mm long or shorter.
-- A corner turns more than 150 degrees (`MAX_TURN_DEG`). At a sharper corner, the outer side of the wall goes far
-  past the corner.
+- A corner turns more than 90 degrees (`MAX_TURN_DEG`). Fusion was seen to keep a 90 degree corner sharp, as the
+  app does. A sharper corner is not proven yet (hand check 40 in `docs/hand-checks.md` has a 135 degree corner).
 - At a corner, the side of the wall on the inner side of the turn cuts each of the two lines short. The cut is the
   reach of the wall on that side times tan(turn / 2). A line must be longer than what its two corners take.
-- Two lines that do not touch come nearer than two times the reach of the wall.
+- Two lines that do not touch come nearer than two times the farthest reach of the wall. The wall reaches the
+  thickness of its side from its line. At a corner, the outer side of the wall meets in a sharp tip. The tip is at
+  the reach of the outer side divided by cos(turn / 2) from the corner. Example: a wall of 2 mm on the outer side of
+  a 90 degree corner has its tip 2.83 mm from the corner, so two lines must be more than 5.66 mm apart.
 
 `keep_line_valid` tests these conditions at the ends and at the middles of the size ranges. For a formula that is
 not only sums and products, it also tests inner settings. It cuts the ranges where the wall stops keeping its shape.

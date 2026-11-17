@@ -360,6 +360,10 @@
      ],
      "edges": []
     },
+    "target_faces_body": {
+     "token": "t1",
+     "name": "Body1"
+    },
     "target_faces_before": [
      {
       "surface": "Plane",
