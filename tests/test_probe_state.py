@@ -84,11 +84,8 @@ class ReadStateTest(unittest.TestCase):
         sk.profiles = Coll([Obj()])
         self.assertEqual(state(Design({"sk1": [sk]}), sketches=["sk1"])["sketches"], {})
 
-    def test_the_volume_and_area_of_the_target_are_read_with_its_box(self):
-        design = Design({})
-        design.target.area = 16.0
-        got = state(design, target=True)
-        self.assertEqual((got["volume_mm3"], got["area_mm2"]), (8000.0, 1600.0))
+    def test_the_volume_of_the_target_is_read_with_its_box(self):
+        self.assertEqual(state(Design({}), target=True)["volume_mm3"], 8000.0)
 
     def test_no_box_without_the_target_flag_or_target(self):
         self.assertNotIn("box", state(Design({}), sketches=[]))

@@ -736,9 +736,10 @@ named parameters, the body's box, the measured references (`probe_refs.py`) and 
 Every value is in the component's coordinates, like the capture. A part that cannot be read has no key. Nothing
 raises.
 
-With the box, a state also holds the volume and the area of the body (`volume_mm3` from `BRepBody.volume`,
-`area_mm2` from `BRepBody.area`). The box alone does not show a change inside the body, for example a deeper pocket
-or a wider hole. The volume and the area show it (`probe.state.body_changed`).
+With the box, a state also holds the volume of the body (`volume_mm3`, from `BRepBody.volume`). The box alone does not
+show a change inside the body, for example a deeper pocket or a wider hole. The volume shows it
+(`probe.state.body_changed`). The area of the body is not read: it would cost a second computation of the body at
+each try. It would show only a change that keeps the box and the volume exactly as they were. Such a change is rare.
 
 A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
 (`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
@@ -1249,8 +1250,8 @@ steps"), and a size that the probe tried and that changed nothing in the part ("
 changes nothing in this part").
 
 The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
-set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box, the volume and the
-area of the body with the first read. A try tells that the body stayed the same only when it and the first read hold
+set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box and the volume of the
+body with the first read. A try tells that the body stayed the same only when it and the first read hold
 the box and the volume (`probe.state.body_compared`).
 
 - The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
@@ -4502,7 +4503,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
-| `BRepBody.volume`, `BRepBody.area` | `probe_state.py` | Read at each try with the box (`volume_mm3`, `area_mm2`). Without them, a try does not show that the body stayed the same. |
+| `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
 Every read is wrapped in `geo.safe`, so a failed read gives null and never a guess. The risky part is the writes.
