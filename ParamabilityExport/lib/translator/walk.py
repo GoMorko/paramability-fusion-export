@@ -13,6 +13,8 @@ handler's Refusal, a step that reaches into another component, and a step that p
 out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
 the copy.
 """
+import traceback
+
 from ..capture_model import gap_hints, gap_picks, step_kinds
 from ..design_model import design, roles
 from ..design_model.reach import construction_fixes
@@ -276,7 +278,18 @@ def walk_items(ctx, result):
         return None
 
     for step in design.read(ctx.capture, ctx.table, ctx.motion, ctx.lineage, ctx.cache):
-        if visit(step) is False:
-            return False
+        walked = len(result.items), len(result.notes)
+        try:
+            if visit(step) is False:
+                return False
+        except Exception:
+            # An error of the add-in in one step stops the copy at that step, so the export still lands as a fixed
+            # shape with a report. A tool body walk passes the error on: the Combine that takes the tool stops then.
+            if ctx.outer is not None:
+                raise
+            del result.items[walked[0]:], result.notes[walked[1]:]
+            result.error_trace = traceback.format_exc()
+            if not refuse(step.item, wording.addin_error_reason(), cause=gap_hints.ADDIN_ERROR):
+                return False
     ctx.current = None
     return True

@@ -242,6 +242,11 @@ def repeats_gap_reason(names):
     return clip("It repeats %s." % _missing(names), MAX_NOTE)
 
 
+def addin_error_reason():
+    """Why the copy stops at a step whose handling raised an error the add-in did not expect."""
+    return "This step could not be copied because of an error in the add-in. Please report it."
+
+
 def floats_reason():
     """Why a join whose material meets only material of left out steps is left out too."""
     return "It sits on a step that was left out, so it would float apart from the copy."

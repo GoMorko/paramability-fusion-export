@@ -982,6 +982,21 @@ The handler answers with a `StepResult` (the recipe steps) or a `Refusal` (a rea
 - A `StepResult` with steps is written. The verdict is `translated`, or `translatedWithNote` when the handler or the
   walk added a note. A step that Fusion shows with a warning gets a note with Fusion's message.
 
+An error that the add-in did not expect can occur while the walk handles an item (a bug in a handler, for example).
+The walk does not let this error stop the whole translation. It stops the copy at that item, as for any other stop:
+
+- The verdict of the item is `unsupported`. The reason is "This step could not be copied because of an error in the
+  add-in. Please report it." The cause is `addinError` (see 1.9.3), so the refusal gets the hint that tells the person
+  which files to send.
+- The walk removes the verdicts and the notes that it added for that item before the error.
+- `result.error_trace` holds the traceback. The pipeline writes it to the log (4.8) and so to the export trail.
+- `after_stop` (1.9.4) walks past the item, as after any stop, so the report also lists the steps after it.
+- In the walk of a tool body (1.9.3), the walk does not catch the error. The error goes to the walk of the part, and
+  the copy stops at the Combine that takes the tool. Thus an error in a tool body never becomes a gap.
+
+The steps that the walk wrote before the error are not used: a stop gives a fixed shape and a report, never a recipe
+that could be wrong.
+
 One check runs after the handler. When the handler wrote an extrude join that meets only material of earlier gaps,
 the walk leaves the step out instead (`faces/floating.py`, "It sits on a step that was left out", see 1.9.3).
 
@@ -1197,6 +1212,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
 | `afterGap` | a step that picks faces of a gap, repeats a gap, sits on a floating join, or extrudes through all to the far side of a part that a gap may change | Fix the step it builds on first. |
+| `addinError` | a step whose handling raised an error that the add-in did not expect (a stop, 1.9.1) | Send the report and the file export-trail.log from the ParamabilityExport temp folder with it. |
 | `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
 
 A step that does not copy is told in the app's user guide page "Steps that do not copy yet". `tests/test_gap_hints.py`
@@ -5384,6 +5400,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
 | Slow export | `timing.phases`; many `probe.states`, `probe.timeline.rolled: false`, high `try_seconds` | Each row rebuilds the whole timeline twice | checklist 4.10.5 |
 | Sizes marked "the tries ran out of time before this size was tried" | `probe.time_limit.hit: true` and `left_out`; `probe.motion.timed_out` | The time limit of the dialog was reached | raise the limit or untick sizes (1.8) |
 | A range stops with "the part comes apart into N separate pieces" | `sizes.cut`; `probe.states` with `pieces`; `probe.dropped`; `probe.motion.spans[...].split` | Copies of a pattern or a join no longer touch the part, or a cut cuts it in two | 1.8, "What a state holds"; 3.2 |
+| Fixed shape at a named step, "because of an error in the add-in" | `refusal` with `hint`; that item's verdict `unsupported` | A bug in the handler of that step, or of a step of a tool body when the step is a Combine (1.9.1) | the traceback in the log and in the export trail (4.8) |
 | A step left out with "Export again with this version of the add-in" | verdict `leftOut`; the gap has the hint | An export of an older add-in (before 0.10.6) | export again |
 | "<Part> stays a fixed shape in this file and does not change with this size." | `sizes.loose` of a `parts` report | A size also moves a part that stays a fixed shape | 1.10, "Several bodies" |
 

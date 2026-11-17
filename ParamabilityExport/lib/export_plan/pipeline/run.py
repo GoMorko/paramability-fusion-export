@@ -1,5 +1,6 @@
 """One export of one body: the stages from the capture to the manifest."""
 import os
+import traceback
 
 from ...design_edit.runner import ExportCancelled
 from ...params import size_table as size_tables
@@ -157,8 +158,10 @@ class _Pipeline:
                 result = translate_capture(capture, self.request.up_axis, self.table, motion, timer=self.timing,
                                            output=self.request.output)
         except Exception as exc:
-            self.port.log(f"translation failed: {exc!r}")
+            self.port.log(f"translation failed: {exc!r}\n{traceback.format_exc()}")
             return None
+        if getattr(result, "error_trace", None):
+            self.port.log(f"translation stopped on an error:\n{result.error_trace}")
         return result
 
     def _listing(self):
