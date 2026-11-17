@@ -107,6 +107,7 @@ class OpenLineReaderTest(unittest.TestCase):
                     operation="JoinFeatureOperation")
         self.assertEqual(data["target_faces_before"], [{"surface": "Plane", "point": [0, 20, 1.5],
                                                          "normal": [-1, 0, 0]}])
+        self.assertEqual((data["target_faces_body"]["token"], data["target_faces_body"]["name"]), ("b1", "Body1"))
         self.assertNotIn("target_faces_before", read(profile=open_line(), endFaces=Coll([]), faces=Coll([])))
 
     def test_too_many_faces_to_read_give_no_wall_faces(self):

@@ -20,8 +20,8 @@ be the direction the extrude reader found and the side `RULE` names. Else the st
 
 The line at other sizes. Its points follow the probe's values for the path (`sketch_values.keys.path`). The wall
 must keep its shape over the size ranges (`keep_line_valid`): each line longer than what its corners take from it,
-no corner sharper than `MAX_TURN_DEG`, and no two lines that do not meet nearer than twice the wall. The ranges are
-cut where it stops, or the sizes are marked.
+no corner sharper than `MAX_TURN_DEG`, and no two lines that do not meet nearer than twice the farthest the wall
+reaches from its line. The ranges are cut where it stops, or the sizes are marked.
 """
 import math
 
@@ -41,8 +41,10 @@ from ..sketch.written_loops import curves_at, value, written_reads
 JOIN_TOL = 1e-4
 # A line must be longer than this (mm) after its corners took their part of it.
 LENGTH_TOL = 1e-3
-# A corner turns by at most this. A sharper one sends the outer side of the wall far past the corner.
-MAX_TURN_DEG = 150.0
+# A corner turns by at most this: Fusion was seen to keep a 90 degree corner sharp, as the app does. A sharper corner
+# is left out until Fusion is seen to keep it sharp too (docs/hand-checks.md, T2-open).
+MAX_TURN_DEG = 90.0
+_TURN_TOL_DEG = 1e-6
 # A face Fusion made lies on a face of the wall within this (mm), and its normal within this sine.
 FACE_TOL = 1e-3
 NORMAL_TOL = 1e-4
@@ -82,9 +84,9 @@ def line_of(data):
     path = data.get("path")
     curves = path.get("curves") if isinstance(path, dict) else None
     if not isinstance(curves, list) or not curves or not isinstance(path.get("frame"), dict):
-        return Refusal(UNREADABLE)
+        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
     if any(not isinstance(c, dict) for c in curves) or path.get("closed") is None:
-        return Refusal(UNREADABLE)
+        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
     if path.get("kind") != "sketch" or path.get("foreign") or path.get("truncated") or path["closed"]:
         return Refusal("The line of this thin extrude is not one open line of one sketch, so it is not copied.",
                        cause=gap_hints.THIN_OUTLINE)
@@ -93,7 +95,7 @@ def line_of(data):
         return Refusal("A thin extrude of a line with arcs or curves is not copied yet.", cause=gap_hints.THIN_OUTLINE)
     if any(not isinstance(f, dict) or f.get("kind") != "line" for f in flats) or any(
             c.get("opposed") is None for c in curves):
-        return Refusal(UNREADABLE)
+        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
     if any(c["opposed"] for c in curves):
         return Refusal("The lines of this thin extrude do not all run the same way along it, so the side of its wall "
                        "is not known.", cause=gap_hints.THIN_OUTLINE)
@@ -170,22 +172,27 @@ def _side_points(points, offset):
 def line_problem(points, left, right):
     """Why a wall reaching `left` and `right` of the line through `points` does not keep its shape, or None: a line
     no longer than what its corners take from it, a corner sharper than MAX_TURN_DEG, or two lines that do not meet
-    nearer than twice the wall."""
+    nearer than twice the farthest the wall reaches from its line (at a corner, the outer side's sharp tip reaches its
+    side's reach divided by the cosine of half the turn)."""
     lengths = [math.dist(a, b) for a, b in zip(points, points[1:])]
     if any(length <= LENGTH_TOL for length in lengths):
         return "a line of it is too short"
     dirs = [_unit(a, b) for a, b in zip(points, points[1:])]
     taken = [0.0] * (len(points) + 1)
+    spread = max(left, right)
     for k in range(1, len(points) - 1):
         a, b = dirs[k - 1], dirs[k]
         turn = math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])
-        if math.degrees(abs(turn)) > MAX_TURN_DEG:
+        if math.degrees(abs(turn)) > MAX_TURN_DEG + _TURN_TOL_DEG:
             return "a corner of it is too sharp"
-        # The side of the wall on the inside of a turn is cut short on both lines of the corner.
-        taken[k] = (left if turn > 0 else right) * math.tan(abs(turn) / 2.0)
+        inner, outer = (left, right) if turn > 0 else (right, left)
+        # The side of the wall on the inside of a turn is cut short on both lines of the corner; the outer side meets
+        # in a tip past the corner.
+        taken[k] = inner * math.tan(abs(turn) / 2.0)
+        spread = max(spread, outer / math.cos(abs(turn) / 2.0))
     if any(length - taken[k] - taken[k + 1] <= LENGTH_TOL for k, length in enumerate(lengths)):
         return "a line of it is shorter than its corners take"
-    reach = 2.0 * max(left, right)
+    reach = 2.0 * spread
     for i in range(len(points) - 1):
         for j in range(i + 2, len(points) - 1):
             if _segment_gap(points[i], points[i + 1], points[j], points[j + 1]) <= reach + LENGTH_TOL:
@@ -303,7 +310,8 @@ def decide(line, location, thickness, faces, start, entry, before=None):
     are the `wall_faces` Fusion measured, `start` where the extrude starts, `entry` its planned `RecipeSide` and
     `before` the faces of the target body before the step (`target_faces_before`), for faces Fusion merged."""
     if not isinstance(faces, list) or not faces:
-        return Refusal("The wall of this thin extrude could not be measured, so it is not copied.")
+        return Refusal("The wall of this thin extrude could not be measured, so it is not copied.",
+                       cause=gap_hints.THIN_OUTLINE)
     length = entry.distance
     if entry.extent == "symmetric":
         ways = [(1, (-length / 2.0, length / 2.0))]
@@ -315,12 +323,12 @@ def decide(line, location, thickness, faces, start, entry, before=None):
         footprint = Footprint(band_profile(line.frame, corners))
         found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
     if len(found) > 1:
-        return Refusal(UNSURE)
+        return Refusal(UNSURE, cause=gap_hints.THIN_OUTLINE)
     if not found:
-        return Refusal(NOT_MATCHING)
+        return Refusal(NOT_MATCHING, cause=gap_hints.THIN_OUTLINE)
     side, way = found[0]
     if (entry.extent != "symmetric" and way != entry.sign) or RULE.get(location, side) != side:
-        return Refusal(NOT_MATCHING)
+        return Refusal(NOT_MATCHING, cause=gap_hints.THIN_OUTLINE)
     return side
 
 
@@ -337,6 +345,14 @@ class LineWall:
                 "ends": "square", "corners": "sharp"}
 
 
+def _faces_of_built_body(ctx, data):
+    """The faces of the body before the step (`target_faces_before`) when they are the faces of the body this walk
+    builds (`target_faces_body`), else None: in the walk of a tool body the reader's target is another body, and a
+    face of that body proves nothing about a face of the tool."""
+    body = data.get("target_faces_body")
+    return data.get("target_faces_before") if isinstance(body, dict) and ctx.is_target(body) else None
+
+
 def wall_step(ctx, item, data, wall, line, drawn, start, entry):
     """The `LineWall` of a thin extrude of an open line, or a Refusal: the side from the measured faces (`decide`),
     the thickness that follows its parameter, and the line's shape kept over the size ranges."""
@@ -344,7 +360,7 @@ def wall_step(ctx, item, data, wall, line, drawn, start, entry):
     # The line alone first: a line that turns back on itself has no wall to compare the faces with.
     problem = line_problem(line.points, 0.0, 0.0)
     side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry,
-                  data.get("target_faces_before")) if not problem else None
+                  _faces_of_built_body(ctx, data)) if not problem else None
     if isinstance(side, Refusal):
         return side
     problem = problem or line_problem(line.points, *reaches(side, thickness))

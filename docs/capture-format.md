@@ -768,7 +768,8 @@ against `samples`.
   and side one must be the left of the line and side two its right, whichever way the extrude goes (Fusion 2706).
 - `target_faces_before` (only with `path`, for a join or a cut; null when the target body or its faces cannot be
   read or it has more than 512 faces): the faces of the target body before the step (`BRepBody.faces`), as
-  `wall_faces` records.
+  `wall_faces` records. `target_faces_body` is `{ token, name }` of that body (null when there is none). The
+  translator uses the faces only in the walk that builds that body, not in the walk of a tool body.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of the measured end face (see
   `end_offset`). Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive

@@ -328,7 +328,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   of the wall is checked against the faces that Fusion made, also where a face of the wall merged with a face of the
   part (a wall flush with the edge of a plate). When they do not show one side, the step is left out. Draw
   the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
-  leaves the step out. A range stops before a corner takes a whole line or two lines come too near.
+  leaves the step out, and so does a corner that turns more than 90 degrees (a V sharper than a square corner). A
+  range stops before a corner takes a whole line, turns past 90 degrees, or two lines come too near.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
