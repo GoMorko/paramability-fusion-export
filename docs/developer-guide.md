@@ -2622,6 +2622,7 @@ Tests of the layout and of the order:
 | File | What it checks |
 | --- | --- |
 | `test_boundary.py` | The import table, the `adsk` rule and the private names (see 2.1). |
+| `test_undefined_names.py` | That every name a module of the add-in uses is bound: by an import, a definition, an assignment, a parameter or a builtin. It also refuses a star import. A missing import fails here, not only in Fusion when the line runs. |
 | `test_interfaces.py` | That the real classes, the shared fakes and both probes have every declared member, and that the pure code asks a store, a port or a probe only for a declared member. |
 | `test_put_back_order.py` | The order of the calls an export makes to put the design back, on every way it ends. |
 | `test_probe_row_schedule.py` | The row phases and the nearer and check rows of a probe or a group. |

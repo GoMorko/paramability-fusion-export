@@ -119,6 +119,7 @@ parameter store, the two Fusion ports and the shared fakes have every member dec
 member declared for a probe (in `export_plan/probe_flow/interface.py`), that both translation contexts have every member
 of the recorder (`design_model/recorder.py`), and that the code asks a store, a port, a probe or a recorder only for a
 declared member, also through another name for it or `getattr`.
+`tests/test_undefined_names.py` reads every module of the add-in with `symtable` and fails on a name that no scope binds (a missing import, for one) and on a star import.
 
 The shared fakes live in `tests/fakes/`, by domain: one parameter store with options for the answers a test needs
 (`store.py`, with the stores that also hold the timeline marker), one port for one body and one for several bodies
