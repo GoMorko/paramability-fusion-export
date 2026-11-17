@@ -8,6 +8,7 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, s
 
 from lib import orca_translate
 from lib.capture_model import gap_hints
+from lib.design_model.steps import pipe as facts
 from lib.params import size_table
 from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion
 from lib.translator import translate
@@ -123,6 +124,27 @@ class CopyTest(unittest.TestCase):
         (step,) = steps_of(translate(pipe(ring)).recipe, "revolve")
         self.assertNotIn("angleDeg", step)
         self.assertEqual(step["sketch"]["on"]["origin"], [0.0, 30.0, 0.0])
+
+
+class StartTest(unittest.TestCase):
+    """Where the section sits when Fusion does not say which way the curves run or whether the path is closed."""
+
+    @staticmethod
+    def path(points, closed):
+        return {"closed": closed, "curves": [{"kind": "line", "start": list(a), "end": list(b), "opposed": None}
+                                             for a, b in zip(points[::2], points[1::2])]}
+
+    def test_an_open_path_starts_at_the_end_the_second_curve_does_not_touch(self):
+        # The first curve is listed from the joint with the second one, at the origin, to (0, 0, -10).
+        points = [(0, 0, 0), (0, 0, -10), (0, 0, 0), (0, 0, 10), (0, 0, 10), (30, 0, 10)]
+        for closed in (False, None):
+            with self.subTest(closed=closed):
+                point, direction = facts.start_of(self.path(points, closed))
+                self.assertEqual((point, direction), ([0, 0, -10], [0.0, 0.0, 1.0]))
+
+    def test_two_curves_that_touch_at_both_ends_give_no_start(self):
+        points = [(0, 0, 0), (10, 0, 0), (10, 0, 0), (0, 0, 0)]
+        self.assertIs(facts.start_of(self.path(points, None)), facts.START_UNREAD)
 
 
 class LeftOutTest(unittest.TestCase):

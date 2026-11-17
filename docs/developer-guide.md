@@ -3472,6 +3472,11 @@ A circle that moves along a path makes the same shape from each end of the path.
 same shape from each point. Thus the start only tells the sweep which end face is the start face and which is the end
 face. The end face check of the sweep (3.8) compares this with the end faces that Fusion made.
 
+But the start must be an end of the path, never a joint inside it. When Fusion does not give `opposed` for the first
+curve, the start is the end of the first curve that the second curve does not touch. This rule applies unless the
+path is known to be closed (`closed` true); a path whose `closed` could not be read counts as open. When both ends or
+no end of the first curve touch the second curve, the start is not known and the pipe is left out.
+
 The handler writes the section as a profile record: one circle, and a second circle for the hole of a hollow pipe.
 The plane of the profile is square to the path at its start. The sweep handler then writes an extrude for a straight
 path, a revolve for one arc or a full circle, and a `sweep` step for a chain.
