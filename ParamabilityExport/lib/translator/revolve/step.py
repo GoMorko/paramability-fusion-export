@@ -15,7 +15,8 @@ sizes the probe measured it move with (ref_motion.py). Any other axis of the par
 sizes that may move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw
 values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are. Fusion turns toward the same side of
 the sketch plane whichever side of the axis the outline is on, so the ranges are cut where the written outline would
-reach its axis (`axis_side.keep_side`).
+reach its axis (`axis_side.keep_side`). Each written revolve step hands the walk a placer (faces/revolve_placer.py), so
+later picks on its faces follow sizes; a revolve held in a `toolBody` gets none.
 """
 import math
 
@@ -29,6 +30,8 @@ from ...design_model.steps import revolve as revolve_facts
 from ...design_model import words as shared
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
+from ..faces.placer_makers import RevolveMaker
+from ..faces.revolve_placer import Turn
 from ..faces.tool_placer import JoinedWalk
 from ..ranges import range_check
 from ..result import Refusal, StepResult
@@ -379,7 +382,7 @@ def handle(ctx, step):
         angle_value, back, turn_back = _two_sides_values(ctx, item, data, angle, side, axis_raw)
     else:
         angle_value = _angle_value(ctx, item, mode, angle, extent)
-    steps = []
+    steps, turns = [], []
     for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])
         if back and turn_back is None:
@@ -404,6 +407,9 @@ def handle(ctx, step):
         if mode != "full":
             recipe_step["angleDeg"] = angle_value.json()
         steps.append(recipe_step)
+        turns.append(Turn(profile, drawn, ctx.table, point2,
+                          sketch_motion.axis_point_raw(ctx, item, axis, profile["frame"], coords),
+                          recipe_step["axis"]["dir"], back, None if mode == "full" else angle_value))
     ref_motion.check_own_axis(ctx, item, axis, "turns about", {p.get("sketch") for p, _, _, _ in built})
     off_axis = keep_side(ctx, item, steps)
     if off_axis is not None:
@@ -417,4 +423,7 @@ def handle(ctx, step):
         return _held(ctx, item, steps, combine, move)
     if combine == "intersect" and len(steps) > 1:
         return _held(ctx, item, steps, combine)
-    return StepResult.of(steps)
+    out = StepResult()
+    for recipe_step, turn in zip(steps, turns):
+        out.add(recipe_step, [RevolveMaker(turn)])
+    return out

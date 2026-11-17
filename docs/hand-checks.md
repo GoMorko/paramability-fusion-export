@@ -889,3 +889,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     "Fillet1, in error in Fusion now, builds at ...". In `report.json` that try has `cleared: true` in
     `probe.states`, and `probe.motion.spans.Side.cleared` lists it. Afterwards the fillet is red again, `Side` is
     40 mm, and `health` has no `steps_changed`.
+77. RV8, picks on the faces of a revolve. Add user parameters `Height` = 40 mm and `Diameter` = 60 mm. On the XZ
+    plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`, with its left side on the z axis.
+    Revolve it a full turn about the z axis as a new body (a cup). Shell it 2 mm inside, with the top face open.
+    Fillet the outer rim (the circle where the outside wall meets the top of the wall) by 1 mm.
+    Export: tick `Height` and `Diameter`. Expect no size marked "may give unexpected results", and the shell and the
+    fillet copied. In `recipe.json` the `openFaces` and `edges` of the two steps hold `near` points with formulas of
+    `Diameter` and `Height`. In Paramability set `Height` to 50 and `Diameter` to 80, then to 30 and 40: the cup stays
+    open at the top, and the round stays on the outer rim, as in Fusion at the same values. Afterwards the design is
+    as before.

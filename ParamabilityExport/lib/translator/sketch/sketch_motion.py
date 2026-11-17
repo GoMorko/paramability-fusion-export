@@ -604,20 +604,25 @@ def axis_point(ctx, item, axis, frame, point2, coords=None):
     are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component). An
     axis marked `fixed` is not a sketch line (the centre of a sweep path arc): it stays as written unless `coords` give
     it, and so does an axis that is no line of a sketch (a construction axis), which the probe does not measure."""
+    found = axis_point_raw(ctx, item, axis, frame, coords)
+    if found is None:
+        return [round(v, 9) + 0.0 for v in point2]
+    return [quantity(ctx, value, number).json() for value, number in zip(found, point2)]
+
+
+def axis_point_raw(ctx, item, axis, frame, coords=None):
+    """The raw (x, y) of the revolve axis point in the sketch plane of `frame`, as `axis_point` writes it; None when
+    it does not move with sizes (it is then written as measured)."""
     axis = axis or {}
     if not active(ctx) or (coords is None and (axis.get("fixed") or not axis.get("sketch"))):
-        return [round(v, 9) + 0.0 for v in point2]
+        return None
     sketch = axis.get("sketch") or ""
     if coords is None:
         coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
     if all(isinstance(v, Affine) and v.is_constant for v in coords):
-        return [round(v, 9) + 0.0 for v in point2]
-    out = []
-    for k, number in zip(("x", "y"), point2):
-        value = combine([(frame[k][c], coords[c]) for c in range(3)] + [(-vec.dot(frame["origin"], frame[k]), 1.0)],
-                        sketch)
-        out.append(quantity(ctx, value, number).json())
-    return out
+        return None
+    return [combine([(frame[k][c], coords[c]) for c in range(3)] + [(-vec.dot(frame["origin"], frame[k]), 1.0)],
+                    sketch) for k in ("x", "y")]
 
 
 def axis_raw(ctx, item, axis):

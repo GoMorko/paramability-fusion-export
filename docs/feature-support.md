@@ -67,7 +67,7 @@ can be.
 | Thin extrude: one closed outline | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: one way, no taper, no To object. Sharp wall corners are rounded, with a note. Orca: a rectangle or circle wall as two outlines. |
 | Thin extrude: open line | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: straight lines drawn one after the other, one way or symmetric, no taper; square ends and sharp corners as in Fusion. The faces Fusion made must show the side of the wall. A line with arcs is left out. Orca has a rib. |
 | Thin extrude: several outlines, holes, two ways, To object, taper | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Revolve: full turn or angle | Copied | - | Copied | - | Orca: one outline without holes, the axis in the sketch plane. |
+| Revolve: full turn or angle | Copied | - | Copied | - | Paramability: a later shell, fillet or chamfer that picks its faces or edges follows its sizes. A pick on an end face of a revolve that does not turn a full circle, or on an inner wall that a shell leaves, keeps its place, and the sizes are marked. Orca: one outline without holes, the axis in the sketch plane. |
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
 | Revolve: two sides with two angles | Copied | - | Partly | Needs Orca | Left out when one angle is 90 or 270 degrees and the start face fits both sides. Two equal angles keep their numbers. Orca: both angles keep their numbers. |
 | Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | |
@@ -193,21 +193,23 @@ Sorted by how many printing projects it helps:
 
 1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
    Fillet and Full Round Fillet.
-2. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), Rib and Web (add-in only):
+2. Picks that follow sizes on the inner walls a shell leaves on a revolve (the inner rim of a cup or a pot), and on the
+   end faces of a revolve that does not turn a full circle (add-in only).
+3. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), Rib and Web (add-in only):
    walls, brackets and stiffeners.
-3. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a closed path of lines (add-in only),
+4. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a closed path of lines (add-in only),
    and sweeps that make a new component (add-in only).
-4. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
-5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
-6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
+5. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
+6. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
+7. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
    change).
-7. Coils with a taper or a spiral (app change), and half turns (add-in only).
-8. Shells that grow both inward and outward (app change), and drafts with two different angles (add-in only, after a hand check of which side each angle leans).
-9. Emboss on a curved face (app change).
-10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
-11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
-12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
-13. Press Pull of curved faces other than whole round faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
+8. Coils with a taper or a spiral (app change), and half turns (add-in only).
+9. Shells that grow both inward and outward (app change), and drafts with two different angles (add-in only, after a hand check of which side each angle leans).
+10. Emboss on a curved face (app change).
+11. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
+12. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
+13. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
+14. Press Pull of curved faces other than whole round faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
     Boundary Fill and sheet metal (app change).
 
 ## Orca does not support

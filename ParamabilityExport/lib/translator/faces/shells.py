@@ -4,6 +4,11 @@ A shell moves every face of the part inward by its thickness, except the faces i
 the point of an outer face (or edge, where two inner walls meet) moved inward by the thickness. So the point is moved
 back out, placed on the slab that made the outer face, and its coordinates follow that slab and the thickness.
 
+A shell after a revolve leaves the outer faces of the revolve where they are, so a point on them is still placed on the
+revolve. The inner walls of a revolve are not placed: a point on one (inside the turned outline, the thickness from a
+face that stays), or on a face the shell opens (where only the rim of the wall is left), is claimed
+(`RevolvePlacer.hollowed`).
+
 A shell that grows outward leaves the faces of the part where they are, as the walls of its hollow, and adds a wall
 outside them. Those new outer faces are not placed (`OutsideShell`), and only points near them are kept from the steps
 before it.
@@ -49,12 +54,22 @@ class InnerPlace(Place):
 
 class Shell(Placer):
     """One shell step: `thickness` a Quantity, `slabs` the solid slabs of the part when it was made, `opened` the
-    Places of the faces it opens."""
+    Places of the faces it opens. `turned` are the revolves of the part (faces/revolve_placer.py); `unknown_open`
+    is True when a face it opens was placed on no step, so any face of a revolve may be one."""
 
-    def __init__(self, thickness, slabs, opened):
+    def __init__(self, thickness, slabs, opened, turned=(), unknown_open=False):
         self.thickness = as_quantity(thickness)
         self.slabs = [s for s in slabs if s.combine in ("new", "add") and s.taper is None]
         self.opened = opened
+        self.turned, self.unknown_open = list(turned), unknown_open
+
+    def claims(self, p):
+        """True when `p` lies on an inner wall of a revolve, or on a face of one that this shell opens."""
+        for revolve in self.turned:
+            opened = None if self.unknown_open else {place.curve for place in self.opened if place.slab is revolve}
+            if revolve.hollowed(p, opened, self.thickness.n):
+                return True
+        return False
 
     def material_at(self, p):
         return CUT if self.hollows(p) else None
