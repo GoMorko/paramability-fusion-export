@@ -23,8 +23,14 @@ def start_values(store, names, units):
     return out
 
 
-def _count(units, name):
-    return unit_kind(units.get(name)) == "count"
+def _whole(value):
+    return abs(value - round(value)) <= SAME_VALUE
+
+
+def _count(units, name, tried, base):
+    """True for a count: a parameter without a unit whose start value and tried value are whole numbers. Fusion also
+    gives no unit to a ratio such as 1.8, which must step by fractions like a length."""
+    return unit_kind(units.get(name)) == "count" and _whole(tried) and _whole(base)
 
 
 def settings(values, start, units, attempt):
@@ -39,7 +45,7 @@ def settings(values, start, units, attempt):
         side = {}
         for name, (tried, base) in moved.items():
             step = OTHER_SIDE_SHARE * (tried - base)
-            if _count(units, name):
+            if _count(units, name, tried, base):
                 step = 1.0 if step > 0 else -1.0
             side[name] = base - step
         return [side]
@@ -48,7 +54,7 @@ def settings(values, start, units, attempt):
         walk = {}
         for name, (tried, base) in moved.items():
             value = tried + (base - tried) * k / WALK_STEPS
-            walk[name] = float(round(value)) if _count(units, name) else value
+            walk[name] = float(round(value)) if _count(units, name, tried, base) else value
         out.append(walk)
     return out
 
