@@ -2299,6 +2299,22 @@ Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py
   `BRepEdge.evaluator.getPointAtParameter` samples (17 per edge). Expected: two flat faces for a round, square or
   triangle section; `faces.edges` holds the helical edges.
 
+## Capture reader calls to watch (pipe)
+
+Hand checks PI1 and PI2 are in `docs/hand-checks.md`. The reader is `read_pipe.py`. Live check PI1 (Fusion 2706)
+confirmed the section place, the size as a diameter, the inward wall and `distanceOne` "1" with `distanceTwo` null on
+an open path.
+
+- `PipeFeature.path` is read with the marker before the pipe (Fusion raises "Didn't roll editing feature back"
+  otherwise), through the same path reader as a sweep (`path_record`). Note the `opposed` flag of the first curve
+  for a path drawn from its far end: the section must sit at the start the flag gives.
+- `sectionType` (`PipeSectionTypes`, read as `circular`, `square`, `triangular` or `other`), `sectionSize` and
+  `sectionThickness` (model parameters in mm; the thickness only when `isHollow` is true), `distanceOne` and
+  `distanceTwo` (model parameters; a member that raises sets `distance_two_unread`).
+- `operation` and `participantBodies` as on a sweep.
+- `startFaces` and `endFaces` with the marker after the pipe (`faces_after`): a point on each end cap and its outward
+  normal. A closed path has none.
+
 ## Capture reader calls to watch (reach)
 
 Written from the API reference and never run (`lib/fusion_reader/read_gap_reach.py`, used only when the first

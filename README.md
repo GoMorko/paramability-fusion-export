@@ -37,6 +37,7 @@ length, or of a round whose radius changes along its edge. It copies such a step
 Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
 tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle.
+A Pipe with a round section is copied as a sweep of a circle. A pipe with a square or triangle section is left out.
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.
 A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the

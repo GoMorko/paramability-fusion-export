@@ -201,6 +201,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   path or an outline with holes has no cap placed. A pick on part of a cap, or on a side edge at a corner of the
   outline along a path of lines and arcs, keeps its points and marks only the sizes the sweep reads. Any other pick on
   a sweep marks every size written before it.
+- A pipe is copied when its section is a circle, solid or hollow, and it runs once along its whole path. It is
+  written as the sweep of that circle (a ring when hollow), square to the path where the path starts and centred on
+  it, so the sweep rules above hold for its path. The section size follows a size as the circle's diameter, and the
+  wall of a hollow pipe goes inward. A size that moves the start of the path is marked "may give unexpected
+  results", since the copy keeps the section where it was measured. These pipes are left out: a square or triangle
+  section (Fusion does not say which way the section turns), a pipe along only part of its path, and a path with a
+  sharp corner (how Fusion builds a pipe there is not known yet). The Orca output leaves every pipe out.
 - A loft is copied when it joins two closed outlines with free ends and no rails or centre line. An outline is a
   sketch outline, a closed loop of edges in one plane or a flat face; a loop of edges or a face is copied as measured,
   and the sizes that may move it are marked. It is written

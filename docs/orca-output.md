@@ -157,6 +157,10 @@ assistant adds, the size limits of a thread, exporting parts together) and the c
 tip. The result window lists up to five steps in full lines ("name: reason Tip: hint") and points to the report for
 the rest.
 
+A pipe is left out of the Orca copy ("Steps of type pipe are not copied.", cause `pipe` from the step kind table),
+with the tip to draw the section on a sketch and sweep it. The Paramability output copies a pipe with a round
+section as a sweep (`docs/limits.md`).
+
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
 the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that
 cannot be placed gives the sentence of the resolved step (`ResolvedStep.why_foreign`, through `extents.reader_skip`):

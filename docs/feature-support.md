@@ -93,7 +93,7 @@ can be.
 | Thread: other forms, tapered | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Box, Cylinder, Sphere, Torus | Left out | Yes, add-in only | Left out | Yes, add-in only | The add-in does not read these step types yet. Extrudes and revolves can rebuild them. |
 | Coil | Partly | Yes, needs an app change | Left out | Yes, add-in only | Paramability: round, square or triangle section, no taper, at most 8 coils. A spiral, a taper and half turns are left out. Orca has a helix that follows variables; not tried. |
-| Pipe | Left out | Yes, add-in only | Left out | Yes, add-in only | A sweep of a circle. |
+| Pipe | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: a circle section, solid or hollow, along the whole path, as a sweep of the circle. A square or triangle section and a path with a sharp corner are left out until a hand check shows how Fusion builds them. |
 | Rectangular pattern of features | Copied | - | Copied | - | Count and spacing follow. Orca: no rounds or chamfers among the copied steps. |
 | Circular pattern of features | Copied | - | Copied | - | Count and angle follow. Paramability: an even count may give unexpected results. |
 | Pattern with suppressed copies | Copied | - | Left out | Needs Orca | Orca's pattern cannot leave copies out. |
@@ -191,7 +191,8 @@ Sorted by how many printing projects it helps:
 1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
    Fillet and Full Round Fillet.
 2. Thin extrudes of an open line, Rib and Web (add-in only): walls, brackets and stiffeners.
-3. Box, Cylinder, Sphere, Torus and Pipe (add-in only), and sweeps that make a new component (add-in only).
+3. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a sharp corner (add-in only), and sweeps
+   that make a new component (add-in only).
 4. Join or new body extrudes through all (app change).
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
 6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
