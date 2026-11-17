@@ -685,3 +685,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     export again with the range of `Height` typed as 4 to 20 mm: the revolve is left out with the tip "Type size
     ranges that keep the outline on one side of the axis, or leave the ranges to the add-in." Afterwards the design
     is as before.
+
+63. PI2, pipes copied as sweeps. Add user parameters `PipeD` = 10 mm, `Wall` = 2 mm and `Run` = 40 mm. On the XZ
+    plane draw a line from (0, 0) to (0, `Run`) mm (so it runs up Z), then a tangent arc of 90 degrees and radius
+    15 mm that ends pointing along +X. Make two copies of the design. In the first use Create > Pipe on the path:
+    Section Circle, Section Size `PipeD`, Hollow off, new body. In the second the same with Hollow on and Section
+    Thickness `Wall`. In the third draw a second sketch on the XY plane with an L of two lines that meet at a sharp
+    corner, (0, 0) to (30, 0) to (30, 20), and pipe it with Section Circle 6 mm.
+    Export: export the pipe body of each design and tick all parameters. The first two copy, each as one sweep of a
+    circle (a ring for the hollow pipe); the volume in Paramability matches Fusion's (Inspect > Properties) at the
+    values now and with `PipeD` at 12 mm, `Wall` at 3 mm and `Run` at 50 mm. The third is left out with the tip
+    "Round the sharp corner of the path with a sketch fillet."; in Fusion, look at the corner from above and write
+    down whether it is mitred (a sharp outside corner) or rounded, so a later version can copy it. Afterwards each
+    design is as before.

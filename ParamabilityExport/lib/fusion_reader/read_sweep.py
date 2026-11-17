@@ -226,7 +226,7 @@ def _number(read, kind="scalar"):
     return geo.safe(lambda: convert(read()), None)
 
 
-def _faces_made(read, ctx):
+def faces_made(read, ctx):
     """[{ point, normal }] for the faces `read()` gives (a collection or vector, one face or nothing); null when the
     member cannot be read."""
     try:
@@ -348,8 +348,8 @@ def _extent_name(raw):
 
 
 def sweep_after(feature, ctx, data):
-    return {"faces_after": {"start": _faces_made(lambda: feature.startFaces, ctx),
-                            "end": _faces_made(lambda: feature.endFaces, ctx)}}
+    return {"faces_after": {"start": faces_made(lambda: feature.startFaces, ctx),
+                            "end": faces_made(lambda: feature.endFaces, ctx)}}
 
 
 def _end_record(section, params, number):
@@ -461,8 +461,8 @@ def loft_before(feature, ctx):
 
 
 def loft_after(feature, ctx, data):
-    return {"faces_after": {"start": _faces_made(lambda: feature.startFace, ctx),
-                            "end": _faces_made(lambda: feature.endFace, ctx)}}
+    return {"faces_after": {"start": faces_made(lambda: feature.startFace, ctx),
+                            "end": faces_made(lambda: feature.endFace, ctx)}}
 
 
 # type name -> (before, after); either may be None

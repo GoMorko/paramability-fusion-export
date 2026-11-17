@@ -40,6 +40,8 @@ COIL_TAPER = "coilTaper"
 COIL_PLACE = "coilPlace"
 COIL_LIMIT = "coilLimit"
 COIL_TOOL = "coilTool"
+PIPE = "pipe"
+PIPE_PART_OF_PATH = "pipePartOfPath"
 COIL_HALF = "coilHalf"
 SCALE = "scale"
 MOVE_UNMEASURED = "moveUnmeasured"
@@ -94,6 +96,8 @@ HINTS = {
     COIL_LIMIT: "A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest.",
     COIL_HALF: "Use revolutions that do not end in a half, such as 3.25 or 4.",
     COIL_TOOL: "Join the coil to the part with a combine before you move or change it.",
+    PIPE: "Draw the section on a sketch square to the path at its start, and sweep it along the path.",
+    PIPE_PART_OF_PATH: "Let the pipe run along the whole path.",
     SCALE: "Change the sizes in the sketches instead of scaling the body.",
     MOVE_UNMEASURED: "Draw the sketch of the body where the body should be, instead of moving the body.",
     OFFSET_CURVED: "Press Pull flat faces only, or change the size of the curved face in its sketch.",

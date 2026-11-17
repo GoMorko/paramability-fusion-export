@@ -221,7 +221,7 @@ message box when the export stopped), with the advice to use Undo, and `report.j
 
 ## When a step cannot be copied
 
-Some steps cannot be copied yet: a spiral or tapered coil, a sweep that twists and tapers, an extrude with a taper on a face, and others (`docs/limits.md` says
+Some steps cannot be copied yet: a spiral or tapered coil, a sweep that twists and tapers, a pipe with a square or triangle section, an extrude with a taper on a face, and others (`docs/limits.md` says
 which). What the add-in does then depends on the step.
 
 Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the

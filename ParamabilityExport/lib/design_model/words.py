@@ -218,6 +218,16 @@ SWEEP_GUIDE_SURFACE_LIKELY = (
     "guide surface are not copied.")
 SWEEP_PART_OF_PATH = "This sweep covers only part of its path, which is not copied."
 
+# Pipes.
+PIPE_SECTION_KIND = ("Pipes with a square or triangle section are not copied, since Fusion does not say which way the "
+                     "section turns.")
+PIPE_SECTION_UNREAD = "The section of this pipe could not be read from Fusion."
+PIPE_COVER_UNREAD = "How much of its path this pipe covers could not be read from Fusion."
+PIPE_PART_OF_PATH = "This pipe covers only part of its path, which is not copied."
+PIPE_PATH_UNREAD = "The path of this pipe could not be read from Fusion."
+PIPE_START_UNREAD = "Where the path of this pipe starts could not be read from Fusion."
+PIPE_SHARP_CORNER = "Pipes along a path with a sharp corner are not copied."
+
 
 def sweep_settings_unread(missing, said):
     """The sentence for sweep settings read as null: `missing` names them (a list of words), `said` is what Fusion

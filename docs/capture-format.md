@@ -1426,6 +1426,32 @@ an existing coil no type, axis, hand, section or operation, so these are worked 
   when the faces cannot be read or are more than a coil can have. The translator finds the axis, the hand and the
   turns from them (`coil_fit.py`) and checks that the helix passes through every sampled point.
 
+**PipeFeature** (`path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`,
+`distanceTwo`, `operation`, `participantBodies` before the item, with the marker before the pipe, the only place
+Fusion gives its path; `startFaces` and `endFaces` after it; `lib/fusion_reader/read_pipe.py`; the handler
+`lib/translator/sweep/pipe.py` copies a circle section as a sweep):
+
+```json
+{
+  "operation": "newBody", "participants": [], "target_box_before": null,
+  "section": "circular", "section_size": 10.0, "hollow": true, "section_thickness": 2.0,
+  "distance_one": 1.0, "distance_two": null,
+  "path": PATH,
+  "params": { "section_size": {..}, "section_thickness": {..}, "distance_one": {..} },
+  "faces_after": { "start": [{ "point": [x, y, z], "normal": [x, y, z] }], "end": [ ... ] }
+}
+```
+
+- `section` is `circular`, `square`, `triangular` or `other` (`PipeSectionTypes`). `section_size` is the diameter of
+  a circle (the side of a square, the height of a triangle) in mm. `section_thickness` is the wall of a hollow pipe in
+  mm, measured inward from the size, and null for a solid pipe. `distance_one` is the share of the path the pipe
+  covers (1 is the whole path); `distance_two` is null when Fusion gives none (an open path), and
+  `distance_two_unread: true` says the member raised. `path` is the path record of a sweep (below). The section sits
+  where the first curve of the path starts, in the path's direction (`opposed`), square to the path and centred on it
+  (`lib/design_model/steps/pipe.py`).
+- A capture without `section` (an export of an add-in that did not read pipes) leaves the pipe out with "Export again
+  with this version of the add-in".
+
 **EmbossFeature** (`profiles`, `inputFaces`, `faces`, `isTangentChain`, `depth`, `horizontalDistance`,
 `verticalDistance`, `rotationAngle`; `adsk.fusion.EmbossFeature` is marked preview in the API reference):
 
