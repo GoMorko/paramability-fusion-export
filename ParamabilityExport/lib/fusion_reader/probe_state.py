@@ -65,9 +65,11 @@ def _read_borrowed(sketch, ctx, path_name):
 
 
 def _read_pieces(body, ctx):
-    """`{ lumps, others }` of the target: how many solids (lumps) it holds and the boxes of the other solid bodies of
-    its component (`probe.pieces`); `others` is left out when they cannot be read or there are more than
-    `MAX_OTHER_BODIES`. None when the lumps cannot be read. Reads what Fusion has built; nothing is recomputed."""
+    """`{ lumps, others, names }` of the target: how many solids (lumps) it holds and the boxes of the other solid
+    bodies of its component (`probe.pieces`); `others` is left out when they cannot be read or there are more than
+    `MAX_OTHER_BODIES`. `names` gives the name of each of `others` (`BRepBody.name`) in the same order, so two reads
+    compare a body with the same body; left out when a name is missing or two bodies share one. None when the lumps
+    cannot be read. Reads what Fusion has built; nothing is recomputed."""
     lumps = geo.safe(lambda: body.lumps.count, None)
     if not isinstance(lumps, int) or isinstance(lumps, bool):
         return None
@@ -78,6 +80,9 @@ def _read_pieces(body, ctx):
         boxes = [geo.safe(lambda: geo.box_of(b), None) for b in others]
         if all(box is not None for box in boxes):
             out["others"] = boxes
+            names = [geo.safe(lambda: b.name, None) for b in others]
+            if all(isinstance(n, str) and n for n in names) and len(set(names)) == len(names):
+                out["names"] = names
     return out
 
 

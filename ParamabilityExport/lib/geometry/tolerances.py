@@ -11,6 +11,12 @@ FIT_TOLERANCE = 1e-4
 POINT_TOLERANCE_MM = 1e-4
 # Two reads of the box of a body agree (mm).
 BODY_TOLERANCE_MM = 1e-4
+# The end check of the body (`export_plan.probe_flow.states.body_difference`): a box that moved more than this (mm), or
+# a volume that changed by more than this share, is a change on its own. A rebuild of the same shape stays far below
+# both; a sketch point moved a few tenths of a mm goes past them. A smaller difference past `BODY_TOLERANCE_MM` or the
+# volume tolerance of `probe.state` counts as a change only when the end check also finds an outline or a step changed.
+END_BODY_BOX_MM = 0.01
+END_BODY_VOLUME_SHARE = 1e-3
 # The sketches after the parameters were put back are where they were at the start (mm).
 RESTORE_TOLERANCE_MM = 1e-4
 # A followed value (mm or degrees) may read this far from its first read before the sketch counts as on another

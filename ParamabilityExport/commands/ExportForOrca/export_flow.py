@@ -72,9 +72,10 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             result = run_pipeline(undo_steps.attach(FusionPort(design, body, units, captures), None), request, tmp)
         write_orca_package(out_path, result.orca)
+        outcome.saved = True
         return os.path.basename(out_path), result
 
-    saved = export_common.run_guarded(design, marker, work)
+    saved = export_common.run_guarded(design, marker, work, outcome=outcome)
     undo = rollback.decide(outcome)
     if saved is not None:
         _show_result(saved[0], saved[1], form["ticked"], undo)

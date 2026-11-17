@@ -17,6 +17,7 @@ from lib.export_plan import health as health_module
 from lib.export_plan import undo_steps
 from lib.export_plan.pipeline import ProbeRun, run_pipeline
 from lib.export_plan.probe_flow import SizeProbe
+from lib.export_plan.probe_flow.states import body_difference
 from lib.geometry.tolerances import FLIP_TOLERANCE
 from lib.probe.same_shape import shape_gap
 
@@ -36,6 +37,14 @@ class HealthStore(FakeStore):
     def timeline_health(self):
         return [step(0, "Sketch1")] + [step(at, name, health)
                                        for at, (name, health) in enumerate(self.steps(self).items(), start=1)]
+
+    def warning_entries(self):
+        """The steps in warning, as Fusion reads them from the same health as the timeline."""
+        found = dict(super().warning_entries())
+        for at, (name, health) in enumerate(self.steps(self).items(), start=1):
+            if health == "warning" and name not in found.values():
+                found[at] = name
+        return list(found.items())
 
 
 def rows(*pairs):
@@ -110,6 +119,21 @@ class StopAtDamageTest(unittest.TestCase):
                                        counts_warning=lambda name: counted)
                 self.assertEqual(len(results), 1)
                 self.assertEqual(job.not_back["items"], ["Sketch5"])
+
+    def test_a_warning_that_does_not_count_and_is_gone_with_the_values_back_costs_no_timeline_read(self):
+        class Counted(HealthStore):
+            reads = 0
+
+            def timeline_health(self):
+                self.reads += 1
+                return super().timeline_health()
+
+        def warns(exprs):
+            return [(2, "Fillet2")] if number(exprs["off"]) == 10 else []
+
+        store = Counted(lambda s: {"Fillet2": "warning" if s.exprs != START else "ok"}, warns=warns)
+        job, results = run_job(store, rows(("off", 10.0), ("cube", 20.0)), counts_warning=lambda name: False)
+        self.assertEqual((len(results), job.not_back, store.reads), (2, None, 1))  # the baseline read only
 
 
 def lid_with(curves):
@@ -250,24 +274,162 @@ class WalkBackTest(unittest.TestCase):
         self.assertEqual(fusion.store.exprs, START)
 
 
+class PendingCheckTest(unittest.TestCase):
+    """The damage of the row run last is checked before any Undo drop and before the discovery baseline."""
+
+    def damage_last(self):
+        """A run whose last row does not build and leaves Sketch5 in warning for good; the sketches read as at the
+        start, so no read asks for the row to run again."""
+        damaged = []
+
+        def solve(store):
+            if number(store.exprs["off"]) == 10:
+                damaged.append(True)
+
+        fusion = Fusion()
+        fusion.store = HealthStore(lambda s: {"Sketch5": "warning" if damaged else "ok"},
+                                   bad_when=lambda e: number(e["off"]) == 10, on_recompute=solve)
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        port = FakePort(store=fusion.store, units=UNITS)
+        undo_steps.attach(port, undo_steps.UndoSteps(lambda flag: True, port.log))
+        run = ProbeRun(port, "", probe, before_discovery=lambda: self.rebased.append(True))
+        run.run_rows(rows(("off", 10.0)))
+        return run, probe, port
+
+    def setUp(self):
+        self.rebased = []
+
+    def test_the_last_row_is_checked_before_the_undo_data_is_dropped(self):
+        run, probe, port = self.damage_last()
+        dropped = port.undo_steps.record["steps"]
+        run.settle()
+        self.assertEqual(run.stopped["items"], ["Sketch5"])
+        self.assertEqual(port.undo_steps.record["steps"], dropped)
+        self.assertEqual(probe.stopped["items"], ["Sketch5"])
+
+    def test_a_lasting_damage_of_the_last_measured_row_stops_before_the_discovery_rows(self):
+        run, probe, port = self.damage_last()
+        tbl = table(PARAMS, TICKED, MODEL)
+        from tests.test_probe_flow import size
+        found = run.discover([dict(size(tbl, "cube", "mm"), end=12.0)])
+        self.assertEqual(found, [])
+        self.assertIsNotNone(run.stopped)
+        self.assertEqual(self.rebased, [])  # the items were not turned on and the baseline kept
+        self.assertEqual(len(run.rows), 1)
+
+    def test_an_unreadable_timeline_keeps_the_undo_data_but_does_not_stop_the_tries(self):
+        def unreadable(store):
+            raise RuntimeError("the timeline cannot be read")
+
+        store = HealthStore(unreadable, bad_when=lambda e: number(e["off"]) == 10)
+        port = FakePort(store=store, units=UNITS)
+        undo_steps.attach(port, undo_steps.UndoSteps(lambda flag: True, port.log))
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), Fusion().read)
+        run = ProbeRun(port, "", probe)
+        run.run_rows(rows(("off", 10.0), ("cube", 20.0), ("height", 40.0)))
+        run.settle()
+        self.assertEqual((len(run.rows), run.stopped), (3, None))
+        self.assertFalse(run.job.back_clean)
+        self.assertEqual(port.undo_steps.record["steps"], 0)
+
+
+class WalkErrorTest(unittest.TestCase):
+    def test_an_error_inside_a_walk_still_puts_the_values_back(self):
+        class Breaks(FakeStore):
+            def read_value(self, name):
+                if self.exprs != START:
+                    raise RuntimeError("Fusion stopped answering")
+                return super().read_value(name)
+
+        store = Breaks(START)
+        job = RowExport(store, UNITS, lambda path: None)
+        job.run([], "", lambda *a: True)
+        with self.assertRaises(RuntimeError):
+            job.walk_back(size_row("height", 40.0), 0)
+        self.assertEqual(store.exprs, START)
+
+
+def body_read(volume, box=(10, 10, 10), others=None):
+    found = {"box": {"min": [0, 0, 0], "max": list(box)}, "volume_mm3": volume, "pieces": {"lumps": 1}}
+    if others is not None:
+        found["pieces"].update(others=[{"min": [20, 0, 0], "max": [30, h, 10]} for _, h in others],
+                               names=[name for name, _ in others])
+    return found
+
+
+class BodyDifferenceTest(unittest.TestCase):
+    def test_a_rebuild_of_the_same_shape_is_no_difference_and_a_real_change_is_clear(self):
+        same = body_difference(body_read(1601.25), body_read(1601.25 * (1 + 1e-9), box=(10, 10, 10 + 1e-6)))
+        self.assertEqual((same.clear, same.small), ([], []))
+        moved = body_difference(body_read(1601.25), body_read(1618.42, box=(10, 10, 10.35)))
+        self.assertEqual((len(moved.clear), moved.small), (2, []))
+
+    def test_a_tiny_volume_change_is_small_not_clear(self):
+        found = body_difference(body_read(58384.6), body_read(58384.7))
+        self.assertEqual((found.clear, len(found.small)), ([], 1))
+
+    def test_other_bodies_are_compared_by_name_not_by_order(self):
+        a = body_read(1000.0, others=[("Lid", 5), ("Pin", 8)])
+        b = body_read(1000.0, others=[("Pin", 8), ("Lid", 5)])
+        self.assertEqual(body_difference(a, b).texts, [])
+        gone = body_read(1000.0, others=[("Pin", 8), ("Clip", 5)])
+        self.assertEqual(len(body_difference(a, gone).clear), 1)
+
+    def test_a_read_without_a_box_or_a_volume_cannot_be_compared(self):
+        self.assertIsNone(body_difference(body_read(1000.0), {"volume_mm3": 1000.0}))
+        self.assertIsNone(body_difference(body_read(1000.0), dict(body_read(1000.0), volume_mm3=None)))
+
+
 class EndCheckTest(unittest.TestCase):
-    def test_a_body_that_differs_at_the_end_is_a_changed_design_with_a_warning(self):
+    def export(self, volumes, store=None, steps=None):
+        """The health of one export whose body reads in turn `volumes` (mm3; the last one repeats) after its E0."""
         from tests.test_pipeline import request
-        port = None
+        port, seen = None, []
 
         def reader(request):
             found = dict(port.e0, box={"min": [0, 0, 0], "max": [10, 10, 10]}, volume_mm3=1000.0)
-            if request.get("target") and not request.get("sketches"):  # the body read after the export
-                found["volume_mm3"] = 1010.0
+            if request.get("target") and not request.get("sketches"):  # a read of the body alone
+                found["volume_mm3"] = volumes[min(len(seen), len(volumes) - 1)]
+                seen.append(found["volume_mm3"])
             return found
 
-        port = FakePort(reader=reader)
+        port = FakePort(reader=reader, store=store)
         with tempfile.TemporaryDirectory() as tmp:
-            health = run_pipeline(port, dataclasses.replace(request(), faster_tries=False), tmp).health
-        self.assertTrue(health["body_changed"])
+            return run_pipeline(port, dataclasses.replace(request(), faster_tries=False), tmp).health
+
+    def test_a_body_that_differs_at_the_end_is_a_changed_design_with_a_warning(self):
+        health = self.export([1000.0, 1010.0])
+        self.assertEqual(len(health["body_changed"]), 1)
         self.assertTrue(health_module.design_changed(health))
         self.assertFalse(health_module.back_as_it_was(health))
-        self.assertTrue(any("1010" in text for text in health_module.health_lines(health)))
+        self.assertTrue(health_module.health_lines(health))
+
+    def test_the_start_of_the_body_is_read_after_the_first_rebuild(self):
+        # E0 reads 1000 before any rebuild; every read of the body alone after it reads 1001.
+        health = self.export([1001.0])
+        self.assertTrue(health_module.back_as_it_was(health))
+
+    def test_a_tiny_difference_alone_is_not_confirmed_and_with_a_changed_outline_is_a_change(self):
+        alone = make_health_with(body_small=["its volume"])
+        self.assertNotIn("body_changed", alone)
+        self.assertFalse(health_module.design_changed(alone))
+        self.assertFalse(health_module.back_as_it_was(alone))
+        backed = make_health_with(body_small=["its volume"], outlines_changed=["Sketch2 reads another outline"])
+        self.assertEqual(backed["body_changed"], ["its volume"])
+
+    def test_tries_that_stopped_are_back_when_the_end_check_confirms_every_part(self):
+        stopped = {"after": "off (max)", "items": ["Sketch5"]}
+        confirmed = make_health_with(stopped=stopped, gap_mm=0.0)
+        self.assertTrue(health_module.back_as_it_was(confirmed))
+        self.assertTrue(health_module.health_lines(confirmed))  # the stop is still told
+        for missing in ({"gap_mm": None}, {"gap_mm": 0.0, "body_unchecked": True}):
+            with self.subTest(missing=missing):
+                self.assertFalse(health_module.back_as_it_was(make_health_with(stopped=stopped, **missing)))
+
+
+def make_health_with(**inputs):
+    inputs.setdefault("gap_mm", 0.0)
+    return health_module.make_health(health_module.HealthInputs(probe=health_module.MEASURED, **inputs))
 
 
 if __name__ == "__main__":

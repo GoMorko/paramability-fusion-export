@@ -69,7 +69,8 @@ class _Pipeline:
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
-        self.put_back.settle(self._restore_gap, self._outline_gap, self._body_check)
+        self.put_back.settle(self._restore_gap, self._outline_gap,
+                             self._body_check if self.probe is not None else None)
         with timing.span("probe"):
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
@@ -248,8 +249,8 @@ class _Pipeline:
         return list(self.probe.restore_changed) if self.probe is not None else []
 
     def _body_check(self):
-        """What of the part's body differs from its first read once the design is back, or nothing without a probe."""
-        return self.probe.measure_body() if self.probe is not None else []
+        """What of the part's body differs from its start once the design is back (`SizeProbe.measure_body`)."""
+        return self.probe.measure_body()
 
     def _close_probe(self):
         """The probe's record for `report.json`, or None when it did not run or failed."""

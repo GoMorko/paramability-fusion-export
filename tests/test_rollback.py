@@ -15,7 +15,7 @@ from lib.design_edit.runner import ExportCancelled
 from lib.dialog_model.orca_result import orca_view
 from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
 from lib.export_plan import rollback, undo_steps
-from lib.export_plan.health import HealthInputs, health_lines, make_health
+from lib.export_plan.health import HealthInputs, copy_lines, design_lines, health_lines, make_health
 from lib.export_plan.pipeline import run_parts_pipeline, run_pipeline
 from lib.export_plan.rollback import ExecuteGate, ExportOutcome, Rollback, decide
 
@@ -78,6 +78,31 @@ class DecideTest(unittest.TestCase):
         self.assertTrue(unconfirmed.undo_unavailable and not unconfirmed.abort)
 
 
+class OutcomeFlagsTest(unittest.TestCase):
+    def test_dropped_undo_data_is_never_aborted_also_without_a_health_record(self):
+        verdict = decide(ExportOutcome(None, touched=True, undo_dropped=True))
+        self.assertEqual((verdict.abort, verdict.undo_unavailable), (False, True))
+
+    def test_a_marker_that_did_not_go_back_at_the_end_is_aborted_unless_undo_data_was_dropped(self):
+        self.assertTrue(aborts(ExportOutcome(CLEAN, touched=True, unconfirmed=True)))
+        self.assertFalse(decide(ExportOutcome(CLEAN, touched=True, unconfirmed=True, undo_dropped=True)).abort)
+
+    def test_the_verdict_tells_whether_the_file_was_saved(self):
+        for saved in (False, True):
+            verdict = decide(ExportOutcome(None, touched=True, saved=saved))
+            self.assertEqual(verdict.saved, saved)
+            self.assertEqual(rollback.lines(verdict)[-1], rollback.SAVED if saved else rollback.NOT_SAVED)
+            self.assertTrue(rollback.abort_message(verdict).endswith(rollback.lines(verdict)[-1]))
+
+    def test_after_an_abort_the_lines_about_the_copy_stay_and_those_about_the_design_go(self):
+        health = dict(CLEAN, broken=["Fillet1"], probe="failed",
+                      tries_stopped={"after": "off (max)", "items": ["Sketch5"]})
+        shown = rollback.check_lines(health, decide(ExportOutcome(health, touched=True)))
+        self.assertEqual(len(copy_lines(health)), 2)
+        self.assertTrue(set(copy_lines(health)) <= set(shown))
+        self.assertFalse(set(design_lines(health)) & set(shown))
+
+
 class ExportOutcomeTest(unittest.TestCase):
     def test_a_clean_export_is_not_aborted(self):
         outcome, error = run(order_port(OrderStore()))
@@ -108,6 +133,25 @@ class ExportOutcomeTest(unittest.TestCase):
         outcome, error = run(order_port(OrderStore(changed="Fillet1", heals=False), cancel_at=4))
         self.assertIsInstance(error, ExportCancelled)
         self.assertTrue(aborts(outcome))
+
+    def test_a_cancel_that_leaves_a_sketch_off_its_start_is_aborted_as_changed(self):
+        outcome, error = run(FakePort(drift=5.0, cancel_at=2))
+        self.assertIsInstance(error, ExportCancelled)
+        verdict = decide(outcome)
+        self.assertEqual((verdict.abort, verdict.changed), (True, True))
+
+    def test_a_cancel_whose_read_after_the_tries_failed_is_aborted_as_not_confirmed(self):
+        outcome, error = run(FakePort(cancel_at=2, fail_read_from=3))
+        self.assertIsInstance(error, ExportCancelled)
+        self.assertTrue(outcome.health["restore_unverified"])
+        verdict = decide(outcome)
+        self.assertEqual((verdict.abort, verdict.changed), (True, False))
+
+    def test_the_outcome_keeps_the_undo_drop_of_the_tries(self):
+        outcome, _ = run(order_port(OrderStore()), light_undo=True)
+        self.assertTrue(outcome.undo_dropped)
+        outcome.health = None  # the health record could not be made
+        self.assertFalse(aborts(outcome))
 
     def test_an_export_that_stops_before_the_tries_changes_nothing_and_is_not_aborted(self):
         outcome, error = run(order_port(OrderStore(), fail_step_at=1))

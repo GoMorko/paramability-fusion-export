@@ -827,12 +827,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the sketch has two solutions and a change of `Base` can flip it to the other one. Extrude it 5 mm. Sketch 2 on
     the top face of that extrude: project one edge of the extrude and draw a rectangle that uses the projected edge
     as a side. Extrude sketch 2 up by `Lift`. Save the design.
-    Export: pick the body, tick `Base` and `Lift`, leave "Lighter on memory" off, then click OK. Expect Fusion to
-    show a message that the export is undone. Then expect the timeline to show no new warning (yellow) or error (red)
-    that it did not have before, the export's steps gone from Edit, Undo (Undo goes back to your own last edit, not
-    to a step of the export), and the result window to say that the add-in undid the export and that the design is as
-    before. The `.paramability` file is saved and opens in Paramability. Note the message Fusion shows and how long
-    the undo takes after the tries end. Repeat with "Lighter on memory" ticked: Fusion shows no undo message, the
+    Export: pick the body, tick `Base` and `Lift`, leave "Lighter on memory" off, then click OK. Expect the result
+    window to say that the add-in asked Fusion to undo everything the export did, and that the file is saved. When the
+    window is closed and the export ends, expect Fusion to show a message that the add-in asked it to undo the export
+    and that the file is saved. Then expect the timeline to show no new warning (yellow) or error (red) that it did not
+    have before, and the export's steps gone from Edit, Undo (Undo goes back to your own last edit, not to a step of
+    the export). When the tries stopped early, the window still says so. The `.paramability` file is saved and opens
+    in Paramability. Note the message Fusion shows and how long the undo takes after the tries end. Repeat, and click
+    Cancel in the progress window during the tries: when the triangle stays flipped, Fusion undoes the export too, and
+    the window and the message say that no file was saved. Repeat with "Lighter on memory" ticked: Fusion shows no undo message, the
     design stays as the put back left it, and the window says that the export could not be undone because Lighter on
     memory was on, and advises to close the design without saving. If your design does
     not leave a step worse (it comes back clean), the export must not be undone: Fusion shows no message and the
@@ -848,4 +851,6 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     changed even with your values back" and names the second sketch. Only the tries before it are used. Afterwards
     the triangle is on the same side as before, the second sketch and the cut have no warning, and `health` in
     `report.json` has no `steps_changed`, no `outlines_changed` and no `body_changed`. Undo is still offered when the
-    tries stopped.
+    tries stopped, unless the end check found the design changed or could not confirm it; then the export is undone
+    (see RB1). `body_changed` must not show for a design that came back: a difference with no other change is at most
+    `body_unconfirmed`.

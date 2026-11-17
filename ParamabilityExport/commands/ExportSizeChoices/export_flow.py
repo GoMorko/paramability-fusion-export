@@ -65,11 +65,12 @@ def _run_export(design, parameters, form, outcome):
                 title, export_common.writer_for(app), results, read.columns, parameters, default_index,
                 form["choice_name"], form["up_axis"], design_info.default_length_unit(design))
             write_package(out_path, manifest, files)
+            outcome.saved = True
         message_box(saved_message(len(results), os.path.basename(out_path)))
 
     export_common.run_guarded(
         design, marker, work, lambda: job.restore_failures,
-        lambda: export_common.settle_steps(store, start, saved, outcome, lambda: job.restore_failures))
+        lambda: export_common.settle_steps(store, start, saved, outcome, lambda: job.restore_failures), outcome)
     undo = rollback.decide(outcome)
     if undo.says:
         export_common.tell_undone(undo)

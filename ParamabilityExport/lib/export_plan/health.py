@@ -50,7 +50,12 @@ class HealthInputs:
     undo_dropped: True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps`).
     outlines_changed: the followed sketches the restore check found on another outline or a turned plane, compared
       by their curves (`SizeProbe.restore_changed`), one text per sketch.
-    body_changed: what of the part's body differs from the start once the design is back (`SizeProbe.measure_body`).
+    body_changed: what of the part's body clearly differs from its start once the design is back
+      (`SizeProbe.measure_body`, `states.BodyCheck.clear`).
+    body_small: small differences of the body (`states.BodyCheck.small`): a change when the end check also finds an
+      outline, a step or a value changed, or the tries stopped on a damaged design; else not confirmed.
+    body_unconfirmed: differences of the body that appeared only after the end check rebuilt the whole design.
+    body_unchecked: True when the body could not be compared at the end.
     """
 
     unrestored: Sequence = ()
@@ -68,6 +73,9 @@ class HealthInputs:
     undo_dropped: bool = False
     outlines_changed: Sequence = ()
     body_changed: Sequence = ()
+    body_small: Sequence = ()
+    body_unconfirmed: Sequence = ()
+    body_unchecked: bool = False
 
 
 def make_health(inputs):
@@ -105,8 +113,17 @@ def make_health(inputs):
         out["undo_dropped"] = True
     if measured and inputs.outlines_changed:
         out["outlines_changed"] = list(dict.fromkeys(inputs.outlines_changed))[:MAX_LISTED]
-    if inputs.body_changed:
-        out["body_changed"] = list(dict.fromkeys(inputs.body_changed))[:MAX_LISTED]
+    # A small difference of the body is a change only when something else shows the design changed.
+    small = list(inputs.body_small)
+    backed = design_changed(out) or bool(out.get("tries_stopped"))
+    changed = list(inputs.body_changed) + (small if backed else [])
+    unconfirmed = list(inputs.body_unconfirmed) + ([] if backed else small)
+    if changed:
+        out["body_changed"] = list(dict.fromkeys(changed))[:MAX_LISTED]
+    if unconfirmed:
+        out["body_unconfirmed"] = list(dict.fromkeys(unconfirmed))[:MAX_LISTED]
+    if inputs.body_unchecked:
+        out["body_unchecked"] = True
     return out
 
 
@@ -129,11 +146,16 @@ def design_changed(health):
 
 def back_as_it_was(health):
     """True only when the end check confirms the design is as it was before the export: every value back, no sketch
-    drift, no step worse or left turned off, nothing left deferred, and every check that tells this could be made
-    (the steps read, the sketches compared, the marker back)."""
+    drift, no step worse or left turned off, nothing left deferred, no difference of the body, and every check that
+    tells this could be made (the steps read, the sketches compared, the marker back). After tries that stopped on a
+    damaged design, the sketches and the body must also have been compared; the stop alone does not count."""
     if not health or design_changed(health) or health.get("left_off"):
         return False
-    if health.get("steps_unread") or health.get("restore_unverified") or health.get("tries_stopped"):
+    if health.get("steps_unread") or health.get("restore_unverified") or health.get("body_unconfirmed"):
+        return False
+    # Tries that stopped on a damaged design are back only when the end check also compared the sketches and the body.
+    if health.get("tries_stopped") and (health.get("probe") != MEASURED or health.get("sketch_gap_mm") is None
+                                        or health.get("body_unchecked")):
         return False
     if steps_module.MARKER_LOST in (health.get("end_actions") or []):
         return False
@@ -220,7 +242,13 @@ def _changed_line(text, found, health):
 
 
 def health_lines(health):
-    """Plain sentences for the result window, most important first. Empty when all is well."""
+    """Plain sentences for the result window, most important first. Empty when all is well: the lines about the
+    design (`design_lines`), then those about the copy (`copy_lines`)."""
+    return design_lines(health) + copy_lines(health)
+
+
+def design_lines(health):
+    """The lines about the state of the design after the export: what did not come back, what could not be checked."""
     if not health:
         return []
     lines = []
@@ -241,6 +269,9 @@ def health_lines(health):
     if health.get("body_changed"):
         lines.append(_changed_line("The part did not come back as it was after the tries: %s.",
                                    health["body_changed"], health))
+    if health.get("body_unconfirmed"):
+        lines.append(clip("Could not confirm that the part came back as it was after the tries: %s differed slightly "
+                          "at the end. Please look at it in Fusion." % "; ".join(health["body_unconfirmed"]), MAX_LINE))
     if health.get("sketch_drift"):
         lines.append(
             "The sketches did not come back to their first shape after the tries (largest gap %.4g mm). "
@@ -256,6 +287,15 @@ def health_lines(health):
         fix = (" " + NO_UNDO_ADVICE) if health.get("undo_dropped") else ", or use Undo in Fusion."
         lines.append(clip("These sketches may not update until you edit them: %s. Open each one and finish it%s"
                           % (_names(health["deferred_left"]), "." + fix if fix.startswith(" ") else fix), MAX_LINE))
+    return lines
+
+
+def copy_lines(health):
+    """The lines about the copy the export made: sketches that stayed on another solution during the tries, tries that
+    stopped early, sketches that could not be measured. They still hold after Fusion undid the export."""
+    if not health:
+        return []
+    lines = []
     if health.get("flipped"):
         lines.append(clip("During the tries Fusion left %s on its other solution after a value was put back. The "
                           "tries made while it stayed there were not used to judge any size." % _names(health["flipped"]),

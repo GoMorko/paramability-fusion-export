@@ -25,7 +25,10 @@ class Probe(Protocol):
     finish(after, labels): build the motion; returns the sizes the probe cannot follow.
     measure_restore(after), restore_unchecked, restore_changed: the gap to the first read once the values are back,
       the sketches that could not be compared and those found on another outline.
-    measure_body(): what of the body differs from the first read once the design is back.
+    keep_body_start(): read the body now and keep it as the start of the end check (after the first rebuild of the
+      tries).
+    measure_body(): what of the body differs from its start once the design is back (`states.BodyCheck`), or None
+      when it cannot be compared.
     """
 
     also_changes: list
@@ -77,5 +80,7 @@ class Probe(Protocol):
     def finish(self, after, labels): ...
 
     def measure_restore(self, after): ...
+
+    def keep_body_start(self): ...
 
     def measure_body(self): ...
