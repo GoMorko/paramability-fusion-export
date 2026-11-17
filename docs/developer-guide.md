@@ -743,9 +743,10 @@ named parameters, the body's box, the measured references (`probe_refs.py`) and 
 Every value is in the component's coordinates, like the capture. A part that cannot be read has no key. Nothing
 raises.
 
-With the box, a state also holds the volume and the area of the body (`volume_mm3` from `BRepBody.volume`,
-`area_mm2` from `BRepBody.area`). The box alone does not show a change inside the body, for example a deeper pocket
-or a wider hole. The volume and the area show it (`probe.state.body_changed`).
+With the box, a state also holds the volume of the body (`volume_mm3`, from `BRepBody.volume`). The box alone does not
+show a change inside the body, for example a deeper pocket or a wider hole. The volume shows it
+(`probe.state.body_changed`). The area of the body is not read: it would cost a second computation of the body at
+each try. It would show only a change that keeps the box and the volume exactly as they were. Such a change is rare.
 
 A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
 (`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
@@ -1265,8 +1266,8 @@ steps"), and a size that the probe tried and that changed nothing in the part ("
 changes nothing in this part").
 
 The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
-set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box, the volume and the
-area of the body with the first read. A try tells that the body stayed the same only when it and the first read hold
+set that size alone (`Motion.body_changes`, `translate._dropped`). The probe compares the box and the volume of the
+body with the first read. A try tells that the body stayed the same only when it and the first read hold
 the box and the volume (`probe.state.body_compared`).
 
 - The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
@@ -2904,13 +2905,14 @@ Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the
 `Body2` starts 3 mm above the top face of `Body1` (`Lift`).
 
 - The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
-- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is proven to
-  be another body, the face is never "on this body" (`follow._another_body`, `follow._beyond_tool`). This is also
-  true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step uses.
-- "Proven" means two things. The body is not the body that the walk builds (`Context.is_target`, also through the
-  lineage). And the body does not have the name of that body under another token. Fusion can give the exported body
-  a new token along the timeline (`capture.renamed_target`). Such a face can be on the exported body, so the
-  translator places it on the slabs as before.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
+  body that the walk builds (`Context.is_target`, also through the lineage), the face is never "on this body"
+  (`follow._another_body`, `follow._beyond_tool`). This is also true when a slab of `Body2` has a face at the same
+  place. That slab face is not the face that the step uses.
+- A body with the name of the exported body under another token is also another body. A name does not prove that
+  it is the same body: a copy, a split piece or a renamed body can have that name. Fusion can give the exported body a
+  new token along the timeline, but then the walk stops at the first step that shows the new token (`roles.lost`).
+  So such a face never reaches this rule.
 - No slab places the face. Thus every size that the items before the step read can move it
   (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
 - When the probe measured the face, the measured move is written instead (see the next part). In the example, the
@@ -4900,7 +4902,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.18). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
-| `BRepBody.volume`, `BRepBody.area` | `probe_state.py` | Read at each try with the box (`volume_mm3`, `area_mm2`). Without them, a try does not show that the body stayed the same. |
+| `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
 
 Every read is wrapped in `geo.safe`, so a failed read gives null and never a guess. The risky part is the writes.

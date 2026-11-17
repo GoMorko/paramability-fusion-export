@@ -28,7 +28,7 @@ records the limits (`kept`) and the values that changed an outline (`changed`), 
 (`design_model.tried_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
 stays stuck, and `kept` is the value now at both ends.
 
-`Motion.body_changes` says, per size set alone in a try, whether the body's box, volume or area changed there
+`Motion.body_changes` says, per size set alone in a try, whether the body's box or volume changed there
 (`body_changes`). The translator calls a size that no formula reads "unchanging" only when it did not.
 """
 from ..design_model.dimension_sizes import size_values
@@ -355,7 +355,7 @@ def _state_record(state):
 
 def body_changes(run, current):
     """`Motion.body_changes` of a `StateRun`: per size that a built state sets alone, True when the body read there
-    differs from E0 in one such state (box, volume or area), False when it reads the same in all of them. A state tells
+    differs from E0 in one such state (box or volume), False when it reads the same in all of them. A state tells
     that the body stayed only when it and E0 read the box and the volume (`body_compared`). A state tells nothing when
     its read shows a size at another value than its row set (`mislabelled`), when a sketch landed on another solution
     there (`apart`) or when it sets a size past the values where its outlines hold (`outside`): the body change there

@@ -208,11 +208,11 @@ class FaceOfAnotherBodyTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[2]["distance"], 10.0)
         self.assertIn("plate_mm", reasons(result))
 
-    def test_a_face_of_the_part_under_a_new_token_is_still_on_the_part(self):
-        # Body1 is the exported body's name: Fusion may have given it another token, so nothing proves another body.
+    def test_a_body_with_the_parts_name_under_another_token_is_another_body(self):
+        # No step shows the part under the token t9, so the name alone proves nothing: a copy can have it.
         result = run(post_on_top("t9", name="Body1"), ["plate_mm", "lift_mm"], Motion.from_json({"values": LIFTED}))
-        self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "plate_mm")
-        self.assertEqual(reasons(result), {})
+        self.assertEqual(steps_of(result.recipe, "extrude")[2]["distance"], 10.0)
+        self.assertIn("plate_mm", reasons(result))
 
 
 class MeasuredMoveWinsTest(unittest.TestCase):
