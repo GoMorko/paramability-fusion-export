@@ -41,6 +41,15 @@ def _extent_type(feature):
     return geo.pick_by_text(name, _EXTENT_TYPES, "other")
 
 
+def one_sided_extrude(feature):
+    """True for a one-sided extrude that makes a new body, joins or cuts; False for any other feature or when its
+    extent or operation cannot be read."""
+    if geo.type_name(feature) != "ExtrudeFeature":
+        return False
+    return (geo.safe(lambda: _extent_type(feature), None) == "one"
+            and geo.safe(lambda: operation_of(feature.operation), None) in ("newBody", "join", "cut"))
+
+
 def _holds_free_outline(profiles):
     """True when a profile record is sketch text or has a free curve (a spline): the shapes the translator rebuilds
     from samples and so checks against the part Fusion made."""

@@ -7,6 +7,12 @@ really sits (`design_model/steps/pattern_places.py`).
 The elements are required: when the collection cannot be read the item gets a read_error, because an empty list
 would look like a pattern with every copy suppressed.
 
+`PatternElement.faces` can crash Fusion itself, not only raise: in Fusion 2706 it did for a rectangular pattern of
+features with a Combine among its inputs. So the faces of the elements are read only for a pattern of features whose
+inputs are all of types read live without a crash (`element_faces_skipped`); else the capture says why in
+`faces_skipped` and the elements have no faces. Nothing but `id`, `isSuppressed` and `transform` is read on an
+element then.
+
 The mirror plane, the circular pattern axis and a rectangular pattern direction taken from an edge or construction
 axis of the part also say what they are (origin, face, edge, construction geometry and what it is built on; see
 read_reference.py), so the translators can tell whether sizes move them.
@@ -112,6 +118,25 @@ def _source_faces(inputs, entity_type):
     return found
 
 
+# The reason in `faces_skipped` when the inputs of a pattern are not all of the types below.
+UNSAFE_INPUTS = "unsafe inputs"
+
+
+def _faces_safe_input(entity):
+    """True for an input feature whose pattern elements Fusion 2706 lists the faces of without a crash, as live checks
+    showed: a hole, and a one-sided extrude that makes a new body, joins or cuts."""
+    return geo.type_name(entity) == "HoleFeature" or read_solid.one_sided_extrude(entity)
+
+
+def element_faces_skipped(inputs, entity_type):
+    """Why the faces of the pattern elements must not be read (`faces_skipped`), or None when they may be: the
+    pattern is of features and every input is of a type in `_faces_safe_input`. A pattern of bodies or faces is not
+    proven safe either."""
+    if entity_type != "features" or not inputs or not all(_faces_safe_input(entity) for entity in inputs):
+        return UNSAFE_INPUTS
+    return None
+
+
 def _common(feature, ctx, faces=False):
     inputs = _inputs(feature)
     entity_type = _entity_type(feature, inputs)
@@ -121,6 +146,9 @@ def _common(feature, ctx, faces=False):
         data["result_bodies"] = None
     if faces:
         data["source_faces"] = _source_faces(inputs, entity_type)
+        skipped = element_faces_skipped(inputs, entity_type)
+        if skipped:
+            data["faces_skipped"] = skipped
     return data
 
 
@@ -328,7 +356,9 @@ def path_before(feature, ctx):
 
 
 def pattern_after(feature, ctx, data):
-    found = {"elements": pattern_elements(feature), "suppressed_ids": _suppressed_ids(feature)}
+    """The elements, with the faces of the sampled ones unless the before read set `faces_skipped`."""
+    found = {"elements": pattern_elements(feature, faces="faces_skipped" not in data),
+             "suppressed_ids": _suppressed_ids(feature)}
     found.update(_result_bodies(feature, ctx, data))
     return found
 

@@ -4903,6 +4903,12 @@ Thus the add-in does not take the place of a copy from the transform alone. The 
    each element made (`PatternElement.faces`, the `faces` of the element). For each face, it writes the centroid
    (`BRepFace.centroid`, in mm) and the area (`BRepFace.area`, in mm2). It reads up to 32 faces of the original and
    up to 8 faces of each element. A list that cannot be read is null.
+   `PatternElement.faces` can crash Fusion itself: in Fusion 2706 it did for a rectangular pattern of features with a
+   Combine among its inputs. Thus the reader reads the faces of the elements only when the pattern is of features and
+   every input is a hole or a one-sided extrude that makes a new body, joins or cuts. These are the types that live
+   checks read without a crash. For any other pattern (also a pattern of bodies or of faces), the capture has
+   `faces_skipped: "unsafe inputs"` and the elements have no faces. The checks then work as for a copy without faces:
+   the other checks below still hold.
    Each face costs Fusion a measure. Thus, in a pattern with more than 12 kept copies, the reader reads the faces of
    12 kept copies only (`SAMPLED_ELEMENTS`): the first three, the last two, and copies spread evenly between them.
    A suppressed copy gets no faces. The checks below then prove the places of the sampled copies only. The wrong
@@ -5357,6 +5363,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
+| `PatternElement.faces` | `read_repeat.py` | Crashed Fusion 2706 itself (no Python error) on a rectangular pattern of features with a Combine among its inputs. The reader reads it only when every input is a hole or a one-sided extrude that makes a new body, joins or cuts (proven live); else `faces_skipped` (hand-tests "Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)"). |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |

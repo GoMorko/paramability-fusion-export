@@ -1070,6 +1070,10 @@ mm2 (`BRepFace.area`).
   one-sided circular copies from their ids and check every place against the faces
   (`design_model/steps/pattern_places.py`, developer guide 3.21). The original is the element with the identity
   frame; in a symmetric direction it is not the first one.
+- `faces_skipped` (rectangular, circular and path patterns): `"unsafe inputs"` when the elements have no `faces`
+  because `PatternElement.faces` is not proven safe for the inputs (it crashed Fusion 2706 for a pattern with a
+  Combine among its inputs). Only a pattern of features whose inputs are all holes or one-sided extrudes that make a
+  new body, join or cut has the faces of its elements read. Absent when they were read, and in older captures.
 - `source_faces` (rectangular, circular and path patterns): up to 32 faces of the original, read with the marker
   before the item: the faces each source feature made (`Feature.faces`), the source faces of a pattern of faces, or
   the faces of the source bodies. Null when they cannot be read, absent in older captures. The frames are in assembly space, so for a

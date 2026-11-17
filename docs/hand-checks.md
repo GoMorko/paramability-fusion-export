@@ -56,6 +56,14 @@ Model any small part with two user parameters that a sketch uses, for example a 
     its values, "recompute: start" and "recompute: end" pairs, and the "STEP file" lines. Pick another body in a new
     dialog: the file then starts again with "start: read the steps". The export takes about as long as before.
 
+### A pattern that repeats a Combine
+
+Model a 60 x 40 x 5 mm plate. Extrude a 6 mm square post 8 mm up from its top face as a new body, combine (join) it
+with the plate, then cut a 3 mm hole through the post with a one-sided extrude cut. Make a rectangular pattern of
+features of the post extrude, the Combine and the cut: 3 copies 15 mm apart along X.
+    Export: export the plate with no parameters ticked. Fusion does not close. In `report.json` the pattern item has
+    `faces_skipped: "unsafe inputs"` and its elements have no `faces`. Afterwards the design is as before.
+
 ## When something looks wrong
 
 Open `report.json` from the export. The field layout is in `docs/capture-format.md`, section 6 ("Report and
