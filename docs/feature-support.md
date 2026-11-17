@@ -1,7 +1,7 @@
 # Feature support
 
 The tables show which Fusion design actions each export copies, and what could be copied later.
-They are for ParamabilityExport 0.13.0-preview.12.
+They are for ParamabilityExport 0.13.0-preview.13.
 `docs/limits.md` (Export for Paramability) and `docs/orca-output.md` (Export for Orca) have the details.
 
 The two exports:
