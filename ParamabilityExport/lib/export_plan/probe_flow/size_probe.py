@@ -57,6 +57,7 @@ class SizeProbe:
         self.time_limit = None  # `{ limit_seconds, hit, seconds }` of the tries' time limit (`note_time_limit`)
         self._timed_out = []  # the sizes of the rows the time limit kept from running
         self._changes = None  # (number of states, `outline_changes`) of the last time it was worked out
+        self._mine = None  # `tried_ranges.part_step` of the capture, made once (`counts_warning`)
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
         self.shared = SharedReads()
         self.shared.share(e0)
@@ -121,7 +122,6 @@ class SizeProbe:
         step the part is built from shows a new warning (the result's `warned`, `tried_ranges.part_step`) is kept
         as a row that did not build too, with that step: Fusion may have built something else there than the copy
         would, so the ranges stop before it as before a step in error."""
-        mine = part_step(self.capture)
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
             more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
@@ -129,7 +129,7 @@ class SizeProbe:
             kept = {"start": start if isinstance(start, dict) else None,
                     "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
             apart = None if result.get("error") else pieces.came_apart(read, self.e0)
-            warned = [name for name in result.get("warned") or () if mine(name)]
+            warned = [name for name in result.get("warned") or () if self.counts_warning(name)]
             if result.get("error"):
                 detail = result.get("detail") or {}
                 state = ProbeState(values or {}, built=False, failed=(detail.get("items") or [""])[0], **kept)
@@ -144,6 +144,13 @@ class SizeProbe:
             else:
                 state = ProbeState(values or {}, read=read, **kept)
             self.states.append(state)
+
+    def counts_warning(self, step):
+        """True when a new warning on the timeline item named `step` makes a row count as not built: a step the part is
+        built from (`tried_ranges.part_step`)."""
+        if self._mine is None:
+            self._mine = part_step(self.capture)
+        return self._mine(step)
 
     def followed_sketches(self):
         """Tokens of the sketches this probe reads at every row."""

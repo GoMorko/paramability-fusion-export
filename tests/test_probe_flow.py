@@ -83,6 +83,25 @@ class WarnedTryTest(unittest.TestCase):
     def test_a_warning_on_a_step_the_part_is_not_built_from_cuts_nothing(self):
         self.assertNotIn("off", self.ranges_after("Extrude9"))
 
+    def test_a_warning_a_step_had_while_it_was_off_does_not_count_once_it_is_back_on(self):
+        from lib.export_plan.pipeline import ProbeRun
+        capture = copy.deepcopy(CAPTURE)
+        for item in capture["items"]:
+            item["in_target_component"] = True
+        fusion = Fusion()
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(capture, tbl, fusion.read)
+
+        def back_on():
+            # The step was off for the tries; back on, it shows the warning it has in the person's design.
+            fusion.store.warns = lambda exprs: [(6, "Extrude6")]
+
+        run = ProbeRun(runner_port(fusion), "", probe, before_discovery=back_on)
+        run.run_rows(keyed(size_row("off", 6.0)))
+        run.discover([dict(size(tbl, "cube", "mm"), end=12.0)])
+        self.assertEqual(run.rows[-1][0]["varied"], ["cube"])
+        self.assertNotIn("warned", run.rows[-1][1])
+
 
 class SizeProbeTest(unittest.TestCase):
     def setUp(self):
