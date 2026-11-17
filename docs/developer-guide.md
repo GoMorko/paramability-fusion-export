@@ -161,8 +161,11 @@ When the person clicks "Export for Paramability", Fusion calls `_on_created` in
    time limit of the tries) and
    runs the pipeline inside `export_common.run_guarded`.
 8. The export runs only once per dialog. With "Lighter on memory" ticked, the export calls Fusion's
-   `Command.beginStep`. Fusion then fires the execute event of the command again. `on_execute` in `entry.py` remembers
-   that the export started, and it ignores the second event.
+   `Command.beginStep`. Fusion then fires the execute event of the command again. `on_execute` in `entry.py` hands the
+   event to an `ExecuteGate` (`lib/export_plan/rollback.py`). Only the first event runs the export. The gate ignores
+   every later event, and it sets no abort on it. When the export ends with a design that is not back as it was, the
+   gate sets `executeFailed` on the first event, so Fusion undoes the export (see "Undo of an export that did not come
+   back" in 1.11).
 
 `run_guarded` catches every way the export can stop and shows one plain message. A cancel shows "Export cancelled.
 Your parameters are back to their values." A known error (`RowBuildError`, `StepExportError`, `PackageCapError`,
@@ -1508,7 +1511,8 @@ with nothing to say is left out:
 
 - `# Check your design` (first, and only when something went wrong): a parameter that did not go back, timeline
   steps whose health differs from the start, sketches that did not come back to their first shape, sketches that
-  could not be checked or measured, sketches left with their compute deferred (`health_lines`);
+  could not be checked or measured, sketches left with their compute deferred (`health_lines`). When the add-in
+  asked Fusion to undo the export, the lines say so (`rollback.check_lines`);
 - `# Result`: the file, whether it is an editable copy (or one with steps left out) and how many parameters come along.
   When the size tries stopped at the time limit, a line says so and how many sizes were not tried (`time_stop_lines`);
 - `# Sizes`: one line per size with its range and its state ("may be unexpected", "range cut", "kept fixed",
@@ -1554,13 +1558,18 @@ fixed points. The order is the same for one body and for several bodies:
 4. `settle(read_gap, read_outline_gap)` once the export is made: the values and the items back, the sketch gap read,
    the marker back, the end check of the timeline steps (next part), and the outlines read again when the end check
    rebuilt the design.
-5. `close(health)` when the export is made. It puts the values and the marker back once more, names the items that
+5. `close(health)` when the export is made. It gives the health to the outcome (`rollback.ExportOutcome`). It puts the values and the marker back once more, names the items that
    stayed off (`_warn_left_off`) and, as its last call, drops the last Undo step when the health record says the design
    is as it was (`undo_steps.drop_after`, see "Lighter on memory").
 6. `close_failed()` when the export stops: the values and the marker go back, the person is told which parameters did
    not go back (`port.warn_unrestored`), which timeline steps differ from the start (`_warn_steps`, the end check runs
    here when it did not yet) and which items stayed off. A warning that fails is logged and the next warnings still
-   run, so the error or cancel that stopped the export is the one that is raised.
+   run, so the error or cancel that stopped the export is the one that is raised. Then it gives the outcome a health
+   record of the stop (`_failed_health`). That record has no probe and no sketch gap, because the sketches are not
+   read again at a stop. When the end check did not run, the outcome gets no health at all.
+
+`hold_timeline` and `_after_tries` set `outcome.touched`: from there on the tries changed the design. The outcome comes
+to `PutBack` through `ExportRequest.outcome`; a request without one keeps no record.
 
 In Export for Paramability, `run_guarded` (in `commands/export_common.py`) no longer puts values back or drops Undo
 data. It shows the message boxes and puts the timeline marker back once more at the end. (Export size choices does not
@@ -1568,6 +1577,59 @@ use `PutBack`: it still gives `run_guarded` the restore of its own rows.) The re
 object, `health.HealthInputs` (`lib/export_plan/health.py`): `health.make_health(HealthInputs(...))`, and
 `PutBack.health_inputs(probe, probe_error, unchecked, flipped)` fills in what the put back knows. The test that holds
 the expected call order for every way an export ends is `tests/test_put_back_order.py` (see 4.11).
+
+#### Undo of an export that did not come back
+
+The put back of the add-in is a set of calls that undo what the tries did. When the end check says it did not work,
+the add-in asks Fusion to undo the whole export. Fusion does this itself, so it also undoes what the add-in cannot
+name. The files that the export wrote outside Fusion stay. Code: `lib/export_plan/rollback.py`.
+
+How Fusion keeps the changes. The export runs inside the execute event of one Fusion command. Fusion keeps what the
+command does in one transaction. The setting `CommandEventArgs.executeFailed` is documented in Fusion's API as: the
+execute operations failed, and the transaction of the command must be aborted. `executeFailedMessage` is the text Fusion
+shows. The add-in sets both on the first execute event, after the export, so Fusion aborts at the end of that event.
+
+Which part the abort reaches:
+
+1. With "Lighter on memory" off, the export starts no step of its own. There is one execute event and one
+   transaction, and it holds the whole export: the capture, every try and the put back. The abort undoes all of it.
+2. With "Lighter on memory" on, the tries call `Command.beginStep(makeExistingStepNonUndoable=True)` (`undo_steps`).
+   Each call ends the current step of the command without Undo data and starts a new step. Fusion cannot undo a step
+   that ended so. The abort reaches only the step that is open at the end, that is the part after the last call. The
+   tries before it stay in the design. This is why the rollback is `partial` in this case, and the window says so
+   and gives the advice of `health.NO_UNDO_ADVICE`.
+3. A call of `beginStep` fires the execute event again. That event comes while the first one still runs, or after it.
+   The gate runs no export on it and sets no abort on it. Only the first event holds the verdict.
+
+When the add-in aborts (`rollback.decide`):
+
+- The health record of the export is not `health.back_as_it_was`. This includes a real change (`design_changed`) and
+  an end check that could not confirm the design is back (for example `restore_unverified`). It aborts also when
+  no warning line is shown for it. The window then still says what happened.
+- No health record exists and the tries ran (`touched`). The state is unknown, so the add-in undoes the export.
+- It does not abort when the tries did not start and the health record shows no problem. Such an export changed
+  nothing that the abort would undo. This is the case of a STEP file that fails, a capture that fails and a cancel
+  before the tries.
+- It does not abort when the export raised or was cancelled and put the design back. The health record of a stop comes
+  from `PutBack.close_failed`.
+
+What the person sees. The "Check your design" part of the result window says that the add-in undid everything the
+export did and that the design is as before; it also says that the file is saved. With a partial undo it says that the
+add-in could only undo the last part, and it gives the advice to close the design without saving. The view data holds
+`rolled_back` (the add-in asked Fusion to undo) and `partial`. When the export saved no file (it stopped), a message
+box says the same. After a full undo the lines about the design (Undo advice, changed steps) are not shown, because
+they no longer hold.
+
+The three buttons use the same gate: `Export for Paramability`, `Export size choices` and `Export for Orca`.
+`run_export` of each never raises and returns its `ExportOutcome`. Export size choices has no `PutBack`: its own
+end check (`export_common.settle_steps`) gives the outcome its health, and the rows set `touched`.
+
+What only a live check can prove: that Fusion undoes the whole transaction when `executeFailed` is set after a long
+export, and how long that takes; that the first event decides, and a later event does not undo the abort; which text
+Fusion shows; that the result window still opens after an abort; and what Fusion keeps with "Lighter on memory" on.
+The hand check RB1 in `docs/hand-checks.md` covers the first four.
+
+The tests are in `tests/test_rollback.py`.
 
 #### The end check of the timeline
 
@@ -1784,6 +1846,8 @@ alphabetical order by module.
 - `health.py`: the `health` record and its sentences (`HealthInputs`, `make_health`, `health_lines`, `back_as_it_was`,
   `left_off_line`). `messages.py`: the package notes and the "Tip: " lines of the left-out steps.
 - `undo_steps.py`: the "Lighter on memory" experiment (`UndoSteps`, `attach`, `drop_after`).
+- `rollback.py`: the undo of an export that did not put the design back (`ExportOutcome`, `decide`, `Rollback`,
+  `ExecuteGate`, the lines for the window).
 - `time_limit.py`: the choices, the default and the words of the time limit of the size tries (see 1.8).
   `fixed_parts.py`: the sizes that also move a part that stays a fixed shape in a parts file (`marked`, `joined`, see
   1.10).
@@ -5264,6 +5328,8 @@ Tests that help most when you debug:
   `tests/local/captures.json`, packages in the folder `PARAMABILITY_LOCAL_REPORTS`), and the module skips without them.
 - `tests/test_gap_hints.py` keeps the hint table and the causes of the translator in step.
 - `tests/test_undo_steps.py` covers "Lighter on memory" with a fake `Command.beginStep`.
+- `tests/test_rollback.py` covers when an export is aborted, the gate of the execute event and the keys of the result
+  window.
 - `tests/test_formula_corpus.py` holds typical printing formulas, made up (a wall of `3 * 0.4 mm`, a fraction of an inch,
   a guarded count). Each case is a set of user parameters, or a feature value that reads them. The test asks whether the
   size table and `values.quantity` keep the formula, so that the shape follows a size that is changed in Paramability.

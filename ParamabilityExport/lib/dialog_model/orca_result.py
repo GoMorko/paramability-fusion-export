@@ -4,7 +4,7 @@ The same `# Title` sections as `result_rows`: what to check in the design, the r
 Orca variable and which stayed fixed, the steps left out, and what to do next in OrcaSlicer. Built from the report
 of the export (`export_plan.orca_export`).
 """
-from ..export_plan.health import health_lines
+from ..export_plan.rollback import NO_ROLLBACK, check_lines
 from ..export_plan.messages import left_out_lines
 from ..export_plan.orca_export import translate_for_orca
 from . import left_out_preview
@@ -78,20 +78,22 @@ def _section(key, title, lines):
     return {"key": key, "title": title, "lines": list(lines), "rows": []} if lines else None
 
 
-def orca_view(file_name, report, ticked=()):
+def orca_view(file_name, report, ticked=(), rollback=NO_ROLLBACK):
     """Plain data for the result dialog: `title`, `sections` (`check`, `result`, `variables`, `left_out`, `next`)
-    and `message`, the same text for a message box. A section without content is absent."""
+    `message`, the same text for a message box, `rolled_back` and `partial` (as in `result_rows.result_view`). A section
+    without content is absent."""
     orca = report.get("orca") or {}
     parameters = [parameter_line(p) for p in orca.get("parameters") or []]
     sections = [
-        _section("check", "Check your design", health_lines(report.get("health"))),
+        _section("check", "Check your design", check_lines(report.get("health"), rollback)),
         _section("result", "Result", _result_lines(file_name, report)),
         _section("variables", "Variables", parameters + _formula_lines(orca, set(ticked))),
         _section("left_out", "Left out", _left_out_lines(report)),
         _section("next", "Next in OrcaSlicer", NEXT_LINES + [NOT_USED_LINE]),
     ]
     sections = [s for s in sections if s]
-    return {"title": TITLE, "sections": sections, "message": view_message(sections)}
+    return {"title": TITLE, "sections": sections, "message": view_message(sections),
+            "rolled_back": rollback.abort, "partial": rollback.partial}
 
 
 def preview(capture, up_axis="z"):

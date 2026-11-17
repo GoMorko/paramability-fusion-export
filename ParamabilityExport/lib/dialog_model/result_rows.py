@@ -7,7 +7,8 @@ debugging stays in `report.json`.
 import re
 
 from .dialog_rows import range_text
-from ..export_plan.health import FAILED, health_lines
+from ..export_plan.health import FAILED
+from ..export_plan.rollback import NO_ROLLBACK, check_lines
 from ..export_plan.messages import (
     ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, also_changes_line, also_changes_parts_line, left_out_lines,
     not_tried_line, time_stop_line)
@@ -245,24 +246,27 @@ def view_message(sections):
     return "\n\n".join("\n".join(["# " + found["title"]] + found["lines"]) for found in sections)
 
 
-def _build(file_name, manifest, report, table, ticked, result_extra=()):
+def _build(file_name, manifest, report, table, ticked, result_extra=(), rollback=NO_ROLLBACK):
     rows = _size_rows(table, report, ticked) + _probe_rows(report)
     size_count = len(report["sizes"].get("free") or [])
     sections = [
-        _section("check", "Check your design", health_lines(report.get("health"))),
+        _section("check", "Check your design", check_lines(report.get("health"), rollback)),
         _section("result", "Result", _result_lines(file_name, manifest, report, size_count, result_extra)),
         _section("sizes", "Sizes", [size_line(r) for r in rows] + kept_number_lines(manifest), rows),
         _section("left_out", "Left out", _left_out_lines(report)),
         _section("more", "More sizes", also_lines(report) + not_tried_lines(report)),
     ]
     sections = [found for found in sections if found]
-    return {"sections": sections, "message": view_message(sections)}
+    return {"sections": sections, "message": view_message(sections), "rolled_back": rollback.abort,
+            "partial": rollback.partial}
 
 
-def result_view(file_name, manifest, report, table, ticked):
+def result_view(file_name, manifest, report, table, ticked, rollback=NO_ROLLBACK):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
-    Keys: `sections` and `message` (the same text for a message box). Each section is `{key, title, lines, rows}`;
+    Keys: `sections` and `message` (the same text for a message box), `rolled_back` (Fusion was told to undo the
+    export, `export_plan.rollback`; the `check` section then says so) and `partial` (the undo cannot reach all of it).
+    Each section is `{key, title, lines, rows}`;
     the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
     with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the
@@ -272,10 +276,10 @@ def result_view(file_name, manifest, report, table, ticked):
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:
         return None
-    return _build(file_name, manifest, report, table, ticked)
+    return _build(file_name, manifest, report, table, ticked, rollback=rollback)
 
 
-def parts_result_view(file_name, manifest, report, table, ticked):
+def parts_result_view(file_name, manifest, report, table, ticked, rollback=NO_ROLLBACK):
     """`result_view` for a parts package (`recipe_export.plan_parts_export`), or None for any other file.
 
     The sizes are the file's: each is listed once, whatever number of parts read it, and its reason names its part. The
@@ -283,4 +287,5 @@ def parts_result_view(file_name, manifest, report, table, ticked):
     if manifest.get("kind") != "parts" or "parts" not in report:
         return None
     sizes = report.get("sizes") or {"free": [], "fixed": [], "loose": [], "dropped": []}
-    return _build(file_name, manifest, dict(report, sizes=sizes), table, ticked, _part_lines(manifest, report))
+    return _build(file_name, manifest, dict(report, sizes=sizes), table, ticked, _part_lines(manifest, report),
+                  rollback)
