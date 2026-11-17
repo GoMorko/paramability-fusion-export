@@ -58,30 +58,75 @@ def run(fusion, probe, sizes):
     return rows, results
 
 
+def shared_name_ranges(at, error=False):
+    """The range cuts after the tries of `off`, with the timeline item at position `at` in warning (in error with
+    `error`) once `off` is above 5.5 mm. The part's own step at 6 and a step of another component at 9 are both named
+    "Extrude6", as Fusion names steps per component."""
+    capture = copy.deepcopy(CAPTURE)
+    for item in capture["items"]:
+        item["in_target_component"] = True
+    capture["items"].append({"index": 9, "name": "Extrude6", "type": "ChamferFeature", "component": "other",
+                             "in_target_component": False, "data": {}})
+    fusion = Fusion()
+    trouble = lambda exprs: [(at, "Extrude6")] if number(exprs["off"]) > 5.5 else []  # noqa: E731
+    if error:
+        fusion.store.errors = []
+        fusion.store.on_recompute = lambda store: setattr(store, "errors", trouble(store.exprs))
+    else:
+        fusion.store.warns = trouble
+    tbl = table(PARAMS, TICKED, MODEL)
+    probe = SizeProbe.start(capture, tbl, fusion.read)
+    run(fusion, probe, [size(tbl, "off", "mm")])
+    probe.finish(probe.read_now(), {})
+    return built_ranges(tbl, probe.motion, capture)
+
+
+class FailedTryTest(unittest.TestCase):
+    """A try where Fusion fails to build a step cuts the range when that step is one the part is built from, told by
+    its timeline position: another component can have a step of the same name."""
+
+    def test_a_failure_of_a_step_of_the_part_cuts_the_range_also_when_another_step_has_its_name(self):
+        cut = shared_name_ranges(6, error=True)["off"]
+        self.assertEqual(cut[1], 5.0)
+        self.assertEqual(cut.failed["high"][1], "Extrude6")
+
+    def test_a_failure_of_a_step_of_another_component_cuts_nothing_also_when_a_step_of_the_part_has_its_name(self):
+        self.assertNotIn("off", shared_name_ranges(9, error=True))
+
+    def test_a_try_in_error_keeps_the_first_failed_step_the_part_is_built_from(self):
+        capture = copy.deepcopy(CAPTURE)
+        for item in capture["items"]:
+            item["in_target_component"] = True
+        capture["items"].append({"index": 9, "name": "Extrude6", "component": "other", "in_target_component": False})
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(capture, tbl, Fusion().read)
+        detail = {"reason": "new_errors", "items": ["Extrude6", "Extrude4"], "at": [9, 4]}
+        probe.add_states([({"off": 8.0}, {"name": "off", "error": "no", "detail": detail}, None)])
+        self.assertEqual((probe.states[-1].failed_at, probe.states[-1].failed), (4, "Extrude4"))
+
+
+    def test_a_record_without_step_positions_cuts_where_a_step_of_the_part_has_the_failed_name(self):
+        # Reports written before positions were kept name the step alone; the shared name counts as the part's.
+        capture = copy.deepcopy(CAPTURE)
+        for item in capture["items"]:
+            item["in_target_component"] = True
+        capture["items"].append({"index": 9, "name": "Extrude6", "component": "other", "in_target_component": False})
+        tbl = table(PARAMS, TICKED, MODEL)
+        motion = Motion(spans={"off": {"low": 5.0, "high": 6.0, "failed": [[8.0, "Extrude6"]]}})
+        self.assertEqual(built_ranges(tbl, motion, capture)["off"][1], 6.0)
+
+
 class WarnedTryTest(unittest.TestCase):
     """A try where a step of the part shows a warning it did not have at the start counts as a try that did not build,
     so the range stops before it."""
 
-    def ranges_after(self, step):
-        """The range cuts after the tries of `off`, with `step` in warning once `off` is above 5.5 mm."""
-        capture = copy.deepcopy(CAPTURE)
-        for item in capture["items"]:
-            item["in_target_component"] = True
-        fusion = Fusion()
-        fusion.store.warns = lambda exprs: [(6, step)] if number(exprs["off"]) > 5.5 else []
-        tbl = table(PARAMS, TICKED, MODEL)
-        probe = SizeProbe.start(capture, tbl, fusion.read)
-        run(fusion, probe, [size(tbl, "off", "mm")])
-        probe.finish(probe.read_now(), {})
-        return built_ranges(tbl, probe.motion, capture)
-
-    def test_a_warning_on_a_step_of_the_part_cuts_the_range_before_the_try(self):
-        cut = self.ranges_after("Extrude6")["off"]
+    def test_a_warning_on_a_step_of_the_part_cuts_the_range_before_the_try_also_when_another_step_has_its_name(self):
+        cut = shared_name_ranges(6)["off"]
         self.assertEqual(cut[1], 5.0)
         self.assertEqual(cut.warned["high"][1], "Extrude6")
 
-    def test_a_warning_on_a_step_the_part_is_not_built_from_cuts_nothing(self):
-        self.assertNotIn("off", self.ranges_after("Extrude9"))
+    def test_a_warning_on_a_step_of_another_component_cuts_nothing_also_when_a_step_of_the_part_has_its_name(self):
+        self.assertNotIn("off", shared_name_ranges(9))
 
     def test_a_warning_a_step_had_while_it_was_off_does_not_count_once_it_is_back_on(self):
         from lib.export_plan.pipeline import ProbeRun

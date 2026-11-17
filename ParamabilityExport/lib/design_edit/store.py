@@ -20,7 +20,8 @@ class ParameterStore(Protocol):
     recompute(): rebuild the design; False when Fusion reports it failed.
     read_value(name): the value of one parameter.
     error_items(): names of the timeline items in error.
-    error_entries(): {key: name} of the same items; the key tells apart items that share a name.
+    error_entries(): {key: name} of the same items; the key tells apart items that share a name. The Fusion store
+      keys an item by its timeline position (`apply.position`), the `index` of its capture item.
     return_marker(): put the timeline marker back where the store keeps it: "" when it was there or cannot be read,
       "moved" when it went back, "lost" when it would not.
     marker_holds(): False when the marker sits before the position the tries need (a read would miss items).

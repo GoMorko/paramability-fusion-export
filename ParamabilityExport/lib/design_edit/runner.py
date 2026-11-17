@@ -36,8 +36,8 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
-    counts_warning(name), when given, says which steps in a new warning count for a row (`apply.new_warnings`); the
-    others are not named and cost no recompute. `rebase()` measures the baseline again before the next row, for a
+    counts_warning(step), when given, says which steps in a new warning count for a row (`apply.new_warnings`; `step`
+    is `(timeline position, name)`); the others are not named and cost no recompute. `rebase()` measures the baseline again before the next row, for a
     caller that turned timeline items back on between runs.
     stop_when(), when given, is asked before each row; when it answers true the run ends there, cleanly: no later row
     runs, the parameters are put back as at the end of any run, and `halted` stays true for every later run of the
@@ -232,7 +232,8 @@ class RowExport:
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
         then set every parameter it needs. A row that builds with timeline items in warning that were not in warning
-        or in error in the baseline (`apply.new_warnings`) also gives 'warned': their names, in timeline order.
+        or in error in the baseline (`apply.new_warnings`) also gives 'warned': `(timeline position, name)` of each,
+        in timeline order.
         A row without a STEP gives 'step_file': None as well.
         """
         if self._saved is None:

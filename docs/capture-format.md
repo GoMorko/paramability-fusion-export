@@ -2042,9 +2042,13 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   the design with only that size changed, an untyped range stops at the farthest value that built
   (`tried_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
   end). A step of the part that shows a new warning at a try counts as a failure there (`spans.warned`, `Cut.warned`; the
-reason says "Fusion shows a warning on Revolve1 at 12.5"). A failure counts only when its step is one the part is built from: an item of the target's component or a
-  step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
-  capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
+reason says "Fusion shows a warning on Revolve1 at 12.5"). A failure counts only when its step is one the part is built from: an item of the target's component, a
+  step that made a Combine tool body or an item with `body_states`, or a failure with no step name; a step of another
+  component, or a name no capture item has, cuts nothing and the size keeps the "followed between A and B" mark. The
+  step is told by its timeline position (the third number of a `spans.failed` entry, the capture item `index`), since
+  Fusion names steps per component and two components can both have a "Chamfer1". An entry without a position (a
+  record of an older version) counts when a step of the part has its name, also when a step of another component has
+  it too. Where a followed sketch made
   a different outline with only that size changed, the range stops the same way at the farthest value that kept it
   (`spans.kept`, `Cut.changed`), and where Fusion built the part in several separate pieces, at the farthest value
   tried in one piece (`spans.split`, `Cut.split`, `tried_ranges.split_cut`; the reason says "the part comes apart into
@@ -2188,7 +2192,8 @@ the highest value it was measured at; each such size with each other size of tho
 `series.curve_sizes`, since a partner of a turn may move no curved value at the sizes now); then every other size at
 the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
-first step that failed (`failed`). A row that built while a step of the part showed a warning it did not show before
+first step that failed and that the part is built from, else the first step that failed (`failed`, the name, and
+`failed_at`, its timeline position; records of older versions have no `failed_at`). A row that built while a step of the part showed a warning it did not show before
 the tries is kept as a state that did not build, with that step in `failed` and `warned: true`. A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
 B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
@@ -2239,7 +2244,8 @@ tell, a read curve runs the way the captured one does along the loop), an arc's 
 `radius`; `curves` lists the profiles
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
-(the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
+(the value now included) and `failed`, `[value, step, position]` for each value tried alone that did not build, with
+the timeline position of the step (`[value, step]` in records of older versions or when Fusion gave no position)
 (`probe.build.spans`), `warned`, the entries of `failed` where the step showed a new warning (only when there is
 one), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
 separate pieces (only when there is one, see "Probe states"), and `kept` and `changed` for a size whose own row changed a followed outline (see the

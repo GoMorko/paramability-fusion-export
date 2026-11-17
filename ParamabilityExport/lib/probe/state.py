@@ -17,9 +17,11 @@ class ProbeState:
     """A state of the probe (see `build` for how the fit uses it).
 
     values: Fusion name to the manifest number the row set; a size that is missing stays at its value now.
-    built: False when Fusion could not build the part there; `failed` then names the first step in error. Also False
-      when Fusion built it in several separate pieces while it was one at E0 (`probe.pieces.came_apart`): `pieces`
-      then holds how many, `failed` is empty and `read` is None.
+    built: False when Fusion could not build the part there; `failed` then names the first step in error that the part
+      is built from (the first step in error when none is), and `failed_at` gives its timeline position (None in a
+      record written before positions were kept, or when Fusion gave none). Also False when Fusion built it in
+      several separate pieces while it was one at E0 (`probe.pieces.came_apart`): `pieces` then holds how many,
+      `failed` is empty and `read` is None.
     read: the probe state read there (`fusion_reader.probe_state`), or None.
     e0: True for the first read, at the values now, before any size changed.
     start: the read with the values back, before the row ran, or None when it was not read.
@@ -27,7 +29,7 @@ class ProbeState:
     again: True for a row run a second time from a checked start.
     changed: True when the row's own size changed a followed outline (set by `marked_states` for `plan`).
     warned: True when Fusion built the part there but a step it is built from shows a new warning: the state counts as
-      one that did not build, `failed` names that step.
+      one that did not build, `failed` names that step and `failed_at` gives its position.
     """
 
     values: dict = field(default_factory=dict)
@@ -35,6 +37,7 @@ class ProbeState:
     read: object = None
     e0: bool = False
     failed: object = None
+    failed_at: object = None
     start: object = None
     put_back: object = None
     again: bool = False
@@ -48,6 +51,7 @@ class ProbeState:
         start, put_back = data.get("start"), data.get("put_back")
         return cls(values=data.get("values") or {}, built=data.get("built") is not False, read=data.get("read"),
                    e0=bool(data.get("e0")), failed=data.get("failed"),
+                   failed_at=data.get("failed_at") if type(data.get("failed_at")) is int else None,
                    start=start if isinstance(start, dict) else None,
                    put_back=put_back if isinstance(put_back, dict) else None,
                    again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"),
@@ -58,6 +62,8 @@ class ProbeState:
         out = {"values": self.values, "built": self.built}
         if self.failed:
             out["failed"] = self.failed
+        if self.failed_at is not None:
+            out["failed_at"] = self.failed_at
         if self.pieces:
             out["pieces"] = self.pieces
         if self.warned:
