@@ -21,8 +21,8 @@ from ..params.expressions.text import MAX_FORMULA_LENGTH
 from .ranges import kept_ranges, range_check
 
 TOLERANCE = 1e-6
-# How far above zero (degrees) an angle the step needs positive stays when the size ranges are cut for it: half the
-# form's step, so the cut end lands on 0.01.
+# How far above zero (degrees or mm) an angle or length the step needs positive stays when the size ranges are cut for
+# it: half the form's step, so the cut end lands on 0.01.
 ABOVE_ZERO = 0.005
 
 
@@ -168,19 +168,19 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
     q = Quantity(literal, text, tr.reads)
     if (absolute or whole) and not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):
         if dim == "angle" and not whole:
-            return _angle_above_zero(ctx, item, q)
-        ctx.doubt(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
-                  % item.get("name", "a step"))
-        return plain
+            return _kept_above(ctx, q, ABOVE_ZERO, "%s needs an angle above zero" % item.get("name", "a step"))
+        return _kept_above(ctx, q, 1.0 - 1e-9 if whole else ABOVE_ZERO,
+                           "%s would leave its working range (a length reaching zero or a count under 1)"
+                           % item.get("name", "a step"))
     return q
 
 
-def _angle_above_zero(ctx, item, q):
-    """`q`, an angle the step needs above zero that reaches zero inside the size ranges (the default range of a small
-    angle starts at 0 degrees): the ranges of the sizes it reads are cut where it stays above ABOVE_ZERO, or its number
-    when no cut does that, with its sizes marked."""
-    found = kept_ranges.holding_ranges(ctx.table, [(q, 1)], ABOVE_ZERO)
-    why = "%s needs an angle above zero" % item.get("name", "a step")
+def _kept_above(ctx, q, floor, why):
+    """`q`, a value the step needs above `floor` (an angle or length above zero, a count of at least 1) that leaves
+    that inside the size ranges (the default range of a small angle starts at 0 degrees; a difference of two sizes can
+    pass zero): the ranges of the untyped sizes it reads are cut where it stays above `floor`, so the formula is kept.
+    Its number, with its sizes marked for `why`, when no cut does that (a typed range, or the value now is outside)."""
+    found = kept_ranges.holding_ranges(ctx.table, [(q, 1)], floor)
     if found is None:
         ctx.doubt(q.reads, why)
         return Quantity(q.n)

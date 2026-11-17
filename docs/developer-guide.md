@@ -1286,9 +1286,17 @@ value that a parameter may drive. It does this:
    of whole parts, `pow` of a whole part to a whole literal of 0 or more, and a choice `test ? a : b` whose two
    results are whole (the test can be anything). A division or a decimal literal makes the count not whole. The
    count is then written as its number and its sizes are marked. The check follows derived sizes up to 8 levels deep.
-6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. The check
-   tries every mix of the range ends (`range_check.sweep`). An angle the step needs above zero has its ranges cut
-   instead (`_angle_above_zero`).
+6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. A count
+   (`whole=True`) must stay at 1 or more. The check tries every mix of the range ends (`range_check.sweep`). When the
+   value leaves that range, the add-in cuts the ranges of the untyped sizes that it reads, so that the value stays
+   above 0.005 (a count at 1 or more), and keeps the formula (`_kept_above`). An angle the step needs above zero gets
+   the same cut. When no cut keeps the value (every size it reads has a typed range, or the value now is outside),
+   the value is written as its number, and its sizes are marked.
+
+   Example. A join of length `Tall - Low` sits on a part of height `Low`. `Low` goes from 5 to 20 mm, and `Tall` from
+   15 to 60 mm. At `Low` 20 and `Tall` 15 the length is -5 mm. So the add-in cuts the ranges where the length stays
+   above zero: `Low` stops at 17.99 and `Tall` starts at 18.01. The length stays `Tall - Low`, and both sizes stay
+   free. If the length became a number instead, the join would stay 20 mm high while `Low` moves its start.
 7. It returns a `Quantity` (`lib/design_model/values.py`, shared with the Orca output): the number plus the formula and
    the Fusion names it reads. `.json()` writes
    `{ "expr": "..." }` or a plain number.
@@ -2738,7 +2746,7 @@ the rule holds (`kept_ranges.holding_ranges`):
 
 - A taper that follows sizes must stay under 45 degrees (the app refuses a steeper one).
 - A draft or revolve angle must stay above zero. Since the default range of a small angle starts at 0, the range is
-  cut to start at 0.01 (`values._angle_above_zero`).
+  cut to start at 0.01 (`values._kept_above`). A length or count that leaves its working range is cut the same way.
 - A "to entity" length must not pass its own start.
 - A coil: the wire must clear the axis, the turns must not touch each other, and the turns of coils and threads together
   stay under 100 (3.13).
