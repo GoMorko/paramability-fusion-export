@@ -147,23 +147,35 @@ class TrayTest(unittest.TestCase):
         self.assertTrue(dropped["used"])
         self.assertIn("a value of Shell1 cannot be copied", dropped["reason"])
 
-    def test_a_length_that_reaches_zero_inside_the_range_marks_its_size(self):
+    def test_a_length_that_reaches_zero_inside_the_range_cuts_the_range_and_keeps_the_formula(self):
         def edit(capture):
             data = capture["items"][1]["data"]
             data["side_one"]["distance"] = data["end_offset"] = 24.0
             data["params"]["side_one.distance"] = param("d3", "(corner_mm - 1.5 mm) * 16", 24.0)
         result, _ = run(on_tray(edit))
-        self.assertEqual([f["name"] for f in result.loose], ["corner_mm"])
-        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 24)
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "(corner_mm - 1.5) * 16"})
+        self.assertEqual([c["name"] for c in result.cuts], ["corner_mm"])
+        self.assertGreater(result.recipe["sizes"]["corner_mm"]["min"], 1.5)
 
-    def test_a_length_that_reaches_zero_only_with_two_sizes_at_opposite_ends_marks_both(self):
+    def test_a_difference_of_two_sizes_cuts_both_ranges_where_it_stays_positive_or_marks_both_when_typed(self):
+        # The pattern of a join of `Tall - Low` on top of a part `Low` high: the length passes zero only when the two
+        # sizes sit at opposite ends of their ranges.
         def edit(capture):
             data = capture["items"][1]["data"]
             data["side_one"]["distance"] = data["end_offset"] = 32.0
             data["params"]["side_one.distance"] = param("d3", "16 * corner_mm - 8 * wall_mm", 32.0)
         result, _ = run(on_tray(edit))
-        self.assertEqual(sorted(f["name"] for f in result.loose), ["corner_mm", "wall_mm"])
-        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 32)
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "16 * corner_mm - 8 * wall_mm"})
+        self.assertNotIn("wall_mm", [d["name"] for d in result.dropped])
+        sizes = result.recipe["sizes"]
+        self.assertGreater(16 * sizes["corner_mm"]["min"] - 8 * sizes["wall_mm"]["max"], 0)
+        capture = on_tray(edit)
+        params = capture["parameters"]
+        typed = size_table.build(params["user"], TICKED, params["model"], "mm",
+                                 ranges={"corner_mm": (0.5, 6.0), "wall_mm": (1.0, 6.0)})
+        marked = translate(capture, size_table=typed)
+        self.assertEqual(sorted(f["name"] for f in marked.loose), ["corner_mm", "wall_mm"])
+        self.assertEqual(steps_of(marked.recipe, "extrude")[0]["distance"], 32)
 
     def test_a_length_of_two_sizes_that_stays_positive_everywhere_keeps_them_free(self):
         def edit(capture):

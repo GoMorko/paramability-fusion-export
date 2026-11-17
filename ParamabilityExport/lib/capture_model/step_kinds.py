@@ -172,6 +172,7 @@ STEP_TYPES = (
     StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OUTLINE_FACE),
              finishing=FINISHING_ALWAYS),
     StepType("SweepFeature", "sweep", reader="read_sweep", sketches=(PROFILES, PATH)),
+    StepType("PipeFeature", "pipe", reader="read_pipe", sketches=(PATH,), gap_cause=gap_hints.PIPE),
     StepType("LoftFeature", "loft", reader="read_sweep", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),
     StepType("ConstructionPlane", "construction plane", role=SKETCH),

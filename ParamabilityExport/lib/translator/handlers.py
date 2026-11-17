@@ -11,7 +11,7 @@ from .hole import step as hole
 from .loft import step as loft
 from .repeat import body_copies
 from .revolve import step as revolve
-from .sweep import step as sweep
+from .sweep import pipe, step as sweep
 
 HANDLERS = {
     "ExtrudeFeature": extrude.handle,
@@ -35,5 +35,6 @@ HANDLERS = {
     "EmbossFeature": emboss.handle,
     "CoilFeature": coil.handle,
     "SweepFeature": sweep.handle,
+    "PipeFeature": pipe.handle,
     "LoftFeature": loft.handle,
 }

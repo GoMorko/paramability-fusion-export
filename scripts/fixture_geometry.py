@@ -5,7 +5,7 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes (thin walls of closed outlines with round corners, and of open lines, included), embosses on flat faces, revolves, sweeps of one outline along a path, lofts of two convex polygons (other lofts give their box only), holes, combines, patterns and mirrors, pastes, moves, scales of bodies and offsets of flat faces with square sides, read straight from the
+The model is a voxel count of extrudes (thin walls of closed outlines with round corners, and of open lines, included), embosses on flat faces, revolves, sweeps of one outline along a path (and pipes with a circle section), lofts of two convex polygons (other lofts give their box only), holes, combines, patterns and mirrors, pastes, moves, scales of bodies and offsets of flat faces with square sides, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
 0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
@@ -628,6 +628,17 @@ def sweep_shape(data):
     return Shape(test, np.min(everything, axis=0) - reach, np.max(everything, axis=0) + reach)
 
 
+def pipe_as_sweep(data):
+    """A circle pipe as the sweep of its section that it equals (`design_model/steps/pipe.py`)."""
+    sys.path.insert(0, os.path.join(ROOT, "ParamabilityExport"))
+    from lib.design_model.problem import is_problem
+    from lib.design_model.steps import pipe
+    start = pipe.start_of(data.get("path")) if pipe.section_problem(data) is None else None
+    if start is None or is_problem(start):
+        raise Unmodelled("pipe")
+    return dict(data, profiles=[pipe.section_profile(data, start)[0]], orientation="perpendicular")
+
+
 def cylinder(origin, axis, radius, a, b):
     """Cylinder along `axis` from distance a to b past `origin`."""
     axis = np.asarray(axis, float) / np.linalg.norm(axis)
@@ -842,8 +853,8 @@ def evaluate(capture):
                     before[item["index"]] = measure(bodies[key], 0.5)[0]
                 bodies[key] = apply_op(bodies.get(key), data["operation"], shape)
                 features[item["index"]] = (key, data["operation"], shape)
-            elif kind == "SweepFeature":
-                shape = sweep_shape(data)
+            elif kind in ("SweepFeature", "PipeFeature"):
+                shape = sweep_shape(pipe_as_sweep(data) if kind == "PipeFeature" else data)
                 key = body_key(item, data, target)
                 if data.get("target_box_before") is not None and bodies.get(key) is not None:
                     before[item["index"]] = measure(bodies[key], 0.5)[0]

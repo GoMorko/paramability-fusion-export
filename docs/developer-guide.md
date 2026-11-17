@@ -463,7 +463,7 @@ export (see checklist 4.10.5).
 
 Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
 `lib/fusion_reader/` (`read_solid.py`, `read_hole.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
-`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`). The step kind table
+`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`, `read_pipe.py`). The step kind table
 (`lib/capture_model/step_kinds.py`) says which module reads which type.
 
 `read_solid.py` reads the extrude, the revolve and the combine. `read_hole.py` reads the hole. Both need the same facts
@@ -1179,6 +1179,8 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilLimit` | more than 8 coils, or more than 100 turns of coils and threads in all | A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest. |
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
+| `pipe` | a pipe with a square or triangle section; every pipe in the Orca output | Draw the section on a sketch square to the path at its start, and sweep it along the path. |
+| `pipePartOfPath` | a pipe along a part of its path | Let the pipe run along the whole path. |
 | `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
 | `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
@@ -1303,9 +1305,17 @@ value that a parameter may drive. It does this:
    of whole parts, `pow` of a whole part to a whole literal of 0 or more, and a choice `test ? a : b` whose two
    results are whole (the test can be anything). A division or a decimal literal makes the count not whole. The
    count is then written as its number and its sizes are marked. The check follows derived sizes up to 8 levels deep.
-6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. The check
-   tries every mix of the range ends (`range_check.sweep`). An angle the step needs above zero has its ranges cut
-   instead (`_angle_above_zero`).
+6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. A count
+   (`whole=True`) must stay at 1 or more. The check tries every mix of the range ends (`range_check.sweep`). When the
+   value leaves that range, the add-in cuts the ranges of the untyped sizes that it reads, so that the value stays
+   above 0.005 (a count at 1 or more), and keeps the formula (`_kept_above`). An angle the step needs above zero gets
+   the same cut. When no cut keeps the value (every size it reads has a typed range, or the value now is outside),
+   the value is written as its number, and its sizes are marked.
+
+   Example. A join of length `Tall - Low` sits on a part of height `Low`. `Low` goes from 5 to 20 mm, and `Tall` from
+   15 to 60 mm. At `Low` 20 and `Tall` 15 the length is -5 mm. So the add-in cuts the ranges where the length stays
+   above zero: `Low` stops at 17.99 and `Tall` starts at 18.01. The length stays `Tall - Low`, and both sizes stay
+   free. If the length became a number instead, the join would stay 20 mm high while `Low` moves its start.
 7. It returns a `Quantity` (`lib/design_model/values.py`, shared with the Orca output): the number plus the formula and
    the Fusion names it reads. `.json()` writes
    `{ "expr": "..." }` or a plain number.
@@ -2505,7 +2515,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `capture.py`: `read_capture`. `helper_pass.py`: the second pass for tool bodies.
 - `read_*.py`: one module per family of step types, each with a `READERS` dict. `read_thread.py` reads the modelled
   thread of a `ThreadFeature` (and the thread info of a tapped hole), `read_coil.py` reads a coil from its parameters,
-  volumes and faces (3.12 and 3.13). `read_geometry.py`: `safe`, boxes, frames, `same_entity`, `foreign`. `read_links.py`, `read_constraints.py`: sketch links and graphs.
+  volumes and faces (3.12 and 3.13), `read_pipe.py` reads a pipe's section, its cover of the path and its path (3.8.1). `read_geometry.py`: `safe`, boxes, frames, `same_entity`, `foreign`. `read_links.py`, `read_constraints.py`: sketch links and graphs.
 - `placement.py`: the place of the body in the assembly, `ref_record`.
 - `probe_state.py`, `probe_refs.py`, `read_face.py`, `probe_patterns.py`: the reads at each probe row.
 - `read_gap_reach.py`: the reach read.
@@ -2810,7 +2820,7 @@ the rule holds (`kept_ranges.holding_ranges`):
 
 - A taper that follows sizes must stay under 45 degrees (the app refuses a steeper one).
 - A draft or revolve angle must stay above zero. Since the default range of a small angle starts at 0, the range is
-  cut to start at 0.01 (`values._angle_above_zero`).
+  cut to start at 0.01 (`values._kept_above`). A length or count that leaves its working range is cut the same way.
 - A "to entity" length must not pass its own start.
 - A coil: the wire must clear the axis, the turns must not touch each other, and the turns of coils and threads together
   stay under 100 (3.13).
@@ -3456,6 +3466,68 @@ written as measured, and the sizes behind its sketch are marked.
 Fusion does not document how it measures the sweep taper or which way the twist turns (`TAPER_MEANING_CONFIRMED` and
 `TWIST_SIGN_CONFIRMED` are false). So a written twist or taper gets a note that asks the person to check the shape,
 and marks its sizes.
+
+### 3.8.1 How a pipe is translated
+
+`pipe.handle` (`lib/translator/sweep/pipe.py`). A pipe is a sweep. Fusion draws the outline of this sweep itself: the
+section. The handler makes this section, puts it into the data of a sweep, and gives the data to the sweep handler
+(3.8). Thus the path of a pipe is planned, checked and written by the same rules as the path of a sweep. A refusal of
+the sweep handler keeps its reason, but the reason names the step a pipe ("This pipe ...").
+
+The reader (`lib/fusion_reader/read_pipe.py`) reads these values:
+
+- `section`: `circular`, `square`, `triangular`, or `other`.
+- `section_size`: the diameter of a circle section, in mm.
+- `hollow` and `section_thickness`: the wall of a hollow pipe, in mm. The thickness is null when the pipe is solid.
+- `distance_one` and `distance_two`: how much of the path the pipe covers. `distance_two` is null on an open path.
+- `operation`, `participants` and `path` (the same path record as a sweep). Fusion gives the path only when the
+  marker is before the pipe.
+- `faces_after`: a point and a normal on each start face and end face, with the marker after the pipe.
+
+The facts of a pipe are in `lib/design_model/steps/pipe.py`. Hand check PI1 gave them:
+
+- The section is at the start of the path. The start is the start of the first curve of the path, in the direction
+  of the path (`opposed` turns the curve).
+- The section is square to the path at the start, and its centre is on the path.
+- The section size is the diameter of the circle.
+- The wall of a hollow pipe goes inward from the section size. A thickness of 2 mm on a diameter of 10 mm gives a hole
+  of 6 mm.
+
+A circle that moves along a path makes the same shape from each end of the path. Along a closed path, it makes the
+same shape from each point. Thus the start only tells the sweep which end face is the start face and which is the end
+face. The end face check of the sweep (3.8) compares this with the end faces that Fusion made.
+
+The handler writes the section as a profile record: one circle, and a second circle for the hole of a hollow pipe.
+The plane of the profile is square to the path at its start. The sweep handler then writes an extrude for a straight
+path, a revolve for one arc or a full circle, and a `sweep` step for a chain.
+
+Sizes:
+
+- The section size and the wall follow sizes. The probe measures no sketch for the section. Thus, while the sweep
+  handler writes the outline, the handler gives the radii of the circles as motion values (`_section_values`). The
+  outer radius is half the section size. The radius of the hole is that value less the wall. These values use the
+  parameters of the pipe, so they follow the sizes behind those parameters. The rules of an outline then apply to
+  them over the size ranges: a radius stays above zero, the hole stays inside the circle, and the circle stays clear
+  of the tightest bend of the path. A size that breaks one of these rules is marked.
+- Without a motion file, the radii stay numbers and the sizes behind them are marked. The first translation (with
+  `OPTIMISTIC`) marks nothing.
+- The path follows sizes in the same way as the path of a sweep. But the copy keeps the section where Fusion had it.
+  Thus a size that moves the start of the path is marked (`_keep_start`). A size that turns the path at its start is
+  held by the sweep rule that the path must start square to its outline.
+
+These pipes are left out:
+
+- A square or triangle section (cause `pipe`). The API does not tell which way the section turns about the path.
+- A pipe along a part of its path: `distance_one` is not 1, or `distance_two` is set and not 0 (cause
+  `pipePartOfPath`).
+- A path with a sharp corner (cause `sharpCorner`). A sweep mitres such a corner, but it is not known how Fusion
+  builds a pipe there. Hand check PI2 asks for this.
+- A section, a cover of the path or a path start that cannot be read, and an export of an older add-in that did not
+  read pipes ("Export again with this version of the add-in", cause `oldExport`).
+- All that the sweep handler leaves out.
+
+The Orca output does not copy a pipe. The step kind table gives the pipe the cause `pipe`, so the Orca gap has the
+same tip.
 
 ### 3.9 How a loft is translated
 
@@ -5194,6 +5266,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_hole.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
+| `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |

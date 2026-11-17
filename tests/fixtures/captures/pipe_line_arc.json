@@ -1,0 +1,373 @@
+{
+ "_comment": "A round pipe of 10 mm along a path on the XZ plane: a 40 mm line up Z and a quarter arc of radius 15 mm toward +X (Pipe1). The pipe size, the first leg and the bend radius are sizes.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -5.0,
+    -5.0,
+    0.0
+   ],
+   "max": [
+    15.0,
+    5.0,
+    60.0
+   ]
+  },
+  "volume_mm3": 4992.143479
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "pipe_mm",
+    "expression": "10 mm",
+    "value": 1.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 10
+   },
+   {
+    "name": "run_mm",
+    "expression": "40 mm",
+    "value": 4.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 40
+   },
+   {
+    "name": "bend_mm",
+    "expression": "15 mm",
+    "value": 1.5,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 15
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "run_mm",
+    "value": 4.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "run_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d1",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": ""
+    }
+   },
+   {
+    "name": "d2",
+    "expression": "bend_mm",
+    "value": 1.5,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "bend_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d2",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": ""
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "pipe_mm",
+    "value": 1.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "SectionSize",
+    "dependency_parameters": [
+     "pipe_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "f1",
+     "name": "Pipe1",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d4",
+    "expression": "1",
+    "value": 1.0,
+    "unit": "",
+    "kind": "count",
+    "role": "AlongDistance",
+    "dependency_parameters": [],
+    "created_by": {
+     "kind": "feature",
+     "token": "f1",
+     "name": "Pipe1",
+     "sketch": "",
+     "component": ""
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Pipe1",
+   "type": "PipeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "target_before": null,
+   "target_after": {
+    "box": {
+     "min": [
+      -5.0,
+      -5.0,
+      0.0
+     ],
+     "max": [
+      15.0,
+      5.0,
+      60.0
+     ]
+    },
+    "volume_mm3": 4992.143479
+   },
+   "data": {
+    "operation": "newBody",
+    "participants": [],
+    "target_box_before": null,
+    "section": "circular",
+    "section_size": 10.0,
+    "hollow": false,
+    "section_thickness": null,
+    "distance_one": 1.0,
+    "path": {
+     "closed": false,
+     "kind": "sketch",
+     "sketch": "Sketch1",
+     "sketch_token": "s1",
+     "frame": {
+      "origin": [
+       0,
+       0,
+       0
+      ],
+      "x": [
+       1,
+       0,
+       0
+      ],
+      "y": [
+       0,
+       0,
+       -1
+      ],
+      "z": [
+       0,
+       1,
+       0
+      ]
+     },
+     "reference": {
+      "kind": "origin"
+     },
+     "projected": false,
+     "curves": [
+      {
+       "kind": "line",
+       "start": [
+        0,
+        0,
+        0
+       ],
+       "end": [
+        0,
+        0,
+        40
+       ],
+       "opposed": false,
+       "entity": "p0",
+       "check": {
+        "start": [
+         0,
+         0,
+         0
+        ],
+        "end": [
+         0,
+         0,
+         40
+        ]
+       },
+       "flat": {
+        "kind": "line",
+        "start": [
+         0,
+         0
+        ],
+        "end": [
+         0,
+         -40
+        ]
+       }
+      },
+      {
+       "kind": "arc",
+       "start": [
+        0,
+        0,
+        40
+       ],
+       "end": [
+        15,
+        0,
+        55
+       ],
+       "mid": [
+        4.393398,
+        0.0,
+        50.606602
+       ],
+       "center": [
+        15,
+        0,
+        40
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ],
+       "radius": 15.0,
+       "opposed": false,
+       "entity": "p1",
+       "check": {
+        "start": [
+         0,
+         0,
+         40
+        ],
+        "end": [
+         15,
+         0,
+         55
+        ]
+       },
+       "flat": {
+        "kind": "arc",
+        "center": [
+         15,
+         -40
+        ],
+        "radius": 15.0,
+        "start": [
+         0,
+         -40
+        ],
+        "end": [
+         15,
+         -55
+        ],
+        "mid": [
+         4.393398,
+         -50.606602
+        ]
+       }
+      }
+     ],
+     "edges": []
+    },
+    "distance_two": null,
+    "params": {
+     "section_size": {
+      "name": "d3",
+      "expression": "pipe_mm",
+      "value": 10.0
+     },
+     "distance_one": {
+      "name": "d4",
+      "expression": "1",
+      "value": 1.0
+     }
+    },
+    "faces_after": {
+     "start": [
+      {
+       "point": [
+        0.0,
+        2.5,
+        0.0
+       ],
+       "normal": [
+        0.0,
+        0.0,
+        -1.0
+       ]
+      }
+     ],
+     "end": [
+      {
+       "point": [
+        15.0,
+        2.5,
+        55.0
+       ],
+       "normal": [
+        1.0,
+        0.0,
+        0.0
+       ]
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

@@ -149,15 +149,16 @@ class EmbossSizesTest(unittest.TestCase):
         for lid in (4.0, 10.0):
             self.assertAlmostEqual(height_at(written, {"lid_mm": lid, "raise_mm": 1.0}), lid)
 
-    def test_a_depth_that_reaches_zero_inside_the_size_range_is_written_as_a_number_with_a_reason(self):
+    def test_a_depth_that_reaches_zero_inside_the_size_range_keeps_its_formula_and_cuts_the_range(self):
         capture = load_capture(LID)
         capture["parameters"]["user"][1].update(expression="2 mm", value=0.2, display_value=2.0)
         ref = emboss_data(capture)["params"]["depth"]
         ref.update(expression="raise_mm - 1 mm", value=1.0)
         result = sized(capture)
         _, raised = steps_of(result.recipe, "extrude")
-        self.assertEqual(raised["distance"], 1.0)
-        self.assertEqual([(d["name"], d["used"]) for d in result.dropped], [("raise_mm", True)])
+        self.assertEqual(raised["distance"], {"expr": "raise_mm - 1"})
+        self.assertEqual(result.dropped, [])
+        self.assertGreater(result.recipe["sizes"]["raise_mm"]["min"], 1.0)
 
 
 class EmbossPinTest(unittest.TestCase):

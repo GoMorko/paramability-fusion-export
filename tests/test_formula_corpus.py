@@ -146,7 +146,6 @@ class FormulaCorpusTest(unittest.TestCase):
             self.assertFalse(q.sized, expression)
             self.assertEqual(len(ctx.doubts), 1, expression)
 
-    @unittest.expectedFailure
     def test_depth_that_is_a_difference_of_sizes_follows_with_cut_ranges(self):
         raw = [plain_param("Outer", "30 mm", mm(30), "mm"), plain_param("Width", "20 mm", mm(20), "mm")]
         table = table_of(raw, ["Outer", "Width"], [model_param("d1", "Outer - Width", 10)])
