@@ -27,12 +27,17 @@ def _join(index, name, target, side, at, height):
     return join
 
 
-def capture(base="extrude_plate", join_z=50.0, gap=True, before=(), side=4.0, corner=(0, 0), height=3.0):
+def capture(base="extrude_plate", join_z=50.0, gap=True, before=(), side=4.0, corner=(0, 0), height=3.0, shell=None):
     """The base body, the joins `before` (`(side, [x, y, z], height)` each), a step the copy leaves out (a coil that
     changes the body), then a `side` mm square extrude joined at height `join_z`, as the last item. The plate of
-    `extrude_plate` runs from 0 to 10 mm high."""
+    `extrude_plate` runs from 0 to 10 mm high. `shell` is the data of a shell of the whole body, made before them."""
     found = load_capture(base)
     target = found["items"][-1]["bodies_after"]
+    if shell:
+        item = copy.deepcopy(load_capture("shell_closed")["items"][-1])
+        item["index"] = len(found["items"])
+        item["data"].update(shell)
+        found["items"].append(item)
     for n, (post_side, post_at, post_height) in enumerate(before):
         found["items"].append(_join(len(found["items"]), "Post%d" % (n + 1), target, post_side, post_at, post_height))
     at = len(found["items"])
@@ -96,6 +101,33 @@ class FloatingJoinTest(unittest.TestCase):
         # A revolve's material is not in the translator's model, so the join may sit on it.
         result = translate(capture(base="revolve_full"))
         self.assertEqual(join_verdict(result)["verdict"], "translated")
+
+    def test_a_join_on_the_wall_of_a_shell_that_grows_outward_stays(self):
+        # The wall rises 3 mm above the plate; a join from 12 mm may sit on it, but not after an inward shell.
+        outward = dict(inside=0.0, outside=3.0, volume_after=3000.0)
+        inward = dict(inside=3.0, outside=0.0, volume_after=3000.0)
+        self.assertEqual(join_verdict(translate(capture(join_z=12.0, shell=outward)))["verdict"], "translated")
+        self.assertEqual(join_verdict(translate(capture(join_z=12.0, shell=inward)))["verdict"], "leftOut")
+        self.assertEqual(join_verdict(translate(capture(join_z=20.0, shell=outward)))["verdict"], "leftOut")
+
+    def test_an_outward_wall_also_grows_material_that_is_not_a_plain_extrude(self):
+        # The sweep's bound reaches x = 31 mm; a rounded outward wall of 3 mm around it reaches x = 34 mm.
+        rounded = dict(inside=0.0, outside=3.0, shell_type="rounded", volume_after=3000.0)
+        verdicts = [join_verdict(translate(capture(base="sweep_sharp_corner", join_z=0.0, corner=(x, 10.0),
+                                                   shell=rounded)))["verdict"] for x in (32.5, 40.0)]
+        self.assertEqual(verdicts, ["translated", "leftOut"])
+
+    def test_a_sharp_outward_wall_reaches_past_its_thickness_at_a_sharp_corner(self):
+        # A 60 degree corner of a triangle at (40, 0): its sharp 3 mm wall reaches about 5.2 mm out along x.
+        triangle = [[0.0, 0.0], [40.0, 0.0], [20.0, 34.641016]]
+        sharp = dict(inside=0.0, outside=3.0, volume_after=3000.0)
+        found = capture(join_z=2.0, corner=(44.5, -3.0), shell=sharp)
+        profile = found["items"][1]["data"]["profiles"][0]
+        profile["loops"][0]["curves"] = [{"kind": "line", "start": triangle[n], "end": triangle[(n + 1) % 3]}
+                                         for n in range(3)]
+        self.assertEqual(join_verdict(translate(found))["verdict"], "translated")
+        self.assertEqual(join_verdict(translate(capture(join_z=2.0, corner=(50.0, -3.0), shell=sharp)))["verdict"],
+                         "leftOut")
 
 
 if __name__ == "__main__":

@@ -232,6 +232,11 @@ def picks_gap_reason(names, sure):
     return clip("It %s faces of %s." % ("picks" if sure else "may pick", _missing(names)), MAX_NOTE)
 
 
+def far_side_gap_reason(names):
+    """Why a step that ends where the part ends is left out after steps missing from the copy."""
+    return clip("It ends where the part ends, and the part may differ there by %s." % _missing(names), MAX_NOTE)
+
+
 def repeats_gap_reason(names):
     """Why a pattern or mirror of steps missing from the copy is left out too."""
     return clip("It repeats %s." % _missing(names), MAX_NOTE)

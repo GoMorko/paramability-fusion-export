@@ -1,0 +1,2548 @@
+{
+  "$defs": {
+    "ArcSlotLoop": {
+      "description": "A curved slot: a band `width` across around a centre line arc of `radius` about `center`, from `startDeg` counter-clockwise to `endDeg` (degrees from the sketch x axis, under one full turn), with a half circle at each end.",
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "endDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "kind": {
+          "const": "arcSlot"
+        },
+        "radius": {
+          "$ref": "#/$defs/Num"
+        },
+        "startDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "width": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "radius",
+        "startDeg",
+        "endDeg",
+        "width"
+      ],
+      "type": "object"
+    },
+    "BaseLoop": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CircleLoop"
+        },
+        {
+          "$ref": "#/$defs/RectLoop"
+        },
+        {
+          "$ref": "#/$defs/ProfileLoop"
+        },
+        {
+          "$ref": "#/$defs/PolygonLoop"
+        },
+        {
+          "$ref": "#/$defs/SlotLoop"
+        },
+        {
+          "$ref": "#/$defs/ArcSlotLoop"
+        },
+        {
+          "$ref": "#/$defs/EllipseLoop"
+        },
+        {
+          "$ref": "#/$defs/RegularPolygonLoop"
+        },
+        {
+          "$ref": "#/$defs/PresetLoop"
+        },
+        {
+          "$ref": "#/$defs/GearLoop"
+        }
+      ]
+    },
+    "BevelGearStep": {
+      "description": "A straight bevel gear. `on.origin` is the centre of the pitch circle at the large end and `on.normal` points to the apex. `faceWidth` is the tooth length along the cone, at most a third of the cone distance. Pitch diameter is module x teeth; pressureAngleDeg defaults to 20.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "backlash": {
+          "$ref": "#/$defs/Num"
+        },
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "faceWidth": {
+          "$ref": "#/$defs/Num"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "bevelGear"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "mateTeeth": {
+          "description": "Teeth of the gear it meshes with on a shaft at 90 degrees; sets the pitch angle. Not with pitchAngleDeg.",
+          "maximum": 200,
+          "minimum": 6,
+          "type": "integer"
+        },
+        "module": {
+          "$ref": "#/$defs/Num"
+        },
+        "on": {
+          "$ref": "#/$defs/Placement"
+        },
+        "pitchAngleDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Half the angle of the pitch cone, above 0 up to 90 (default 45; 90 is a crown gear). Not with mateTeeth."
+        },
+        "pressureAngleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "teeth": {
+          "maximum": 200,
+          "minimum": 6,
+          "type": "integer"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "on",
+        "teeth",
+        "module",
+        "faceWidth",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "BevelStep": {
+      "properties": {
+        "cutAngleDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Instead of otherSize: how far the cut leans from the sizeOn face, above 0 and under 90 degrees. On a square edge otherSize = size * tan(cutAngleDeg). Needs sizeOn."
+        },
+        "edges": {
+          "anyOf": [
+            {
+              "properties": {
+                "chain": {
+                  "description": "`tangent`: each point also picks the edges running on from its edge without a corner (a tangent chain).",
+                  "enum": [
+                    "tangent"
+                  ],
+                  "type": "string"
+                },
+                "near": {
+                  "items": {
+                    "$ref": "#/$defs/Pos3"
+                  },
+                  "maxItems": 32,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "near"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "`joint`: where that step's body meets the part it joined (not the first body).",
+              "properties": {
+                "featureEdges": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "which": {
+                  "enum": [
+                    "start",
+                    "end",
+                    "sides",
+                    "all",
+                    "joint"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "featureEdges",
+                "which"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "all": {
+                  "enum": [
+                    "convex",
+                    "concave"
+                  ],
+                  "type": "string"
+                },
+                "parallelTo": {
+                  "$ref": "#/$defs/Vec3"
+                }
+              },
+              "required": [
+                "all"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Every edge around the picked faces, as a face picked for a CAD fillet or chamfer.",
+              "properties": {
+                "faceEdges": {
+                  "$ref": "#/$defs/FaceSelector"
+                }
+              },
+              "required": [
+                "faceEdges"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "bevel"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "otherSize": {
+          "$ref": "#/$defs/Num",
+          "description": "The distance on the other face; absent means equal to size. Needs sizeOn; not with cutAngleDeg."
+        },
+        "size": {
+          "$ref": "#/$defs/Num"
+        },
+        "sizeOn": {
+          "$ref": "#/$defs/Vec3",
+          "description": "With otherSize or cutAngleDeg: of an edge's two faces, `size` is measured on the one whose outward normal at the edge middle is closest to this direction."
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "edges",
+        "size"
+      ],
+      "type": "object"
+    },
+    "CircleLoop": {
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "circle"
+        },
+        "radius": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "radius"
+      ],
+      "type": "object"
+    },
+    "CoilStep": {
+      "description": "A spring: the sketch (the wire's section on a plane through the axis; inner loops make a hollow wire) swept along a helix about the axis, with pitch mm of rise per turn and turns turns (may be fractional, at most 100; 100 over all threads and coils), 8 coils per recipe. A right hand coil rises along axis.dir while turning counter-clockwise about it.",
+      "properties": {
+        "axis": {
+          "properties": {
+            "dir": {
+              "$ref": "#/$defs/Point2"
+            },
+            "point": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "point",
+            "dir"
+          ],
+          "type": "object"
+        },
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "hand": {
+          "enum": [
+            "right",
+            "left"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "coil"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "pitch": {
+          "$ref": "#/$defs/Num"
+        },
+        "sketch": {
+          "$ref": "#/$defs/Sketch"
+        },
+        "turns": {
+          "$ref": "#/$defs/Num"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sketch",
+        "axis",
+        "pitch",
+        "turns",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "DraftStep": {
+      "description": "Leans the picked faces by `angleDeg` about where they meet the neutral plane, as a mould needs. With `angleTwoDeg`, each face is divided at the plane and its part on the other side leans by that angle. A face that cannot lean is skipped with a note.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "How far the picked faces lean from the pull direction, under 30 degrees either way (0 is refused)."
+        },
+        "angleTwoDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "The angle for the part of each face on the other side of the neutral plane from the pull direction, under 30 degrees either way (0 is refused). A positive angle takes material off that side, so two equal angles lean both sides away from the plane (a symmetric draft)."
+        },
+        "faces": {
+          "$ref": "#/$defs/FaceSelector"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "draft"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "neutral": {
+          "description": "The neutral plane: points on it keep their place. `normal` is the pull direction, the way a mould opens.",
+          "properties": {
+            "normal": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "origin": {
+              "$ref": "#/$defs/Pos3"
+            }
+          },
+          "required": [
+            "origin",
+            "normal"
+          ],
+          "type": "object"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "faces",
+        "angleDeg",
+        "neutral"
+      ],
+      "type": "object"
+    },
+    "EllipseLoop": {
+      "description": "An ellipse with radiusX along the sketch x axis turned by `angleDeg` (default 0) about `center`. It can be tapered or thin like any other outline.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "ellipse"
+        },
+        "radiusX": {
+          "$ref": "#/$defs/Num"
+        },
+        "radiusY": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "radiusX",
+        "radiusY"
+      ],
+      "type": "object"
+    },
+    "ExtrudeStep": {
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "distance": {
+          "$ref": "#/$defs/Num",
+          "description": "How far the extrude reaches. Not needed for upToBody, { upTo } or through."
+        },
+        "extent": {
+          "anyOf": [
+            {
+              "enum": [
+                "oneSide",
+                "symmetric",
+                "through",
+                "upToBody"
+              ],
+              "type": "string"
+            },
+            {
+              "properties": {
+                "upTo": {
+                  "$ref": "#/$defs/FaceSelector"
+                }
+              },
+              "required": [
+                "upTo"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "oneSide and symmetric reach `distance`; through goes all the way (a join or new body with a distance reaches it both ways, without one to the far side of the part); upToBody grows until it meets the part (a cut instead goes through the material in front of the sketch until it comes out the other side); `{ upTo }` grows until it meets that face (a flat face counts as its whole plane). upToBody and { upTo } need no `distance`, and cannot be twisted or tapered."
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "extrude"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "sketch": {
+          "$ref": "#/$defs/Sketch"
+        },
+        "taperDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Walls lean in by this angle going away from the sketch plane (negative leans out), under 45 degrees. The sketch is the outline at the sketch plane; at distance h it is offset inward by h times tan(taperDeg), openings grow by the same. Not with twistDeg, thin or extent through."
+        },
+        "thin": {
+          "$ref": "#/$defs/ExtrudeThin"
+        },
+        "twistDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Turns the shape about the sketch normal through the sketch origin over the distance, at most 3600 degrees. Not with extent through."
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        },
+        "within": {
+          "$ref": "#/$defs/Sketch",
+          "description": "Acts only inside this outline. Not with combine new."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sketch",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "ExtrudeThin": {
+      "description": "A wall of this thickness along the outline instead of a filled shape. `side` is where the wall sits against the outline (default middle).",
+      "properties": {
+        "corners": {
+          "description": "Round (default) rounds the outer side of a corner, sharp keeps it pointed.",
+          "enum": [
+            "round",
+            "sharp"
+          ],
+          "type": "string"
+        },
+        "ends": {
+          "description": "Where an open outline stops: round (default) or cut square. Open outlines only.",
+          "enum": [
+            "round",
+            "square"
+          ],
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "inside",
+            "outside",
+            "middle"
+          ],
+          "type": "string"
+        },
+        "thickness": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "thickness"
+      ],
+      "type": "object"
+    },
+    "FaceSelector": {
+      "anyOf": [
+        {
+          "properties": {
+            "near": {
+              "items": {
+                "$ref": "#/$defs/Pos3"
+              },
+              "maxItems": 32,
+              "type": "array"
+            }
+          },
+          "required": [
+            "near"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "featureFace": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "which": {
+              "enum": [
+                "start",
+                "end"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "featureFace",
+            "which"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "GearLoop": {
+      "description": "An involute spur gear outline about `center`: pitch diameter module x teeth, tip diameter module x (teeth + 2), root diameter 2.5 x module smaller than the pitch diameter. pressureAngleDeg defaults to 20 (10 to 35). Tooth 0 is centred on the sketch x axis turned by `angleDeg` (default 0). profileShift (default 0, -1 to 1) moves the teeth out by that many modules; clearance (default 0.25 x module, mm) is the room below the mating tips; backlash (default 0, mm) thins each tooth at the pitch circle. internal true draws a ring gear's inward teeth as the outline of the hole they surround (use it as an inner loop or a cut), without profile shift. Flanks below the base circle run straight to the root unless undercut is true. Each tooth counts 4 toward the points of a loop (5 when twisted). A helical gear is this outline extruded with twistDeg; a herringbone is two stacked extrudes of opposite twist.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "backlash": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "clearance": {
+          "$ref": "#/$defs/Num"
+        },
+        "internal": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "gear"
+        },
+        "module": {
+          "$ref": "#/$defs/Num"
+        },
+        "pressureAngleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "profileShift": {
+          "$ref": "#/$defs/Num"
+        },
+        "rootFillet": {
+          "$ref": "#/$defs/Num",
+          "description": "Rounds each tooth root with a tangent arc of this radius in mm (default 0). With undercut it rounds the tip of the cutting rack instead (default 0.38 x module, less when the clearance is small)."
+        },
+        "teeth": {
+          "maximum": 200,
+          "minimum": 6,
+          "type": "integer"
+        },
+        "undercut": {
+          "description": "Draws the root the cutting rack leaves on outside teeth: the path of its rounded tip, which cuts into the flanks of a gear of few teeth (default false).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "teeth",
+        "module"
+      ],
+      "type": "object"
+    },
+    "HoleStep": {
+      "properties": {
+        "counterbore": {
+          "description": "A flat bottomed step at the mouth: this diameter and this deep, wider than the hole and shallower than a blind hole.",
+          "properties": {
+            "depth": {
+              "$ref": "#/$defs/Num"
+            },
+            "diameter": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "required": [
+            "diameter",
+            "depth"
+          ],
+          "type": "object"
+        },
+        "countersink": {
+          "description": "A cone widening the mouth to this diameter at the surface, with this included angle (60 to 120 degrees; 90 is the usual screw head). Wider than the hole. Not with entryChamfer or counterbore.",
+          "properties": {
+            "angleDeg": {
+              "$ref": "#/$defs/Num"
+            },
+            "diameter": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "required": [
+            "diameter",
+            "angleDeg"
+          ],
+          "type": "object"
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Num"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diameter": {
+          "$ref": "#/$defs/Num"
+        },
+        "direction": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "entryChamfer": {
+          "$ref": "#/$defs/Num"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "hole"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/Pos3"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "origin",
+        "direction",
+        "diameter",
+        "depth"
+      ],
+      "type": "object"
+    },
+    "LoftSection": {
+      "properties": {
+        "holes": {
+          "description": "Openings in this section. Holes with the same key in neighbouring sections are lofted together and cut from the loft; a key needs two or more sections in a row.",
+          "items": {
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "loop": {
+                "$ref": "#/$defs/SketchLoop"
+              }
+            },
+            "required": [
+              "key",
+              "loop"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "on": {
+          "$ref": "#/$defs/Placement"
+        },
+        "outer": {
+          "$ref": "#/$defs/SketchLoop"
+        }
+      },
+      "required": [
+        "on",
+        "outer"
+      ],
+      "type": "object"
+    },
+    "LoftStep": {
+      "description": "A solid through closed outlines in order along the loft. Planes must not cross inside the part.",
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "loft"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "ruled": {
+          "type": "boolean"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/LoftSection"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "type": "array"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        },
+        "within": {
+          "$ref": "#/$defs/Sketch",
+          "description": "Acts only inside this outline. Not with combine new."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sections",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "MirrorStep": {
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "mirror"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "of": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "plane": {
+          "properties": {
+            "normal": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "origin": {
+              "$ref": "#/$defs/Pos3"
+            }
+          },
+          "required": [
+            "origin",
+            "normal"
+          ],
+          "type": "object"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "of",
+        "plane"
+      ],
+      "type": "object"
+    },
+    "MoveStep": {
+      "description": "Moves everything built before it in its own list, as the Move tool of a CAD program. Give translate, turn or both. It cannot be the first step of a list.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "move"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "translate": {
+          "$ref": "#/$defs/Pos3",
+          "description": "How far to shift along each axis, mm. Applied after the turn."
+        },
+        "turn": {
+          "description": "A turn about the line through axisPoint along axis, by the right hand rule. Applied before the shift.",
+          "properties": {
+            "angleDeg": {
+              "$ref": "#/$defs/Num"
+            },
+            "axis": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "axisPoint": {
+              "$ref": "#/$defs/Pos3"
+            }
+          },
+          "required": [
+            "axisPoint",
+            "axis",
+            "angleDeg"
+          ],
+          "type": "object"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "Num": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "description": "A named size, or an expression of one: the size value times `times` (default 1) plus `plus` (default 0).",
+          "properties": {
+            "plus": {
+              "type": "number"
+            },
+            "size": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "times": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "size"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A formula over the declared sizes, such as \"units_x * 42 - 0.5\".",
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OffsetFacesStep": {
+      "description": "Moves the picked faces along their normals, as the offset faces (press pull) tool of a CAD program: the faces around them extend or shrink along their own surfaces to meet the moved faces, so a leaning or curved side keeps its slope. Flat faces, and whole round faces, whose radius changes.",
+      "properties": {
+        "distance": {
+          "$ref": "#/$defs/Num",
+          "description": "How far the faces move along their outward normals, mm. Positive moves them out of the material and grows the part, negative moves them in; 0 is refused."
+        },
+        "faces": {
+          "$ref": "#/$defs/FaceSelector"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "offsetFaces"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "faces",
+        "distance"
+      ],
+      "type": "object"
+    },
+    "PatternCount": {
+      "anyOf": [
+        {
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "description": "A named size, or an expression of one: the size value times `times` (default 1) plus `plus` (default 0).",
+          "properties": {
+            "plus": {
+              "type": "number"
+            },
+            "size": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "times": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "size"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A formula over the declared sizes, such as \"units_x * 42 - 0.5\".",
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PatternStep": {
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "pattern"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "linear": {
+          "properties": {
+            "count": {
+              "$ref": "#/$defs/PatternCount"
+            },
+            "dir": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "step": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "required": [
+            "dir",
+            "count",
+            "step"
+          ],
+          "type": "object"
+        },
+        "linear2": {
+          "description": "A second direction that turns the linear row into a grid: copies sit at every pair of steps. Needs linear. Copies are numbered row by row, the first direction running fastest.",
+          "properties": {
+            "count": {
+              "$ref": "#/$defs/PatternCount"
+            },
+            "dir": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "step": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "required": [
+            "dir",
+            "count",
+            "step"
+          ],
+          "type": "object"
+        },
+        "of": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "polar": {
+          "properties": {
+            "angleDeg": {
+              "$ref": "#/$defs/Num"
+            },
+            "axis": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "axisPoint": {
+              "$ref": "#/$defs/Pos3"
+            },
+            "count": {
+              "$ref": "#/$defs/PatternCount"
+            }
+          },
+          "required": [
+            "axisPoint",
+            "axis",
+            "count"
+          ],
+          "type": "object"
+        },
+        "skip": {
+          "description": "Copies left out, by number: 1 is the first copy after the original, in the order the pattern makes them (the grid row by row, then the polar copies). The original (0) cannot be left out; numbers are unique and within the copies made. At most 256.",
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "of"
+      ],
+      "type": "object"
+    },
+    "Placement": {
+      "properties": {
+        "normal": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "origin": {
+          "$ref": "#/$defs/Pos3"
+        },
+        "xDir": {
+          "$ref": "#/$defs/Vec3"
+        }
+      },
+      "required": [
+        "origin",
+        "normal",
+        "xDir"
+      ],
+      "type": "object"
+    },
+    "Point2": {
+      "items": {
+        "$ref": "#/$defs/Num"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "PolygonLoop": {
+      "properties": {
+        "kind": {
+          "const": "polygon"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/Point2"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "points"
+      ],
+      "type": "object"
+    },
+    "Pos3": {
+      "items": {
+        "$ref": "#/$defs/Num"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "PresetLoop": {
+      "description": "A reviewed outline of a printing standard, by versioned name (for example gridfinity.v1.foot, the footprint of one Gridfinity cell: a 41.5 mm square with 3.75 mm corners), centred on `center` and turned by `angleDeg` (default 0). It is drawn as a plain profile. Offset it for the smaller steps of a shape.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "preset"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "center"
+      ],
+      "type": "object"
+    },
+    "ProfileLoop": {
+      "properties": {
+        "kind": {
+          "const": "profile"
+        },
+        "segments": {
+          "$ref": "#/$defs/Segments"
+        },
+        "start": {
+          "$ref": "#/$defs/Point2"
+        }
+      },
+      "required": [
+        "kind",
+        "start",
+        "segments"
+      ],
+      "type": "object"
+    },
+    "RectLoop": {
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Turns the rectangle about `center` (default 0)."
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "cornerRadius": {
+          "$ref": "#/$defs/Num"
+        },
+        "height": {
+          "$ref": "#/$defs/Num"
+        },
+        "kind": {
+          "const": "rect"
+        },
+        "width": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "RegularPolygonLoop": {
+      "description": "A polygon of equal sides, `acrossFlats` between two opposite sides (a hex nut size). With angleDeg 0 one corner points along the sketch x axis; `angleDeg` turns it about `center`.",
+      "properties": {
+        "acrossFlats": {
+          "$ref": "#/$defs/Num"
+        },
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "regularPolygon"
+        },
+        "sides": {
+          "maximum": 64,
+          "minimum": 3,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "sides",
+        "acrossFlats"
+      ],
+      "type": "object"
+    },
+    "RevolveStep": {
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "axis": {
+          "properties": {
+            "dir": {
+              "$ref": "#/$defs/Point2"
+            },
+            "point": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "point",
+            "dir"
+          ],
+          "type": "object"
+        },
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "revolve"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "sketch": {
+          "$ref": "#/$defs/Sketch"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        },
+        "within": {
+          "$ref": "#/$defs/Sketch",
+          "description": "Acts only inside this outline. Not with combine new."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sketch",
+        "axis",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "RoundStep": {
+      "properties": {
+        "edgeSizes": {
+          "description": "With a near selector: the size of the edge picked by the point at the same place in near, so rounds of different sizes meeting at a corner are one step. Edges without an entry, or picked by an earlier point already, use size (or the first entry). At most as many entries as near points.",
+          "items": {
+            "$ref": "#/$defs/Num"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "edges": {
+          "anyOf": [
+            {
+              "properties": {
+                "chain": {
+                  "description": "`tangent`: each point also picks the edges running on from its edge without a corner (a tangent chain).",
+                  "enum": [
+                    "tangent"
+                  ],
+                  "type": "string"
+                },
+                "near": {
+                  "items": {
+                    "$ref": "#/$defs/Pos3"
+                  },
+                  "maxItems": 32,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "near"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "`joint`: where that step's body meets the part it joined (not the first body).",
+              "properties": {
+                "featureEdges": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "which": {
+                  "enum": [
+                    "start",
+                    "end",
+                    "sides",
+                    "all",
+                    "joint"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "featureEdges",
+                "which"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "all": {
+                  "enum": [
+                    "convex",
+                    "concave"
+                  ],
+                  "type": "string"
+                },
+                "parallelTo": {
+                  "$ref": "#/$defs/Vec3"
+                }
+              },
+              "required": [
+                "all"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Every edge around the picked faces, as a face picked for a CAD fillet or chamfer.",
+              "properties": {
+                "faceEdges": {
+                  "$ref": "#/$defs/FaceSelector"
+                }
+              },
+              "required": [
+                "faceEdges"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "round"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "size": {
+          "$ref": "#/$defs/Num"
+        },
+        "sizeEnd": {
+          "$ref": "#/$defs/Num",
+          "description": "The radius at the other end of each picked edge; the radius changes steadily along the edge from `size` at its end lowest along x (then y, then z) to this. Not with edgeSizes."
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "edges",
+        "size"
+      ],
+      "type": "object"
+    },
+    "ScaleStep": {
+      "description": "Scales everything built before it in its own list, as the Scale tool of a CAD program. It cannot be the first step of a list.",
+      "properties": {
+        "factor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Num"
+            },
+            {
+              "$ref": "#/$defs/Pos3"
+            }
+          ],
+          "description": "One number for every direction, or [x, y, z] along the part axes; each 0.001 to 1000."
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "scale"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "point": {
+          "$ref": "#/$defs/Pos3",
+          "description": "The point that stays in place, mm (default the part origin)."
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "factor"
+      ],
+      "type": "object"
+    },
+    "Segment": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "line"
+            },
+            "to": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "arc"
+            },
+            "through": {
+              "$ref": "#/$defs/Point2"
+            },
+            "to": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "kind",
+            "to",
+            "through"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A smooth cubic curve from the previous point through the listed points to `to`.",
+          "properties": {
+            "kind": {
+              "const": "spline"
+            },
+            "through": {
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            "to": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "kind",
+            "through",
+            "to"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Segments": {
+      "items": {
+        "$ref": "#/$defs/Segment"
+      },
+      "maxItems": 1000,
+      "type": "array"
+    },
+    "ShellStep": {
+      "properties": {
+        "corners": {
+          "description": "The outside corners of the wall: sharp (default) or round.",
+          "enum": [
+            "sharp",
+            "round"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "shell"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "openFaces": {
+          "$ref": "#/$defs/FaceSelector",
+          "description": "Left out: a closed hollow."
+        },
+        "outside": {
+          "description": "The wall grows outward, so the part gets bigger by the thickness (default inward).",
+          "type": "boolean"
+        },
+        "thickness": {
+          "$ref": "#/$defs/Num"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "thickness"
+      ],
+      "type": "object"
+    },
+    "Size": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "description": "length (mm, default), angle (degrees), number, count (whole), toggle (0 or 1) or choice (one of `options`).",
+              "enum": [
+                "length",
+                "angle",
+                "number",
+                "count",
+                "toggle",
+                "choice"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "options": {
+              "description": "The values of a choice, each with a label.",
+              "items": {
+                "$ref": "#/$defs/SizeOption"
+              },
+              "maxItems": 16,
+              "minItems": 2,
+              "type": "array"
+            },
+            "step": {
+              "description": "Values are `min` plus whole steps. Needs `min`.",
+              "type": "number"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "preset": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "preset"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SizeOption": {
+      "properties": {
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "type": "object"
+    },
+    "Sketch": {
+      "properties": {
+        "inner": {
+          "items": {
+            "$ref": "#/$defs/SketchLoop"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "on": {
+          "$ref": "#/$defs/Placement"
+        },
+        "outer": {
+          "$ref": "#/$defs/SketchLoop"
+        }
+      },
+      "required": [
+        "on",
+        "outer"
+      ],
+      "type": "object"
+    },
+    "SketchLoop": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CircleLoop"
+        },
+        {
+          "$ref": "#/$defs/RectLoop"
+        },
+        {
+          "$ref": "#/$defs/ProfileLoop"
+        },
+        {
+          "$ref": "#/$defs/PolygonLoop"
+        },
+        {
+          "$ref": "#/$defs/SlotLoop"
+        },
+        {
+          "$ref": "#/$defs/ArcSlotLoop"
+        },
+        {
+          "$ref": "#/$defs/EllipseLoop"
+        },
+        {
+          "$ref": "#/$defs/RegularPolygonLoop"
+        },
+        {
+          "$ref": "#/$defs/PresetLoop"
+        },
+        {
+          "$ref": "#/$defs/GearLoop"
+        },
+        {
+          "description": "An unclosed outline. Only the outer loop of an extrude or sweep with `thin`.",
+          "properties": {
+            "kind": {
+              "const": "open"
+            },
+            "segments": {
+              "$ref": "#/$defs/Segments"
+            },
+            "start": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "kind",
+            "start",
+            "segments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The outline of `loop` moved out by `distance` mm (negative moves in; 0 is refused). `loop` is any closed loop kind except offset. corners round (default) rounds the outward corners with arcs; sharp extends the sides to meet.",
+          "properties": {
+            "corners": {
+              "enum": [
+                "round",
+                "sharp"
+              ],
+              "type": "string"
+            },
+            "distance": {
+              "$ref": "#/$defs/Num"
+            },
+            "kind": {
+              "const": "offset"
+            },
+            "loop": {
+              "$ref": "#/$defs/BaseLoop"
+            }
+          },
+          "required": [
+            "kind",
+            "loop",
+            "distance"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SkinStep": {
+      "description": "A smooth surface through a height grid. At most 4 per recipe.",
+      "properties": {
+        "heights": {
+          "description": "Heights in mm along on.normal, one list per row, one number per column, evenly spaced over size. 3 to 33 each way, 2048 over all skins.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 33,
+            "minItems": 3,
+            "type": "array"
+          },
+          "maxItems": 33,
+          "minItems": 3,
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "skin"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "lift": {
+          "$ref": "#/$defs/Num",
+          "description": "Moves the whole surface along the normal, mm (default 0)."
+        },
+        "mode": {
+          "description": "trim cuts above the surface; fill adds up to it from the plane; both makes it the top.",
+          "enum": [
+            "trim",
+            "fill",
+            "both"
+          ],
+          "type": "string"
+        },
+        "on": {
+          "$ref": "#/$defs/Placement"
+        },
+        "size": {
+          "description": "Grid length along xDir (the columns), then across, mm; centred on on.origin.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        },
+        "within": {
+          "$ref": "#/$defs/SketchLoop",
+          "description": "A closed outline in the grid plane that limits the step (default the whole grid), 0.01 mm or more inside it."
+        },
+        "withinHoles": {
+          "description": "Openings in `within` where the part stays as it is, such as a post. Each lies inside `within`, apart from the others. Needs `within`.",
+          "items": {
+            "$ref": "#/$defs/SketchLoop"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "on",
+        "size",
+        "heights",
+        "mode"
+      ],
+      "type": "object"
+    },
+    "SlotLoop": {
+      "description": "A stadium: a band `width` across with a half circle at each end, `length` overall (at least `width`), centred on `center` and running along the sketch x axis turned by `angleDeg` (default 0).",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "slot"
+        },
+        "length": {
+          "$ref": "#/$defs/Num"
+        },
+        "width": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "length",
+        "width"
+      ],
+      "type": "object"
+    },
+    "StepInTool1": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtrudeStep"
+        },
+        {
+          "$ref": "#/$defs/RevolveStep"
+        },
+        {
+          "$ref": "#/$defs/LoftStep"
+        },
+        {
+          "$ref": "#/$defs/SweepStep"
+        },
+        {
+          "$ref": "#/$defs/HoleStep"
+        },
+        {
+          "$ref": "#/$defs/RoundStep"
+        },
+        {
+          "$ref": "#/$defs/BevelStep"
+        },
+        {
+          "$ref": "#/$defs/ShellStep"
+        },
+        {
+          "$ref": "#/$defs/PatternStep"
+        },
+        {
+          "$ref": "#/$defs/MirrorStep"
+        },
+        {
+          "$ref": "#/$defs/DraftStep"
+        },
+        {
+          "$ref": "#/$defs/OffsetFacesStep"
+        },
+        {
+          "$ref": "#/$defs/MoveStep"
+        },
+        {
+          "$ref": "#/$defs/ScaleStep"
+        },
+        {
+          "$ref": "#/$defs/ToolBody2"
+        }
+      ]
+    },
+    "StepInTool2": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtrudeStep"
+        },
+        {
+          "$ref": "#/$defs/RevolveStep"
+        },
+        {
+          "$ref": "#/$defs/LoftStep"
+        },
+        {
+          "$ref": "#/$defs/SweepStep"
+        },
+        {
+          "$ref": "#/$defs/HoleStep"
+        },
+        {
+          "$ref": "#/$defs/RoundStep"
+        },
+        {
+          "$ref": "#/$defs/BevelStep"
+        },
+        {
+          "$ref": "#/$defs/ShellStep"
+        },
+        {
+          "$ref": "#/$defs/PatternStep"
+        },
+        {
+          "$ref": "#/$defs/MirrorStep"
+        },
+        {
+          "$ref": "#/$defs/DraftStep"
+        },
+        {
+          "$ref": "#/$defs/OffsetFacesStep"
+        },
+        {
+          "$ref": "#/$defs/MoveStep"
+        },
+        {
+          "$ref": "#/$defs/ScaleStep"
+        },
+        {
+          "$ref": "#/$defs/ToolBody3"
+        }
+      ]
+    },
+    "StepInTool3": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtrudeStep"
+        },
+        {
+          "$ref": "#/$defs/RevolveStep"
+        },
+        {
+          "$ref": "#/$defs/LoftStep"
+        },
+        {
+          "$ref": "#/$defs/SweepStep"
+        },
+        {
+          "$ref": "#/$defs/HoleStep"
+        },
+        {
+          "$ref": "#/$defs/RoundStep"
+        },
+        {
+          "$ref": "#/$defs/BevelStep"
+        },
+        {
+          "$ref": "#/$defs/ShellStep"
+        },
+        {
+          "$ref": "#/$defs/PatternStep"
+        },
+        {
+          "$ref": "#/$defs/MirrorStep"
+        },
+        {
+          "$ref": "#/$defs/DraftStep"
+        },
+        {
+          "$ref": "#/$defs/OffsetFacesStep"
+        },
+        {
+          "$ref": "#/$defs/MoveStep"
+        },
+        {
+          "$ref": "#/$defs/ScaleStep"
+        }
+      ]
+    },
+    "SweepPath": {
+      "anyOf": [
+        {
+          "description": "A flat path drawn in its own placement. It starts on the profile sketch plane.",
+          "properties": {
+            "closed": {
+              "description": "The path ends where it starts (its last segment ends on start). The sweep then has no end faces.",
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "flat"
+            },
+            "on": {
+              "$ref": "#/$defs/Placement"
+            },
+            "segments": {
+              "items": {
+                "$ref": "#/$defs/Segment"
+              },
+              "maxItems": 64,
+              "type": "array"
+            },
+            "start": {
+              "$ref": "#/$defs/Point2"
+            }
+          },
+          "required": [
+            "on",
+            "start",
+            "segments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A path through corner points in the part frame (mm), in any direction. Straight legs join the points; each inner point is rounded by a tangent arc of `bendRadius` (one radius for every corner, or a list with one per inner point). The profile sketch lies in the plane through the first point, square to the first leg.",
+          "properties": {
+            "bendRadius": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Num"
+                },
+                {
+                  "items": {
+                    "$ref": "#/$defs/Num"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
+                }
+              ]
+            },
+            "kind": {
+              "const": "corners"
+            },
+            "points": {
+              "items": {
+                "$ref": "#/$defs/Pos3"
+              },
+              "maxItems": 64,
+              "minItems": 2,
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "points",
+            "bendRadius"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SweepStep": {
+      "description": "The profile sketch moved along the path. The profile must stay smaller than the tightest bend.",
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "corners": {
+          "enum": [
+            "mitre",
+            "round"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "sweep"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "orientation": {
+          "description": "fixed keeps the profile direction; follow (default) turns with the path.",
+          "enum": [
+            "follow",
+            "fixed"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/SweepPath"
+        },
+        "sketch": {
+          "$ref": "#/$defs/Sketch"
+        },
+        "taperDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Walls lean in by this angle (negative: out): outline offsets inward by length times tan(angle)"
+        },
+        "thin": {
+          "$ref": "#/$defs/Thin"
+        },
+        "twistDeg": {
+          "$ref": "#/$defs/Num",
+          "description": "Turns the profile about the path, at most 3600 degrees."
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sketch",
+        "path",
+        "combine"
+      ],
+      "type": "object"
+    },
+    "Thin": {
+      "description": "A wall of this thickness along the outline instead of a filled shape. `side` is where the wall sits against the outline (default middle).",
+      "properties": {
+        "side": {
+          "enum": [
+            "inside",
+            "outside",
+            "middle"
+          ],
+          "type": "string"
+        },
+        "thickness": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "required": [
+        "thickness"
+      ],
+      "type": "object"
+    },
+    "ThreadStep": {
+      "description": "A 60 degree thread from axis.origin along axis.dir. diameter is the major diameter; external adds a screw thread, internal cuts one. Pitch 0.2 to 10 mm, at most 100 turns (100 over all threads), 8 threads per recipe. clearance (default 0) loosens a fit for printing. startAngleDeg (default 0) is where the crest sits at axis.origin: degrees about the axis by the right hand rule, from the reference direction normalize(axis x c), with c = x when the axis is mostly along z, y when mostly along x and z when mostly along y.",
+      "properties": {
+        "axis": {
+          "properties": {
+            "dir": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "origin": {
+              "$ref": "#/$defs/Pos3"
+            }
+          },
+          "required": [
+            "origin",
+            "dir"
+          ],
+          "type": "object"
+        },
+        "clearance": {
+          "$ref": "#/$defs/Num"
+        },
+        "diameter": {
+          "$ref": "#/$defs/Num"
+        },
+        "hand": {
+          "enum": [
+            "right",
+            "left"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "internal": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "thread"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "length": {
+          "$ref": "#/$defs/Num"
+        },
+        "minorDiameter": {
+          "$ref": "#/$defs/Num"
+        },
+        "pitch": {
+          "$ref": "#/$defs/Num"
+        },
+        "pitchDiameter": {
+          "$ref": "#/$defs/Num"
+        },
+        "startAngleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "axis",
+        "length",
+        "diameter",
+        "pitch"
+      ],
+      "type": "object"
+    },
+    "ToolBody1": {
+      "description": "A separate shape built from its own steps, then joined to, cut from or intersected with the part by `combine`. It may hold another tool, 3 levels at most. A pattern or mirror naming its id copies the finished tool.",
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "features": {
+          "description": "The steps that build the tool: any kind except thread, coil, skin and bevelGear. Selectors and `of` reach only steps of this list.",
+          "items": {
+            "$ref": "#/$defs/StepInTool1"
+          },
+          "maxItems": 400,
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "toolBody"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "combine",
+        "features"
+      ],
+      "type": "object"
+    },
+    "ToolBody2": {
+      "description": "A separate shape built from its own steps, then joined to, cut from or intersected with the part by `combine`. It may hold another tool, 3 levels at most. A pattern or mirror naming its id copies the finished tool.",
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "features": {
+          "description": "The steps that build the tool: any kind except thread, coil, skin and bevelGear. Selectors and `of` reach only steps of this list.",
+          "items": {
+            "$ref": "#/$defs/StepInTool2"
+          },
+          "maxItems": 400,
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "toolBody"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "combine",
+        "features"
+      ],
+      "type": "object"
+    },
+    "ToolBody3": {
+      "description": "A separate shape built from its own steps, then joined to, cut from or intersected with the part by `combine`. It may hold another tool, 3 levels at most. A pattern or mirror naming its id copies the finished tool.",
+      "properties": {
+        "combine": {
+          "enum": [
+            "new",
+            "add",
+            "cut",
+            "intersect"
+          ],
+          "type": "string"
+        },
+        "features": {
+          "description": "The steps that build the tool: any kind except thread, coil, skin and bevelGear. Selectors and `of` reach only steps of this list.",
+          "items": {
+            "$ref": "#/$defs/StepInTool3"
+          },
+          "maxItems": 400,
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "toolBody"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "combine",
+        "features"
+      ],
+      "type": "object"
+    },
+    "Vec3": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "When": {
+      "description": "A formula over the declared sizes. The step and the steps that only exist for it are left out when it is 0.",
+      "maxLength": 300,
+      "type": "string"
+    }
+  },
+  "description": "Millimetres in the part frame. Patterns and mirrors may copy at most 256 bodies in total.",
+  "properties": {
+    "features": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ExtrudeStep"
+          },
+          {
+            "$ref": "#/$defs/RevolveStep"
+          },
+          {
+            "$ref": "#/$defs/LoftStep"
+          },
+          {
+            "$ref": "#/$defs/SweepStep"
+          },
+          {
+            "$ref": "#/$defs/ThreadStep"
+          },
+          {
+            "$ref": "#/$defs/CoilStep"
+          },
+          {
+            "$ref": "#/$defs/SkinStep"
+          },
+          {
+            "$ref": "#/$defs/HoleStep"
+          },
+          {
+            "$ref": "#/$defs/RoundStep"
+          },
+          {
+            "$ref": "#/$defs/BevelStep"
+          },
+          {
+            "$ref": "#/$defs/ShellStep"
+          },
+          {
+            "$ref": "#/$defs/PatternStep"
+          },
+          {
+            "$ref": "#/$defs/MirrorStep"
+          },
+          {
+            "$ref": "#/$defs/DraftStep"
+          },
+          {
+            "$ref": "#/$defs/OffsetFacesStep"
+          },
+          {
+            "$ref": "#/$defs/BevelGearStep"
+          },
+          {
+            "$ref": "#/$defs/MoveStep"
+          },
+          {
+            "$ref": "#/$defs/ScaleStep"
+          },
+          {
+            "$ref": "#/$defs/ToolBody1"
+          }
+        ]
+      },
+      "maxItems": 400,
+      "type": "array"
+    },
+    "frame": {
+      "$ref": "#/$defs/Placement",
+      "description": "Every position and direction of the features is written in this frame instead of the part frame (a tilted part can then use plain axis aligned numbers). xDir is made square to the normal. Defaults to the part frame. A round with sizeEnd still reads its ends against the part axes."
+    },
+    "schema": {
+      "const": "paramability.recipe"
+    },
+    "sizes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Size"
+      },
+      "description": "At most 64 sizes, names up to 64 characters.",
+      "type": "object"
+    },
+    "sizesAsWritten": {
+      "description": "True when the declared sizes are the whole list: no size is added for other numbers and a changed height moves nothing above it.",
+      "type": "boolean"
+    },
+    "version": {
+      "const": 17
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "features"
+  ],
+  "type": "object"
+}

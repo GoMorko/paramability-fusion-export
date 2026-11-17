@@ -243,24 +243,35 @@ class MeasuredRoundTest(unittest.TestCase):
 
 
 class ShellTest(unittest.TestCase):
-    def test_faces_chain_and_thickness(self):
+    # Fusion returns None (no exception) for the side of a shell that has no wall.
+    def test_faces_chain_and_inward_wall(self):
         neighbour = face("f2", x=5)
         top = face("f1", x=4, chain=[neighbour])
         data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([top, face("f2", x=5)]),
-                                 isTangentChain=True, insideThickness=param(0.2), outsideThickness=param(0.0),
+                                 isTangentChain=True, insideThickness=param(0.2), outsideThickness=None,
                                  shellType="SharpOffsetShellType"))
         self.assertEqual(data, {
             "faces": [{"token": "f1", "point": [4, 1, 2]}, {"token": "f2", "point": [5, 1, 2]}],
-            "bodies_input": False, "inside": 2.0, "outside": 0.0, "shell_type": "sharp"})
+            "bodies_input": False, "inside": 2.0, "outside": 0.0, "shell_type": "sharp",
+            "volume_before": 8000.0, "volume_after": 8000.0})
 
-    def test_body_input_rounded_type_and_missing_members(self):
+    def test_body_input_rounded_type_and_outward_wall(self):
         data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([body()]),
-                                 insideThickness=param(0.1), shellType="RoundedOffsetShellType"))
-        self.assertEqual((data["faces"], data["bodies_input"], data["outside"], data["shell_type"]),
-                         ([], True, 0.0, "rounded"))
+                                 insideThickness=None, outsideThickness=param(0.1),
+                                 shellType="RoundedOffsetShellType"))
+        self.assertEqual((data["faces"], data["bodies_input"], data["inside"], data["outside"], data["shell_type"]),
+                         ([], True, 0.0, 1.0, "rounded"))
+
+    def test_a_wall_on_both_sides_reads_both(self):
         data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([face("f1")]),
-                                 insideThickness=param(0.1)))
-        self.assertEqual((data["shell_type"], len(data["faces"])), ("sharp", 1))
+                                 insideThickness=param(0.1), outsideThickness=param(0.2)))
+        self.assertEqual((data["inside"], data["outside"]), (1.0, 2.0))
+
+    def test_a_shell_member_that_cannot_be_read_is_not_guessed(self):
+        data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([face("f1")]),
+                                 outsideThickness=None))
+        self.assertEqual((data["shell_type"], data["inside"], data["outside"], len(data["faces"])),
+                         ("other", None, 0.0, 1))
 
 
 class DraftTest(unittest.TestCase):

@@ -58,15 +58,15 @@ class GapHintTest(unittest.TestCase):
         self.assertEqual(hint_of(result, "RectangularPattern1"), gap_hints.HINTS[gap_hints.AFTER_GAP])
 
     def test_a_refusal_with_a_cause_gets_its_hint_and_one_without_gets_none(self):
-        for change, expected in (({"bodies_input": True}, gap_hints.HINTS[gap_hints.SHELL_KIND]),
-                                 ({"shell_type": "rounded"}, None)):
+        for change, expected in (({"outside": 1.0}, gap_hints.HINTS[gap_hints.SHELL_KIND]),
+                                 ({"faces": []}, None)):
             with self.subTest(change=change):
                 result = translate(tray(lambda c: c["items"][SHELL]["data"].update(change)))
                 self.assertEqual(hint_of(result, "Shell1"), expected)
                 self.assertEqual("hint" in result.gaps[0], expected is not None)
 
     def test_each_listed_kind_that_does_not_copy_gets_its_own_reason_and_hint(self):
-        kinds = {"ScaleFeature": gap_hints.SCALE, "ReplaceFaceFeature": gap_hints.REPLACE_FACE,
+        kinds = {"ReplaceFaceFeature": gap_hints.REPLACE_FACE,
                  "RibFeature": gap_hints.RIB_WEB, "WebFeature": gap_hints.RIB_WEB,
                  "BoundaryFillFeature": gap_hints.BOUNDARY_FILL}
         generic = translate(tray(unsupported(SHELL, "MadeUpFeature"))).gaps[0]["reason"]

@@ -84,8 +84,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
 3. DR1, draft directions. Extrude a box from a sketch on the XY plane. Draft two side faces by 3 degrees from a user
    parameter, with the XY plane as the fixed plane. Make a second copy with the direction flipped and a third with a
    negative angle.
-   Export: each copy leans the same way as in Fusion. A "Symmetric" draft that crosses the plane is left out with a
-   reason.
+   Export: each copy leans the same way as in Fusion. (A "Symmetric" draft that crosses the plane is copied: see DR2.)
 
 4. TH2, a sketch with two solutions. Sketch a triangle: one corner on the origin, one 40 mm along X, the third
    placed only by two distances (`Arm` = 30 mm from the origin, 35 mm from the second corner), no other constraint,
@@ -99,9 +98,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: the single path sweep copies; the guide surface sweep is left out and names the settings Fusion did not
    give; the edge loft names what Fusion gave for the section.
 
-6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
-   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path along a sketch
-   spline, and Boundary Fill between two bodies.
+6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it together with a sketch; on a
+   second box add a Rib (a sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern
+   on Path along a sketch spline, and Boundary Fill between two bodies.
    Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
    ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
    ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
@@ -193,7 +192,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     cylinder, started from the lower end. Make a third with an ANSI Unified thread, and a fourth with an ACME thread.
     Export: tick `Neck`. In `report.json`, the item of the thread must hold `thread_type`, `pitch` (2.0, from
     `threadPitch`), `angle_deg` (60, or null), `major_diameter`
-    (30.0), `minor_diameter`, `right_hand`, and a `faces` entry with `radius` 15, a `span` and `outward` true. If
+    (30.0), `minor_diameter`, `pitch_diameter` (between the minor and the major diameter, from `pitchDiameter`),
+    `right_hand`, and a `faces` entry with `radius` 15, a `span` and `outward` true. If
     a number is missing or 10 times too big or too small, the units of the thread info differ from the reader's guess
     (cm). The thread copies as a `thread` step; the metric and Unified ones copy, the ACME one is left out with the
     hint about 60 degree threads. Changing `Neck` in Paramability changes the thread length. In the partial thread
@@ -414,19 +414,26 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the inner diameter; for (c) and (d) which way the corners point (a corner toward +X, +Y or another way) and
     the side length; the body volume (Inspect > Properties); and in the timeline dialog (double click the feature)
     the values of Distance One and Distance Two. Say whether the section is centred on the path.
-40. T2-open, a thin extrude of an open line. Units mm, Z up. On the XY plane draw one open line from (0, 0) to
-    (40, 0) and a second sketch with two joined lines (0, 0) to (30, 0) to (30, 20) (not closed). Use Create >
-    Extrude on each: the dialog picks the open line as the profile; set Thin Extrude on, Wall Location "Side 1",
-    Thickness 2 mm, distance 15 mm, Operation New Body. Repeat the line with Wall Location "Side 2" and with
-    "Center Line". Use one new body for each.
-    Export: export one of the bodies with no parameters ticked (the export may stop with a reason for an open
-    line; read the report anyway). In `report.json` read the extrude item: `data.thin_wall.profile_type` (what the
-    open line reads as, such as `Path` or `Profile`), `data.thin_wall.location`, `data.thin_wall.thickness`,
-    `data.profiles` (each entry, `kind` and `type`), `data.end_area`, `data.end_normal` and `data.end_offset`.
-    Send back these for every body. In Fusion, look at the end of the wall in the section view (zoom on the end of
-    the line): is the end square or round, and for the two joined lines is the corner at (30, 0) sharp or round
-    on the outside. For each location say on which side of the line (looking along it from the start) the wall
-    stands: left or right.
+40. T2-open, a wall along an open line with a corner. Units mm, Z up. Add user parameters `Leg` = 30 mm, `Height` =
+    15 mm and `Wall` = 2 mm. On the XY plane draw two joined lines, the second from the end of the first: (0, 0) to
+    (30, 0) to (30, 20), not closed. Make the start point coincident with the origin, the first line horizontal with
+    a length dimension `Leg`, the second line vertical with a length dimension of 20 mm. Use Create > Extrude with the
+    open line as the profile: Thin Extrude on, Wall Location "Side 1", Thickness `Wall`, distance `Height`, Operation
+    New Body. Make two more designs the same with Wall Location "Side 2" and "Center". A fourth design: a 60 x 40 x
+    3 mm plate on the XY plane, and on its top face the same two lines starting at (10, 10), extruded up as a Join
+    with Side 1. A fifth design: the same plate and join, with the lines starting at the corner (0, 0) of the plate,
+    so the wall is flush with the plate's front and left edges. A sixth design: a new body as the first, but the
+    second line turns 135 degrees, from (30, 0) to (15.86, 14.14) (20 mm long), Side 2 so the wall is on the outer
+    side of the sharp corner.
+    Export: tick `Leg`, `Height` and `Wall` and export each body. Expect the extrude copied, not left out, and the
+    copy to match the Fusion body: Side 1 inside the corner (1440 mm3 at the start sizes), Side 2 outside it (1560
+    mm3), Center half on each side (1500 mm3), the ends square and the outer corner sharp. In Paramability set `Leg`
+    to 50 and `Wall` to 4: the wall follows as in Fusion. In `report.json` the extrude item has `data.path` with two
+    lines (`opposed` false) and `data.wall_faces` with 8 flat faces for a new body. The flush wall is copied too (8640
+    mm3 with the plate): its `data.wall_faces` lists a face with its point on the plate, and
+    `data.target_faces_before` lists the plate's 6 faces. The 135 degree corner is copied too: Fusion keeps one sharp
+    tip at (34.83, -2) (8 flat faces, box x 0 to 34.83, y -2 to 15.56), and the copy matches its 1644.85 mm3. If a
+    copy leaves the step out, send `report.json` and the reason.
 41. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
     plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
     about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with
@@ -591,7 +598,73 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
-54. TD4, tapped holes through all and a cosmetic one. Add a user parameter `Plate` = 30 mm. Make a box 80 x 60 mm,
+54. SC1, scale of a body. Add a user parameter `Grow` = 1.5 (no unit) and `Height` = 10 mm. Sketch a 40 x 20 mm
+    rectangle on the XY plane with one corner at the origin and extrude it by `Height`. Use Modify, Scale on the body
+    with the origin point as the point, uniform, factor `Grow`. Fillet one top edge by 2 mm after the scale. Make a
+    second design with the same box scaled Non Uniform by X 1, Y 2, Z 0.5 about the far top corner of the box (a
+    vertex), and a third with the box in a component that is turned 30 degrees about Z in the assembly, scaled Non
+    Uniform about the component's origin.
+    Export: tick `Grow` and `Height`. The first copy has a `scale` step with factor `Grow` after the extrude and
+    matches the STEP; in Paramability, change `Grow` to 2: the part grows to 80 x 40 x 20 mm, and the fillet
+    stays on its edge (the fillet may mark sizes "may give unexpected results"). The second copy
+    writes the factors [1, 2, 0.5] and the corner as the point, and `Height` is marked "may give unexpected results".
+    The third leaves the scale out with "turned at an angle". Export for Orca leaves the scale out with the tip
+    "Change the sizes in the sketches". In `report.json` note `input_kind`, `point` and `factors` of each scale.
+    Afterwards the design is as before.
+55. SH1, a shell that grows outward. Add a user parameter `Wall` = 2 mm. Sketch a 40 x 20 mm rectangle with its corner
+    at the origin on the XY plane and extrude it 10 mm. Make a Shell: pick the top face, direction Outside, thickness
+    `Wall`, type Sharp. Fusion keeps the box as the hollow and adds the wall outside it, with the top open.
+    Export: tick `Wall`. The recipe has a `shell` step with `outside: true`, `thickness` `{ "expr": "Wall" }` and
+    `openFaces`, and the recipe version is 17. In `report.json` the shell data has `inside` 0, `outside` 2 and
+    `shell_type` `sharp`, and `volume_before` is more than `volume_after`. In Paramability: the part is 44 mm by 24
+    mm by 12 mm over all, open at the top, and the hollow is the 40 x 20 x 10 mm box. Change `Wall` to 3 mm: the
+    outside grows to 46 x 26 mm, as in Fusion. Then add a Join extrude of a 4 x 4 mm square that starts 11 mm above
+    the base plane (inside the wall height) at the corner of the part: the join stays in the copy. Afterwards the
+    design is as before. On another copy set the Shell direction to Both Sides: the shell is left out with a reason
+    and the tip "Shell one way only, inward or outward, with sharp or rounded corners."
+56. SH2, a closed hollow. Sketch a 40 x 20 mm rectangle with its corner at the origin and extrude it 10 mm. Make a
+    Shell: pick the body (not a face), direction Inside, thickness 2 mm, type Sharp. The body becomes a closed hollow
+    with a 36 x 16 x 6 mm cavity.
+    Export: the recipe has a `shell` step with no `openFaces` and no `outside`, and the recipe version is 17. In
+    `report.json` the shell data has `bodies_input` true, no faces, and `volume_after` below `volume_before`. In
+    Paramability: the part is a closed hollow; cut it with a section view and see the cavity. Add a Fillet on the
+    four vertical outer edges after the shell: the fillet is copied. Afterwards the design is as before.
+57. SH3, a shell with rounded corners. Sketch a 40 x 20 mm rectangle with its corner at the origin and extrude it 10
+    mm. Make a Shell: pick the top face, direction Outside, thickness 2 mm, type Rounded. Fusion rounds the outside
+    corners and edges of the wall with a radius of 2 mm. On another copy use direction Inside and type Rounded.
+    Export: the recipe has a `shell` step with `corners: "round"` (and `outside: true` on the first copy), and the
+    recipe version is 17. In `report.json` the shell data has `shell_type` `rounded`. In Paramability: the outer
+    corners of the wall are round as in Fusion, and the volumes of the copy and the STEP agree within 1 percent. When
+    they do not agree, note which of the two types differs and by how much: the rounded type of Fusion and of the
+    app may round different edges. On the inside copy the shape that Fusion makes is the one to match.
+58. DR2, a Symmetric draft and a Two Sides draft across the plane. Add a user parameter `Lean` = 3 deg. Extrude a
+    40 x 20 mm rectangle 10 mm up from the XY plane. Add a construction plane parallel to the XY plane, offset 5 mm,
+    and use it as the fixed plane. Make three copies of the design. Copy one: Draft the four side faces, Draft Type
+    "Symmetric", angle `Lean`. Copy two: the same, with the angle -3 deg. Copy three: Draft Type "Two Sides" with Angle 1
+    = 3 deg and Angle 2 = 6 deg. In each copy, measure how wide the top face (z = 10), the middle (z = 5) and the bottom
+    face (z = 0) are along X, and write the numbers down. On a fourth copy use Two Sides with 3 deg and 3 deg.
+    Export: tick `Lean` for copy one. Expect copy one to be widest in the middle (note it if not: the copy relies on
+    both sides leaning alike), so material comes off on both sides; the draft is copied as one step with two equal angles of 3 degrees (recipe version 17), and in Paramability
+    the top and bottom faces are narrower than the middle exactly as in Fusion. Changing `Lean` changes both sides. In
+    copy two the box is narrowest in the middle, and both angles are -3. Copy three is left out with the reason that
+    each side has its own angle; note which angle (3 or 6) Fusion applied to the half above the plane (z 5 to 10)
+    and whether `isDirectionFlipped` changes it: the answer decides whether this case can be copied later. On the fourth
+    copy note whether the shape equals the Symmetric draft of copy one (the same widths); it is left out now. Afterwards
+    the design is as before.
+59. PF1, Press Pull on a whole round face (a press fit). Add user parameters `Fit` = 0.2 mm and `HoleSize` = 5 mm.
+    On the XY plane draw a 40 x 20 mm rectangle with its corner at the origin and extrude it 10 mm. On the top face
+    draw a circle of diameter `HoleSize` with its centre at (12, 10) and cut it through all. On the XY plane draw a
+    circle of 6 mm diameter with its centre at (30, 10) and extrude it 15 mm as a Join, so a pin stands 5 mm above
+    the plate. Use Press Pull (Offset Faces) on the wall of the hole with the distance `-Fit`. Use Press Pull on the
+    round side of the pin with the distance -0.1 mm.
+    Export: tick `Fit` and `HoleSize`. In `report.json`, each Offset Faces item has a face of `kind` "round" with two
+    `ends` of `kind` "circle", each with a flat `face`; `outward` is false for the hole and true for the pin;
+    `rounds_after` holds a radius of 2.7 for the hole and 2.9 for the pin. The recipe is version 17 with two
+    `offsetFaces` steps; the distance of the hole follows `Fit`. In Paramability, set `Fit` to 0.4 mm: the hole is
+    5.8 mm across, and the pin stays 5.8 mm across. When `rounds_after` is empty, Fusion does not list the moved face
+    after the step and both steps are left out with "could not be measured": report this. Afterwards the design is as
+    before.
+60. TD4, tapped holes through all and a cosmetic one. Add a user parameter `Plate` = 30 mm. Make a box 80 x 60 mm,
     `Plate` high. On the top face add three Holes, "Tapped", M6x1: at (-20, 0) Simple, "Modeled" ticked, through all;
     at (0, 0) Counterbore 10 mm across and 3 mm deep, "Modeled" ticked, through all; at (20, 0) Simple, cosmetic
     (Modeled off), 15 mm deep.
@@ -606,7 +679,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     on the top face over x -14..-6 and y -10..10, clear of the holes. Export again with `Plate` and `HoleX` ticked: the
     thread of that hole is 30 mm long as a number, and `Plate` and `HoleX` are marked "may give unexpected results"
     (the hole can move under the box, where Fusion's thread is 40 mm). Afterwards the design is as before.
-55. MV1, a sphere moved into a box and kept where both meet. Make a box 40 x 20 x 10 mm with its corner at the
+61. MV1, a sphere moved into a box and kept where both meet. Make a box 40 x 20 x 10 mm with its corner at the
     origin. Make a second body: sketch a half circle of radius 60 mm on a plane through the middle of the box (y = 10),
     centre at (20, 10, 0), with its straight side on a vertical line, and revolve it 360 degrees about that line as a
     new body. Move the sphere with a Move along X, Y and Z by z = -52 mm. Combine the box with the sphere: Intersect,
@@ -616,14 +689,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     apart along z. Then add a Rotate Move of the sphere (10 degrees about the z axis through (0, 0, 0)) before the
     Combine and export again: the Combine is left out with a reason that names the sphere and the Rotate Move, and no
     flat box is written. Afterwards the design is as before.
-56. HB1, an extrude that starts from a face of a helper body. Add user parameters `Height` = 10 mm and `Lift` = 3 mm.
+62. HB1, an extrude that starts from a face of a helper body. Add user parameters `Height` = 10 mm and `Lift` = 3 mm.
     Body1: a 40 x 40 mm rectangle at the origin extruded `Height` as a new body. Body2: a 10 x 10 mm rectangle
     centred at (20, 20) on the XY plane, extruded 5 mm as a new body, with the start "From object" on the top face of
     Body1 and an offset of `Lift`. Body3: the same with the centre at (10, 10) and an offset of `-Lift`.
     Export: pick Body2 and tick both sizes. Both stay sizes, and the start of the extrude in `recipe.json` reads
     `Height + Lift` (Body3: `Height - Lift`). No size is "not used" with "changes nothing". In Paramability, change
     `Height` to 15 mm: Body2 starts at 18 mm, as in Fusion. Afterwards the design is as before.
-57. PE1, where Fusion says the copies of a rectangular pattern are. Make a 100 x 60 x 5 mm plate with its corner at
+63. PE1, where Fusion says the copies of a rectangular pattern are. Make a 100 x 60 x 5 mm plate with its corner at
     the origin. Drill a simple 5 mm hole through all at (10, 10). Make a rectangular pattern of the hole: direction
     one along X, quantity 4, distance 20 mm, spacing; direction two along Y, quantity 3, distance 15 mm. On a copy of
     the design, tick Symmetric in direction one and set its quantity to 5, with the hole at (50, 10). On another copy,
@@ -639,7 +712,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     assembly space and the face centres in the component's space (the original hole near (10, 10), not near (-10, 110)); both patterns
     are copied. If they are left out with that reason, note the frames and face centres: the spaces differ from
     what the reader expects.
-58. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
+64. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
     its corner at the origin. Sketch a circle of radius 20 mm centred at (30, 30) on the top face, and a circle of
     radius 2 mm at (50, 30); cut the small circle through all. Make a Pattern on Path of the cut along the large
     circle: quantity 6, extent, distance the whole circle (125.664 mm), orientation Path Direction.
@@ -647,7 +720,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     circle's centre and the centre of its `faces`. Expect 6 different places 60 degrees apart and transforms that
     agree with the faces. The pattern is copied as a full turn of 6 and matches the STEP. If two elements share a
     place, or a transform does not agree with its faces, the pattern is left out with that reason: note the values.
-59. PE3, where Fusion says the copies of a pattern of bodies are. Make a 10 x 10 x 10 mm box at (20, -5, 0) to
+65. PE3, where Fusion says the copies of a pattern of bodies are. Make a 10 x 10 x 10 mm box at (20, -5, 0) to
     (30, 5, 10) as its own body, and a disc of 80 mm diameter, 5 mm high, centred on the origin as a second body. Make
     a circular pattern of the box body (Pattern Type Bodies) about the Z axis: Full, quantity 6. On a copy of the
     design, make it Angle, total 120 degrees, quantity 3. On another copy, make a rectangular pattern of the box body
@@ -657,7 +730,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     of the box tool: 6 copies round the circle, 3 over 120 degrees, and 3 along X. Each copy matches the STEP. If
     a pattern is left out with "The copies of this pattern could not be matched to the bodies it made", note the
     frames and the body points.
-60. NC1, steps that make a new component. Add a user parameter `Len` = 30 mm. With the top level active, sketch a
+66. NC1, steps that make a new component. Add a user parameter `Len` = 30 mm. With the top level active, sketch a
     30 x 20 mm rectangle on the XY plane, width `Len`, and extrude it 10 mm with the operation New Component. In the
     same way revolve a 10 x 20 mm rectangle on the XZ plane (50 to 60 mm from the Z axis) a full turn about the Z axis,
     and loft a 20 mm square on the XY plane to a 10 mm square on a plane 15 mm up, each with New Component.
@@ -665,7 +738,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     matches the STEP, with no "older version of the add-in" reason. In Paramability, change `Len` to 40 mm: the
     extrude grows like in Fusion. Then move the first new component 20 mm along X (Position, Capture Position) and
     export it again: the copy still matches. Afterwards the design is as before.
-61. HO1, a hole placed from the projected origin. Add user parameters `Width` = 80 mm, `Depth` = 60 mm, `Height` = 30
+67. HO1, a hole placed from the projected origin. Add user parameters `Width` = 80 mm, `Depth` = 60 mm, `Height` = 30
     mm and `HoleX` = 20 mm. Sketch a centred rectangle `Width` x `Depth` on the XY plane and extrude it `Height` up.
     Sketch on the top face, project the origin point (Project, then the origin in the browser), add a sketch point
     and dimension it `HoleX` along X from the projected origin, on the same line in Y. Add a simple 6 mm hole on
@@ -674,7 +747,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     reason "placed by geometry projected into Sketch2". In Orca, change `HoleX` to 30 mm: the hole moves like in
     Fusion. Afterwards the design is as before.
 
-62. RV7, a revolve about an axis that a size moves past the outline. Add a user parameter `Height` = 10 mm. On the XY
+68. RV7, a revolve about an axis that a size moves past the outline. Add a user parameter `Height` = 10 mm. On the XY
     plane make a 40 x 20 mm box with its corner at the origin, extruded `Height` up. Sketch on its top face a line on
     the top front edge (y = 0, from x = 0 to 40), coincident with that edge. On the XZ plane draw a rectangle from
     x = 0 to 10, z = 12 to 15. Revolve it 90 degrees about the line, Join, toward +Y (the ends lie on the top face).
@@ -686,7 +759,25 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     ranges that keep the outline on one side of the axis, or leave the ranges to the add-in." Afterwards the design
     is as before.
 
-63. PI2, pipes copied as sweeps. Add user parameters `PipeD` = 10 mm, `Wall` = 2 mm and `Run` = 40 mm. On the XZ
+69. TA2, a join through all onto a body with a step. Add user parameters `Low` = 10 mm and `Tall` = 30 mm. On the XY
+    plane draw a rectangle from (0, 0) to (60, 20) and extrude it `Low` up as a new body (Body1). On the XY plane draw
+    a rectangle from (40, 0) to (60, 20) and extrude it Join, distance `Tall`, so Body1 has a low part and a tall part.
+    On the XY plane draw a rectangle from (80, 0) to (100, 20) and extrude it 50 mm up as a new body (Body2). On the
+    XY plane draw three squares: A from (10, 5) to (20, 15) under the low part, B from (35, 5) to (45, 15) across the
+    step, C from (45, 5) to (55, 15) under the tall part. Extrude each square alone, Join, extent All, direction up,
+    with Body1 as the only body it joins (three extrudes, in the order B, C, A).
+    Export: pick Body1, tick `Low` and `Tall`. In `report.json` all three end at 30 (`end_offset`), the top of the
+    whole body; `end_area` is 450 for B and C and 100 for A. A, B and C are copied as extrudes to the far side of the
+    part (`"extent": "through"`, no distance, recipe version 17), and `Low` and `Tall` are marked "may give unexpected
+    results" with an extrude named. In Paramability set `Tall` to 40 and `Low` to 15: A, B and C end at the top of
+    the tall part, as in Fusion with the same values. Then add Body2 to the bodies that B joins and export again:
+    Fusion still ends B at 30, and B is left out with the tip "Let the extrude join only this body, or give it a
+    distance." Afterwards the design is as before.
+    A curved far side: make a cylinder of radius 10 mm along X as its own body, a 10 x 10 mm square on a plane
+    through its axis tilted 20 degrees, Join, extent All, the cylinder the only body it joins. Fusion adds nothing
+    and lists no end face (`end_offset` null). The export never copies that join as `"extent": "through"`.
+
+70. PI2, pipes copied as sweeps. Add user parameters `PipeD` = 10 mm, `Wall` = 2 mm and `Run` = 40 mm. On the XZ
     plane draw a line from (0, 0) to (0, `Run`) mm (so it runs up Z), then a tangent arc of 90 degrees and radius
     15 mm that ends pointing along +X. The arc must start on the end point of the line (draw it from that point):
     an arc that only has a coincident constraint to the line makes the pipe follow the line alone. Make two copies

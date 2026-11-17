@@ -20,6 +20,11 @@ class Placer:
         for a point on an edge."""
         raise NotImplementedError
 
+    def claims(self, p):
+        """True when `p` lies on a face this step made that it cannot place. A pick there is not placed on the steps
+        before it either, since those only hold faces the step has moved or covered."""
+        return False
+
     def material_at(self, p):
         """What this step leaves at `p`: ADD when `p` lies in or on material it adds, CUT when in or on material it
         removes, None when it does not change `p`."""

@@ -158,12 +158,12 @@ def _segments_of(link):
             else {"kind": "line", "to": _pt(piece[-1])} for piece in pieces]
 
 
-FLIPPED_KINDS = ("circle", "rect", "ellipse", "polygon", "profile")
+FLIPPED_KINDS = ("circle", "rect", "ellipse", "polygon", "profile", "open")
 
 
 def flip_y(loop):
     """The loop mirrored across the sketch x axis, for a placement whose normal is reversed. Coordinates may be
-    formulas. Handles the kinds in FLIPPED_KINDS, the loops `loop_of` makes."""
+    formulas. Handles the kinds in FLIPPED_KINDS: the loops `loop_of` makes and the open line of a thin extrude."""
     def flip(p):
         x, y = p
         return [x if isinstance(x, Sized) else round9(x), negated(y) if isinstance(y, Sized) else round9(-y)]
@@ -176,7 +176,7 @@ def flip_y(loop):
             out["angleDeg"] = round9(-loop["angleDeg"])
     elif kind == "polygon":
         out["points"] = [flip(p) for p in loop["points"]]
-    elif kind == "profile":
+    elif kind in ("profile", "open"):
         out["start"] = flip(loop["start"])
         segments = []
         for seg in loop["segments"]:

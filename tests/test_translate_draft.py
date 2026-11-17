@@ -11,6 +11,7 @@ TRAY = "filter_tray_sized"
 
 WALL = {"token": "f1", "point": [40, 10, 5], "box": {"min": [40, 0, 0], "max": [40, 20, 10]}}
 FLOOR = {"point": [0, 0, 0], "normal": [0, 0, 1]}
+MIDDLE = {"point": [0, 0, 5], "normal": [0, 0, 1]}
 
 
 def drafted(volume_after=7900.0, **data):
@@ -68,12 +69,46 @@ class DraftTest(unittest.TestCase):
         result = translate(capture, size_table=table_of(capture, ["turn_deg"]))
         self.assertEqual(steps_of(result.recipe, "draft")[0]["angleDeg"], 3.0)
 
+    def test_a_symmetric_draft_across_the_plane_leans_both_sides_away_from_it(self):
+        result = translate(drafted(plane=MIDDLE, symmetric=True))
+        step = steps_of(result.recipe, "draft")[0]
+        self.assertEqual((step["angleDeg"], step["angleTwoDeg"]), (3.0, 3.0))
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_symmetric_draft_that_adds_material_leans_both_sides_the_other_way(self):
+        step = steps_of(translate(drafted(8100.0, plane=MIDDLE, symmetric=True)).recipe, "draft")[0]
+        self.assertEqual((step["angleDeg"], step["angleTwoDeg"]), (-3.0, -3.0))
+
+    def test_both_angles_of_a_symmetric_draft_follow_the_same_size(self):
+        capture = drafted(plane=MIDDLE, symmetric=True,
+                          params={"angle_deg": {"name": "d9", "expression": "turn_deg / 30", "value": 3.0}})
+        capture["parameters"] = load_capture(TRAY)["parameters"]
+        table = table_of(capture, ["turn_deg"])
+        result = translate(capture, size_table=table)
+        step = steps_of(result.recipe, "draft")[0]
+        self.assertIn(table.size_name("turn_deg"), step["angleDeg"]["expr"])
+        self.assertIn(table.size_name("turn_deg"), step["angleTwoDeg"]["expr"])
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_symmetric_draft_on_one_side_stays_a_one_angle_step(self):
+        result = translate(drafted(symmetric=True))
+        step = steps_of(result.recipe, "draft")[0]
+        self.assertNotIn("angleTwoDeg", step)
+        self.assertLess(result.recipe["version"], 17)
+
     def test_each_draft_the_copy_cannot_check_is_left_out(self):
         cases = {
             "faces on both sides": drafted(plane={"point": [0, 0, 5], "normal": [0, 0, 1]}),
             "volume not measured": drafted(None),
             "volume unchanged": drafted(8000.0),
             "two different angles": drafted(two_angles=True, angle_two_deg=5.0),
+            "two different angles across the plane": drafted(two_angles=True, angle_two_deg=5.0, plane=MIDDLE),
+            "two equal angles across the plane": drafted(two_angles=True, angle_two_deg=3.0, plane=MIDDLE),
+            "symmetric across the plane, volume unchanged": drafted(8000.0, plane=MIDDLE, symmetric=True),
+            "symmetric across the plane, not measured": drafted(None, plane=MIDDLE, symmetric=True),
+            "symmetric across the plane, at the cap": drafted(plane=MIDDLE, symmetric=True, angle_deg=30.0),
             "past the recipe's cap": drafted(angle_deg=30.0),
         }
         for label, capture in cases.items():

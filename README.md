@@ -34,12 +34,19 @@ learning only.
 The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the step out and tells you why.
 For some steps the add-in measures the shape that Fusion made, for example the radius of a round set by chord
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
+A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
+A thin extrude of an open line (a fence or a divider) is copied only when the faces that Fusion made show on which
+side of the line the wall stands.
 Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
 tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
-For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle.
+For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
+Scale of a body is copied only when the body measured after it has the size and volume that its factors give. A Press
+Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
 A Pipe with a round section is copied as a sweep of a circle. A pipe with a square or triangle section is left out.
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.
+A join "through all" is copied only when it joins this body alone and Fusion ended it on the far side of this body.
+The add-in marks the sizes that change the body before it "may give unexpected results" (`docs/limits.md`).
 A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
 range of that parameter stops before the outline reaches the axis.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
@@ -93,7 +100,7 @@ or if an error occurs.
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
-- This is version 0.13.0-preview.13. Use a current Paramability build to open its files.
+- This is version 0.13.0-preview.14. Use a current Paramability build to open its files.
 
 ## More information
 

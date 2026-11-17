@@ -482,7 +482,8 @@ class ForeignTest(unittest.TestCase):
         self.assertEqual([e.get("foreign") for e in data["sets"][0]["edges"]], [True, None])
         shell_face = face("f1")
         shell_face.body = Obj(parentComponent=self.other)
-        shell = self.tray.feature("ShellFeature", "Shell1", inputEntities=Coll([shell_face]), insideThickness=Obj(value=0.2))
+        shell = self.tray.feature("ShellFeature", "Shell1", inputEntities=Coll([shell_face]), insideThickness=Obj(value=0.2),
+                                  outsideThickness=None)
         self.assertTrue(self.read_data(shell)["faces"][0]["foreign"])
 
     def test_combine_target_and_tools_are_flagged(self):

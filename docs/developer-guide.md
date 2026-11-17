@@ -8,7 +8,7 @@ file. Paramability opens that file as a part. The part has sizes that come from 
 The guide is for a developer who knows Fusion as a user and knows Python. The developer did not write the add-in. The
 goal is that the developer can find and fix a problem alone.
 
-The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.13.
+The guide describes the code as it is on `main` of the add-in repository, version 0.13.0-preview.14.
 The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:
@@ -31,7 +31,7 @@ What version 0.12.0 added, with the sections that explain it:
 
 What this version writes:
 
-- recipe version 16 when a sweep needs it, else a lower version;
+- recipe version 17 when a shell needs it, else 16 when a sweep needs it, else a lower version;
 - a gaps file of version 3 always (up to 256 left-out steps, each with a `finishing` flag). Version 0.11.1 wrote version 1 for up to 16 steps and version 2 for more;
 - a `report.json` with a `timing` block and a `health` block, and also the record of the time limit
   (`probe.time_limit`), the count of pieces in the tries (`pieces`) and a `hint` in `refusal`;
@@ -463,7 +463,7 @@ export (see checklist 4.10.5).
 
 Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
 `lib/fusion_reader/` (`read_solid.py`, `read_hole.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
-`read_move.py`, `read_paste.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`, `read_pipe.py`). The step kind table
+`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`, `read_pipe.py`). The step kind table
 (`lib/capture_model/step_kinds.py`) says which module reads which type.
 
 `read_solid.py` reads the extrude, the revolve and the combine. `read_hole.py` reads the hole. Both need the same facts
@@ -1018,11 +1018,12 @@ imports translator code, and only the translator reads `HANDLERS`.
 | `CombineFeature` | `combine.step.handle` |
 | `FilletFeature`, `ChamferFeature`, `ShellFeature` | `finishes.finish.fillet`, `.chamfer`, `.shell` |
 | `DraftFeature` | `finishes.draft.handle` |
-| `OffsetFacesFeature` | `finishes.offset.handle` |
+| `OffsetFacesFeature` | `finishes.offset.handle` (see 3.20) |
 | `RectangularPatternFeature`, `CircularPatternFeature`, `MirrorFeature` | `repeat.body_copies.rectangular`, `.circular`, `.mirror` |
 | `PathPatternFeature` | `repeat.body_copies.path` (see 3.17) |
 | `SplitBodyFeature` | `bodies.split.handle` |
 | `CopyPasteBody`, `MoveFeature` | `bodies.paste.handle`, `bodies.move.handle` |
+| `ScaleFeature` | `bodies.scale.handle` (see 3.18) |
 | `EmbossFeature` | `extrude.emboss.handle` |
 | `SweepFeature`, `LoftFeature` | `sweep.step.handle`, `loft.step.handle` |
 | `CoilFeature` | `coil.step.handle` (see 3.13) |
@@ -1039,19 +1040,20 @@ types that the add-in does not copy, with the reason and the cause of the hint (
 | `StitchFeature` | "Steps of type stitch are not copied." | `surface` |
 | `OffsetFeature` (surface offset) | "Offsetting a surface is not copied." | `surface` |
 | `BoundaryFillFeature` | "Boundary Fill is not copied." | `boundaryFill` |
-| `ScaleFeature` | "Scaling a body is not copied." | `scale` |
 | `ReplaceFaceFeature` | "Replace Face is not copied." | `replaceFace` |
 | `RibFeature`, `WebFeature` | "Rib is not copied.", "Web is not copied." | `ribWeb` |
 
 Scale, Replace Face, Rib, Web and the surface Offset also have the flag `reaches_bodies`. The Path Pattern has it too. They can change
 or take bodies of another component, so the capture walk measures the body around them also when they sit in another
-component. A coil, a modelled thread and a path pattern are copied, so they are not in this table (3.12, 3.13 and 3.17). A path
-pattern that is left out keeps the cause `pathPattern`.
+component. A coil, a modelled thread, a path pattern and a scale are copied, so they are not in this table (3.12, 3.13, 3.17 and
+3.18). A path pattern that is left out keeps the cause `pathPattern`. A scale that is left out keeps the cause `scale`.
 
 A second table, `RECIPE_KINDS`, lists the recipe step kinds the translator writes (`extrude`, `revolve`, `hole`,
 `round`, `bevel`, `shell`, `offsetFaces`, `pattern`, `mirror`, `toolBody`, `move`, `loft`, `sweep`, `draft`, `thread`,
-`coil`). Each kind has the recipe version that brought it, and the paths of its points and directions (so `place.place`
+`coil`, `scale`). Each kind has the recipe version that brought it, and the paths of its points and directions (so `place.place`
 can move the recipe into the assembly and turn it for Y up). The `thread` and the `coil` use the base recipe version.
+The `scale` kind (version 17) also has `factors`: the path of its per-axis factors. `place.place` does not move these
+values. It puts each factor on the axis that the map turns its axis to.
 
 A kind can also say that it may not stand inside a tool body (`in_tool` is false). This holds for `thread` and `coil`,
 and for `skin` and `bevelGear`, which the translator never writes. These kinds build on the whole part. `tool_words` is
@@ -1153,11 +1155,12 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
 | `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
-| `throughAllAdds` | a join or a new body extruded through all (`extrude/through.py`; the Orca output gives the same cause) | Give the extrude a distance, or end it on a face or plane. |
-| `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
+| `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, one in the walk of a tool body or of a body before a split, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
+| `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
-| `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
+| `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
 | `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
 | `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
 | `twistLong` | a sweep with a twist of more than 3600 degrees | Use a twist of 3600 degrees or less. |
@@ -1179,9 +1182,9 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
 | `pipe` | a pipe with a square or triangle section; every pipe in the Orca output | Draw the section on a sketch square to the path at its start, and sweep it along the path. |
 | `pipePartOfPath` | a pipe along a part of its path | Let the pipe run along the whole path. |
-| `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
+| `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
-| `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face, also with flat faces in the same step (`finishes/offset.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
+| `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
@@ -1193,7 +1196,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `oldExport` | a step whose only records of another component are sketch outlines, planes or axes, in a capture that an add-in before 0.10.6 read (`addin` of the capture, `refs.old_writer`) | Export again with this version of the add-in. |
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
-| `afterGap` | a step that picks faces of a gap, repeats a gap, or sits on a floating join | Fix the step it builds on first. |
+| `afterGap` | a step that picks faces of a gap, repeats a gap, sits on a floating join, or extrudes through all to the far side of a part that a gap may change | Fix the step it builds on first. |
 | `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
 
 A step that does not copy is told in the app's user guide page "Steps that do not copy yet". `tests/test_gap_hints.py`
@@ -1341,8 +1344,13 @@ rows, then the offset) that map a point of the capture to the recipe.
 
 The recipe version is the lowest version that holds every written step and selector: 12 as the base, 13 with an
 `offsetFaces` step, 14 with a `chain` or `faceEdges` pick, 15 with a `toolBody` or `move` step or a pattern of more
-than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path. So a simple part still
-opens in an older app.
+than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path, 17 with a `scale`
+step, a shell that grows outward, rounds its corners or has no open faces, a draft with `angleTwoDeg`, or an
+`offsetFaces` step that moves a round face. So a simple part still opens in an older app.
+
+The step of a round face has no field that shows version 17. So the handler writes it as a `NewerStep`
+(`lib/translator/result.py`). This is a plain dict for JSON, with the attribute `version`. `translate.py` reads this
+attribute from each written step and takes it into the version.
 
 `_over_caps` checks the app's limits at the current values: at most 400 steps, tool steps nested at most 3 deep, at most
 256 copies per pattern. A limit that is broken stops the copy. A pattern count that can pass its limit somewhere in the
@@ -1798,7 +1806,7 @@ one folder per family of steps.
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
     measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
-    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), and `emboss.py` (the Emboss handler).
+    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), and `emboss.py` (the Emboss handler).
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -1822,14 +1830,15 @@ one folder per family of steps.
     mirror plane is in `design_model/steps/repeat.py`. The plain pattern that a path pattern equals is in
     `design_model/steps/path_pattern.py` (see 3.17). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
-  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py`.
-  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
+  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py` and `offset_round.py` (offsets of faces, see 3.20).
+  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `scale.py` (see 3.18), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
-  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
-  (joins that would float).
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
+  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
+  (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
+  `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
   `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
@@ -1889,7 +1898,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   frames in the frame of the part (`data_in_component` for the data of a pattern, `read_in_component` for a probe
   read), the grid index of a copy (`solve_lattice`), the steps a symmetric direction runs each way (`reach`,
   `FUSION_EXTRA_SIDE`), the plane of a mirror (`mirror_plane`) and the timeline items that a pattern or a mirror
-  repeats (`repeated_items`). `steps/pattern_places.py`: where the copies of a pattern sit (see 3.18): the places of
+  repeats (`repeated_items`). `steps/pattern_places.py`: where the copies of a pattern sit (see 3.21): the places of
   circular copies from their ids (`circular_sign`, `id_frames`), the check of a place against the faces of a copy
   (`agrees`), and the check that the places do not repeat and fill the count (`listed_places`, `grid_places`).
   `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
@@ -2249,7 +2258,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. There are readers for
   extrudes, holes and threads, patterns, mirrors, moves and splits, rounds and chamfers, sweeps and lofts.
   - `steps/thread.py`: the thread of a ThreadFeature and the thread of a tapped hole. `spec_of` gives the `Spec` (pitch,
-    major and minor diameter, hand) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
+    major and minor diameter, hand, and the pitch diameter when Fusion gives one between the minor and the major
+    diameter) of Fusion's thread info. It gives a `Problem` for a profile that is not the 60
     degree form (cause `threadProfile`), for a number that is missing and for a thread that has no usable depth. A
     caller can pass the range of pitches that it copies (`pitches`). A pitch outside it is a `Problem` with the cause
     `threadLimits`. `cylinder` gives the one `Cylinder` that the faces make (the point on the axis, the unit axis, the
@@ -2516,6 +2526,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `probe_state.py`, `probe_refs.py`, `read_face.py`, `probe_patterns.py`: the reads at each probe row.
 - `read_gap_reach.py`: the reach read.
 - `read_face_rays.py`: the rays from the outlines of an extrude to a curved face it ends on (`outline_hits_face`).
+- `read_flat_faces.py`: the flat faces of the target body square to the sketch of a join through all, with the marker
+  before the step (`target_flat_faces`).
 - `rows.py`: `DesignParameterStore` (set expressions, rebuild, health, marker roll, suppression). It has every member of
   `ParameterStore` and of the timeline controls.
 - `sketch_keep.py`: `SketchKeeper`. `step_export.py`: the STEP file.
@@ -3357,24 +3369,37 @@ looks at those bodies and not at every body of the component (`_writes_flat`).
 ### 3.7 How a draft is translated
 
 `draft.handle` (`lib/translator/finishes/draft.py`) writes a recipe `draft` step: the faces (picked by points), the neutral plane
-and one angle.
+and one angle. A Symmetric draft with faces on both sides of the plane also writes a second angle, `angleTwoDeg`.
 
 The difficulty: Fusion's API does not say which way its angle and its flip lean a face. So the copy reads it from the
 part:
 
-1. Every drafted face must lie on one side of the neutral plane. Else the draft is left out ("This draft leans faces
-   on both sides of its plane, so the way it leans cannot be checked.").
+1. Every drafted face must lie on one side of the neutral plane, or the draft must be Symmetric (see step 5). Else the
+   draft is left out ("This draft leans faces on both sides of its plane, so the way it leans cannot be checked.").
 2. The volume must change. A draft that takes material off leans the faces in on that side. One that adds material
    leans them out. So the sign of the recipe angle comes from `volume_after < volume_before` and the side.
-3. The angle must be under 30 degrees (`MAX_ANGLE_DEG`, the app's cap). Two different angles are left out. Two angles
-   from the same formula are fine.
+3. The angle must be under 30 degrees (`MAX_ANGLE_DEG`, the app's cap). Two angles from the same formula are fine.
 4. The angle follows its parameter. Its range is cut to stay above zero and under 30 degrees, so the default range of
    a 3 degree draft becomes about 0.01 to 29.98.
-5. The neutral plane follows sizes like a mirror plane.
+5. A Symmetric draft with faces on both sides of the plane leans the part of each face on the pull side and the part
+   on the other side by the same angle, away from the plane or both toward it. So both parts take material off, or
+   both add it, and the sign comes from the volume change alone, with no side. The recipe step gets `angleDeg` and
+   `angleTwoDeg` with the same value and the same sign. Both follow the same size. This is the only step that needs
+   recipe version 17 (`DRAFT_VERSIONS` in `translate.py`). A Symmetric draft with all faces on one side stays a step
+   with one angle, so it needs no new version.
+6. A Two Sides draft with two different angles is left out ("This draft gives each side of its plane its own angle,
+   and the copy cannot tell which angle leans which side."). Fusion says only "the first side" and "the second side"
+   of the plane, not which one is the side the pull direction points to. One volume cannot tell it. The copy does not
+   guess, because a wrong guess is a wrong part. A Two Sides draft with two equal angles and faces on one side stays as
+   it was: the volume gives the sign. With faces on both sides it is left out, since Fusion does not say that two equal
+   angles lean like a Symmetric draft.
+7. The neutral plane follows sizes like a mirror plane.
 
 Example: two side walls of a 40 by 20 by 10 block are drafted by `Taper = 3` degrees about the bottom plane. The
 volume goes from 8000 to 7900 mm3. The walls lie above the plane, so the copy leans them in: `angleDeg: { "expr":
-"Taper" }`.
+"Taper" }`. With a Symmetric draft about a plane at half height, the walls lie on both sides of the plane. The volume
+goes from 8000 to 7900 mm3, so both sides take material off: `angleDeg` and `angleTwoDeg` are both `{ "expr": "Taper" }`
+and the recipe is version 17.
 
 ### 3.8 How a sweep is translated
 
@@ -3568,7 +3593,7 @@ A step becomes a gap (left out, recipe still written):
 - it is a modelled thread or a coil that the copy cannot hold (a profile that is not a 60 degree form, a taper, a spiral,
   a cap that is passed, a step in a tool body: see 3.12 and 3.13);
 - its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
-  angles);
+  different angles);
 - it reaches into another component in a way the copy cannot follow (`foreign` records). An add-in before 0.10.6
   marked the part's own sketches and planes, when seen through an occurrence, as records of another component. The
   capture tells which add-in version read it (`addin`). When that version is before 0.10.6, a step whose only such
@@ -3648,7 +3673,7 @@ original. So an odd count is taken as centred, but only when every copy is liste
 out by number), the original is among them, and every copy turns by a whole number of steps. Else the pattern is
 refused. An even count of a symmetric circular pattern stays marked.
 
-The places of the copies of a symmetric pattern come from the element transforms. The checks of 3.18 apply to them:
+The places of the copies of a symmetric pattern come from the element transforms. The checks of 3.21 apply to them:
 two copies on one place, or places that do not fill the count when no copy is suppressed, leave the step out. Each
 copy whose faces were read must sit where its place puts the faces of the original. A probe try that reads two copies
 on one place counts as a try that breaks the rule.
@@ -3657,7 +3682,15 @@ on one place counts as a try that breaks the rule.
 
 A recipe `thread` step is a helical thread of a set form on a cylinder. It holds an axis (origin and direction), a length,
 the major diameter, the pitch, the minor diameter, whether it is internal, and the hand (written only for a left hand
-thread). The form is a 60 degree form. Fusion's metric and Unified profiles are that form.
+thread). It can also hold the pitch diameter (`pitchDiameter`, in mm). This is the diameter where the ridge of the
+thread is half a pitch wide. The app cannot find it exactly from the major diameter, the minor diameter and the pitch,
+so it reads the number from Fusion's thread info (`ThreadInfo.pitchDiameter`). The field is optional. The translator
+writes it only when Fusion gives a value that lies between the minor and the major diameter. It writes it only in a
+recipe of version 17 or newer. A recipe gets that version for other reasons, for example a shell or a draft with two
+angles. The pitch diameter never raises the version by itself, because an app that does not know the field would
+refuse the recipe for a detail that it can do without. When the recipe stays below version 17, `translate._walk`
+removes the field from every thread step, also inside a tool body. The Orca output does not use it: the Orca thread
+feature has a pitch and a depth, and no pitch diameter. The form is a 60 degree form. Fusion's metric and Unified profiles are that form.
 
 #### A cosmetic thread
 
@@ -4211,6 +4244,197 @@ the same plane, so they touch. The recipe writes the two sides as one `toolBody`
 that is already nested as deep as the cap (`tool_walk.MAX_DEPTH`) cannot hold one more level, so the step is left
 out. An intersect with more than one outline is left out.
 
+#### A join through all
+
+Fusion can join an extrude "through all" (the extent "All"). Fusion then ends the extrude at the far side of the
+body that the extrude joins (its participant body). The far side is the plane through the farthest point of the body
+along the direction of the extrude. Hand checks in Fusion (TA1 and TA2) showed this:
+
+- A join "All" with one body as its only participant ends at the top of that body, not at the top of a taller body
+  next to it.
+- On a body with a step, a square under the low part ends at the top of the tall part. It does not end where the
+  square leaves the body.
+- On a curved far side (a cylinder that lies on its side), a join "All" adds nothing and has no end face.
+- A join "All" that joins two bodies can end at the top of the body under it, not at the top of the taller body
+  beside it. The add-in does not know the rule for this case.
+
+The app has an extent for this: an extrude with `combine: "add"` or `"new"`, `extent: "through"` and no `distance`
+(recipe version 17). The app extrudes the outline from the sketch plane along the sketch normal to the far side of
+the part that it built so far. The app finds the far side exactly: it measures the gap between the part and a plane
+past the part. The recipe walk builds one body. Thus "the part" in the app is the copy of the target body before
+the step (or, in a `toolBody`, the copy of the tool body before the step).
+
+`extrude/through.py` (`_join_far_side`) writes this extent only when the capture shows that Fusion and the app end
+the extrude at the same plane. First, the add-in checks the walk:
+
+- The step is a join. A new body through all has no body before it to end at, so it is left out
+  (`throughAllAdds`).
+- The walk builds the exported body itself at this step. The reader measures the box, the end face and the flat
+  faces on the exported body. In the walk of a tool body of a Combine, or before a split while the walk builds the
+  body that was split, these measures are of another body. Thus the step is left out (`throughAllAdds`).
+- No earlier step of the walk is a gap. The app ends the extrude at the far side of the part that it built. A step
+  that is not in the copy can change where that part ends. Thus the step is left out after a gap, with the cause
+  `afterGap` and the ids of the earlier gaps, as for an extrude up to a tilted or curved face.
+
+Then the add-in checks these conditions, in this order:
+
+1. The target body is the only participant body (`participants`, read with `ctx.is_target`). When Fusion joins more
+   bodies, the add-in cannot tell where Fusion ends the extrude, and the app knows only the target body. The cause
+   of this gap is `throughAllBodies`. When the capture has no participant bodies, the add-in cannot tell, and the
+   cause is `throughAllAdds`.
+2. The extrude has one side, no taper and no thin wall. The app does not accept a taper or a thin wall with this
+   extent, and a join through all both ways has no extent in the recipe.
+3. The capture has the box of the target body before the step (`target_box_before`) and a measured end face that
+   is an end cap (`end_offset` and `end_is_cap`).
+4. The end cap lies on the far side of the box. The add-in calculates the farthest corner of the box along the
+   direction of the extrude, from the start of the extrude. The measured end must be at that distance, within
+   `LENGTH_TOL`.
+5. The body had material on the plane of the end before the step (`_reaches_end`). One of these shows it:
+   - The reader found a flat face of the body on that plane, and its outward normal points along the extrude
+     (`target_flat_faces`). The reader reads these faces only for a join or new body through all.
+   - The end face that Fusion measured is larger than the end caps of all the outlines together (`end_area` against
+     the outline areas, with `CAP_RELATIVE_TOL` and `CAP_ABSOLUTE_TOL`). A join merges its end cap with a face of
+     the body on the same plane.
+
+Condition 5 is necessary because a box can be larger than its body. For example, the box of a body with a curved
+top can be higher than the body. If Fusion used the box and the app used the body, the two ends would not agree.
+When the body has material on the plane of the end, the body reaches the plane, and the box does not go farther
+than the plane (condition 4). Thus the far side of the body is on that plane, and the app ends the extrude at the
+same plane as Fusion. A join onto a curved far side has no end cap in Fusion, so condition 3 leaves it out.
+
+When a condition is not true, the step is left out with a reason. A new body through all has no target body before
+the step, so it is always left out.
+
+The app finds the far side again each time that it builds the part, so the end follows the sizes. But the add-in can
+check the far side only at the sizes of the export. At other sizes, a different part of the body can become the
+farthest part, for example a curved face. The add-in cannot check that Fusion and the app find the same far side
+there. Thus the add-in marks these sizes ("may give unexpected results", with the step named): the sizes that the
+steps written before it read (`ctx.written_reads`), and the sizes that move its outlines
+(`sketch_motion.outline_movers`). This mark is broad. It also marks sizes that cannot move the far side, for example
+the size of a small hole. The probe does not record the box of the body at each try (the motion file has only
+`box_max`, the union of all tries), so the add-in cannot tell which sizes move the body along the extrude. A taper of zero that follows a size is pinned, as for a cut through all both ways.
+
+The written step has no slab, so later picks on its faces do not follow it. Its length follows the part, so it is not
+repeatable: a pattern or a mirror of the step is left out. The Orca output still leaves a join through all out
+(`throughAllAdds`).
+
+#### A thin extrude of an open line
+
+Fusion can make a thin extrude of an open line. This is a wall along a chain of sketch lines that does not close.
+People use it for fences, dividers, ribs and brackets. The recipe has a wall for this (recipe version 17). It is an
+extrude whose outline is an `open` loop, with `thin.ends: "square"` and `thin.corners: "sharp"`. The app then cuts
+each end of the wall square to the line. At a corner, the app extends the two sides of the wall until they meet.
+Fusion builds the wall in the same way.
+
+What the reader reads:
+
+- For an open line, `ExtrudeFeature.profile` is a `Path`, not a `Profile`. The reader keeps one record
+  `{ "kind": "other", "type": "Path" }` in `profiles`.
+- The reader reads the path into `path` with `read_sweep.path_record`, as for a sweep. Each curve of the path has
+  its points in the sketch plane (`flat`) and `opposed`. `opposed` is true when the path goes against the direction
+  of the sketch line.
+- Fusion lists no start faces and no end faces for this extrude. Thus `extrude_after` reads all the faces that the
+  extrude made (`ExtrudeFeature.faces`) into `wall_faces`. For each face, it reads the type of surface, a point on
+  the face and the normal at that point.
+- For a join or a cut, `extrude_before` also reads the faces of the target body before the step
+  (`target_faces_before`), in the same form, and which body that is (`target_faces_body`). A face of the wall that
+  Fusion merges with a face of the part lies on the plane of one of these faces.
+
+The table entry of `ExtrudeFeature` has `PATH`. Thus the size probe follows the curves of the line, as it does for
+a sweep path.
+
+The translator writes the step in `translator/extrude/thin_line.py`. `extrude/step.py` sends an extrude to it when
+the extrude is thin and its outline is a `Path`. Then:
+
+1. `line_of` reads the line. The path must be one open chain of sketch lines of one sketch. Each line must start
+   where the line before it ends. No line can be `opposed`. The add-in leaves out a line with an arc or a free
+   curve, a line that runs against the path, a chain with a gap, a closed chain and a path of body edges.
+2. `outline` writes the `open` loop from the first point of the line to the last point. Thus the loop keeps the
+   direction of the line. When the probe followed the path, each point follows its sizes (the keys of
+   `sketch_values.keys.path`). When the probe did not follow the path, the loop keeps its numbers, and the sizes of
+   its sketch are marked.
+3. `wall_step` checks the line alone (`line_problem` with no wall). Then `decide` finds the side of the wall. Then
+   `line_problem` checks the wall on that side.
+
+The side of the wall. The app puts an `inside` wall on the left of the line. You look along the line from its start,
+and you look from the front of the sketch (along its normal). An `outside` wall is on the right. A `middle` wall has
+half of the thickness on each side. Fusion names the side "side one", "side two" or "center". Tests in Fusion showed
+that side one is on the left of the path, and side two is on the right (`RULE`). This is true when the extrude goes
+along the sketch normal, against it, or to the two sides. When the line goes the other way, the wall goes to the
+other side.
+
+The add-in does not use the rule alone. It compares the wall with the faces that Fusion made (`fits`). For each side
+that the location in Fusion permits, and for each direction, it makes the outline of the wall (`band`). Then each
+measured face must agree with that wall:
+
+- The face must be flat.
+- The point of the face must be between the two ends of the wall.
+- A face across the sketch normal must be at one end of the wall, and its point must be on the outline of the wall
+  or in it.
+- A face along the sketch normal must be on a side of the outline, and its normal must be square to that side.
+- At least one face must agree in this way.
+
+A face that does not agree in this way can be a face that Fusion merged (`merged`). The add-in accepts it only when
+these two conditions are true:
+
+- The face is on the plane of a face of the target body before the step (`target_faces_before`), and the two faces
+  point to the same side.
+- The face is on the plane of a face of the wall, and the two faces point to the same side.
+
+Exactly one side and one direction must agree. The direction must be the direction that the extrude reader found.
+The side must also be the side that `RULE` gives. If one of these conditions is false, the add-in leaves the step
+out.
+
+Example. The line goes from (0, 0) to (30, 0) to (30, 20). The wall is 2 mm thick on side one and 15 mm high. The
+left wall has the outline (0, 2), (28, 2), (28, 20), (30, 20), (30, 0), (0, 0). The right wall has the outline
+(0, 0), (30, 0), (30, 20), (32, 20), (32, -2), (0, -2). Fusion made a face at y = 2, and its normal is along y. Only
+the left wall has a side there. Thus the side is `inside`.
+
+A join can merge a face of the wall with a face of the part. Example: the plate is 60 x 40 x 3 mm, and the line
+starts at the corner of the plate, on its top face. The wall is flush with the front edge and the left edge of the
+plate. Fusion merges the start end of the wall with the left face of the plate. It lists one face at (0, 20, 1.5)
+with its normal toward -x. That point is on the plate, not on the wall. The plate had a face on the plane x = 0 with
+its normal toward -x, and the start end of the wall is on that plane with its normal toward -x. Thus the face is a
+merged face, and the side is found from the other faces. When the add-in has no faces of the part (an older
+capture, a new body), or no face of the part explains the face, the add-in leaves the step out.
+
+The faces of the part must be the faces of the body that the walk builds (`ctx.is_target` of `target_faces_body`).
+The reader reads the faces of the exported body. In the walk of a tool body of a Combine, the walk builds the tool,
+not the exported body. A face of the exported body does not prove that a face of the tool merged. Thus in that walk
+the add-in accepts no merged face, and a wall flush with the edge of the tool is left out.
+
+Each refusal of the open line has the cause `thinOutline`, so the gap shows its tip.
+
+An extrude that goes against the sketch normal is written on the reversed sketch plane, and its loop is mirrored
+(`flip_y`). Then the left of the line becomes the right. Thus `LineWall.written` changes `inside` to `outside`, and
+`outside` to `inside`.
+
+The shape of the wall at other sizes. The app and Fusion build the same wall only while the wall keeps its shape.
+`line_problem` gives a problem in these conditions:
+
+- A line is 0.001 mm long or shorter.
+- A corner turns more than 135 degrees (`MAX_TURN_DEG`). Fusion was seen to keep corners of 90 and 135 degrees
+  sharp, as the app does: the two outer sides of the wall run on until they meet in one tip. A sharper corner is
+  not proven yet. Example (hand check 40): the line goes from (0, 0) to (30, 0), then 20 mm at 135 degrees to
+  (15.858, 14.142). A 2 mm wall on side two has its tip at (34.828, -2), and the wall is 1644.853 mm3 at 15 mm.
+- At a corner, the side of the wall on the inner side of the turn cuts each of the two lines short. The cut is the
+  reach of the wall on that side times tan(turn / 2). A line must be longer than what its two corners take.
+- Two lines that do not touch come nearer than two times the farthest reach of the wall. The wall reaches the
+  thickness of its side from its line. At a corner, the outer side of the wall meets in a sharp tip. The tip is at
+  the reach of the outer side divided by cos(turn / 2) from the corner. Example: a wall of 2 mm on the outer side of
+  a 90 degree corner has its tip 2.83 mm from the corner, so two lines must be more than 5.66 mm apart.
+
+`keep_line_valid` tests these conditions at the ends and at the middles of the size ranges. For a formula that is
+not only sums and products, it also tests inner settings. It cuts the ranges where the wall stops keeping its shape.
+If no cut helps, it marks the sizes.
+
+Example. The second line is 3 mm long, and the wall is 2 mm on the inner side of the corner. The corner turns 90
+degrees, so it takes 2 mm of the line (2 times tan 45 degrees). The range of the wall thickness stops before 3 mm.
+
+The material of the wall. A later step can ask if a point is in the wall (`material_at`). The add-in gives the wall
+as the closed outline that it fills (`band_profile`), in a `ThinWall` with the side `inside`. The faces of the wall
+are not placed.
+
 ### 3.16 How a round by chord length or with a changing radius is translated
 
 Fusion has two more kinds of fillet sets that the copy can write as a `round` step:
@@ -4419,7 +4643,7 @@ distance). Thus the angle follows the sizes. A path pattern that goes round a wh
 Its distance then stays a number, and its sizes are marked.
 
 The rectangular and the circular handler check the measured copies against the pattern that they write, and they
-check the place of each copy against its faces (3.18). Thus a copy that Fusion put in another place leaves the step
+check the place of each copy against its faces (3.21). Thus a copy that Fusion put in another place leaves the step
 out. A refusal that has no cause of its own gets the cause `pathPattern`, unless it comes from an earlier gap.
 
 The step kind table gives the path pattern `sketches=(PATH,)`. Thus the size probe follows the path sketch as it
@@ -4431,7 +4655,214 @@ Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and 
 `pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
 Thus the ranges of the count and the spacing stop at their values now.
 
-### 3.18 Where the copies of a pattern sit
+### 3.18 How a scale is translated
+
+`scale.handle` (`lib/translator/bodies/scale.py`) writes a recipe `scale` step. The step has a factor and a point.
+The app scales all the steps before the `scale` step in the same list about the point. The list is the main list of
+the part, or the `features` list of a tool body.
+
+The reader (`lib/fusion_reader/read_scale.py`) reads these items with the marker before the Scale:
+
+- The input entities. The copy can use only bodies. When a sketch is an input too, `input_kind` is `sketches`.
+- The point that stays in place. This point is the origin point of the component, a sketch point, a construction
+  point, or a corner of a body.
+- The factor. A uniform Scale has one factor. A non-uniform Scale has one factor for each axis.
+- The box and the volume of each body.
+
+The reader reads the box and the volume of each body again with the marker after the Scale.
+
+The handler does these checks in this sequence. When a check fails, the Scale becomes a gap with the cause `scale`:
+
+1. All the inputs must be bodies. A Scale that also scales a sketch is left out. A later step can use the scaled
+   sketch, and the copy cannot change that sketch.
+2. The point and the factors must be readable. A point of another component is left out.
+3. Each factor must be from 0.001 to 1000. This is the range that the app accepts.
+4. The copy must have a step before the Scale in the same list. The app does not accept a `scale` step as the first
+   step of a list.
+5. For a non-uniform Scale, the map that moves the recipe into the assembly must turn each axis onto an axis
+   (`place.axis_turn`). This map comes from the place of the component and from the Y up turn. When the component
+   is turned by an angle that is not a quarter turn, the factors have no axes in the assembly, so the Scale is left
+   out. A Scale in a tool body of another component has one more map. The Combine moves the steps of the tool with
+   the place of the tool component, then with the inverse of the place of the exported body. Both places are read at
+   the Combine. The Combine checks this map against the steps of the tool before it moves them (`place.factors_fit`).
+   When a step of the tool has factors per axis that are not equal, and the map turns an axis off the axes, the
+   Combine is left out with the cause `scale`. The export does not stop.
+6. The measured body must agree with the Scale. The volume after the Scale must be the volume before it, multiplied
+   by the three factors. Each side of the box must move as the factors and the point move it. This check finds a
+   point or an axis that the reader did not read correctly. If the body was not measured, the Scale is left out.
+
+Then the handler writes the step:
+
+- The factors follow their parameters (`values.quantity`, without a unit). A factor must stay above zero, at or above
+  0.001 and at or below 1000 in the size ranges. When the formula of a factor can go out of that range, the copy
+  writes the factor as a number. The sizes in that formula are marked.
+- The point is written where Fusion measured it. When the point is the origin, no size can move it. For a sketch
+  point, a construction point or a corner, `reach.reference_sizes` gives the sizes that can move the point. The copy
+  marks these sizes "may give unexpected results".
+
+After the `scale` step, the placers of the steps before it become `ScaledPlacer` (`faces/scaled_placer.py`). A
+`ScaledPlacer` knows where the material is: it moves a point back through the Scale before it asks the old placer.
+But it does not place picks. Thus a round, a chamfer or an offset after the Scale that picks a face made before the
+Scale keeps its measured points, and the sizes are marked.
+
+The recipe is carried into the assembly by `place.place`. The point moves like every other position. A factor list
+`[x, y, z]` is put on the new axes: for a Y up design, `[1, 2, 0.5]` becomes `[1, 0.5, 2]`.
+
+The Orca copy leaves every Scale out (`orca_translate/bodies.py`), because Orca's Design tab has no step that scales
+a body. The cause is `scale`, and the Orca result shows its tip.
+
+Example: a block of 40 by 20 by 10 mm is scaled by the user parameter `Grow` = 1.5 about the origin. The volume goes
+from 8000 mm3 to 27000 mm3, which is 8000 multiplied by 1.5 three times. The box goes from (40, 20, 10) to
+(60, 30, 15). The copy writes `{ "kind": "scale", "factor": { "expr": "Grow" }, "point": [0, 0, 0] }`. The recipe has
+version 17.
+
+### 3.19 How a shell is translated
+
+`finish.shell` (`lib/translator/finishes/finish.py`) writes a recipe `shell` step. A shell hollows the part and leaves a
+wall of one thickness. The copy reads four things from Fusion.
+
+1. The direction. Fusion has an inside thickness and an outside thickness (`ShellFeature.insideThickness`,
+   `outsideThickness`). Only one of them is more than 0 in the copy. The inside thickness gives a wall that grows
+   inward: the outer shape of the part stays. The outside thickness gives a wall that grows outward: the faces of the
+   part stay as the walls of the hollow, and the wall is added outside them, so the part gets bigger by the thickness.
+   The step then has `outside: true`. When both thicknesses are more than 0, the wall grows both ways. The recipe
+   cannot say that, so the step is left out with the cause `shellKind`. Fusion gives no parameter for the side that
+   has no wall. It gives an empty value (None), and it does not give an error. An inward shell has no outside
+   thickness, and an outward shell has no inside thickness. The reader reads an empty value as 0 (no wall on that
+   side). The reader reads a side as unknown only when Fusion gives an error for it or does not have the member. When
+   one of the two thicknesses is unknown, the step is left out. The reader does not guess 0 for an unknown side,
+   because that would write an inward wall for an outward one (`_shell_side` in `fusion_reader/read_finish.py`).
+2. The corners. `shellType` is sharp or rounded. A rounded shell writes `corners: "round"`. A sharp shell writes no
+   `corners` field. A type that cannot be read, or that is neither of the two, is left out with the cause `shellKind`.
+3. The open faces. A shell that picks faces opens them: the step has `openFaces`, picked as before (`follow.faces`). A
+   shell that picks the body opens nothing, and it is a closed hollow: the step has no `openFaces`. A shell that picks
+   a body and faces together is left out.
+4. The volume of the part before and after the step (`volume_before`, `volume_after`, read with `target_volume`). An
+   inward shell must make the part smaller, and an outward shell must change the volume. A step that does not is left
+   out, because the copy then does not do what Fusion did. A shell that grows outward or has rounded corners is also
+   left out when the volume was not measured. A shell that goes inward with sharp corners is copied without the
+   measure, as before, but it is checked when the measure is there. The volume does not tell the corners apart.
+   So the corners come from `shellType` only.
+
+Example, made up: a box of 40 by 20 by 10 mm. `Shell1` picks the body, with an outside thickness of 1.5 mm and sharp
+corners. Fusion measures 8000 mm3 before the step and 5200 mm3 after it. The recipe gets
+`{ "kind": "shell", "thickness": 1.5, "outside": true }` and no `openFaces`. The recipe is version 17.
+
+The version is the lowest one that holds the step (`_shell_version` in `translator/translate.py`). A shell with
+`outside`, with `corners` or without `openFaces` needs version 17. A shell with open faces, a thickness and sharp
+corners keeps the lowest version. The app reads the three fields only from version 17, and it refuses a file that
+states an older version.
+
+The thickness follows its parameter. An inward wall reads `inside`, and an outward wall reads `outside`, both as a
+length that stays above 0 (`values.quantity`).
+
+How later steps find faces after a shell. Each step that makes faces is kept as a placer (3.3).
+
+- A shell that goes inward is the placer `Shell`. A point on an inner wall is moved back out by the thickness, placed on
+  the step that made the outer face, and follows that step and the thickness. A closed hollow is the same placer with no
+  open face.
+- A shell that goes outward is the placer `OutsideShell`. The faces of the part before it stay where they are, and a
+  pick on one of them is placed as before. The new outer faces are not placed. A point that lies outside the part as it
+  was, and inside the box of the wall, is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and
+  gives no place. Without it, an earlier step could place such a point by chance: for example, a cut that reaches 2 mm
+  past the top of the part has an end face where the new outer wall is. A pick with no place is written as measured
+  points, and every size that an earlier step reads is marked, as for any pick the copy cannot follow. A tool placer
+  and a moved placer pass the claim of the placer inside them.
+- The box of the wall (`OutsideShell.wall_box`) limits the claim to points near the new wall. This is important for a
+  shell inside a tool body. The part as it was before the tool does not belong to the tool, so every point on a face
+  of the part lies outside the material of the tool. Without the box, the shell in the tool claims these points too,
+  and a later pick on a face of the part gets no place. `added_bounds.outside_wall_box` makes the box when the shell
+  is written. It starts from the box of all the material that the walk has written before the shell: the material
+  of the placers (`material_boxes.material_boxes`) and the bounds of the steps that have no placer for their
+  material, for example a sweep (`added_bounds.bounds`). It grows this box by the largest round or bevel and then by
+  the wall:
+  - A rounded wall lies no further than the thickness from the part. The box grows by the thickness.
+  - A sharp wall reaches further at a sharp corner (the mitre). A corner that turns by an angle a moves out by the
+    thickness divided by cos(a / 2). The copy can find all the corners only when the part is a stack of straight
+    extrudes along one axis, without a taper, cut, round, bevel or other step (also in tools, patterns and mirrors).
+    Then the box grows by the thickness multiplied by sqrt(f * f + 1), where f is the largest mitre factor of the
+    outline corners. A corner that turns by more than 150 degrees has no box.
+  When one part of this cannot be told, the shell has no box. It then claims every point outside the part as it was,
+  as before. This gives more picks without a place, but it never places a pick on a wrong face.
+- `OutsideShell` knows the hollow (the part before it, as material that is removed) and does not know the wall. It is
+  `opaque`: a later step on the sketch of another part says it cannot check that it still meets the wall.
+- The check for a join that would float (`faces/floating.py`) treats an outward shell as a step that may add material.
+  The material lies in the box of the wall (`added_bounds.outside_shell_bound`), so a join on the outer wall stays.
+  A shell without a box is a step that the check cannot bound: every later join stays. An inward shell only removes
+  material.
+
+An outward shell, a closed hollow and a rounded shell cannot be checked in Fusion's tests. They have hand checks in
+`docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).
+
+### 3.20 How an offset of faces (press pull) is translated
+
+`offset.handle` (`lib/translator/finishes/offset.py`) writes one recipe `offsetFaces` step for one Press Pull (Offset
+Faces) item. The step has one `near` point for each face that the item moves, and the distance. Fusion and the app
+use the same sign: a positive distance moves the face along its outward normal, out of the material.
+
+A flat face gets a point inside its outline, away from its edges and holes (`inside_point`). The face is copied only
+when Fusion left a flat face on the plane of the face, moved by the distance (`faces_after`). The app lets the faces
+around a moved face extend or shrink, so a leaning side wall and two moved faces that meet need no special case.
+
+A round face is a cylinder. It is a pin or a boss when its outward normal points away from the axis. It is a bore when
+the normal points towards the axis. The move changes the radius:
+
+- For a pin or a boss, the new radius is the radius plus the distance.
+- For a bore, the new radius is the radius minus the distance.
+
+So a Press Pull of -0.2 mm on the wall of a bore of radius 2.5 mm gives a bore of radius 2.7 mm. This is the usual way
+to tune a hole for a fit.
+
+The app (recipe version 17) moves a round face only when these conditions are true. `offset_round.py` checks each
+condition before the step is written:
+
+1. The face goes all the way round. The reader gives one entry for each edge loop of the face (`ends`). A whole
+   cylinder has two loops, and each loop has one circle edge. Part of a circle, or a face with a seam edge, has other
+   loops. Then the step is left out.
+2. Both ends are flat faces square to the axis. The face across each end circle must be a plane. Its normal must be
+   parallel to the axis. A round or a chamfer at an end is not a plane, and an end on a slope is not square. Then the
+   step is left out.
+3. The ring does not run into other faces. The reader gives the outline of each end face. The circle of the round
+   face is one curve of that outline. Each other curve of the outline must stay clear of the ring between the old
+   radius and the new radius (`_limits`, with a margin of 0.01 mm). A curve inside the circle sets the lowest radius,
+   and a curve outside the circle sets the highest radius. A curve that touches or crosses the circle leaves the step
+   out.
+4. The face does not touch another face that the same item moves (`meets_offset`).
+5. The new radius stays above zero.
+6. Fusion left a cylinder on the same axis with the new radius (`rounds_after`). This checks the sign rule on the real
+   part. If no such cylinder is found, the step is left out.
+
+When one of these conditions is false, the whole step is left out with the cause `offsetCurved`, also when the step
+moves flat faces too.
+
+The pick point of a round face is on the face, halfway between its two ends. It is on the side of the point that
+Fusion gave for the face (`pointOnFace`).
+
+The distance can follow a size. Then the translator checks the size range:
+
+- The distance must not reach zero.
+- For each round face, the new radius must stay between the lowest and the highest radius of step 3 over the whole
+  range (`clear_over_range`).
+
+If one of these checks fails, the distance is written as a number. The size then gets the reason "the round face
+that ... moves could close or run into other faces".
+
+The step adds a `MovedFaces` placer (`lib/translator/faces/offset_faces.py`). This placer knows the material that the
+move added or removed, and the faces after the move:
+
+- A later pick on a moved flat face moves back along the normal of the face by the distance.
+- A later pick on a moved round face moves back along the radius by the distance. Then it follows the step that made
+  the face, and the distance.
+- The ring between the old and the new radius counts as added material when the distance is positive. It counts as
+  removed material when the distance is negative. `follow.inside` and the check for joins that float use this.
+
+Example, made up: a plate 40 x 20 x 10 mm has a hole of radius 2.5 mm through it. A Press Pull on the hole wall has
+the distance `-Fit`, with `Fit` = 0.2 mm. Fusion leaves a cylinder of radius 2.7 mm. The recipe gets
+`{ "kind": "offsetFaces", "faces": { "near": [[12, 7.5, 5]] }, "distance": { "expr": "-Fit" } }` and version 17. The
+default range of `Fit` is 0.1 to 0.4 mm. The new radius stays between 2.6 and 2.9 mm, far from the plate edges, so the
+distance follows `Fit`.
+
+### 3.21 Where the copies of a pattern sit
 
 Each pattern element has a transform (`PatternElement.transform`). The transform is the move from the original to
 the copy. The reader writes it as the `frame` of the element. But Fusion does not always give the right transform.
@@ -4909,7 +5340,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
-| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.18). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
+| `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |

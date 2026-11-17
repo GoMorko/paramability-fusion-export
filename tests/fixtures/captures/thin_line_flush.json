@@ -1,0 +1,543 @@
+{
+ "_comment": "A 60 x 40 x 3 mm plate (Extrude1) and an L shaped wall joined on its top (Extrude2): a thin extrude of the open line (0, 0) to (30, 0) to (30, 20) on a plane at the top of the plate, 15 mm up, wall 2 mm on side one, flush with the front and left edges of the plate. Fusion merges the front side and the start end of the wall with the plate's front and left faces, so the face listed for the start end has its point on the plate, off the wall.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    60.0,
+    40.0,
+    18.0
+   ]
+  },
+  "volume_mm3": 8640.0
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0,
+           0
+          ],
+          "end": [
+           60,
+           0
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           60,
+           0
+          ],
+          "end": [
+           60,
+           40
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           60,
+           40
+          ],
+          "end": [
+           0,
+           40
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           0,
+           40
+          ],
+          "end": [
+           0,
+           0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 3.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 3.0
+   }
+  },
+  {
+   "index": 2,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Extrude2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      3.0
+     ]
+    },
+    "volume_mm3": 7200.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      18.0
+     ]
+    },
+    "volume_mm3": 8640.0
+   },
+   "data": {
+    "operation": "join",
+    "profiles": [
+     {
+      "kind": "other",
+      "type": "Path"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 15.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": true,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      3.0
+     ]
+    },
+    "end_offset": null,
+    "profile_area": null,
+    "end_area": null,
+    "thin_wall": {
+     "location": "side1",
+     "thickness": 2.0,
+     "location_two": "side1",
+     "thickness_two": null,
+     "profile_type": "Path"
+    },
+    "path": {
+     "closed": false,
+     "kind": "sketch",
+     "sketch": "Sketch2",
+     "sketch_token": "s2",
+     "frame": {
+      "origin": [
+       0,
+       0,
+       3
+      ],
+      "x": [
+       1,
+       0,
+       0
+      ],
+      "y": [
+       0,
+       1,
+       0
+      ],
+      "z": [
+       0,
+       0,
+       1
+      ]
+     },
+     "reference": {
+      "kind": "constructionPlane",
+      "token": "tok_top"
+     },
+     "projected": false,
+     "curves": [
+      {
+       "kind": "line",
+       "start": [
+        0,
+        0,
+        3
+       ],
+       "end": [
+        30,
+        0,
+        3
+       ],
+       "opposed": false,
+       "entity": "ln0",
+       "check": {
+        "start": [
+         0,
+         0,
+         3
+        ],
+        "end": [
+         30,
+         0,
+         3
+        ]
+       },
+       "flat": {
+        "kind": "line",
+        "start": [
+         0,
+         0
+        ],
+        "end": [
+         30,
+         0
+        ]
+       }
+      },
+      {
+       "kind": "line",
+       "start": [
+        30,
+        0,
+        3
+       ],
+       "end": [
+        30,
+        20,
+        3
+       ],
+       "opposed": false,
+       "entity": "ln1",
+       "check": {
+        "start": [
+         30,
+         0,
+         3
+        ],
+        "end": [
+         30,
+         20,
+         3
+        ]
+       },
+       "flat": {
+        "kind": "line",
+        "start": [
+         30,
+         0
+        ],
+        "end": [
+         30,
+         20
+        ]
+       }
+      }
+     ],
+     "edges": []
+    },
+    "target_faces_body": {
+     "token": "t1",
+     "name": "Body1"
+    },
+    "target_faces_before": [
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       20,
+       3
+      ],
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       20,
+       0
+      ],
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       0,
+       20,
+       1.5
+      ],
+      "normal": [
+       -1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       60,
+       20,
+       1.5
+      ],
+      "normal": [
+       1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       0,
+       1.5
+      ],
+      "normal": [
+       0,
+       -1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       40,
+       1.5
+      ],
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     }
+    ],
+    "wall_faces": [
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       10,
+       10.5
+      ],
+      "normal": [
+       1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       15,
+       0,
+       9
+      ],
+      "normal": [
+       0,
+       -1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       28,
+       11,
+       10.5
+      ],
+      "normal": [
+       -1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       29,
+       20,
+       10.5
+      ],
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       14,
+       2,
+       10.5
+      ],
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       15,
+       1,
+       18
+      ],
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       0,
+       20,
+       1.5
+      ],
+      "normal": [
+       -1,
+       0,
+       0
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

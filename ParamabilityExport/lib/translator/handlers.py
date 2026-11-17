@@ -2,7 +2,7 @@
 `handle(ctx, step) -> StepResult | Refusal`, where `step` is the item's `design_model.design.ResolvedStep`. A type with no entry has no recipe step (`capture_model.step_kinds`
 gives its reason)."""
 from . import extrude
-from .bodies import move, paste, split
+from .bodies import move, paste, scale, split
 from .coil import step as coil
 from .combine import step as combine
 from .extrude import emboss
@@ -31,6 +31,7 @@ HANDLERS = {
     "SplitBodyFeature": split.handle,
     "CopyPasteBody": paste.handle,
     "MoveFeature": move.handle,
+    "ScaleFeature": scale.handle,
     "EmbossFeature": emboss.handle,
     "CoilFeature": coil.handle,
     "SweepFeature": sweep.handle,

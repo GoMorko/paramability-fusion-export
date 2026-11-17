@@ -3,9 +3,13 @@
 A shell moves every face of the part inward by its thickness, except the faces it opens. A point on an inner wall is
 the point of an outer face (or edge, where two inner walls meet) moved inward by the thickness. So the point is moved
 back out, placed on the slab that made the outer face, and its coordinates follow that slab and the thickness.
+
+A shell that grows outward leaves the faces of the part where they are, as the walls of its hollow, and adds a wall
+outside them. Those new outer faces are not placed (`OutsideShell`), and only points near them are kept from the steps
+before it.
 """
 from ...geometry import vec
-from .placer import CUT, Placer
+from .placer import ADD, CUT, Placer
 from .slabs import AXIAL_TOL, LATERAL_TOL, Place, as_quantity
 
 # Offset directions are written with this many digits, so a formula holds no rounding noise.
@@ -128,3 +132,45 @@ class Shell(Placer):
         if outer is None:
             return None
         return InnerPlace(outer, outer_point, offset, self.thickness)
+
+
+class OutsideShell(Placer):
+    """A shell that grows outward by `thickness` (a Quantity): the part before it becomes the hollow, and the wall lies
+    outside it. `before` are the placers that held the part when the shell was made, `step_id` the shell step, and
+    `wall_box` a box `(min, max)` that holds the wall at the measured sizes, or None when it could not be told.
+
+    The hollow is known (`material_at`), the wall is not, and its faces are not placed: a pick on one (a point that
+    lies outside the part as it was, inside `wall_box`) is claimed, so no earlier step places it by chance. Without a
+    box every point outside the part as it was is claimed. `opaque` makes a step on another part's sketch say it
+    cannot check that it still meets the wall."""
+
+    opaque = True
+
+    def __init__(self, thickness, before, step_id=None, wall_box=None):
+        self.thickness = as_quantity(thickness)
+        self.before = list(before)
+        self.step_id, self.wall_box = step_id, wall_box
+
+    def _was_material(self, p):
+        held = False
+        for placer in self.before:
+            material = placer.material_at(p)
+            if material is not None:
+                held = material == ADD
+        return held
+
+    def place(self, p, edge):
+        return None
+
+    def claims(self, p):
+        box = self.wall_box
+        if box is not None and not all(box[0][i] <= p[i] <= box[1][i] for i in range(3)):
+            return False
+        return not self._was_material(p)
+
+    def material_at(self, p):
+        return CUT if self._was_material(p) else None
+
+    @property
+    def wall_offsets(self):
+        return (self.thickness.n, -self.thickness.n)

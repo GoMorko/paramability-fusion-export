@@ -24,7 +24,7 @@ UNREAD = "unread"       # an item whose Fusion entity could not be read (type "n
 PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
-PATH = "path"           # data.path: the curves of one sketch a sweep follows
+PATH = "path"           # data.path: the curves of one sketch a sweep follows, or the open line of a thin extrude
 OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
 # When a missing step of a type only finishes surfaces (`StepType.finishing`).
@@ -110,6 +110,7 @@ class RecipeKind:
     tool_words, tool_cause: for a kind with `in_tool` false, its plain name in the refusal "cannot be part of a tool
       body", and the `gap_hints` cause that gives the hint for it.
     written: False for kinds the recipe schema has but the translator never writes.
+    factors: paths to per-axis factors `[x, y, z]`, which `place.place` puts on the axes its map turns them to.
     """
 
     name: str
@@ -124,10 +125,11 @@ class RecipeKind:
     tool_words: str = None
     tool_cause: str = None
     written: bool = True
+    factors: tuple = ()
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE, PATH)),
     StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_thread", finishing=FINISHING_UNMODELED),
@@ -151,8 +153,8 @@ STEP_TYPES = (
              gap_cause=gap_hints.SURFACE),
     StepType("BoundaryFillFeature", "boundary fill", unsupported="Boundary Fill is not copied.",
              gap_cause=gap_hints.BOUNDARY_FILL),
-    StepType("ScaleFeature", "scale", unsupported="Scaling a body is not copied.", gap_cause=gap_hints.SCALE,
-             reaches_bodies=True, turns_faces=True),
+    StepType("ScaleFeature", "scale", reader="read_scale", gap_cause=gap_hints.SCALE, reaches_bodies=True,
+             turns_faces=True),
     StepType("ReplaceFaceFeature", "replace face", unsupported="Replace Face is not copied.",
              gap_cause=gap_hints.REPLACE_FACE, reaches_bodies=True, turns_faces=True),
     StepType("RibFeature", "rib", unsupported="Rib is not copied.", gap_cause=gap_hints.RIB_WEB,
@@ -224,6 +226,7 @@ RECIPE_KINDS = (
     RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
                directions=(("neutral", "normal"),)),
     RecipeKind("bevelGear", in_tool=False, tool_words="gear", written=False),
+    RecipeKind("scale", version=17, positions=(("point",),), factors=(("factor",),)),
 )
 
 _TYPES = {t.name: t for t in STEP_TYPES}

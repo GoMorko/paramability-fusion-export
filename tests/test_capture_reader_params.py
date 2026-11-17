@@ -48,8 +48,13 @@ class FeatureParamsTest(unittest.TestCase):
 
     def test_shell_thickness(self):
         data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([face("f1")]),
-                                 insideThickness=model_param("d5", "wall", 0.2)))
+                                 insideThickness=model_param("d5", "wall", 0.2), outsideThickness=None))
         self.assertEqual(data["params"], {"inside": {"name": "d5", "expression": "wall", "value": 2.0}})
+
+    def test_outside_shell_thickness(self):
+        data = read_data(feature("ShellFeature", "Shell1", inputEntities=Coll([face("f1")]),
+                                 insideThickness=None, outsideThickness=model_param("d6", "wall", 0.2)))
+        self.assertEqual(data["params"], {"outside": {"name": "d6", "expression": "wall", "value": 2.0}})
 
 
 class EnvelopeTest(unittest.TestCase):

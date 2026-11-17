@@ -20,7 +20,8 @@ plane.
 
 The modules: `step` (`handle`), `plan` (the recipe sides from the shared reader's), `side` (the `RecipeSide` record
 of one side), `reach` (distance, start and reach to a face as values that follow sizes), `taper` (the taper and its
-limit), `through` (the length of a cut through all and its taper check with `extrude/through_taper.py`), `material` (the
+limit), `through` (the length of a cut through all and its taper check with `extrude/through_taper.py`, and a join
+through all to the far side of the part), `material` (the
 side of the part a cut through all goes to), `checks` (the refusals of the shared reader's measured checks: length,
 side walls and volume), `built` (the outlines to write), `order` (the order of the outlines) and `common` (shared
 tolerances).

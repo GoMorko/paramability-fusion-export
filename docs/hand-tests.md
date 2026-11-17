@@ -1580,12 +1580,14 @@ calls to watch (thin extrude)".
       takes the side from `end_area`, not from the location name, and the part must match each time. Where Fusion
       keeps the outside corners sharp, the copy rounds them and the item shows the note "Fusion keeps the corners of
       this wall sharp"; check that the difference is the size of the corner only.
-- [ ] **T2 Open line.** Draw one open line (or a few joined lines that do not close) and make a thin extrude of it,
-      the way a rib or a fence is made. The copy stops with "A thin extrude of an open line is not copied yet" and the
-      part saves as a fixed shape. In `report.json` read what Fusion gave as the profile: `thin_wall.profile_type`
-      (the type of `ExtrudeFeature.profile`) and the entries of `profiles` (`{ "kind": "other", "type": ... }` shows
-      the type of each). Note whether the end of the wall is square or round in Fusion; the app draws round ends.
-      This is what a later copy of open lines needs.
+- [ ] **T2 Open line.** Answered in Fusion 2706 for lines on the XY and XZ planes, extruded along the sketch
+      normal: `ExtrudeFeature.profile` is a `Path` of `PathEntity` items (each `isOpposedToEntity` false),
+      `startFaces` and `endFaces` are empty, side one puts the wall on the left of the path (seen from the front of
+      the sketch), side two on the right, center half each way; the ends are square and the corners sharp. The copy
+      writes such a wall now (`docs/hand-checks.md`, T2-open). Against the sketch normal and both ways the side is the
+      same (HC40). A join flush with the plate edges lists the merged faces in `ExtrudeFeature.faces`, one with its
+      point on the plate (HC40e); the copy accepts it by the faces of the plate before the step. Still open: the side
+      for a line with arcs (left out).
 - [ ] **T3 Wall as a size.** Tick the parameter behind the wall thickness and the one behind the height, export, and
       change both in Paramability: the wall and the height follow. Set the range of the wall so it can reach zero:
       the wall is then not a size, with the reason in the result window.
@@ -1994,7 +1996,7 @@ read the capture in `report.json`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`.
 - `ThreadFeature.isModeled`, `isRightHanded`, `isFullLength`, `threadLength`, `threadOffset`, `threadInfo` and its
   `threadType`, `threadDesignation`, `threadClass`, `isInternal`, `threadAngle` (degrees), `threadPitch`, `majorDiameter`,
-  `minorDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
+  `minorDiameter`, `pitchDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
   and `faces` after the step (the made thread faces: their `vertices` give `made_span`). These names match the Fusion API
   stub (July 2025); every member is optional in the reader. Hand check TD1 in `docs/hand-checks.md` lists what to look for.
 - Tapped hole thread (hand check TD2): Fusion (September 2025 and later) keeps the tap type in
@@ -2046,6 +2048,10 @@ read the capture in `report.json`.
   versions (a collection in older ones). When it gives no faces, `OffsetFacesFeature.faces` with the marker after the
   item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
   is moved back by `distance` and copied, and any curved face listed there leaves the step out.
+- `OffsetFacesFeature` on a cylinder face: `Cylinder.origin`, `axis` and `radius`; `BRepFace.loops` of a whole
+  cylinder (two loops of one `Circle3D` edge each, no seam edge); `Circle3D.center`, `normal` and `radius`;
+  `BRepEdge.faces` across an end circle; and `OffsetFacesFeature.faces` after the item, which must list the moved
+  cylinder with its new radius (hand check PF1 in `docs/hand-checks.md`).
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.
@@ -2250,8 +2256,15 @@ thin extrude tests above and read the capture in `report.json`.
 - The side of the wall is not taken from the location name (the API does not say which of side one and side two is
   the inside). `endFaces[0].area` (read as `end_area`) decides it, so check that for a thin extrude it is the face at
   the far end of the wall and has the area of the wall's cross section (T1).
-- `ExtrudeFeature.profile` of an open line, and `type_name` of what it returns (`thin_wall.profile_type`): not known
-  (T2).
+- `ExtrudeFeature.profile` of an open line is a `Path` (`thin_wall.profile_type`, T2). The reader reads it as a
+  sweep path (`path`, see "Capture reader calls to watch (sweep and loft)": `Path.item(i).entity`,
+  `isOpposedToEntity`, `curve`).
+- `ExtrudeFeature.faces` (the `Feature` member) for a thin extrude of an open line, read into `wall_faces`: for each
+  face `BRepFace.geometry` (its type, `Plane` for a flat face), `pointOnFace` and `evaluator.getNormalAtPoint`. Check
+  that the faces of a new body wall are its sides, its two ends and its two caps (8 for one corner).
+- `BRepBody.faces` of the target body before a join or cut of an open line (`target_faces_before`), with the same
+  three members per face. Check for a wall flush with a plate edge (hand check 40, flush design) that the plate's
+  side faces are listed with outward normals.
 
 ## Capture reader calls to watch (spline outlines and sketch text)
 
@@ -2298,6 +2311,24 @@ Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py
 - `BRepFace` of `Feature.faces`: the flat end faces read like any flat face (`face_loops`), the curved faces give
   `BRepEdge.evaluator.getPointAtParameter` samples (17 per edge). Expected: two flat faces for a round, square or
   triangle section; `faces.edges` holds the helical edges.
+
+## Capture reader calls to watch (scale)
+
+Hand check SC1 is in `docs/hand-checks.md`. The reader is `read_scale.py`. These members were written from the API
+stubs and never run. A member that cannot be read gives `null` or `other`, and the translator leaves the step out.
+
+- `ScaleFeature.inputEntities` with the marker just before the item: `BRepBody` entries for a scale of bodies; a
+  `Sketch` among them gives `input_kind` `sketches`. `BRepBody.boundingBox` and `BRepBody.volume` of each input body
+  before the item, and again after it for the body found by its token (`after`).
+- `ScaleFeature.point` with the marker before the item: a `SketchPoint` (`worldGeometry`, `parentSketch`), a
+  `ConstructionPoint` (`geometry`, `entityToken`, `timelineObject.index`) or a `BRepVertex` (`geometry`, `body`).
+  The origin point of the component (`Component.originConstructionPoint`) gives `{ origin: true }`. Check that a
+  sketch point on a sketch of a turned plane gives its place in the component's coordinates.
+- `ScaleFeature.isUniform`, `scaleFactor` (uniform) and `xScale`, `yScale`, `zScale` (per axis). The API reference
+  says the axis factors are null "where isUniform is false"; note in `report.json` whether `factors` holds numbers for
+  a scale per axis. Note also along which axes Fusion scales a body in a component that is turned in the assembly:
+  the translator checks the body's box in the component's own coordinates, so a scale along the assembly axes is left
+  out as "does not change the body as its factors and point say".
 
 ## Capture reader calls to watch (pipe)
 

@@ -3,7 +3,8 @@
 Every flat face the item moves becomes one `near` point inside the face, and the item one `offsetFaces` step with the
 distance as Fusion gives it (mm, positive moves the face out of the material). The app moves each face along its
 normal and lets the faces around it extend or shrink to meet it, so leaning side walls and faces that touch each other
-need no special case. Curved faces and moves that were not measured are refused.
+need no special case. A whole round face (a pin, a boss or a bore) gets a point halfway along it, and the step then
+needs recipe version 17 (finishes/offset_round.py). Other curved faces and moves that were not measured are refused.
 """
 import math
 
@@ -13,8 +14,9 @@ from ...design_model.values import Quantity, number
 from ...geometry import vec
 from ...geometry.footprint import Footprint
 from ..faces.placer_makers import MovedFacesMaker
-from ..result import Refusal, StepResult
+from ..result import NewerStep, Refusal, StepResult
 from ..values import quantity, stays_positive
+from . import offset_round
 
 
 MOVE_TOL_MM = 1e-3
@@ -36,7 +38,9 @@ def _moved_as_read(face, distance, after):
     return False
 
 
-def _face_refusal(face, distance, after):
+def _face_refusal(face, distance, after, rounds_after):
+    if offset_round.is_round(face):
+        return offset_round.refusal(face, distance, rounds_after)
     if face.get("kind") == "other" or "loops" not in face:
         return Refusal("Offsets of curved faces are not copied yet.", cause=gap_hints.OFFSET_CURVED)
     if not _moved_as_read(face, distance, after):
@@ -113,11 +117,16 @@ def _near_point(face, cache):
     return [round(frame["origin"][i] + uv[0] * frame["x"][i] + uv[1] * frame["y"][i], 9) + 0.0 for i in range(3)]
 
 
-def _distance(ctx, item, distance):
-    """The distance as a number or a formula over the sizes; a size that could bring it to zero stays fixed."""
+def _distance(ctx, item, distance, rounds):
+    """The distance as a number or a formula over the sizes. A size that could bring it to zero, or make a round face
+    (`rounds`) run into other edges of its end faces, stays fixed."""
     q = quantity(ctx, item, "distance", distance)
+    name = item.get("name") or "a step"
     if q.sized and not stays_positive(ctx.table, q if distance > 0 else q.scaled(-1)):
-        ctx.doubt(q.reads, "the offset of %s could reach zero" % (item.get("name") or "a step"))
+        ctx.doubt(q.reads, "the offset of %s could reach zero" % name)
+        q = Quantity(q.n)
+    elif q.sized and not offset_round.clear_over_range(ctx.table, rounds, q):
+        ctx.doubt(q.reads, "the round face that %s moves could close or run into other faces" % name)
         q = Quantity(q.n)
     return q.json()
 
@@ -132,17 +141,19 @@ def handle(ctx, step):
         return Refusal("The faces or the distance of this offset could not be read.")
     if not math.isfinite(distance) or not abs(number(distance)) > 0:
         return Refusal("This offset has no distance.")
-    after = data.get("faces_after") or []
+    after, rounds_after = data.get("faces_after") or [], data.get("rounds_after") or []
     for face in faces:
-        refusal = _face_refusal(face, distance, after)
+        refusal = _face_refusal(face, distance, after, rounds_after)
         if refusal:
             return refusal
     cache = ctx.cache.setdefault(__name__, {})
-    points = [_near_point(face, cache) for face in faces]
+    points = [offset_round.near_point(face) if offset_round.is_round(face) else _near_point(face, cache)
+              for face in faces]
     if any(p is None for p in points):
         return Refusal("A face of this offset has no room for a pick point, so it is not copied.")
+    rounds = [face for face in faces if offset_round.is_round(face)]
     selector = follow.faces(ctx, item, [{"point": p} for p in points])
+    step = {"kind": "offsetFaces", "faces": selector, "distance": _distance(ctx, item, distance, rounds)}
     out = StepResult()
-    out.add({"kind": "offsetFaces", "faces": selector, "distance": _distance(ctx, item, distance)},
-            [MovedFacesMaker(faces)])
+    out.add(NewerStep.of(step, offset_round.VERSION) if rounds else step, [MovedFacesMaker(faces)])
     return out

@@ -1,7 +1,7 @@
 # Feature support
 
 The tables show which Fusion design actions each export copies, and what could be copied later.
-They are for ParamabilityExport 0.13.0-preview.13.
+They are for ParamabilityExport 0.13.0-preview.14.
 `docs/limits.md` (Export for Paramability) and `docs/orca-output.md` (Export for Orca) have the details.
 
 The two exports:
@@ -55,7 +55,7 @@ can be.
 | Extrude: To object, flat face or plane square to it | Copied | - | Copied | - | Paramability: follows the face. Orca: the measured distance; it follows an offset plane or the end face of a copied extrude. Both: with Chain Faces on, only when the outline lands on the face alone, and the sizes that may move the face or the outline are marked. |
 | Extrude: To object, tilted or curved | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one side, no taper, no offset, a face of the same body; with Chain Faces on, a tilted flat face only when the outline lands on it alone. A face that a size may move is followed only when a copied extrude made it, else the step is left out. Orca names a face by its own numbering. |
 | Extrude: All, cut or intersect | Copied | - | Copied | - | Orca: a one way cut with material behind its sketch is a 1000 mm cut. |
-| Extrude: All, join or new body | Left out | Yes, needs an app change | Left out | Needs Orca | Fusion ends it where the part ends. |
+| Extrude: All, join or new body | Partly | - | Left out | Needs Orca | Fusion ends it where the part ends. Paramability: one way, no taper, no thin wall, the picked body the only body it joins, and Fusion's end on the far side of that body; the sizes that may change the body before it or move its outline are marked. A new body has no body before it, so it is left out. |
 | Extrude: start offset | Copied | - | Partly | Needs Orca | Orca: the offset keeps its number. |
 | Extrude: start From object | Copied | - | Partly | Needs Orca | Orca: the sketch plane moves to the face, but does not follow it. |
 | Extrude: start From object with an offset | Copied | - | Left out | Yes, add-in only | Paramability: the start face that Fusion measured shows which way the offset goes; without it the step is left out. |
@@ -65,7 +65,7 @@ can be.
 | Extrude, revolve or loft: new component | Copied | - | Copied | - | Both: the body it makes, with its sketch from the component that was active, placed through the assembly. A sketch of a component placed more than once is left out. A sweep made so is left out (its path stays in the other component). |
 | Extrude of a flat face of the part | Copied | - | Partly | Needs Orca | Paramability: follows when the face is the end of an earlier extrude without taper; else measured, with sizes marked. Orca: the face as it is now. |
 | Thin extrude: one closed outline | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: one way, no taper, no To object. Sharp wall corners are rounded, with a note. Orca: a rectangle or circle wall as two outlines. |
-| Thin extrude: open line | Left out | Yes, add-in only | Left out | Yes, add-in only | The app builds walls along an open line. Orca has a rib. |
+| Thin extrude: open line | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: straight lines drawn one after the other, one way or symmetric, no taper; square ends and sharp corners as in Fusion. The faces Fusion made must show the side of the wall. A line with arcs is left out. Orca has a rib. |
 | Thin extrude: several outlines, holes, two ways, To object, taper | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Revolve: full turn or angle | Copied | - | Copied | - | Orca: one outline without holes, the axis in the sketch plane. |
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
@@ -109,8 +109,9 @@ can be.
 
 | Fusion action | Paramability now | Paramability possible later | Orca now | Orca possible later | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Press Pull of a flat face (Offset Faces) | Copied | - | Left out | Needs Orca | Paramability: not two faces that meet, not a face with a leaning or rounded side. |
-| Press Pull of a curved face | Left out | Yes, needs an app change | Left out | Needs Orca | The app moves flat faces only. |
+| Press Pull of a flat face (Offset Faces) | Copied | - | Left out | Needs Orca | Paramability: faces that meet and faces with a leaning or rounded side are copied too; the app lets the faces around them follow. |
+| Press Pull of a whole round face (a pin, a boss or a bore) | Copied | - | Left out | Needs Orca | Paramability: needs an app that reads recipe version 17. The face goes all the way round, both ends are flat and square to its axis, and the new radius stays clear of the other edges of the end faces (also over the size range of the distance). |
+| Press Pull of another curved face, or of part of a round face | Left out | Yes, needs an app change | Left out | Needs Orca | The app moves flat faces and whole round faces only. |
 | Fillet: constant radius | Copied | - | Partly | Needs Orca | Orca: only when the edges are all, top, bottom or side edges of the part, or corners of straight extrudes. Other edges are left out, because Orca names edges by its own numbering. |
 | Fillet: variable radius | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one straight or arc edge alone in its fillet, no radii between the ends, and only when the radius changes evenly along the edge. Radii between the ends need an app change. |
 | Fillet: chord length | Partly | - | Left out | Needs Orca | Paramability: a plain round of the radius the chord gives, where the faces meet at the same angle along each edge. |
@@ -120,9 +121,10 @@ can be.
 | Chamfer: equal distance | Copied | - | Partly | Needs Orca | Orca: the same edges as for a fillet. |
 | Chamfer: two distances, distance and angle | Copied | - | Left out | Needs Orca | Orca makes only even chamfers. Paramability: two distances need sides that the add-in could measure. |
 | Shell: inside, open faces | Copied | - | Left out | Needs Orca | Orca opens only a face that it picks by its own numbering. |
-| Shell: outward, closed, rounded corners | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Draft | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane. Two different angles are left out. |
-| Scale | Left out | Yes, needs an app change | Left out | Needs Orca | |
+| Shell: outward, closed, rounded corners | Copied | - | Left out | Needs Orca | Paramability: needs a Paramability release that reads recipe version 17. The part's volume must change as the shell says. A shell that grows both inward and outward is left out. |
+| Draft | Partly | Yes, add-in only | Left out | Needs Orca | Paramability: one angle under 30 degrees, faces on one side of the plane; a Symmetric draft with faces on both sides is copied as two equal angles (recipe version 17). Two different angles are left out because Fusion does not say which angle leans which side; a hand check can settle it. |
+| Scale of bodies | Copied | - | Left out | Needs Orca | Paramability: the factors follow sizes. A point that sizes can move keeps its place, and those sizes are marked. Factors per axis in a component turned at an angle are left out. |
+| Scale of sketches, or of a body and a sketch together | Left out | Yes, add-in only | Left out | Needs Orca | |
 | Combine: join, cut, intersect | Copied | - | Copied | - | The tool bodies are copied from their steps, also from other components. Orca: an intersect with several tools that the add-in cannot work out is left out. |
 | Replace Face | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Split Face | Copied | - | Left out | Yes, add-in only | Paramability passes it by when the solid stays the same, with a note: picks on the split faces may not follow. Orca leaves the step out, although the shape stays the same. |
@@ -190,20 +192,21 @@ Sorted by how many printing projects it helps:
 
 1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
    Fillet and Full Round Fillet.
-2. Thin extrudes of an open line, Rib and Web (add-in only): walls, brackets and stiffeners.
+2. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), Rib and Web (add-in only):
+   walls, brackets and stiffeners.
 3. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a closed path of lines (add-in only),
    and sweeps that make a new component (add-in only).
-4. Join or new body extrudes through all (app change).
+4. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).
 6. Extrudes to a tilted or curved face with two sides (add-in only), or with a taper or an offset past the face (app
    change).
 7. Coils with a taper or a spiral (app change), and half turns (add-in only).
-8. Shells that grow outward, close the body or round their corners, and drafts with two angles (app change).
+8. Shells that grow both inward and outward (app change), and drafts with two different angles (add-in only, after a hand check of which side each angle leans).
 9. Emboss on a curved face (app change).
 10. Path pattern along other curves than one line, arc or circle, and patterns and mirrors of faces (app change).
 11. Taper tapped holes and threads that are not 60 degree or are tapered (app change).
 12. Sweeps along 3D splines, with a guide rail or a guide surface (app change).
-13. Scale, Press Pull of curved faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
+13. Press Pull of curved faces other than whole round faces, Move of faces, Split Body by a surface, Delete Face, Replace Face, Thicken,
     Boundary Fill and sheet metal (app change).
 
 ## Orca does not support

@@ -36,6 +36,16 @@ SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 # Sweep step fields (and the flat path's `closed`) newer than RECIPE_VERSION, the same way.
 SWEEP_VERSIONS = {"twistDeg": 16, "taperDeg": 16, "orientation": 16}
 SWEEP_PATH_VERSIONS = {"closed": 16}
+# Draft step fields newer than RECIPE_VERSION, the same way.
+DRAFT_VERSIONS = {"angleTwoDeg": 17}
+# Fields of an extrude's thin wall newer than RECIPE_VERSION, the same way.
+THIN_VERSIONS = {"ends": 17, "corners": 17}
+# A thread step's `pitchDiameter` is only written into a recipe of this version or newer; it never raises the version.
+PITCH_DIAMETER_VERSION = 17
+# A shell that grows outward, rounds its corners or has no open faces needs this version.
+SHELL_VERSION = 17
+# An add or new extrude through all to the far side of the part (no distance) needs this version.
+THROUGH_ADDS_VERSION = 17
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 256
 # Recipes before version 15 take at most 64 copies per pattern count (both linear counts together for a grid).
@@ -516,6 +526,13 @@ def _sweep_version(step):
     return max(fields, default=0)
 
 
+def _shell_version(step):
+    """SHELL_VERSION for a shell step that grows outward, rounds its corners or has no open faces, else 0."""
+    if step.get("kind") != "shell":
+        return 0
+    return SHELL_VERSION if "outside" in step or "corners" in step or "openFaces" not in step else 0
+
+
 def _walk(capture, table, size_table, motion=None, cache=None):
     """One walk over the items: (TranslateResult, Context). `cache` is shared by the walks of one translation."""
     ctx = Context(capture, size_table, motion, cache, table)
@@ -530,8 +547,19 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     written = all_steps(ctx.steps)
     version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
                   + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})]
+                  + [DRAFT_VERSIONS.get(key, 0) for step in written if step["kind"] == "draft" for key in step]
+                  + [THIN_VERSIONS.get(key, 0) for step in written if step["kind"] == "extrude"
+                     for key in step.get("thin") or {}]
                   + [_counts_version(step, ctx.table) for step in written]
-                  + [_sweep_version(step) for step in written])
+                  + [_sweep_version(step) for step in written]
+                  + [_shell_version(step) for step in written]
+                  + [THROUGH_ADDS_VERSION for step in written if step["kind"] == "extrude"
+                     and step.get("extent") == "through" and step.get("combine") in ("add", "new")]
+                  + [getattr(step, "version", 0) for step in written])
+    if version < PITCH_DIAMETER_VERSION:
+        for step in written:
+            if step["kind"] == "thread":
+                step.pop("pitchDiameter", None)
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps, "sizesAsWritten": True}
     over = _over_caps(recipe, ctx)
     if over:

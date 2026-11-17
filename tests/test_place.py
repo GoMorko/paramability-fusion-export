@@ -88,6 +88,8 @@ class FieldTableTest(unittest.TestCase):
             if kind in place.NOT_WRITTEN:
                 continue
             listed = {tuple(p) for p in place.POSITIONS.get(kind, [])} | {tuple(p) for p in place.DIRECTIONS.get(kind, [])}
+            # A per-axis factor is a Pos3 in the schema; `place` puts it on the turned axes instead of moving it.
+            listed |= {tuple(p) for p in place.FACTORS.get(kind, [])}
             self.assertEqual(paths, listed, kind)
             self.assertFalse({tuple(p) for p in place.POSITIONS.get(kind, [])} & {tuple(p) for p in place.DIRECTIONS.get(kind, [])})
         self.assertEqual(kinds, set(place.POSITIONS) | set(place.DIRECTIONS) | set(place.NOT_WRITTEN))

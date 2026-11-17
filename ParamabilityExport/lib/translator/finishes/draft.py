@@ -3,8 +3,13 @@
 The recipe step leans faces about where they meet the neutral plane, and a positive angle takes material off the side
 the pull direction points to. Fusion's API does not say which way its angle and its flip turn a face, so the copy
 reads it from the part: with every face on one side of the plane, a draft that removes material leans the way that
-takes material off there. The part's volume must change, and a draft with faces on both sides of its plane, two
-different angles, or an angle at the recipe's cap is left out with the reason.
+takes material off there. The part's volume must change.
+
+A Symmetric draft with faces on both sides of the plane leans each side away from the plane by the same angle, so both
+sides take material off together or both add it, and the volume change tells which. The step then carries the angle
+twice, `angleDeg` and `angleTwoDeg`, with one sign. Two Sides drafts with different angles are left out: the API does
+not say which angle belongs to the side the pull direction points to, and one volume cannot tell it. So are a draft
+with faces on both sides that is not Symmetric, and an angle at the recipe's cap.
 
 The angle follows its sizes, and the size ranges are cut where it would reach zero or the recipe's cap; a draft with two angles
 follows them only when both come from the same formula. The faces are picked by points on them, like the open faces of a shell, and the plane
@@ -70,22 +75,28 @@ def handle(ctx, step):
     if not isinstance(angle, (int, float)) or angle == 0:
         return Refusal("The angle of this draft could not be read.")
     if data.get("two_angles") and not (isinstance(second, (int, float)) and abs(abs(second) - abs(angle)) < 1e-9):
-        return Refusal("This draft leans the two sides of its plane by different angles, which is not copied yet.")
+        return Refusal("This draft gives each side of its plane its own angle, and the copy cannot tell which angle "
+                       "leans which side.")
     if abs(angle) >= MAX_ANGLE_DEG:
         return Refusal("Drafts of %g degrees or more are not copied." % MAX_ANGLE_DEG, cause=gap_hints.DRAFT_STEEP)
     side = _faces_side(faces, point, normal)
-    if not side:
+    # Both halves of a Symmetric draft lean the same way from the plane, so its sign needs no side.
+    both = not side and data.get("symmetric") is True and not data.get("two_angles")
+    if not side and not both:
         return Refusal("This draft leans faces on both sides of its plane, so the way it leans cannot be checked.")
     before, after = data.get("volume_before"), data.get("volume_after")
     if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
         return Refusal("The part was not measured around this draft, so the way it leans cannot be checked.")
     if abs(after - before) <= VOLUME_TOL_MM3:
         return Refusal("This draft does not change the part's volume, so the way it leans cannot be checked.")
-    lean = side if after < before else -side
+    lean = (1 if after < before else -1) if both else (side if after < before else -side)
     size = _angle(ctx, item, data, angle)
     shift = follow.place_plane(ctx, item, plane, normal, "leans faces about")
     origin = follow.shifted_origin(round_vec(point), normal, shift)
+    step = {"kind": "draft", "faces": follow.faces(ctx, item, faces), "angleDeg": size.scaled(lean).json(),
+            "neutral": {"origin": origin, "normal": round_vec(normal)}}
+    if both:
+        step["angleTwoDeg"] = size.scaled(lean).json()
     out = StepResult()
-    out.add({"kind": "draft", "faces": follow.faces(ctx, item, faces), "angleDeg": size.scaled(lean).json(),
-             "neutral": {"origin": origin, "normal": round_vec(normal)}})
+    out.add(step)
     return out

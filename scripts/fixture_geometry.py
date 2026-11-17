@@ -5,7 +5,7 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, sweeps of one outline along a path (and pipes with a circle section), lofts of two convex polygons (other lofts give their box only), holes, combines, patterns and mirrors, pastes, moves and offsets of flat faces with square sides, read straight from the
+The model is a voxel count of extrudes (thin walls of closed outlines with round corners, and of open lines, included), embosses on flat faces, revolves, sweeps of one outline along a path (and pipes with a circle section), lofts of two convex polygons (other lofts give their box only), holes, combines, patterns and mirrors, pastes, moves, scales of bodies and offsets of flat faces with square sides, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
 0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
@@ -58,6 +58,12 @@ class Shape:
         corners = np.array([[x, y, z] for x in (self.lo[0], self.hi[0]) for y in (self.lo[1], self.hi[1])
                             for z in (self.lo[2], self.hi[2])]) @ rot.T + shift
         return Shape(lambda p: self.test((p - shift) @ rot), corners.min(axis=0), corners.max(axis=0))
+
+    def scaled(self, center, factors):
+        """p -> center + factors * (p - center), each factor above zero."""
+        center, factors = np.asarray(center, float), np.asarray(factors, float)
+        return Shape(lambda p: self.test(center + (p - center) / factors),
+                     center + factors * (self.lo - center), center + factors * (self.hi - center))
 
     def reflected(self, point, normal):
         n = np.asarray(normal, float) / np.linalg.norm(normal)
@@ -296,14 +302,50 @@ def extrude_intervals(data, origin, rot):
     raise Unmodelled("extent type")
 
 
+def _moved_line(points, offset):
+    """The polyline `points` moved `offset` to its left (negative: right), each corner where the moved lines meet."""
+    normals = []
+    for a, b in zip(points, points[1:]):
+        size = math.dist(a, b)
+        normals.append([-(b[1] - a[1]) / size, (b[0] - a[0]) / size])
+    out = [[points[0][i] + offset * normals[0][i] for i in range(2)]]
+    for k in range(1, len(points) - 1):
+        n1, n2 = normals[k - 1], normals[k]
+        bend = 1.0 + n1[0] * n2[0] + n1[1] * n2[1]
+        out.append([points[k][i] + offset * (n1[i] + n2[i]) / bend for i in range(2)])
+    return out + [[points[-1][i] + offset * normals[-1][i] for i in range(2)]]
+
+
+def line_band(data):
+    """The wall of a thin extrude of an open line (`data.path`, lines only) as a closed profile, as Fusion builds it:
+    side one on the left of the line, side two on its right, center half each way; sharp corners, square ends."""
+    path, wall = data.get("path") or {}, data["thin_wall"]
+    flats = [c.get("flat") or {} for c in path.get("curves") or []]
+    if not flats or any(f.get("kind") != "line" for f in flats) or wall.get("location") not in LINE_REACH:
+        raise Unmodelled("open line")
+    points = [flats[0]["start"]] + [f["end"] for f in flats]
+    left, right = (share * wall["thickness"] for share in LINE_REACH[wall["location"]])
+    ring = _moved_line(points, left) + _moved_line(points, -right)[::-1]
+    ring.append(ring[0])
+    return {"frame": path["frame"], "loops": [{"outer": True, "curves": [
+        {"kind": "line", "start": a, "end": b} for a, b in zip(ring, ring[1:])]}]}
+
+
+# Share of the wall thickness to the left and to the right of an open line, by Fusion's wall location.
+LINE_REACH = {"side1": (1.0, 0.0), "side2": (0.0, 1.0), "center": (0.5, 0.5)}
+
+
 def extrude_shape(data):
     profiles = data["profiles"]
     if not profiles:
         raise Unmodelled("no profile")
     pieces = []
     for profile in profiles:
+        line = data.get("thin") and profile.get("type") == "Path"
+        if line:
+            profile = line_band(data)
         test2d, pts2d = profile_test(profile)
-        if data.get("thin"):
+        if data.get("thin") and not line:
             test2d, pts2d = thin_band(profile, test2d, pts2d, data["thin_wall"])
         origin, rot = frame_of(profile["frame"])
         intervals = extrude_intervals(data, origin, rot)
@@ -843,6 +885,12 @@ def evaluate(capture):
             elif kind == "MoveFeature":
                 for body, before_points, after_points in zip(data["bodies"], data["points_before"], data["points_after"]):
                     bodies[key_of(body)] = bodies[key_of(body)].moved(*rigid_fit(before_points, after_points))
+            elif kind == "ScaleFeature":
+                if data.get("input_kind") != "bodies":
+                    raise Unmodelled("scale of sketches")
+                factors = [data["factor"]] * 3 if data.get("uniform") else data["factors"]
+                for body in data["bodies"]:
+                    bodies[key_of(body)] = bodies[key_of(body)].scaled(data["point"]["point"], factors)
             elif kind == "OffsetFacesFeature":
                 key = body_key(item, data, target)
                 bodies[key] = apply_op(bodies[key], "join" if data["distance"] > 0 else "cut", offset_shape(data))

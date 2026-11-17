@@ -127,7 +127,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
@@ -507,7 +507,7 @@ not judged to meet material where Orca removes nothing.
   turn evenly, the same as Fusion, so the count and the angle both follow, also across 360. A part turn to both sides
   is two tool bodies with their numbers fixed. Fusion 2706 gives element transforms one step ahead for circular
   patterns (hand check CP1), so a one-sided pattern takes the places of its copies from their ids and the way they
-  turn from their faces (`design_model/steps/pattern_places.py`, developer guide 3.18). Ids that repeat or do not
+  turn from their faces (`design_model/steps/pattern_places.py`, developer guide 3.21). Ids that repeat or do not
   fill the count, faces that do not sit at the places, or a way of turning that nothing shows leave the pattern out
   (cause `copiesUneven`).
 - Rectangular and two-sided circular patterns keep the places of their transforms. Two copies on one place, places

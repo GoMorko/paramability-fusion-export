@@ -5,6 +5,10 @@ where Fusion shows the body (`placement.frame` of the capture), and for a Y up d
 (x, y, z) to (x, -z, y). Both are applied in one pass. A recipe is always written Z up (the package manifest's
 `upAxis` applies to the STEP files only). 2D sketch values and revolve axes live in a sketch plane and stay.
 
+Per-axis factors (`factors` of the step kind table, the `[x, y, z]` of a scale) are put on the axes the map turns
+them to. A map that does not turn each axis onto an axis (a turn by a part of a quarter turn) has no such axes: every
+caller checks the steps and the map first (`factors_fit`), and `place` raises when one did not.
+
 A coordinate may be a formula: the map writes affine formulas through `Quantity`, and entries of the rotation that
 are zero or plus or minus one are snapped, so a part that is only moved keeps plain formulas (`x + 100`).
 """
@@ -17,6 +21,7 @@ from .step_walk import all_steps
 # Step kind -> paths to positions, and to directions (turned, not moved), from the step kind table.
 POSITIONS = {k.name: list(k.positions) for k in RECIPE_KINDS if k.positions}
 DIRECTIONS = {k.name: list(k.directions) for k in RECIPE_KINDS if k.directions}
+FACTORS = {k.name: list(k.factors) for k in RECIPE_KINDS if k.factors}
 
 # Step kinds with positions or directions that the translator never writes. The schema walk in the tests
 # fails when a kind appears in no table, so a new schema field cannot slip by.
@@ -51,6 +56,41 @@ def _mapped(triple, move, offset, shift=None):
             total = total.plus(shift[i])
         out.append(total.json())
     return out
+
+
+def axis_turn(rows):
+    """For each axis i of a map, the axis j it comes from (`rows[i][j]` is plus or minus one), or None when the map
+    turns some axis off the axes."""
+    found = []
+    for row in rows:
+        hits = [j for j, c in enumerate(row) if abs(abs(c) - 1.0) <= 1e-9]
+        if len(hits) != 1 or any(abs(c) > 1e-9 for j, c in enumerate(row) if j != hits[0]):
+            return None
+        found.append(hits[0])
+    return found if sorted(found) == [0, 1, 2] else None
+
+
+def _factors(triple, move):
+    turn = axis_turn(move.rows)
+    if turn is None:
+        if all(v == triple[0] for v in triple):
+            return list(triple)
+        raise ValueError("Per-axis factors cannot follow a map that turns an axis off the axes.")
+    return [triple[j] for j in turn]
+
+
+def factors_fit(features, move):
+    """False when a step among `features` (also inside tool steps) has per-axis factors that differ and `move` turns
+    an axis off the axes, so `place` cannot carry them."""
+    if axis_turn(move.rows) is not None:
+        return True
+    for step in all_steps(features):
+        for path in FACTORS.get(step.get("kind"), ()):
+            found = []
+            _apply(step, path, lambda t: found.append(t) or t)
+            if any(any(v != t[0] for v in t) for t in found):
+                return False
+    return True
 
 
 def _apply(node, path, fn):
@@ -88,4 +128,6 @@ def place(recipe, move, shift=None):
             _apply(step, path, lambda t: _mapped(t, move, True, shift))
         for path in DIRECTIONS.get(kind, ()):
             _apply(step, path, lambda t: _mapped(t, move, False))
+        for path in FACTORS.get(kind, ()):
+            _apply(step, path, lambda t: _factors(t, move))
     return out

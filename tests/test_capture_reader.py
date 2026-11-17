@@ -764,6 +764,7 @@ class ThreadReadTest(unittest.TestCase):
                          ("ISO Metric profile", "M8x1.25", False, True))
         self.assertEqual((data["pitch"], data["major_diameter"], data["minor_diameter"], data["angle_deg"]),
                          (1.25, 8.0, 6.46, 60.0))
+        self.assertEqual(data["pitch_diameter"], 7.0)
         self.assertEqual((data["full_length"], data["length"], data["offset"]), (True, 10.0, 0.0))
         (face,) = data["faces"]
         self.assertEqual((face["surface"], face["radius"], face["span"], face["outward"]), ("Cylinder", 4.0, [0.0, 10.0], True))
@@ -779,6 +780,7 @@ class ThreadReadTest(unittest.TestCase):
         old = Obj(threadType="ISO Metric profile", pitch=0.125, majorDiameter=0.8, minorDiameter=0.646)
         data = self.read(threadInfo=old, inputCylindricalFaces=None, inputFaces=Coll([cylinder_face()]))
         self.assertEqual((data["pitch"], data["faces"]), (None, []))
+        self.assertIsNone(data["pitch_diameter"])
 
     def test_the_single_input_face_is_used_when_the_collection_is_missing(self):
         data = self.read(inputCylindricalFaces=None, inputCylindricalFace=cylinder_face())

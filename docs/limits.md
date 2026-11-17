@@ -28,6 +28,17 @@ What the copy can and cannot do, step by step. The README lists only the main li
   direction points to a side without material there, the other side is used, with a note. A tapered one is copied
   as a tapered cut that ends past the part; one whose walls lean in ends just past it, and is left out when its
   outline would come close to closing there.
+- A join through all to one side is copied as an extrude to the far side of the part. It is copied only when it joins
+  the picked body alone: with more bodies, the export cannot tell where Fusion ends it. The export must also show that
+  Fusion ended it on the far side of that body: its end face lies on the far side of the body, and the body has a flat
+  face on that plane (or the end face merged with one). Else it is left out with a reason. A join through all onto a
+  curved top adds nothing in Fusion and is left out. A join through all after a step that the copy left out is left
+  out too, and so is one that builds the tool body of a Combine. A join through all both ways,
+  with a taper or with a thin wall, and a new body through all, are left out. Each size that may change the body before
+  the join, or move its outline, is marked "may give unexpected results" with the step named: the export cannot check
+  that Fusion and the copy still end it at the same place at other sizes. This marks more sizes than needed (also a
+  hole size or a fillet radius that cannot move the far side), because the export cannot tell which sizes move the
+  body along the extrude. Give the extrude a distance or end it on a face to keep these sizes unmarked.
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
@@ -124,8 +135,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
   These steps are left out of the copy (see "When a step cannot be copied"):
-  thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
-  have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
+  thin extrudes of an open line with arcs or curves, of several outlines, of an outline with holes, that go two ways,
+  reach to a face or have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
   a tilted or curved surface, extrudes that end on a tilted or curved surface with two sides, a taper or an offset
   past it, on such a face of another body or after a left out step, or on such a face that a size may move when no
   copied extrude made it, extrudes that end on a flat face that Fusion joins with the faces next to it (Chain Faces
@@ -145,18 +156,24 @@ What the copy can and cannot do, step by step. The README lists only the main li
   that side ends inside the part, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, threads that are not metric or Unified 60 degree threads, tapered threads, rounds whose radius changes
   along the edge other than the ones above, rounds set by chord length where the faces meet at an angle that changes
-  along the edge, rounds with curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
+  along the edge, rounds with curvature continuity, shells that grow both inward and outward, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
-  faces) of a curved face (the whole step is left out, also when it moves flat faces too, so the copy never moves
-  only part of what Fusion moved), of a face with a leaning or rounded side, or of two faces that meet, and every
+  faces) of a curved face other than a whole round face (a pin, a boss or a bore that goes all the way round between
+  two flat ends square to its axis; part of a circle, an end on a slope or with a round or chamfer, a round face that
+  also moves a face next to it, and one whose new radius would reach another edge of its end faces, at the current
+  sizes or anywhere in the size range of its distance, are left out or keep the distance as a number; the whole step is left out, also when it moves flat faces too, so the copy never moves only part of what Fusion moved; the end faces
+  are checked as exported, so when other sizes move an edge near the ring, Paramability may refuse the move at those
+  sizes), and every
   step type not listed above. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
   helical edges read back as one plain helix; at most 8 coils, and 100 turns of coils and threads together in timeline order (later ones are left out), never as a tool
   with other steps (a spiral, a taper and a half-turn count of revolutions are left out). A draft is copied when its faces all lie on one side of its plane, with one angle
   under 30 degrees (or the same on both sides; it follows a size only when both sides use the same formula, and the
-  size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean);
-  other drafts are left out. A step of that kind in a tool body leaves the Combine that
+  size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean).
+  A Symmetric draft with faces on both sides of its plane is copied the same way, as two equal angles (recipe version
+  17, which needs a Paramability build that opens version 17). A draft with two different angles, and a draft with faces
+  on both sides that is not Symmetric, are left out: Fusion does not say which angle leans which side. A step of that kind in a tool body leaves the Combine that
   takes the tool out of the copy, as one missing step. A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
 - A sweep is copied when its outline is one closed sketch outline (holes allowed; several outlines become one sweep
@@ -243,6 +260,16 @@ What the copy can and cannot do, step by step. The README lists only the main li
   scales, are left out of the copy. A body with no corners (a sphere, a torus, a closed revolve) is copied when a Move
   along X, Y and Z or a free Move only shifts it; a Rotate, or any other Move that turns such a body, is left out with
   the tip to draw the sketch of the body where the body should be.
+- Scale of bodies is copied. The factor, or the three factors of a scale that differs per axis, follow sizes. A factor
+  whose formula could go under 0.001 or over 1000 keeps its number, and its sizes are marked. The point that stays in
+  place keeps the place Fusion measured: when it is the origin, nothing is marked; when it is a sketch point, a
+  construction point or a corner of the part, the sizes that can move it are marked "may give unexpected results".
+  The add-in checks the scale on the measured body (its volume and its box): a scale that does not agree is left
+  out. A scale that also scales sketches, a scale with factors per axis in a component that is turned at an angle
+  that is not a quarter turn, and a scale before the first copied step of the body are left out. When a tool body
+  with such a scale is joined or cut into a part that is turned at an angle, the combine is left out. A round, chamfer
+  or offset after the scale that picks faces made before it keeps its measured place, and the sizes are marked.
+  Export for Orca leaves every scale out: Orca has no step that scales a body.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
   the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
   sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout
@@ -299,6 +326,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the API does not say which of Fusion's side one and side two is which. Where Fusion keeps the corners of the wall
   sharp, the copy rounds them and says so. A later pick on the wall's faces is placed on earlier steps or its
   sizes may give unexpected results.
+- A thin extrude of an open line of straight lines (a fence, a divider, a rib along a plate) is copied with square
+  ends and sharp corners, as Fusion builds it. The wall thickness and the sizes that move the line are sizes. The side
+  of the wall is checked against the faces that Fusion made, also where a face of the wall merged with a face of the
+  part (a wall flush with the edge of a plate). When they do not show one side, the step is left out. Draw
+  the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
+  leaves the step out, and so does a corner that turns more than 135 degrees (a V sharper than 45 degrees). A range
+  stops before a corner takes a whole line, turns past 135 degrees, or two lines come too near.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
@@ -320,4 +354,4 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.13.0-preview.13. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.13.0-preview.14. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.

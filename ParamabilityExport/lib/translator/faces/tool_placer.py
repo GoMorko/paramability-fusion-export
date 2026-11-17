@@ -31,7 +31,12 @@ class ToolPlacer(Placer):
             found = placer.place(p, edge)
             if found is not None:
                 return found
+            if placer.claims(p):
+                return None
         return None
+
+    def claims(self, p):
+        return any(placer.claims(p) for placer in self.placers)
 
     def place_on_wall(self, p):
         for placer in reversed(self.placers):

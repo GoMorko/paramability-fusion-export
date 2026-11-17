@@ -18,7 +18,8 @@ measured (`ref_motion`): its place is a formula of them, or the sizes that act o
 A step inside a tool can reach to a face that is not on the tool. The walk that holds the tool places that face as it
 stood at that step (`_beyond_tool`), so the step follows the part although the tool is built on its own.
 
-A point on the inner wall of a shell is placed through the outer wall it was moved from (faces/shells.py), and a point on
+A point on the inner wall of a shell is placed through the outer wall it was moved from (faces/shells.py); a point on the
+new outer wall of a shell that grows outward is placed on no step (`Placer.claims`), and a point on
 a face that an offsetFaces step moved through the face before the move (faces/offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (faces/crossings.py).
 """
@@ -74,6 +75,8 @@ def locate(ctx, p, edge=False, below=None):
         found = placer.place(p, edge)
         if found is not None:
             break
+        if placer.claims(p):
+            return None
     if edge and (found is None or _on_one_face(found)):
         crossed = crossings.cross(_walls(ctx, p, below), p)
         if crossed is not None:
