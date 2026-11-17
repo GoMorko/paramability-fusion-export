@@ -2127,7 +2127,7 @@ one folder per family of steps.
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
   (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
   `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
@@ -3233,6 +3233,85 @@ top edges, and `Shell1` opens the top face.
   grows, the centre stays on the middle line and the point stays on the edge.
 - A point that no slab places "may sit on geometry that moves". Then every size the steps before it read is marked
   loose, with the step named in the reason.
+
+#### A point on a revolve
+
+Every written revolve step is kept as a `RevolvePlacer` (`lib/translator/faces/revolve_placer.py`). The placer keeps
+the outline of the step, the axis and the turn as the step writes them (`Turn`). One revolve item can write one
+revolve step for each outline, and each step gets its own placer. A revolve that the handler writes inside a
+`toolBody` (an intersect of several outlines, or a turn back that a `move` does) gets no placer. An intersect gets no
+placer, because the faces that it keeps can also be faces of the part.
+
+A revolve turns its outline about an axis in the sketch plane. Each face of a revolve is one outline curve, turned
+about the axis. Each edge between two of these faces is one outline corner, turned about the axis. The placer reads a
+measured point as three numbers:
+
+1. The height of the point along the axis.
+2. The distance of the point from the axis.
+3. The angle of the point about the axis, from the sketch plane.
+
+The height and the distance give a point in the sketch plane. The placer then finds the outline curves within 0.001 mm
+of that point (`LATERAL_TOL`):
+
+- A point of a face must lie on exactly one curve. The point moves with that curve, as the probe measured the curve
+  (`sketch_motion.Outline.follow`). On a line, the point stays at the same share of the length of the line. On an arc,
+  the point moves only when the arc keeps its shape. An arc that changes its shape is stuck, and the sizes that move it
+  are marked.
+- A point of an edge must lie at one corner where exactly two curves meet. The point moves with that corner.
+- The point keeps its angle about the axis. The axis can move with sizes too, and the point turns about the axis where
+  it is at the other sizes.
+- The placer writes the three coordinates of the point as formulas (`near` with formulas, as for a slab).
+
+A curve that lies on the axis makes no face. Thus the placer does not use it. Example: the line on the axis of a cup
+outline. A point at the centre of the top face of the cup then lies on one curve only, the top line.
+
+Example. A cup has the sizes `Height` (40 mm) and `Diameter` (60 mm). Its outline is a rectangle from the axis to
+`Diameter / 2`, and from the floor to `Height`. It turns a full circle about the z axis. `Shell1` opens the top face, and
+`Fillet1` rounds the outer rim.
+
+- The face point of `Shell1` lies 10 mm from the axis, on the top line, at 45 degrees. The top line is 30 mm long, so
+  the point is at one third of the line. The step writes the point as
+  `[0.11785113 * Diameter, 0.11785113 * Diameter, Height]`. At `Diameter` 80 the point is 13.33 mm from the axis.
+- The edge point of `Fillet1` lies at the corner of the top line and the side line, at 30 degrees. The step writes
+  `[0.433012702 * Diameter, 0.25 * Diameter, Height]`.
+- No size is marked.
+
+The placer does not place a point in these cases:
+
+- The point is on an end face of a revolve that turns less than a full circle. The end faces are not placed yet.
+- The point is on two curves, and not at a corner of these two curves.
+- The point is a point of a face, and it is at a corner.
+- The point is a point of an edge, and it lies inside one face. The edge then comes from another step.
+- The point is also on a face of a step that the walk wrote before the revolve (`before`). Example: the edge where a
+  revolve sits on a plate. The plate and the revolve can move with different sizes.
+
+When the face under such a point moves with sizes, the placer "claims" the point (`Placer.claims`):
+`follow.locate` stops, and the sizes of the steps before the pick are marked. A mark is better than a guess where two
+faces meet. A face stays where it is (`_still`) when no size moves the axis or the sketch plane, and its curve does not
+move, or slides along its own line only. On an end face, a size behind the angle moves the face too. When the face
+stays, the placer claims nothing. A point that it does not place then goes to the other steps, as without the
+revolve. Example: a cut through the flat lid of a revolve makes an edge inside the lid face. The lid stays, so the
+cut places the edge on its own wall (`follow._on_a_wall`).
+
+A pick is correct only while the curve that it picks stays a curve. Thus each pick adds rules (`RevolvePlace.cuts`),
+and `follow._keep_copies` cuts the ranges where a rule fails (`kept_ranges.holding_ranges`):
+
+- Each picked line or arc keeps its length along the direction from its start to its end, more than 0.001 mm
+  (`LENGTH_TOL_MM`). An edge at a corner picks the two curves of the corner. Example: a step in the side wall of a cup
+  at `16 + Ledge` mm, and a rim at 40 mm. The wall above the step is `24 - Ledge` mm high. A round on the rim picks that
+  wall. At `Ledge` 24 the wall has no height, so the range of `Ledge` stops at 23.99.
+- A revolve that turns less than a full circle and whose angle follows a size must turn past the angle of the point,
+  by more than 0.001 degrees (`ANGLE_TOL_DEG`).
+- When no cut keeps a rule (the person typed the range), the sizes of the rule are marked.
+
+The placer does not model the material of the revolve (`material_at` gives None). Thus the checks that need all the
+material of the part (`follow.inside`, `faces/floating.py`, `material_boxes`) see a revolve as a step that they must
+bound by its own step, as before.
+
+A pick on a revolve face does not give the move of a flat face or of an edge. Thus a face that an extrude starts from or
+reaches to, and an edge that a plane or an axis is built on, are not followed on a revolve (`follow.target_shift`,
+`follow._edge_shift`). Their sizes are marked, as before. An extrude up to a revolve face writes its `near` point with
+formulas (`follow.placed_point`).
 
 #### A face of another body
 
@@ -4418,6 +4497,9 @@ range stops at the step of the form before it. In the example, the range of the 
 When no shorter ranges keep the rule, the step is left out with the cause `revolveAxisSide`. This occurs when every
 size that the step reads has a range that the person typed.
 
+Each written revolve step gives the walk a placer (`RevolveMaker`, `faces/revolve_placer.py`). Then a later pick on
+a face or an edge of the revolve follows the outline, the axis and the turn (3.3).
+
 The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
 marked.
@@ -5093,6 +5175,14 @@ How later steps find faces after a shell. Each step that makes faces is kept as 
 - A shell that goes inward is the placer `Shell`. A point on an inner wall is moved back out by the thickness, placed on
   the step that made the outer face, and follows that step and the thickness. A closed hollow is the same placer with no
   open face.
+- After a revolve, the outer faces of the revolve stay where they are. A point on them is placed on the revolve (3.3).
+  The inner walls of a revolve are not placed yet. `Shell` claims a point of an inner wall: a point inside the turned
+  outline, at the thickness from the nearest face that the shell keeps. `Shell` also claims a point that lies only on
+  faces that the shell opens (`RevolvePlacer.hollowed`). Example: the inner rim of a cup lies on the plane of the
+  opened top face, but only the wall of the shell is there. A point on the
+  corner of an opened face and a kept face (the outer rim of the cup) is placed on the revolve. When a face that the
+  shell opens is placed on no step, any face of a revolve can be that face. Then `Shell` claims every point on a
+  revolve.
 - A shell that goes outward is the placer `OutsideShell`. The faces of the part before it stay where they are, and a
   pick on one of them is placed as before. The new outer faces are not placed. A point that lies outside the part as it
   was, and inside the box of the wall, is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and

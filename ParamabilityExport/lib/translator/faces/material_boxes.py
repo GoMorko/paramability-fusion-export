@@ -9,6 +9,7 @@ from ...geometry.footprint import polyline
 from .end_caps import EndCaps
 from .moved_placer import MovedPlacer
 from .offset_faces import MovedFaces
+from .revolve_placer import RevolvePlacer
 from .shells import OutsideShell, Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
@@ -94,7 +95,8 @@ def material_boxes(placers, motion=None):
     step), or UNKNOWN when the box of one cannot be told. `motion` carries the boxes of a moved step's placers."""
     found = []
     for placer in placers:
-        if isinstance(placer, (Shell, OutsideShell, EndCaps)):
+        if isinstance(placer, (Shell, OutsideShell, EndCaps, RevolvePlacer)):
+            # Their material is not modelled: the checks look at their steps instead (`added_bounds.bound`).
             continue
         if isinstance(placer, Slab):
             if placer.combine not in ("new", "add"):

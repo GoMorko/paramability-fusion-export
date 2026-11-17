@@ -28,9 +28,11 @@ from ...geometry import vec
 from .. import notes, ref_motion, values
 from ...design_model.reach import any_face_sizes, built_on_other, offset_param, on_part, reference_sizes
 from ..sketch import sketch_motion
+from ..ranges import kept_ranges
 from . import crossings, picks, shells
 from .copy_counts import stays_at_least
 from .placer import ADD
+from .revolve_placer import RevolvePlace
 from .slabs import (
     AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab, as_quantity,
     cleaned_all,
@@ -132,6 +134,20 @@ def _keep_copies(ctx, item, found):
         why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
                else notes.stuck_reason(stuck.cause, stuck.sketch))
         ctx.doubt(sketch_motion.movers(ctx.table, stuck), why)
+    for value, floor, why in getattr(found, "cuts", ()):
+        _keep_above(ctx, value, floor, why(_name(item)))
+
+
+def _keep_above(ctx, value, floor, why):
+    """Cut the ranges where a value a pick needs (the length of a picked curve) would reach `floor`; mark its sizes
+    when no cut keeps it above."""
+    if ctx.table is None:
+        return
+    found = kept_ranges.holding_ranges(ctx.table, [(value, 1)], floor)
+    if found is None:
+        ctx.doubt(value.reads, why)
+    elif found:
+        ctx.cut(found, why)
 
 
 def _reads_behind(ctx, p):
@@ -308,6 +324,9 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     found = locate(ctx, point) if point else None
     if isinstance(found, shells.InnerPlace) and (found.single is None or abs(vec.dot(found.single, direction)) < 1 - 1e-9):
         found = None
+    if isinstance(found, RevolvePlace):
+        # A point on a revolve face follows the face, not how far a flat face moves along `direction`.
+        found = None
     if found is None or found.which == "side":
         names = _reads_behind(ctx, point) if point else ctx.written_reads
         ctx.doubt(names, "%s %s a face that may move with it, and the copy cannot follow that" % (_name(item), what))
@@ -370,7 +389,8 @@ def _round_face_axis(ctx, item, ref, what):
 
 def _edge_shift(ctx, item, points, direction, what):
     found = locate(ctx, points[0], True)
-    if found is None:
+    if found is None or isinstance(found, RevolvePlace):
+        # A revolve's edges are circles: how one point on a circle moves is not how a plane or axis built on it moves.
         ctx.doubt(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
                   % (_name(item), what))
         return None

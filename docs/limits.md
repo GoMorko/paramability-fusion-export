@@ -49,6 +49,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   body along the extrude. Give the extrude a distance or end it on a face to keep these sizes unmarked.
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
+- A shell, round or chamfer that picks a face or an edge made by a revolve follows the outline, the axis and the angle
+  of the revolve: the open top of a cup and a round on its outer rim follow its height and its diameter. The range of
+  a size stops before a picked side of the outline would shrink to nothing, and before a revolve that does not turn a
+  full circle would no longer reach the picked place. These picks are not followed: a pick on an end face of a
+  revolve that does not turn a full circle, a pick on the inner walls a shell leaves (the inner rim of a cup), a pick
+  where the revolve meets a step made before it, and a pick that lies on two sides of the outline at once. When sizes
+  move the face under such a pick, the pick keeps its place and the sizes the steps before it use are marked "may give
+  unexpected results". Picks on an intersect revolve, and on a revolve to two sides whose angle before the sketch
+  follows a size, do not follow sizes either.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
   read) leaves the revolve out of the copy; the reason says which of these it is.
 - A revolve or pattern axis, a mirror or split plane, or a pattern direction of the part that the copy keeps where it

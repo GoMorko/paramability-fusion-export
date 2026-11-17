@@ -10,6 +10,7 @@ from . import added_bounds, follow, meets_part
 from .end_caps import Cap, EndCaps
 from .offset_faces import MovedFaces
 from .picks import face_points
+from .revolve_placer import RevolvePlacer
 from .shells import OutsideShell, Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
@@ -74,7 +75,25 @@ class ShellMaker:
             ctx.add_placer(OutsideShell(self.thickness, ctx.placers, step_id, wall))
             return
         opened = [follow.locate(ctx, p) for p in face_points(self.faces)]
-        ctx.add_placer(Shell(self.thickness, ctx.slabs, [o for o in opened if o is not None]))
+        turned = [placer for placer in ctx.placers if isinstance(placer, RevolvePlacer)
+                  and placer.combine in ("new", "add")]
+        ctx.add_placer(Shell(self.thickness, ctx.slabs, [o for o in opened if o is not None], turned,
+                             any(o is None for o in opened)))
+
+
+class RevolveMaker:
+    """A revolve step: `turn` is the `revolve_placer.Turn` of its written outline and axis. The steps written before
+    it are kept, to tell where its faces meet theirs. An intersect gets no placer: the faces it keeps can lie on the
+    part as well."""
+
+    def __init__(self, turn):
+        self.turn = turn
+
+    def make(self, ctx, step_id, step):
+        combine = step.get("combine", "add")
+        if combine == "intersect":
+            return
+        ctx.add_placer(RevolvePlacer(step_id, step.get("label") or "a revolve", self.turn, ctx.placers, combine))
 
 
 class MovedFacesMaker:
