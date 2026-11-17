@@ -855,3 +855,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (see RB1). `body_changed` must not show for a design that came back: a difference with no other change is at most
     `body_unconfirmed`. When a flip was brought back, `probe.recovery.attempts` in `report.json` lists each attempt
     with the row and the values set, and the attempt that brought the triangle back has `back: true`.
+74. CH5, two components with steps of the same name. Add a user parameter `Width` = 12 mm. Make component Box and
+    activate it. Sketch a rectangle of `Width` x 20 mm on the XY plane, extrude it 10 mm up as a new body, and chamfer
+    the four top edges by 4 mm in one Chamfer step (Fusion names it Chamfer1). Activate the top level, make component
+    Other and activate it. Sketch a 30 x 30 mm rectangle from (50, 0) on the XY plane, extrude it 10 mm up as a new
+    body, and chamfer its four top edges by 1 mm (Fusion also names it Chamfer1, in its own component). Fusion cannot
+    build the chamfer of Box when `Width` is below 8 mm.
+    Export: pick the Box body and tick `Width`; leave its range as the add-in gives it (6 to 24 mm). Expect the range
+    of `Width` to start at a value from 8 to 12 mm, with the reason "Fusion did not rebuild the design at ...
+    (Chamfer1)". In `report.json`, each entry of `probe.motion.spans.Width.failed` has a third number: the timeline
+    position of the chamfer of Box (the `index` of that item in `capture.items`, not of the chamfer of Other). The
+    state of that try in `probe.states` has `failed_at` with the same number. Afterwards the design is as before.

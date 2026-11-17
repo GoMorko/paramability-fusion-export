@@ -3,12 +3,13 @@ the copy follows makes a different outline, and where the part came apart into s
 
 `built_ranges` cuts a free size's range on each side to the farthest value that built, kept the outline and stayed in
 one piece, since a form should not offer a value the design cannot take. Only a failure in a step the part is built
-from counts (`part_step`). A try where such a step showed a new warning counts as one that did not build (the probe
-keeps it in `Motion.spans` `failed`, and in `warned` too): Fusion may have built another shape there than the copy. Where a sketch the copy follows makes a different outline (`Motion.spans` `kept`,
-`probe.build.outline_windows`), the range stops at the farthest value tried that kept it, and where Fusion built the
-part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at the farthest value tried that kept it in
-one. These are facts of the tries, so the recipe translator and the probe both read them here. An end the person typed
-is kept.
+from counts (`part_step`, by the step's timeline position, since names repeat across components). A try where such a
+step showed a new warning counts as one that did not build (the probe keeps it in `Motion.spans` `failed`, and in
+`warned` too): Fusion may have built another shape there than the copy. Where a sketch the copy follows makes a
+different outline (`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried
+that kept it, and where Fusion built the part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at
+the farthest value tried that kept it in one. These are facts of the tries, so the recipe translator and the probe both
+read them here. An end the person typed is kept.
 """
 from ..geometry.tolerances import SAME_SIZE
 from ..params.size_table import Cut
@@ -16,17 +17,43 @@ from ..sketch_values import coverage
 
 
 def part_step(capture):
-    """A test for the step names (`Motion.spans` `failed`) of timeline items the part is built from: items of the
-    target's component and the steps that made a tool body of a Combine. A name that also belongs to an item outside
-    those, or to no item, is not the part's. A failure with no step name (the design did not recompute at all), or
-    without a capture, counts for the part."""
+    """A test `mine(step)` for a step that failed or showed a new warning in a try (`Motion.spans` `failed`): True when
+    it is a timeline item the part is built from: an item of the target's component, a step that made a tool body of
+    a Combine, or an item with `body_states`. `step` is `(position, name)`, or a name alone as records written before
+    positions were kept give it.
+
+    Fusion names steps per component, so a name such as "Chamfer1" can belong to the part and to another component
+    at once. A step with a timeline position is judged by that position (the capture item `index`). A name alone, or
+    a position that no capture item has, counts as the part's when an item the part is built from has that name, also
+    when an item outside the part has it too: a doubt cuts the range, it never keeps a value Fusion could not build. A
+    failure with no step (the design did not recompute at all), or without a capture, counts for the part."""
     if capture is None:
         return lambda step: True
-    mine, other = set(), set()
+    mine_at, known_at, mine_names = set(), set(), set()
     for item in capture.get("items") or ():
         owned = item.get("in_target_component") or item.get("helper_of") or item.get("body_states")
-        (mine if owned else other).add(item.get("name"))
-    return lambda step: not step or (step in mine and step not in other)
+        at = item.get("index")
+        if type(at) is int:
+            known_at.add(at)
+            if owned:
+                mine_at.add(at)
+        if owned:
+            mine_names.add(item.get("name"))
+
+    def mine(step):
+        at, name = step if isinstance(step, (list, tuple)) else (None, step)
+        if not name and at is None:
+            return True
+        if type(at) is int and at in known_at:
+            return at in mine_at
+        return name in mine_names
+    return mine
+
+
+def tried_step(entry):
+    """`(position, name)` of the step of a `Motion.spans` `failed` entry: `[value, name]`, or `[value, name,
+    position]` when the try gave the step's timeline position."""
+    return (entry[2] if len(entry) > 2 else None, entry[1])
 
 
 def _cut_past(table, entry, span, tries):
@@ -50,7 +77,7 @@ def failure_cut(table, entry, span, mine):
     size changed (`span` as `Motion.spans`), past the farthest value that built; `mine(step)` says whether a failed
     step counts (`part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
     behind each cut end."""
-    return _cut_past(table, entry, span, [(value, step) for value, step in span.get("failed") or () if mine(step)])
+    return _cut_past(table, entry, span, [(f[0], f[1]) for f in span.get("failed") or () if mine(tried_step(f))])
 
 
 def split_cut(table, entry, span):
@@ -100,7 +127,7 @@ def built_ranges(table, motion, capture=None):
         if not span or not size or "min" not in size:
             continue
         low, high, found = failure_cut(table, e, span, mine)
-        warnings = {tuple(w) for w in span.get("warned") or ()}
+        warnings = {(w[0], w[1]) for w in span.get("warned") or ()}
         warned = {side: f for side, f in found.items() if tuple(f) in warnings}
         found = {side: f for side, f in found.items() if side not in warned}
         kept_low, kept_high, changed = outline_cut(table, e, span)

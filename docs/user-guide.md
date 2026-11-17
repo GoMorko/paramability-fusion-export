@@ -135,7 +135,9 @@ also tries the values between them, halving up to four times, so the last value 
 value past one that did not build is not tried at all, since the range stops before it anyway. On a
 side where Fusion did not rebuild, the range on the form stops at the last value that built, unless you typed that end
 in the dialog or the failing step belongs to another component than the part; on a side the tries did not reach, the
-size says "it was followed between A and B". Each cut range has one line in the result window ("range cut" with the
+size says "it was followed between A and B". Steps in different components can have the same name (two components
+can each have a "Chamfer1"); the add-in tells them apart by their place in the timeline, so a failing step of the part
+still stops the range. Each cut range has one line in the result window ("range cut" with the
 value and the step where Fusion did not rebuild or showed a warning), a reason in `report.json` (`sizes.cut`) and the same reason in the
 file's `cuts` list, where Paramability shows it as a quiet note next to the size, not as a warning. In a file with several bodies a size that more than one body
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at

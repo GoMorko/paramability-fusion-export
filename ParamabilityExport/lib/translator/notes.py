@@ -44,12 +44,12 @@ def _nearest_tries(span, now, kinds=("failed", "changed", "split")):
     `Motion.spans`: the values that did not rebuild (`failed`, `broke` true, `name` the step; `_WARNED` for a step
     that showed a new warning there), that changed an outline (`changed`, `name` the sketch) or that left the part in
     several pieces (`split`, `broke` None, `name` the number of pieces)."""
-    warned = {(v, name) for v, name in span.get("warned") or ()}
+    warned = {(v, name) for v, name, *_ in span.get("warned") or ()}
     out = []
     for side in (-1, 1):
         seen = [(v, name, _WARNED if broke is True and (v, name) in warned else broke)
                 for key, broke in _TRY_KINDS if key in kinds
-                for v, name in span.get(key) or () if (v - now) * side > 0]
+                for v, name, *_ in span.get(key) or () if (v - now) * side > 0]
         if seen:
             out.append(min(seen, key=lambda f: abs(f[0] - now)))
     return out

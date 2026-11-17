@@ -729,10 +729,11 @@ full example.
    Fusion without that call gets them one at a time and a `design.computeAll`. The row
    fails when Fusion refuses the expression, when the rebuild raises or reports failure, or when an item before the
    marker goes into error that was fine in the baseline. After one change, a step in error is judged after one full
-   recompute, since that change rebuilds only the steps it touches. The first new item in error is the "failed step"
-   of the row. Then it reads the steps in warning (`apply.new_warnings`). A new warning on a step the part is built
-   from goes to the result (`warned`). A new warning on another step does not, but the job notes it, for the check
-   before the next row.
+   recompute, since that change rebuilds only the steps it touches. The error of the row (`RowBuildError.detail`)
+   lists the new items in error: `items` has their names and `at` has their timeline positions, in the same order.
+   Then it reads the steps in warning (`apply.new_warnings`). Each step in warning is a pair: its timeline position
+   and its name. A new warning on a step the part is built from goes to the result (`warned`). A new warning on
+   another step does not, but the job notes it, for the check before the next row.
 7. For a probe row there is no STEP file (`"step": False`). The step callback reads the probe state instead
    (`ProbeRun._export`). A row with a STEP file (Export size choices) is recomputed in full after the change, and
    judged by that recompute, before its STEP is written.
@@ -2541,7 +2542,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `tried_ranges.py`: the range cuts that come from the tries of the size probe. `built_ranges` cuts the range of a
   free size on each side, to the farthest value that Fusion rebuilt (`failure_cut`), that kept each followed outline
   (`outline_cut`) and that kept the part in one piece (`split_cut`). Only a failure in a step that the part is built
-  from counts (`part_step`). An end that the person typed is not cut. The recipe translator cuts its size table with
+  from counts (`part_step`). `part_step` identifies the step by its timeline position, because two components can
+  have steps with the same name. A record without positions (an older version wrote it) uses the name: a name that
+  a step of the part has counts as the part's. An end that the person typed is not cut. The recipe translator cuts its size table with
   `built_ranges` before the walk, and so does the export of several parts (`export_plan/pipeline/parts.py`). The probe
   uses the same cuts to find a size that kept no value other than its value now (`probe/build.py`,
   `outline_windows`).
@@ -3065,7 +3068,8 @@ not a reason to drop it (see 3.2).
 | nearer | 68.75 | half way between 65 and 72.5 | builds |
 | (none) | | 68.75 and 72.5 are within a tenth of the way (`BISECT_GAP`) | stop |
 
-The probe keeps the span of `Width`: `low` 20, `high` 68.75, and `failed` `[[80, "Fillet2"], [72.5, "Fillet2"]]`.
+The probe keeps the span of `Width`: `low` 20, `high` 68.75, and `failed` `[[80, "Fillet2", 14], [72.5, "Fillet2",
+14]]`. The third number is the timeline position of Fillet2 (here 14).
 
 The translator (`tried_ranges.built_ranges`, `failure_cut`) then cuts the range to 20 to 68.75. The reason comes from
 `notes.cut_reason`:
@@ -3082,8 +3086,24 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 
 #### The rules around the cut
 
-- Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component, or a step
-  that built a tool body. A failure in another component cuts nothing.
+- Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component,
+  a step that built a tool body, or an item with `body_states`. A failure in another component cuts nothing.
+- `part_step` identifies a step by its timeline position, not by its name. Fusion names steps for each component.
+  Thus "Chamfer1" can be a step of the part and also a step of another component. A test by name cannot tell these
+  two steps apart. The rows reader gives the position of each step in error or in warning
+  (`DesignParameterStore.error_entries`, `warning_entries`: the index of `Timeline.item`). The position goes into
+  `RowBuildError.detail` (`at`), into the `warned` list of the row, into `ProbeState.failed_at` and into the
+  `Motion.spans` entries (`[value, step, position]`). The capture item `index` is the same timeline position.
+  Thus `part_step` compares the position with the items that the part is built from.
+- A row can put more than one step into error. `SizeProbe.add_states` keeps the first step in error that the part is
+  built from as `failed`. When no such step is in error, it keeps the first step in error. Thus an error in another
+  component that comes first in the timeline does not hide an error in the part.
+- Records that older versions wrote (`report.json` states and motion files) have the step name only. For these
+  records, `part_step` counts a name as the part's when an item that the part is built from has that name. This is
+  also true when an item of another component has the same name. A position that no capture item has gets the same
+  name test. This rule cuts more ranges, never fewer. A wrong cut removes some values from the form. A missing cut
+  offers values at which Fusion does not build the part.
+- The names stay in all records, for the text that the person reads.
 - A row that Fusion builds can still be wrong. A step can show a warning: for example, a revolve whose outline crosses
   its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
   counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
@@ -3092,11 +3112,12 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   probe, which the runner gets). When such a step reads in warning after a rebuild of only the changed steps, the
   design is recomputed in full once and read again, as for errors. A step that is in error after that recompute makes
   the row a row that did not build. A warning on any other step costs no recompute. The result of the row then has
-  `warned`, the names of those steps. The trim turns some timeline items off for the tries, and these items show no
+  `warned`, the position and the name of each of those steps. The trim turns some timeline items off for the tries, and these items show no
   warning while they are off. Thus, when the items come back on before the discovery rows, the runner measures the
-  baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
-  of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
-  run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
+  baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count.
+  `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first of those steps that
+  the part is built from, `failed_at` its position, and `warned` true. Thus the rows nearer to the value now and the
+  halving run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
   the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
   since Fusion shows a warning on Revolve1 at 12.5." (`Cut.warned`, `notes.warned_why`). A warning on a step of
   another component changes nothing.
@@ -5341,8 +5362,8 @@ nothing in the part changed.
 | Key | Meaning |
 | --- | --- |
 | `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
-| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
-| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error that the part is built from when it did not build, else the first step in error), `failed_at` (the timeline position of that step; not in records of older versions), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, `items` with the names of the steps and `at` with their timeline positions). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
 | `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
 | `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
 | `motion` | The motion file (below). |
@@ -5360,7 +5381,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step, position]`; `[value, step]` in records of older versions or when Fusion gave no position), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |
@@ -5819,7 +5840,9 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    - another text: a recipe rule (a taper near 45 degrees, an angle near zero, a length that would pass its start, a coil
      whose wire would touch the axis).
 2. For a failure: look at `probe.motion.spans[<Fusion name>]`: `low`, `high` and `failed`. Check the step named in
-   `failed`. Is it a step of the part? (Only those cut.) Set the same value in Fusion by hand and see if that step
+   `failed`. Is it a step of the part? (Only those cut.) The third number of the entry is the timeline position of the
+   step. Find the capture item with that `index`. Its `in_target_component` tells you if it is a step of the part.
+   Do not go by the name: another component can have a step with the same name. Set the same value in Fusion by hand and see if that step
    fails. If Fusion really fails there, the cut is right.
 3. Count the nearer rows. The probe has at most 24 nearer rows per export and 64 rows in all. With many sizes, some
    get only one nearer try. Then the cut end can be far from the real limit. Untick sizes you do not need, or type the

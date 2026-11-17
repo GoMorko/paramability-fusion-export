@@ -15,9 +15,11 @@ from lib.probe.state import ProbeState, as_states
 class ReportFormTest(unittest.TestCase):
     def test_a_state_writes_its_keys_in_order_and_only_the_report_parts_of_its_reads(self):
         read = {"sketches": {"a": 1}, "box": {"min": [0, 0, 0]}, "target": True}
-        state = ProbeState({"w": 2.0}, built=False, failed="Fillet1", start=read, put_back=read, again=True)
+        state = ProbeState({"w": 2.0}, built=False, failed="Fillet1", failed_at=7, start=read, put_back=read,
+                           again=True)
+        self.assertEqual(ProbeState.from_json(state.json()).failed_at, 7)
         self.assertEqual(json.dumps(state.json()),
-                         '{"values": {"w": 2.0}, "built": false, "failed": "Fillet1", "again": true, '
+                         '{"values": {"w": 2.0}, "built": false, "failed": "Fillet1", "failed_at": 7, "again": true, '
                          '"start": {"sketches": {"a": 1}, "box": {"min": [0, 0, 0]}}, '
                          '"put_back": {"sketches": {"a": 1}, "box": {"min": [0, 0, 0]}}}')
         self.assertEqual(json.dumps(ProbeState(read=read, e0=True).json()),

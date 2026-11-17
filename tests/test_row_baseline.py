@@ -170,7 +170,7 @@ class WarningRowTest(unittest.TestCase):
 
     def test_a_step_that_warns_only_at_the_try_is_named(self):
         result = self.run_try(lambda exprs: [(4, "Revolve1")] if exprs["w"] != "5 mm" else [])
-        self.assertEqual(result.get("warned"), ["Revolve1"])
+        self.assertEqual(result.get("warned"), [(4, "Revolve1")])
         self.assertEqual(result["values"], {"w": 7.0})
 
     def test_a_warning_the_design_had_before_the_tries_is_not(self):

@@ -7,6 +7,7 @@ from ...package.text import clip
 from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, same_shape, series
 from ...probe.state import ProbeState
 from ...timing import trail
+from ...design_edit.apply import as_step, detail_steps
 from ...design_model.tried_ranges import part_step
 from ...sketch_values.motion import SHAPE, UNREAD
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
@@ -125,7 +126,9 @@ class SizeProbe:
         as a row that did not build, with the number of pieces: the app cannot build the part there. A row where a
         step the part is built from shows a new warning (the result's `warned`, `tried_ranges.part_step`) is kept
         as a row that did not build too, with that step: Fusion may have built something else there than the copy
-        would, so the ranges stop before it as before a step in error."""
+        would, so the ranges stop before it as before a step in error. A row in error keeps the first step in error
+        that the part is built from (the first step in error when none is). Each step is kept with its timeline
+        position (`ProbeState.failed_at`), since another component can have a step of the same name."""
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
             more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
@@ -133,15 +136,19 @@ class SizeProbe:
             kept = {"start": start if isinstance(start, dict) else None,
                     "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
             apart = None if result.get("error") else pieces.came_apart(read, self.e0)
-            warned = [name for name in result.get("warned") or () if self.counts_warning(name)]
+            warned = [step for step in map(as_step, result.get("warned") or ()) if self.counts_warning(step)]
             if result.get("error"):
                 detail = result.get("detail") or {}
-                state = ProbeState(values or {}, built=False, failed=(detail.get("items") or [""])[0], **kept)
+                steps = detail_steps(detail)
+                at, name = next((s for s in steps if self.counts_warning(s)), steps[0] if steps else (None, ""))
+                state = ProbeState(values or {}, built=False, failed=name, failed_at=at, **kept)
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
             elif warned:
-                state = ProbeState(values or {}, built=False, failed=warned[0], warned=True, **kept)
-                self.dropped.append({"name": result.get("name"), "error": WARNED_TRY % warned[0],
-                                     "detail": {"reason": "new_warnings", "items": warned}})
+                at, name = warned[0]
+                state = ProbeState(values or {}, built=False, failed=name, failed_at=at, warned=True, **kept)
+                self.dropped.append({"name": result.get("name"), "error": WARNED_TRY % name,
+                                     "detail": {"reason": "new_warnings", "items": [n for _, n in warned],
+                                                "at": [a for a, _ in warned]}})
             elif apart:
                 state = ProbeState(values or {}, built=False, pieces=apart, **kept)
                 self.dropped.append({"name": result.get("name"), "error": pieces.APART_ERROR % apart})
@@ -150,8 +157,8 @@ class SizeProbe:
             self.states.append(state)
 
     def counts_warning(self, step):
-        """True when a new warning on the timeline item named `step` makes a row count as not built: a step the part is
-        built from (`tried_ranges.part_step`)."""
+        """True when a new warning on the timeline item `step` (`(position, name)`) makes a row count as not built: a
+        step the part is built from (`tried_ranges.part_step`)."""
         if self._mine is None:
             self._mine = part_step(self.capture)
         return self._mine(step)

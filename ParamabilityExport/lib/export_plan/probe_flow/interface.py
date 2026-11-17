@@ -15,8 +15,8 @@ class Probe(Protocol):
     probe_rows(sizes, extra), pair_rows, far_rows, far_pair_rows, nearer_rows, check_rows (sizes, room): the rows of
       each phase, in the order `ProbeRun.measure` asks for them.
     add_states(entries): the states of the rows run (`ProbeRun.probe_states`).
-    counts_warning(step): True when a new warning on the timeline item named `step` makes a row count as not built
-      (a step a part is built from, `tried_ranges.part_step`).
+    counts_warning(step): True when a new warning on the timeline item `step` (`(position, name)`) makes a row count
+      as not built (a step a part is built from, `tried_ranges.part_step`).
     note_recovery(record), note_stop(record, unrun), note_time_limit(record, unrun): what the runner did, for the
       report (`note_time_limit`: the time limit of the tries, and the rows it kept from running).
     time_left_out(): the sizes the time limit left without a try that built on its own.
