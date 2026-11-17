@@ -1,5 +1,6 @@
 """Apply size rows to a design and put the parameters back. Works on the design object it is given."""
 from ..design_edit.marker import at_end, put_back, read_marker
+from ..timing import trail
 from . import read_geometry as geo
 
 
@@ -192,6 +193,7 @@ class DesignParameterStore:
     current_expressions = saved_expressions
 
     def set_expression(self, name, expression):
+        trail.line("set %s = %s" % (name, expression))
         self.design.userParameters.itemByName(name).expression = expression
 
     def _make_value(self):
@@ -208,6 +210,7 @@ class DesignParameterStore:
         modify = getattr(self.design, "modifyParameters", None)
         if modify is None or not expressions:
             return False
+        trail.line("set %s" % ", ".join("%s = %s" % pair for pair in expressions.items()))
         try:
             params = self.design.userParameters
             found = [params.itemByName(name) for name in expressions]
@@ -224,9 +227,11 @@ class DesignParameterStore:
         return self.design.userParameters.itemByName(name).value
 
     def recompute(self):
+        trail.line("recompute: start")
         try:
             return self.design.computeAll()
         finally:
+            trail.line("recompute: end")
             self._keep_marker()
 
     def error_entries(self):

@@ -2,6 +2,8 @@
 (faces/floating.py, faces/added_bounds.py). A box is `(min, max)`, two [x, y, z] lists in mm. `UNKNOWN` stands for
 material whose box cannot be told.
 """
+import math
+
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from .end_caps import EndCaps

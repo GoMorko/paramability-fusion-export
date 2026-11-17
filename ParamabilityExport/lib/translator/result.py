@@ -183,3 +183,6 @@ class TranslateResult:
     refusal_stop: Optional[object] = None
     # When the copy stops: what a walk past the stop finds (`translate._diagnosis`), or None.
     after_stop: Optional[dict] = None
+    # When the copy stops on an error of the add-in in one step's handling (`walk.walk_items`): its traceback, for the
+    # log. None otherwise.
+    error_trace: Optional[str] = None

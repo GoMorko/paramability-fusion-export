@@ -313,8 +313,11 @@ class MarkerAwareFeature(Obj):
         return Coll(self._elements)
 
 
-def source_feature(index):
-    return Obj("fusion::ExtrudeFeature", timelineObject=Obj(index=index))
+def source_feature(index, **kw):
+    """A one-sided extrude cut, an input whose pattern elements may have their faces read."""
+    kw.setdefault("extentType", "OneSideFeatureExtentType")
+    kw.setdefault("operation", "CutFeatureOperation")
+    return Obj("fusion::ExtrudeFeature", timelineObject=Obj(index=index), **kw)
 
 
 def rectangular(**kw):

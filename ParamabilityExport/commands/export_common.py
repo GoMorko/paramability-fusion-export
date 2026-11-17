@@ -18,6 +18,7 @@ from ..lib.fusion_reader.capture import MarkerError
 from ..lib.fusion_ui.log import error_box, log, message_box
 from ..lib.fusion_ui.progress import ProgressDialog
 from ..lib.package.caps import PackageCapError
+from ..lib.timing import trail
 
 _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -89,7 +90,8 @@ def run_guarded(design, marker, work, unrestored=lambda: (), settle=None):
     """Run `work()` and return its value, or None when the export stopped. Each way it stops gets a plain message,
     and the timeline marker is moved back to `marker` at the end. `unrestored()` names the parameters that could not be
     put back, for an export that does not check this itself; `settle()`, when given, runs once the parameters are back
-    (`settle_steps`)."""
+    (`settle_steps`). The export trail (`timing.trail`) covers the whole run."""
+    trail.start("export")
     try:
         return work()
     except ExportCancelled:
@@ -104,6 +106,7 @@ def run_guarded(design, marker, work, unrestored=lambda: (), settle=None):
             settle()
         if marker is not None and not put_back(design.timeline, marker):
             message_box(not_put_back_message(marker), error=True)
+        trail.end("export")
     return None
 
 

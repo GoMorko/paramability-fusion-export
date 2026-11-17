@@ -26,6 +26,7 @@ side for the translator.
 from ..capture_model import step_kinds, tool_items
 from ..capture_model.gap_picks import pick_records
 from ..design_edit.marker import read_marker
+from ..timing import trail
 from . import read_geometry as geo
 from .capture import MarkerError, restore_marker
 
@@ -108,6 +109,7 @@ class _Marker:
         if self._at == position:
             return
         self.moves += 1
+        trail.line("reach: marker to %d" % position)
         geo.safe(lambda: setattr(self.timeline, "markerPosition", position), None)
         if geo.safe(lambda: self.timeline.markerPosition, None) != position:
             raise ReachReadError("The timeline marker could not be moved.")

@@ -100,6 +100,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   was measured odd and can become even inside its size range follows the sizes for a rectangular pattern (Fusion puts
   the extra copy of an even count ahead of the original, as seen in its exports); a circular one may give unexpected
   results at an even count, and so may a pattern whose tries show the copies elsewhere.
+- The add-in looks at the faces of each copy of a pattern only when the pattern repeats holes or one-sided extrudes
+  that make a new body, join or cut. For other patterns (a pattern that repeats a Combine, for one) Fusion can close
+  when the add-in asks for these faces. Without the faces, a circular pattern whose turn way cannot be told from
+  Fusion's other numbers is left out with "Which way this pattern turns its copies could not be read."
 - A path pattern is copied when its path is one straight line, one arc or one circle. On a line it becomes a row of
   copies along the line. On an arc or a circle the copies must turn with the path, and it becomes a pattern round the
   centre of the arc. Its count and distance can follow sizes. The copies must stay on the path: when a size can move
@@ -354,4 +358,4 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.14.0. It writes recipe version 17 when a step needs it (a scale, an outward or closed shell, a draft with two angles, a press pull of a round face, a thin wall along an open line, or a join through all; a thread then also carries its pitch diameter). Version 17 needs Paramability 1.7.0 or newer. Version 0.13.0-preview.13 is the last version that writes at most recipe version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. The hand checks in `docs/hand-checks.md` list what was checked in Fusion.
+- This is version 0.14.1. It writes recipe version 17 when a step needs it (a scale, an outward or closed shell, a draft with two angles, a press pull of a round face, a thin wall along an open line, or a join through all; a thread then also carries its pitch diameter). Version 17 needs Paramability 1.7.0 or newer. Version 0.13.0-preview.13 is the last version that writes at most recipe version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. The hand checks in `docs/hand-checks.md` list what was checked in Fusion.

@@ -14,6 +14,7 @@ Fusion is reached only through `PartsPort`. The design is put back on every way 
 in the single body export.
 """
 import os
+import traceback
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -242,11 +243,14 @@ class PartsPipeline:
         is the timing phase the time is added to."""
         try:
             with self.timing.span(phase):
-                return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion,
-                                         timer=self.timing)
+                result = translate_capture(self.captures[index], self.request.up_axis, self._part_table(index),
+                                           motion, timer=self.timing)
         except Exception as exc:
-            self.port.log("translation of %s failed: %r" % (self.names[index], exc))
+            self.port.log("translation of %s failed: %r\n%s" % (self.names[index], exc, traceback.format_exc()))
             return None
+        if getattr(result, "error_trace", None):
+            self.port.log("translation of %s stopped on an error:\n%s" % (self.names[index], result.error_trace))
+        return result
 
     def _with_reach(self, index, first, motion):
         """The translation of part `index` again with the `reach` of the steps `first` left out. The capture of the

@@ -18,6 +18,7 @@ cannot be read keeps `read_error`, and items past a limit keep `helper_unread` w
 timeline marker.
 """
 from ..capture_model import lineage, tool_items
+from ..timing import trail
 from ..timing.timer import span_on
 from . import read_geometry as geo
 from .parameters import list_model_parameters
@@ -29,6 +30,7 @@ UNREADABLE = "the tool body or the place of its component could not be read"
 def _tool_context(design, timeline, anchor, tool, timer=None):
     """`(ReadContext, body)` of the tool body with the marker just before its `anchor` item, or `(None, reason)`. The
     context shares the capture's `timer`."""
+    trail.line("tool body: marker to %d" % anchor["index"])
     with span_on(timer, "marker_moves_helper"):
         timeline.markerPosition = anchor["index"]
     body = geo.safe(lambda: geo.find_native(design, tool.get("token") or ""), None)
@@ -134,6 +136,7 @@ class _Pass:
         """Rolls to each item once and reads its feature (steps of other components) and the states of its bodies."""
         starts = set(jobs)
         for position in sorted(starts | {i + 1 for i in starts}):
+            trail.line("tool steps: marker to %d" % position)
             with span_on(self.ctx, "marker_moves_helper"):
                 self.timeline.markerPosition = position
             if position - 1 in jobs:

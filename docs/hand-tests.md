@@ -2096,6 +2096,14 @@ capture in `report.json`.
   `totalAngle` as an angle; `isSymmetricInDirectionOne`, `isSymmetricInDirectionTwo`, `isSymmetric`.
 - `patternElements` read with the marker just after the item: `PatternElement.id`, `isSuppressed`, `transform`. The
   first element is the identity; compare each origin with the lattice step. Whether suppressed copies are listed.
+- `PatternElement.faces` can crash Fusion itself (the whole app closes, no Python error). Seen in Fusion 2706 on a
+  rectangular pattern of 4 features with a Combine among them (7 copies): it crashed on the first sampled copy,
+  before any face was read. `Feature.faces` of the same Combine, read with the marker before the pattern, did not
+  crash. Read live without a crash: patterns of holes (T19a, T19b, T50, CP1) and of one-sided extrude cuts (T58).
+  The reader reads `PatternElement.faces` only when every input of a pattern of features is a hole or a one-sided
+  extrude that makes a new body, joins or cuts (`read_repeat.element_faces_skipped`); else the capture has
+  `faces_skipped`. The list is `pattern_faces` in the step kind table (`capture_model/step_kinds.py`). Before you
+  add a type to it, read the faces of a pattern of that type live.
 - `suppressedElementsIds` as a list of integers.
 - `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.

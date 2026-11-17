@@ -88,6 +88,11 @@ class FloatingJoinTest(unittest.TestCase):
                                    height=6.0))
         self.assertEqual(join_verdict(result)["verdict"], "translated")
 
+    def test_a_tapered_slab_of_the_copy_is_bounded_by_its_lean(self):
+        # The plate of `extrude_taper` leans 5 degrees over its 10 mm: a join at 50 mm floats, one on top stays.
+        self.assertEqual(join_verdict(translate(capture(base="extrude_taper")))["note"], floats_reason())
+        self.assertEqual(join_verdict(translate(capture(base="extrude_taper", join_z=10.0)))["verdict"], "translated")
+
     def test_a_join_away_from_the_part_stays_when_no_step_was_left_out(self):
         result = translate(capture(gap=False))
         self.assertEqual(join_verdict(result)["verdict"], "translated")

@@ -39,6 +39,10 @@ CHAMFER_SETS = "chamferSets"  # the sets of a chamfer
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
 FINISH = "finish"       # copied as its own step with its pick points moved to each copy
 
+# `StepType.pattern_faces`: when the reader may read `PatternElement.faces` of a pattern of features of the type.
+PATTERN_FACES_ALWAYS = "always"
+PATTERN_FACES_ONE_SIDED = "oneSided"  # a one-sided extrude that makes a new body, joins or cuts
+
 
 @dataclass(frozen=True)
 class StepType:
@@ -72,6 +76,8 @@ class StepType:
       the part nor which bodies exist, so the gap's `finishing` flag is true (`translator/gaps/finishing.py`).
     facts: ROUND_SETS or CHAMFER_SETS when a shared step reader gives facts of the type from its data alone
       (`design_model/design.py`, `FACT_READERS`).
+    pattern_faces: PATTERN_FACES_ALWAYS or PATTERN_FACES_ONE_SIDED when live checks read `PatternElement.faces` of a
+      pattern of features of the type without a crash (`fusion_reader/read_repeat.py`); None when that is not proven.
     """
 
     name: str
@@ -91,6 +97,7 @@ class StepType:
     repeats_sources: bool = False
     finishing: str = None
     facts: str = None
+    pattern_faces: str = None
 
 
 @dataclass(frozen=True)
@@ -129,9 +136,10 @@ class RecipeKind:
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE, PATH)),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE, PATH),
+             pattern_faces=PATTERN_FACES_ONE_SIDED),
     StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
-    StepType("HoleFeature", "hole", reader="read_hole", sketches=(HOLE_POINTS,)),
+    StepType("HoleFeature", "hole", reader="read_hole", sketches=(HOLE_POINTS,), pattern_faces=PATTERN_FACES_ALWAYS),
     StepType("ThreadFeature", "thread", reader="read_thread", finishing=FINISHING_UNMODELED),
     StepType("CombineFeature", "combine", reader="read_solid", reaches_bodies=True),
     StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS, facts=ROUND_SETS),

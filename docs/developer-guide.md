@@ -8,7 +8,7 @@ file. Paramability opens that file as a part. The part has sizes that come from 
 The guide is for a developer who knows Fusion as a user and knows Python. The developer did not write the add-in. The
 goal is that the developer can find and fix a problem alone.
 
-The guide describes the code as it is on `main` of the add-in repository, version 0.14.0.
+The guide describes the code as it is on `main` of the add-in repository, version 0.14.1.
 The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:
@@ -982,6 +982,21 @@ The handler answers with a `StepResult` (the recipe steps) or a `Refusal` (a rea
 - A `StepResult` with steps is written. The verdict is `translated`, or `translatedWithNote` when the handler or the
   walk added a note. A step that Fusion shows with a warning gets a note with Fusion's message.
 
+An error that the add-in did not expect can occur while the walk handles an item (a bug in a handler, for example).
+The walk does not let this error stop the whole translation. It stops the copy at that item, as for any other stop:
+
+- The verdict of the item is `unsupported`. The reason is "This step could not be copied because of an error in the
+  add-in. Please report it." The cause is `addinError` (see 1.9.3), so the refusal gets the hint that tells the person
+  which files to send.
+- The walk removes the verdicts and the notes that it added for that item before the error.
+- `result.error_trace` holds the traceback. The pipeline writes it to the log (4.8) and so to the export trail.
+- `after_stop` (1.9.4) walks past the item, as after any stop, so the report also lists the steps after it.
+- In the walk of a tool body (1.9.3), the walk does not catch the error. The error goes to the walk of the part, and
+  the copy stops at the Combine that takes the tool. Thus an error in a tool body never becomes a gap.
+
+The steps that the walk wrote before the error are not used: a stop gives a fixed shape and a report, never a recipe
+that could be wrong.
+
 One check runs after the handler. When the handler wrote an extrude join that meets only material of earlier gaps,
 the walk leaves the step out instead (`faces/floating.py`, "It sits on a step that was left out", see 1.9.3).
 
@@ -1197,6 +1212,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
 | `afterGap` | a step that picks faces of a gap, repeats a gap, sits on a floating join, or extrudes through all to the far side of a part that a gap may change | Fix the step it builds on first. |
+| `addinError` | a step whose handling raised an error that the add-in did not expect (a stop, 1.9.1) | Send the report and the file export-trail.log from the ParamabilityExport temp folder with it. |
 | `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
 
 A step that does not copy is told in the app's user guide page "Steps that do not copy yet". `tests/test_gap_hints.py`
@@ -1695,11 +1711,11 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), a region inside another (`region_inside`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). The volume checks take the data of the steps, not the timeline items: the caller reads the data through the shared layer (`design_model.design`). |
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
-| `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
+| `timing` | nothing | Stopwatch helpers, the `timing` block of `report.json`, and the export trail (`trail.py`, see 4.8). |
 | `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links do not read the data of a step. They get the measured references of the steps and the names of the parameters that can place an occurrence as plain values from `design_model/step_links.py`. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
-| `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
+| `design_edit` | `package`, `params`, `timing` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
 | `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `results`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
@@ -1708,7 +1724,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `orca_recipe`, `orca_translate`, `package`, `params`, `probe`, `results`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
 | `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
-| `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
+| `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package`, `timing` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
 | `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The three buttons, their flows and the panel. |
 
 Only `fusion_reader`, `fusion_ui` and `commands` use `adsk`. Everything else is pure Python and runs without Fusion.
@@ -2622,6 +2638,7 @@ Tests of the layout and of the order:
 | File | What it checks |
 | --- | --- |
 | `test_boundary.py` | The import table, the `adsk` rule and the private names (see 2.1). |
+| `test_undefined_names.py` | That every name a module of the add-in uses is bound: by an import, a definition, an assignment, a parameter or a builtin. It also refuses a star import. A missing import fails here, not only in Fusion when the line runs. |
 | `test_interfaces.py` | That the real classes, the shared fakes and both probes have every declared member, and that the pure code asks a store, a port or a probe only for a declared member. |
 | `test_put_back_order.py` | The order of the calls an export makes to put the design back, on every way it ends. |
 | `test_probe_row_schedule.py` | The row phases and the nearer and check rows of a probe or a group. |
@@ -4886,6 +4903,12 @@ Thus the add-in does not take the place of a copy from the transform alone. The 
    each element made (`PatternElement.faces`, the `faces` of the element). For each face, it writes the centroid
    (`BRepFace.centroid`, in mm) and the area (`BRepFace.area`, in mm2). It reads up to 32 faces of the original and
    up to 8 faces of each element. A list that cannot be read is null.
+   `PatternElement.faces` can crash Fusion itself: in Fusion 2706 it did for a rectangular pattern of features with a
+   Combine among its inputs. Thus the reader reads the faces of the elements only when the pattern is of features and
+   every input is a hole or a one-sided extrude that makes a new body, joins or cuts. These are the types that live
+   checks read without a crash. For any other pattern (also a pattern of bodies or of faces), the capture has
+   `faces_skipped: "unsafe inputs"` and the elements have no faces. The checks then work as for a copy without faces:
+   the other checks below still hold.
    Each face costs Fusion a measure. Thus, in a pattern with more than 12 kept copies, the reader reads the faces of
    12 kept copies only (`SAMPLED_ELEMENTS`): the first three, the last two, and copies spread evenly between them.
    A suppressed copy gets no faces. The checks below then prove the places of the sampled copies only. The wrong
@@ -5340,6 +5363,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
+| `PatternElement.faces` | `read_repeat.py` | Crashed Fusion 2706 itself (no Python error) on a rectangular pattern of features with a Combine among its inputs. The reader reads it only when every input is a hole or a one-sided extrude that makes a new body, joins or cuts (proven live); else `faces_skipped` (hand-tests "Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)"). |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `BRepBody.volume` | `probe_state.py` | Read at each try with the box (`volume_mm3`). Without it, a try does not show that the body stayed the same. |
@@ -5358,6 +5382,37 @@ put back that failed, a marker roll or suppression that failed, the reach read r
 parameters that could not be restored, steps that would not turn back on, a "Lighter on memory" call that stopped
 ("keeping the tries out of Undo stopped: ..."), and the full traceback of an unexpected error. An unexpected error also shows a
 message box with the traceback (`error_box`).
+
+The export trail (`lib/timing/trail.py`) is a second record, on disk, for a crash of Fusion. The log of Fusion is
+lost when Fusion closes suddenly. The trail is not lost. Its rules are:
+
+- The file is `export-trail.log` in the folder `ParamabilityExport` of the temp folder (`tempfile.gettempdir()`;
+  `%TEMP%` on Windows). `trail.path()` gives it.
+- `trail.session(title)` (or `start` and `end`) marks a session. `run_guarded` in `commands/export_common.py` runs
+  every export in a session. `_read_capture` in `commands/ExportForParamability/export_flow.py` runs every capture
+  read in a session, also the read of the dialog when the person picks a body. Only the outermost session empties
+  the file. Thus the file holds the last export, or the last read of the dialog when it came later.
+- The outermost session also turns on `faulthandler` with the trail file. When the process crashes, Python writes
+  the stack of each thread to the file. At the end of the session, `faulthandler` goes back to how it was.
+- `trail.line(text)` writes one line with the time. It calls `flush()` and `os.fsync()` before it returns, so the line
+  is on the disk when Fusion crashes in the next call. A line outside a session goes to the end of the file.
+- No call raises. When the file cannot be written, the trail stops and the export goes on.
+- The tests write the trail to a temp folder of their own (`tests/context.py` sets `trail.ROOT`).
+
+The lines come from these places:
+
+| Place | Lines |
+| --- | --- |
+| `fusion_ui/log.py`, `log` | each log line, after "log:" (also each traceback of `error_box`) |
+| `fusion_reader/capture.py` | each marker move, the start and the finish of each item (index, type, name), each call of a before or after reader (index, type), a reader that failed, the tool pass, the read of the sketch links and graphs, and the marker back |
+| `fusion_reader/helper_pass.py` | each marker move for the tool bodies of other components |
+| `fusion_reader/read_gap_reach.py` | each marker move of the reach read |
+| `fusion_reader/rows.py`, `DesignParameterStore` | the start and the end of each recompute, and each parameter value that it sets |
+| `design_edit/runner.py`, `RowExport` | each try (number, name, values) and the parameters set back before the next try |
+| `fusion_reader/step_export.py`, `export_body_step` | the start and the end of each STEP file |
+
+A line costs one write to the disk. The lines are short and come one or a few per Fusion call, so the cost is small
+next to the Fusion call itself.
 
 To debug code in Fusion: change the file, then in Scripts and Add-Ins click Stop and Run on the add-in. `stop` drops
 the add-in modules from Python's cache, so Run loads your change. Fusion can also attach a Python debugger (VS Code)
@@ -5383,6 +5438,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
 | Slow export | `timing.phases`; many `probe.states`, `probe.timeline.rolled: false`, high `try_seconds` | Each row rebuilds the whole timeline twice | checklist 4.10.5 |
 | Sizes marked "the tries ran out of time before this size was tried" | `probe.time_limit.hit: true` and `left_out`; `probe.motion.timed_out` | The time limit of the dialog was reached | raise the limit or untick sizes (1.8) |
 | A range stops with "the part comes apart into N separate pieces" | `sizes.cut`; `probe.states` with `pieces`; `probe.dropped`; `probe.motion.spans[...].split` | Copies of a pattern or a join no longer touch the part, or a cut cuts it in two | 1.8, "What a state holds"; 3.2 |
+| Fixed shape at a named step, "because of an error in the add-in" | `refusal` with `hint`; that item's verdict `unsupported` | A bug in the handler of that step, or of a step of a tool body when the step is a Combine (1.9.1) | the traceback in the log and in the export trail (4.8) |
 | A step left out with "Export again with this version of the add-in" | verdict `leftOut`; the gap has the hint | An export of an older add-in (before 0.10.6) | export again |
 | "<Part> stays a fixed shape in this file and does not change with this size." | `sizes.loose` of a `parts` report | A size also moves a part that stays a fixed shape | 1.10, "Several bodies" |
 

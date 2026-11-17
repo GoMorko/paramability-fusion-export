@@ -8,6 +8,7 @@ from tests import context  # noqa: F401
 from tests.orca_sized import fixture
 from tests.test_capture_reader import Coll, Obj, P, param
 from tests.test_capture_reader_finish import element as fake_element, read_pattern, rectangular as fake_rectangular
+from tests.test_capture_reader_finish import source_feature
 from tests.translator_helpers import left_out, load_capture, steps_of, verdict_of
 
 from lib.design_model.steps import pattern_places
@@ -160,7 +161,7 @@ class ReaderTest(unittest.TestCase):
         copies[0].faces = [face(1)]
         copies[1].faces = [Obj("fusion::BRepFace", centroid=P(999, 0, 0), area=0.5, assemblyContext=Obj(),
                                nativeObject=face(11))]
-        source = Obj("fusion::ExtrudeFeature", timelineObject=Obj(index=1), faces=Coll([face(1)]))
+        source = source_feature(1, faces=Coll([face(1)]))
         data = read_pattern("RectangularPatternFeature", copies,
                             **fake_rectangular(inputEntities=Coll([source])))
         self.assertEqual(data["source_faces"], [{"center": [1.0, 0.0, 0.0], "area": 50.0}])
@@ -168,6 +169,23 @@ class ReaderTest(unittest.TestCase):
                          [[{"center": [1.0, 0.0, 0.0], "area": 50.0}], [{"center": [11.0, 0.0, 0.0], "area": 50.0}],
                           None])
 
+
+    def test_element_faces_are_never_touched_when_an_input_is_not_proven_safe(self):
+        # PatternElement.faces crashed Fusion 2706 for a pattern of features with a Combine among its inputs.
+        class Untouchable(Obj):
+            @property
+            def faces(self):
+                raise AssertionError("PatternElement.faces was read")
+
+        def copies():
+            return [Untouchable("fusion::PatternElement", id=n, isSuppressed=False, transform=fake_element(n, (n, 0, 0))
+                                .transform) for n in range(3)]
+        combine = Obj("fusion::CombineFeature", timelineObject=Obj(index=1), faces=Coll([]))
+        symmetric = source_feature(1, extentType="SymmetricFeatureExtentType")
+        for inputs in ([source_feature(1), combine], [symmetric]):
+            data = read_pattern("RectangularPatternFeature", copies(), **fake_rectangular(inputEntities=Coll(inputs)))
+            self.assertEqual(data["faces_skipped"], read_repeat.UNSAFE_INPUTS)
+            self.assertEqual([e["id"] for e in data["elements"] if "faces" not in e], [0, 1, 2])
 
     def test_a_pattern_of_many_copies_has_the_faces_of_a_spread_sample_read(self):
         copies = [fake_element(n, (n, 0, 0)) for n in range(30)]

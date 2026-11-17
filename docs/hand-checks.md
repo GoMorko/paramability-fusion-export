@@ -47,6 +47,23 @@ with the last release: `health` and `probe.timeline` hold the same keys and valu
   before the export.
 - If something is off, use Edit, Undo once and see "When something looks wrong". With "Lighter on memory" ticked, Undo may not step back through the export: close the design without saving and open the version you saved before.
 
+### The export trail
+
+Model any small part with two user parameters that a sketch uses, for example a plate `Width` by `Depth`, 3 mm high.
+    Export: export it with both parameters ticked. While the result window is open, open
+    `%TEMP%\ParamabilityExport\export-trail.log`. It starts with "start: export" and ends with "end: export". It
+    lists "start item" and "finish item" for each timeline step, the marker moves, a "try" line for each size try with
+    its values, "recompute: start" and "recompute: end" pairs, and the "STEP file" lines. Pick another body in a new
+    dialog: the file then starts again with "start: read the steps". The export takes about as long as before.
+
+### A pattern that repeats a Combine
+
+Model a 60 x 40 x 5 mm plate. Extrude a 6 mm square post 8 mm up from its top face as a new body, combine (join) it
+with the plate, then cut a 3 mm hole through the post with a one-sided extrude cut. Make a rectangular pattern of
+features of the post extrude, the Combine and the cut: 3 copies 15 mm apart along X.
+    Export: export the plate with no parameters ticked. Fusion does not close. In `report.json` the pattern item has
+    `faces_skipped: "unsafe inputs"` and its elements have no `faces`. Afterwards the design is as before.
+
 ## When something looks wrong
 
 Open `report.json` from the export. The field layout is in `docs/capture-format.md`, section 6 ("Report and
