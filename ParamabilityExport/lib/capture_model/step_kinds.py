@@ -24,7 +24,7 @@ UNREAD = "unread"       # an item whose Fusion entity could not be read (type "n
 PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
-PATH = "path"           # data.path: the curves of one sketch a sweep follows
+PATH = "path"           # data.path: the curves of one sketch a sweep follows, or the open line of a thin extrude
 OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
 # When a missing step of a type only finishes surfaces (`StepType.finishing`).
@@ -129,7 +129,7 @@ class RecipeKind:
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE, PATH)),
     StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_thread", finishing=FINISHING_UNMODELED),

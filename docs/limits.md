@@ -132,8 +132,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
   These steps are left out of the copy (see "When a step cannot be copied"):
-  thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
-  have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
+  thin extrudes of an open line with arcs or curves, of several outlines, of an outline with holes, that go two ways,
+  reach to a face or have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
   a tilted or curved surface, extrudes that end on a tilted or curved surface with two sides, a taper or an offset
   past it, on such a face of another body or after a left out step, or on such a face that a size may move when no
   copied extrude made it, extrudes that end on a flat face that Fusion joins with the faces next to it (Chain Faces
@@ -315,6 +315,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the API does not say which of Fusion's side one and side two is which. Where Fusion keeps the corners of the wall
   sharp, the copy rounds them and says so. A later pick on the wall's faces is placed on earlier steps or its
   sizes may give unexpected results.
+- A thin extrude of an open line of straight lines (a fence, a divider, a rib along a plate) is copied with square
+  ends and sharp corners, as Fusion builds it. The wall thickness and the sizes that move the line are sizes. The side
+  of the wall is checked against the faces that Fusion made. When they do not show one side, the step is left out.
+  This can occur when a face of the wall merges with a face of the part (a wall flush with the edge of a plate). Draw
+  the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
+  leaves the step out. A range stops before a corner takes a whole line or two lines come too near.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures

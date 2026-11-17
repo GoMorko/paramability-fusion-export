@@ -65,7 +65,7 @@ can be.
 | Extrude, revolve or loft: new component | Copied | - | Copied | - | Both: the body it makes, with its sketch from the component that was active, placed through the assembly. A sketch of a component placed more than once is left out. A sweep made so is left out (its path stays in the other component). |
 | Extrude of a flat face of the part | Copied | - | Partly | Needs Orca | Paramability: follows when the face is the end of an earlier extrude without taper; else measured, with sizes marked. Orca: the face as it is now. |
 | Thin extrude: one closed outline | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: one way, no taper, no To object. Sharp wall corners are rounded, with a note. Orca: a rectangle or circle wall as two outlines. |
-| Thin extrude: open line | Left out | Yes, add-in only | Left out | Yes, add-in only | The app builds walls along an open line. Orca has a rib. |
+| Thin extrude: open line | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: straight lines drawn one after the other, one way or symmetric, no taper; square ends and sharp corners as in Fusion. The faces Fusion made must show the side of the wall. A line with arcs is left out. Orca has a rib. |
 | Thin extrude: several outlines, holes, two ways, To object, taper | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Revolve: full turn or angle | Copied | - | Copied | - | Orca: one outline without holes, the axis in the sketch plane. |
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
@@ -192,7 +192,8 @@ Sorted by how many printing projects it helps:
 
 1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
    Fillet and Full Round Fillet.
-2. Thin extrudes of an open line, Rib and Web (add-in only): walls, brackets and stiffeners.
+2. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), Rib and Web (add-in only):
+   walls, brackets and stiffeners.
 3. Box, Cylinder, Sphere, Torus and Pipe (add-in only), and sweeps that make a new component (add-in only).
 4. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
 5. Lofts through three or more outlines (add-in only), and lofts with rails or tangent ends (app change).

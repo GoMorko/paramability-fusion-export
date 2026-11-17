@@ -68,9 +68,11 @@ def prepare(data):
 
 
 def open_line_refusal(profiles):
-    """A Refusal for a profile input that is not a closed sketch outline (an open line comes back this way)."""
+    """A Refusal for a profile input that is not a closed sketch outline: an open line whose path was not read (a
+    capture of an older add-in reads it as entities without a path)."""
     if any(p.get("kind") == "other" and "loops" not in p for p in profiles):
-        return Refusal("A thin extrude of an open line is not copied yet.", cause=gap_hints.THIN_OUTLINE)
+        return Refusal("The open line of this thin extrude could not be read, so it is not copied.",
+                       cause=gap_hints.THIN_OUTLINE)
     return None
 
 

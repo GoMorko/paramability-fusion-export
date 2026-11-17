@@ -414,19 +414,21 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the inner diameter; for (c) and (d) which way the corners point (a corner toward +X, +Y or another way) and
     the side length; the body volume (Inspect > Properties); and in the timeline dialog (double click the feature)
     the values of Distance One and Distance Two. Say whether the section is centred on the path.
-40. T2-open, a thin extrude of an open line. Units mm, Z up. On the XY plane draw one open line from (0, 0) to
-    (40, 0) and a second sketch with two joined lines (0, 0) to (30, 0) to (30, 20) (not closed). Use Create >
-    Extrude on each: the dialog picks the open line as the profile; set Thin Extrude on, Wall Location "Side 1",
-    Thickness 2 mm, distance 15 mm, Operation New Body. Repeat the line with Wall Location "Side 2" and with
-    "Center Line". Use one new body for each.
-    Export: export one of the bodies with no parameters ticked (the export may stop with a reason for an open
-    line; read the report anyway). In `report.json` read the extrude item: `data.thin_wall.profile_type` (what the
-    open line reads as, such as `Path` or `Profile`), `data.thin_wall.location`, `data.thin_wall.thickness`,
-    `data.profiles` (each entry, `kind` and `type`), `data.end_area`, `data.end_normal` and `data.end_offset`.
-    Send back these for every body. In Fusion, look at the end of the wall in the section view (zoom on the end of
-    the line): is the end square or round, and for the two joined lines is the corner at (30, 0) sharp or round
-    on the outside. For each location say on which side of the line (looking along it from the start) the wall
-    stands: left or right.
+40. T2-open, a wall along an open line with a corner. Units mm, Z up. Add user parameters `Leg` = 30 mm, `Height` =
+    15 mm and `Wall` = 2 mm. On the XY plane draw two joined lines, the second from the end of the first: (0, 0) to
+    (30, 0) to (30, 20), not closed. Make the start point coincident with the origin, the first line horizontal with
+    a length dimension `Leg`, the second line vertical with a length dimension of 20 mm. Use Create > Extrude with the
+    open line as the profile: Thin Extrude on, Wall Location "Side 1", Thickness `Wall`, distance `Height`, Operation
+    New Body. Make two more designs the same with Wall Location "Side 2" and "Center". A fourth design: a 60 x 40 x
+    3 mm plate on the XY plane, and on its top face the same two lines starting at (10, 10), extruded up as a Join
+    with Side 1.
+    Export: tick `Leg`, `Height` and `Wall` and export each body. Expect the extrude copied, not left out, and the
+    copy to match the Fusion body: Side 1 inside the corner (1440 mm3 at the start sizes), Side 2 outside it (1560
+    mm3), Center half on each side (1500 mm3), the ends square and the outer corner sharp. In Paramability set `Leg`
+    to 50 and `Wall` to 4: the wall follows as in Fusion. In `report.json` the extrude item has `data.path` with two
+    lines (`opposed` false) and `data.wall_faces` with 8 flat faces for a new body. If a copy leaves the step out,
+    send `report.json` and the reason; for the plate also note whether a face listed in `wall_faces` lies outside
+    the wall.
 41. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
     plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
     about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with

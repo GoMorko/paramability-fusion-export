@@ -635,7 +635,7 @@ against `samples`.
 
 **ExtrudeFeature** (`operation`, `profile`, `extentType`, `hasTwoExtents`, `extentOne`, `extentTwo`,
 `symmetricExtent`, `startExtent`, `taperAngleOne`, `taperAngleTwo`, `isThinExtrude`, `participantBodies`,
-`endFaces`):
+`endFaces`, and `faces` for a thin extrude of an open line):
 
 ```json
 {
@@ -740,13 +740,31 @@ against `samples`.
 - `thin_wall` (only when `thin` is true): `{ "location", "thickness", "location_two", "thickness_two",
   "profile_type" }` from `thinExtrudeWallLocationOne` and `thinExtrudeWallLocationTwo` (`ThinExtrudeWallLocation`:
   `side1`, `side2`, `center`, else `other`; null when unreadable), `thinExtrudeWallThicknessOne` and
-  `thinExtrudeWallThicknessTwo` (mm, null when unreadable) and the type name of `ExtrudeFeature.profile` (an open
-  line shows here and as `{ "kind": "other", "type": ... }` in `profiles`). The thickness of side one also names its
-  parameter as `params["thin.thickness"]`. The translator copies one closed outline without holes, one way or
-  symmetric, without a taper. Side one and side two are not taken for inside and outside (the API does not say):
+  `thinExtrudeWallThicknessTwo` (mm, null when unreadable) and the type name of `ExtrudeFeature.profile` (`Path`
+  for an open line). The thickness of side one also names its parameter as `params["thin.thickness"]`. The
+  translator copies one closed outline without holes, or one open line (see `path`), one way or symmetric, without a
+  taper. Side one and side two are not taken for inside and outside (the API does not say):
   `end_area`, the area of the wall's end face, is compared with the expected area of each side of the outline,
   worked out from its lengths and corners, and decides the side. The area is used rather than the volume change
   because a wall that joins or cuts an existing part overlaps it, while the end face stays the wall's cross section.
+- `path` (only when `ExtrudeFeature.profile` is a `Path`, the open line of a thin extrude): the path as a sweep
+  path is read (`read_sweep.path_record`, see **SweepFeature**): its sketch curves in path order, each with `flat`
+  (the curve in the sketch's own 2D frame) and `opposed` (the path runs against the curve). `profiles` then holds
+  one `{ "kind": "other", "type": "Path" }`. Captures of older versions list one `other` record per path
+  entity and no `path`; the translator refuses those. The probe follows the path like a sweep path (`PATH` in the
+  step kind table). The translator copies a chain of sketch lines of one sketch, each starting where the one before
+  ends and none `opposed`, as an `open` loop from the first point to the last, with `thin.ends` square and
+  `thin.corners` sharp (recipe version 17; `translator/extrude/thin_line.py`).
+- `wall_faces` (only with `path`, after the item; null when `faces` cannot be read or it has more than 64 faces):
+  `[{ "surface", "point", "normal" }]` for each face of `ExtrudeFeature.faces`: `surface` as for a face record
+  (`Plane`, `Cylinder`, `Cone` or `other`), `point` its `pointOnFace` (mm) and `normal` the unit normal there (null
+  when unreadable). Fusion lists no `startFaces` and no `endFaces` for a thin extrude of an open line (Fusion 2706),
+  so `end_offset` and `end_area` stay null. The translator builds the wall for each side Fusion's location allows
+  and each direction, and copies the step only when exactly one of them holds every face: each face flat, between
+  the two ends of the wall, a face across the sketch normal at an end and on the wall's outline, a face along it on
+  a side of the outline and square to that side (within 1e-3 mm and a sine of 1e-4). That direction must be the
+  one the extrude reader found and, along the sketch normal, side one must be the left of the line and side two its
+  right.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of the measured end face (see
   `end_offset`). Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive

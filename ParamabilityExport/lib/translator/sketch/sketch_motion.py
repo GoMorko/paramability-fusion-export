@@ -159,7 +159,7 @@ class Anchors:
         kind = loop["kind"]
         if kind == "polygon":
             self.points += [(p, tuple(r)) for p, r in zip(loop["points"], raw_loop["points"])]
-        elif kind == "profile":
+        elif kind in ("profile", "open"):
             self.points.append((loop["start"], tuple(raw_loop["start"])))
             for seg, rseg in zip(loop["segments"], raw_loop["segments"]):
                 self.points.append((seg["to"], tuple(rseg["to"])))

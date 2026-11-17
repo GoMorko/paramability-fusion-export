@@ -1580,12 +1580,13 @@ calls to watch (thin extrude)".
       takes the side from `end_area`, not from the location name, and the part must match each time. Where Fusion
       keeps the outside corners sharp, the copy rounds them and the item shows the note "Fusion keeps the corners of
       this wall sharp"; check that the difference is the size of the corner only.
-- [ ] **T2 Open line.** Draw one open line (or a few joined lines that do not close) and make a thin extrude of it,
-      the way a rib or a fence is made. The copy stops with "A thin extrude of an open line is not copied yet" and the
-      part saves as a fixed shape. In `report.json` read what Fusion gave as the profile: `thin_wall.profile_type`
-      (the type of `ExtrudeFeature.profile`) and the entries of `profiles` (`{ "kind": "other", "type": ... }` shows
-      the type of each). Note whether the end of the wall is square or round in Fusion; the app draws round ends.
-      This is what a later copy of open lines needs.
+- [ ] **T2 Open line.** Answered in Fusion 2706 for lines on the XY and XZ planes, extruded along the sketch
+      normal: `ExtrudeFeature.profile` is a `Path` of `PathEntity` items (each `isOpposedToEntity` false),
+      `startFaces` and `endFaces` are empty, side one puts the wall on the left of the path (seen from the front of
+      the sketch), side two on the right, center half each way; the ends are square and the corners sharp. The copy
+      writes such a wall now (`docs/hand-checks.md`, T2-open). Still open: the side for an extrude that goes against
+      the sketch normal or both ways (the copy takes it from the faces Fusion made), whether `ExtrudeFeature.faces`
+      lists a face that a join merged with a face of the part, and the side for a line with arcs (left out).
 - [ ] **T3 Wall as a size.** Tick the parameter behind the wall thickness and the one behind the height, export, and
       change both in Paramability: the wall and the height follow. Set the range of the wall so it can reach zero:
       the wall is then not a size, with the reason in the result window.
@@ -2254,8 +2255,13 @@ thin extrude tests above and read the capture in `report.json`.
 - The side of the wall is not taken from the location name (the API does not say which of side one and side two is
   the inside). `endFaces[0].area` (read as `end_area`) decides it, so check that for a thin extrude it is the face at
   the far end of the wall and has the area of the wall's cross section (T1).
-- `ExtrudeFeature.profile` of an open line, and `type_name` of what it returns (`thin_wall.profile_type`): not known
-  (T2).
+- `ExtrudeFeature.profile` of an open line is a `Path` (`thin_wall.profile_type`, T2). The reader reads it as a
+  sweep path (`path`, see "Capture reader calls to watch (sweep and loft)": `Path.item(i).entity`,
+  `isOpposedToEntity`, `curve`).
+- `ExtrudeFeature.faces` (the `Feature` member) for a thin extrude of an open line, read into `wall_faces`: for each
+  face `BRepFace.geometry` (its type, `Plane` for a flat face), `pointOnFace` and `evaluator.getNormalAtPoint`. Check
+  that the faces of a new body wall are its sides, its two ends and its two caps (8 for one corner), and note for a
+  join whether a face that merged with a face of the part is listed and where its point lies.
 
 ## Capture reader calls to watch (spline outlines and sketch text)
 

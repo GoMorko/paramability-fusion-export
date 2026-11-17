@@ -1,0 +1,42 @@
+{
+ "version": 1,
+ "values": {
+  "1/path/c0/end.0": {
+   "const": 0,
+   "terms": {
+    "length_mm": 1
+   },
+   "sketch": "Sketch1"
+  },
+  "1/path/c1/start.0": {
+   "const": 0,
+   "terms": {
+    "length_mm": 1
+   },
+   "sketch": "Sketch1"
+  },
+  "1/path/c1/end.0": {
+   "const": 0,
+   "terms": {
+    "length_mm": 1
+   },
+   "sketch": "Sketch1"
+  }
+ },
+ "curves": [
+  "1/path"
+ ],
+ "box_max": {
+  "min": [
+   -80,
+   -60,
+   0
+  ],
+  "max": [
+   80,
+   60,
+   64
+  ]
+ },
+ "states": []
+}

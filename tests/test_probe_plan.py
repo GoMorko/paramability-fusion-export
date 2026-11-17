@@ -96,6 +96,13 @@ class PathScanTests(unittest.TestCase):
         asked = plan.request(capture(item), table(PARAMS, ["count"], MODEL))
         self.assertEqual(asked["curves"], {"skP": ["l0", "l1"]})
 
+    def test_the_open_line_of_a_thin_extrude_is_covered(self):
+        line = path_of(flat_line("l0", [0, 0], [30, 0]), flat_line("l1", [30, 0], [30, 20]))
+        item = {"index": 1, "name": "Extrude1", "type": "ExtrudeFeature",
+                "data": {"profiles": [{"kind": "other", "type": "Path"}], "thin": True, "path": line}}
+        found = plan.scan(capture(item))
+        self.assertEqual((found.covered, [t["kind"] for t in found.targets]), ({"skP": "Path"}, ["path"]))
+
     def test_a_path_with_a_free_curve_or_edges_is_left_as_measured_and_leaves_its_sketch_alone(self):
         free = dict(flat_line("l1", [0, 20], [10, 20]), kind="other")
         for label, found_path in (("free curve", path_of(flat_line("l0", [0, 0], [0, 20]), free)),
