@@ -2843,13 +2843,14 @@ Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the
 `Body2` starts 3 mm above the top face of `Body1` (`Lift`).
 
 - The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
-- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is proven to
-  be another body, the face is never "on this body" (`follow._another_body`, `follow._beyond_tool`). This is also
-  true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step uses.
-- "Proven" means two things. The body is not the body that the walk builds (`Context.is_target`, also through the
-  lineage). And the body does not have the name of that body under another token. Fusion can give the exported body
-  a new token along the timeline (`capture.renamed_target`). Such a face can be on the exported body, so the
-  translator places it on the slabs as before.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
+  body that the walk builds (`Context.is_target`, also through the lineage), the face is never "on this body"
+  (`follow._another_body`, `follow._beyond_tool`). This is also true when a slab of `Body2` has a face at the same
+  place. That slab face is not the face that the step uses.
+- A body with the name of the exported body under another token is also another body. A name does not prove that
+  it is the same body: a copy, a split piece or a renamed body can have that name. Fusion can give the exported body a
+  new token along the timeline, but then the walk stops at the first step that shows the new token (`roles.lost`).
+  So such a face never reaches this rule.
 - No slab places the face. Thus every size that the items before the step read can move it
   (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
 - When the probe measured the face, the measured move is written instead (see the next part). In the example, the
