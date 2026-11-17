@@ -38,7 +38,7 @@ package may import only packages above it in this list (not every one of them). 
   `step_links.py` the measured references of the steps and the items that may place an occurrence, which it hands as plain
   values to the geometry links of `params` (`reach`, `reference_links`, `outside`); `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
   both outputs word alike); `reach.py` which sizes may move a sketch, a plane, a face or
-  a joint; `edges.py` an edge or a face of the part matched to the straight extrude that made it (which sizes may
+  a joint (the sizes behind the model parameters in `param_reach.py`, named by `reach` too); `edges.py` an edge or a face of the part matched to the straight extrude that made it (which sizes may
   turn a pattern direction taken from it, and which may change the thickness a hole goes through);
   `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
   at; `problem.py` the answer of a reader that cannot read, place or build the design (`Problem`: a code, plain words

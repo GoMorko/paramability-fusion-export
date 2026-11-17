@@ -2056,7 +2056,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `reach.py`: which ticked sizes can move something that a step uses. Each
   function reads the size table and the capture only. No function says what a copy does about a size. The recipe
   output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
-  - The sizes behind the model parameters of the design. `sketch_params` and `sketch_sizes` give the sizes behind the
+  - The sizes behind the model parameters of the design. These functions are in `param_reach.py`, and `reach.py`
+    gives the same names. `sketch_params` and `sketch_sizes` give the sizes behind the
     dimensions of a sketch. `linked_sizes` gives the sizes that reach the sketch through the geometry of another
     component (`table.links`). `construction_sizes` gives the sizes behind construction planes or axes.
     `joint_reasons` gives the sizes that a joint reads. `text_sizes` gives the sizes that set the height of a sketch
