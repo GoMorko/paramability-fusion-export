@@ -1,0 +1,416 @@
+{
+ "_comment": "An L shaped wall (Extrude1): a thin extrude of the open line (0, 0) to (30, 0) to (30, 20) on the XY plane, 15 mm up, wall 2 mm on side one (the left of the line, inside the corner). Fusion reads the line as a path and lists no end faces; the faces the extrude made show where the wall stands. The first line's length, the height and the wall are sizes.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    30.0,
+    20.0,
+    15.0
+   ]
+  },
+  "volume_mm3": 1440.0
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "length_mm",
+    "expression": "30 mm",
+    "value": 3.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 30
+   },
+   {
+    "name": "height_mm",
+    "expression": "15 mm",
+    "value": 1.5,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 15
+   },
+   {
+    "name": "wall_mm",
+    "expression": "2 mm",
+    "value": 0.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 2
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "length_mm",
+    "value": 3.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "length_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d1",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": ""
+    }
+   },
+   {
+    "name": "d2",
+    "expression": "height_mm",
+    "value": 1.5,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "height_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d2",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "wall_mm",
+    "value": 0.2,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "wall_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": ""
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "kind": "other",
+      "type": "Path"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 15.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": true,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": null,
+    "profile_area": null,
+    "end_area": null,
+    "params": {
+     "side_one.distance": {
+      "name": "d2",
+      "expression": "height_mm",
+      "value": 15.0
+     },
+     "thin.thickness": {
+      "name": "d3",
+      "expression": "wall_mm",
+      "value": 2.0
+     }
+    },
+    "thin_wall": {
+     "location": "side1",
+     "thickness": 2.0,
+     "location_two": "side1",
+     "thickness_two": null,
+     "profile_type": "Path"
+    },
+    "path": {
+     "closed": false,
+     "kind": "sketch",
+     "sketch": "Sketch1",
+     "sketch_token": "s1",
+     "frame": {
+      "origin": [
+       0,
+       0,
+       0
+      ],
+      "x": [
+       1,
+       0,
+       0
+      ],
+      "y": [
+       0,
+       1,
+       0
+      ],
+      "z": [
+       0,
+       0,
+       1
+      ]
+     },
+     "reference": {
+      "kind": "constructionPlane",
+      "token": "tok_xy",
+      "origin": true
+     },
+     "projected": false,
+     "curves": [
+      {
+       "kind": "line",
+       "start": [
+        0,
+        0,
+        0
+       ],
+       "end": [
+        30,
+        0,
+        0
+       ],
+       "opposed": false,
+       "entity": "ln0",
+       "check": {
+        "start": [
+         0,
+         0,
+         0
+        ],
+        "end": [
+         30,
+         0,
+         0
+        ]
+       },
+       "flat": {
+        "kind": "line",
+        "start": [
+         0,
+         0
+        ],
+        "end": [
+         30,
+         0
+        ]
+       }
+      },
+      {
+       "kind": "line",
+       "start": [
+        30,
+        0,
+        0
+       ],
+       "end": [
+        30,
+        20,
+        0
+       ],
+       "opposed": false,
+       "entity": "ln1",
+       "check": {
+        "start": [
+         30,
+         0,
+         0
+        ],
+        "end": [
+         30,
+         20,
+         0
+        ]
+       },
+       "flat": {
+        "kind": "line",
+        "start": [
+         30,
+         0
+        ],
+        "end": [
+         30,
+         20
+        ]
+       }
+      }
+     ],
+     "edges": []
+    },
+    "wall_faces": [
+     {
+      "surface": "Plane",
+      "point": [
+       15,
+       1,
+       0
+      ],
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       15,
+       1,
+       15
+      ],
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       15,
+       0,
+       7.5
+      ],
+      "normal": [
+       0,
+       -1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       14,
+       2,
+       7.5
+      ],
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30,
+       10,
+       7.5
+      ],
+      "normal": [
+       1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       28,
+       11,
+       7.5
+      ],
+      "normal": [
+       -1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       0,
+       1,
+       7.5
+      ],
+      "normal": [
+       -1,
+       0,
+       0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       29,
+       20,
+       7.5
+      ],
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

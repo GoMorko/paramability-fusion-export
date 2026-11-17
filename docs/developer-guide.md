@@ -1155,7 +1155,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
 | `throughAllAdds` | a join or a new body extruded through all (`extrude/through.py`; the Orca output gives the same cause) | Give the extrude a distance, or end it on a face or plane. |
-| `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a wall that does not keep its shape) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
@@ -1794,7 +1794,7 @@ one folder per family of steps.
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
     measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
-    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), and `emboss.py` (the Emboss handler).
+    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), and `emboss.py` (the Emboss handler).
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -4137,6 +4137,95 @@ the same plane, so they touch. The recipe writes the two sides as one `toolBody`
 (recipe version 15). Its first step makes a new body with side one. Its second step joins side two. A tool step
 that is already nested as deep as the cap (`tool_walk.MAX_DEPTH`) cannot hold one more level, so the step is left
 out. An intersect with more than one outline is left out.
+
+#### A thin extrude of an open line
+
+Fusion can make a thin extrude of an open line. This is a wall along a chain of sketch lines that does not close.
+People use it for fences, dividers, ribs and brackets. The recipe has a wall for this (recipe version 17). It is an
+extrude whose outline is an `open` loop, with `thin.ends: "square"` and `thin.corners: "sharp"`. The app then cuts
+each end of the wall square to the line. At a corner, the app extends the two sides of the wall until they meet.
+Fusion builds the wall in the same way.
+
+What the reader reads:
+
+- For an open line, `ExtrudeFeature.profile` is a `Path`, not a `Profile`. The reader keeps one record
+  `{ "kind": "other", "type": "Path" }` in `profiles`.
+- The reader reads the path into `path` with `read_sweep.path_record`, as for a sweep. Each curve of the path has
+  its points in the sketch plane (`flat`) and `opposed`. `opposed` is true when the path goes against the direction
+  of the sketch line.
+- Fusion lists no start faces and no end faces for this extrude. Thus `extrude_after` reads all the faces that the
+  extrude made (`ExtrudeFeature.faces`) into `wall_faces`. For each face, it reads the type of surface, a point on
+  the face and the normal at that point.
+
+The table entry of `ExtrudeFeature` has `PATH`. Thus the size probe follows the curves of the line, as it does for
+a sweep path.
+
+The translator writes the step in `translator/extrude/thin_line.py`. `extrude/step.py` sends an extrude to it when
+the extrude is thin and its outline is a `Path`. Then:
+
+1. `line_of` reads the line. The path must be one open chain of sketch lines of one sketch. Each line must start
+   where the line before it ends. No line can be `opposed`. The add-in leaves out a line with an arc or a free
+   curve, a line that runs against the path, a chain with a gap, a closed chain and a path of body edges.
+2. `outline` writes the `open` loop from the first point of the line to the last point. Thus the loop keeps the
+   direction of the line. When the probe followed the path, each point follows its sizes (the keys of
+   `sketch_values.keys.path`). When the probe did not follow the path, the loop keeps its numbers, and the sizes of
+   its sketch are marked.
+3. `wall_step` checks the line alone (`line_problem` with no wall). Then `decide` finds the side of the wall. Then
+   `line_problem` checks the wall on that side.
+
+The side of the wall. The app puts an `inside` wall on the left of the line. You look along the line from its start,
+and you look from the front of the sketch (along its normal). An `outside` wall is on the right. A `middle` wall has
+half of the thickness on each side. Fusion names the side "side one", "side two" or "center". Tests in Fusion showed
+this for extrudes that go along the sketch normal: side one is on the left of the path, and side two is on the
+right (`RULE`). When the line goes the other way, the wall goes to the other side.
+
+The add-in does not use the rule alone. It compares the wall with the faces that Fusion made (`fits`). For each side
+that the location in Fusion permits, and for each direction, it makes the outline of the wall (`band`). Then each
+measured face must agree with that wall:
+
+- The face must be flat.
+- The point of the face must be between the two ends of the wall.
+- A face across the sketch normal must be at one end of the wall, and its point must be on the outline of the wall
+  or in it.
+- A face along the sketch normal must be on a side of the outline, and its normal must be square to that side.
+
+Exactly one side and one direction must agree. The direction must be the direction that the extrude reader found.
+When the extrude goes along the sketch normal, the side must also be the side that `RULE` gives. If one of these
+conditions is false, the add-in leaves the step out.
+
+Example. The line goes from (0, 0) to (30, 0) to (30, 20). The wall is 2 mm thick on side one and 15 mm high. The
+left wall has the outline (0, 2), (28, 2), (28, 20), (30, 20), (30, 0), (0, 0). The right wall has the outline
+(0, 0), (30, 0), (30, 20), (32, 20), (32, -2), (0, -2). Fusion made a face at y = 2, and its normal is along y. Only
+the left wall has a side there. Thus the side is `inside`.
+
+A join can merge a face of the wall with a face of the part. For example, the wall is flush with the edge of a
+plate. Then the point of the merged face can be out of the wall. No side agrees, and the add-in leaves the step out.
+This is safe, because the add-in does not guess.
+
+An extrude that goes against the sketch normal is written on the reversed sketch plane, and its loop is mirrored
+(`flip_y`). Then the left of the line becomes the right. Thus `LineWall.written` changes `inside` to `outside`, and
+`outside` to `inside`.
+
+The shape of the wall at other sizes. The app and Fusion build the same wall only while the wall keeps its shape.
+`line_problem` gives a problem in these conditions:
+
+- A line is 0.001 mm long or shorter.
+- A corner turns more than 150 degrees (`MAX_TURN_DEG`). At a sharper corner, the outer side of the wall goes far
+  past the corner.
+- At a corner, the side of the wall on the inner side of the turn cuts each of the two lines short. The cut is the
+  reach of the wall on that side times tan(turn / 2). A line must be longer than what its two corners take.
+- Two lines that do not touch come nearer than two times the reach of the wall.
+
+`keep_line_valid` tests these conditions at the ends and at the middles of the size ranges. For a formula that is
+not only sums and products, it also tests inner settings. It cuts the ranges where the wall stops keeping its shape.
+If no cut helps, it marks the sizes.
+
+Example. The second line is 3 mm long, and the wall is 2 mm on the inner side of the corner. The corner turns 90
+degrees, so it takes 2 mm of the line (2 times tan 45 degrees). The range of the wall thickness stops before 3 mm.
+
+The material of the wall. A later step can ask if a point is in the wall (`material_at`). The add-in gives the wall
+as the closed outline that it fills (`band_profile`), in a `ThinWall` with the side `inside`. The faces of the wall
+are not placed.
 
 ### 3.16 How a round by chord length or with a changing radius is translated
 

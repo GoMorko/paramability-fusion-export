@@ -14,6 +14,7 @@ from ..faces.placer_makers import SlabMaker, ThinWallMaker
 from ..faces.tool_placer import ToolMaker
 from ..result import Refusal, StepResult
 from ..sketch import face_outline, loops, sketch_motion
+from . import thin_line
 from .built import outlines_built, thin_wall_step
 from .checks import check_measured_length, check_taper, volume_refusal
 from .common import COMBINE, UNREADABLE
@@ -42,27 +43,36 @@ def handle(ctx, step):
     profiles = data.get("profiles") or []
     if not profiles:
         return Refusal("This extrude has no sketch outline.")
-    if thin:
+    line = None
+    if thin and thin_line.is_line(profiles):
+        line = thin_line.line_of(data)
+        if isinstance(line, Refusal):
+            return line
+    elif thin:
         refusal = thin_wall.open_line_refusal(profiles)
         if refusal is None and len(profiles) > 1:
             refusal = Refusal("A thin extrude of several outlines is not copied yet.", cause=gap_hints.THIN_OUTLINE)
         if refusal is not None:
             return refusal
-    face = face_outline.prepare(ctx, item, profiles)
-    if isinstance(face, Refusal):
-        return face
-    drawn_ones = [p for p in profiles if not p.get("face")]
-    for profile in drawn_ones:
-        refusal = loops.outline_refusal(profile)
-        if refusal is not None:
-            return refusal
     combine = COMBINE[operation]
-    # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
-    if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
-        return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
-    built = outlines_built(ctx, item, face, drawn_ones, thin)
-    if isinstance(built, Refusal):
-        return built
+    if line is not None:
+        loop, drawn = thin_line.outline(ctx, item, line)
+        face, drawn_ones, built = None, [line.path], [(line.path, (loop, []), drawn)]
+    else:
+        face = face_outline.prepare(ctx, item, profiles)
+        if isinstance(face, Refusal):
+            return face
+        drawn_ones = [p for p in profiles if not p.get("face")]
+        for profile in drawn_ones:
+            refusal = loops.outline_refusal(profile)
+            if refusal is not None:
+                return refusal
+        # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
+        if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
+            return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
+        built = outlines_built(ctx, item, face, drawn_ones, thin)
+        if isinstance(built, Refusal):
+            return built
     sources = ([face.profile] if face is not None else []) + drawn_ones
     picked = len(sources)
     profiles = [profile for profile, _, _ in built]
@@ -86,7 +96,10 @@ def handle(ctx, step):
                   volume_refusal(data, plan, operation, sources, thin)):
         if check:
             return check
-    thin_step = thin_wall_step(ctx, item, data, wall, profiles[0]) if thin else None
+    if line is not None:
+        thin_step = thin_line.wall_step(ctx, item, data, wall, line, first_drawn, start, plan[0])
+    else:
+        thin_step = thin_wall_step(ctx, item, data, wall, profiles[0]) if thin else None
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
@@ -128,6 +141,13 @@ def handle(ctx, step):
         if entry.taper:
             recipe_step["taperDeg"] = entry.taper_q.json() if entry.taper_q else round9(entry.taper)
         placers = []
+        if isinstance(thin_step, thin_line.LineWall):
+            # The placer holds the wall as the closed outline it fills, all of it inside that outline.
+            recipe_step["thin"] = thin_step.written(reverse)
+            placers.append(ThinWallMaker(on, entry.extent, entry.q or Quantity(entry.distance), thin_step.profile,
+                                         "inside", thin_step.thickness.n))
+            out.add(recipe_step, placers, repeatable=False)
+            continue
         if thin_step is not None:
             side, thickness_q = thin_step
             recipe_step["thin"] = {"thickness": thickness_q.json(), "side": side}

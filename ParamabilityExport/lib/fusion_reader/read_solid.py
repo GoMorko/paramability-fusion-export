@@ -148,6 +148,10 @@ def extrude_before(feature, ctx):
     }
     if thin:
         data["thin_wall"] = _thin_wall(feature)
+    if geo.safe(lambda: geo.type_name(feature.profile), None) == "Path":
+        from .read_sweep import path_record  # read_sweep imports this module
+
+        data["path"] = geo.safe(lambda: path_record(feature.profile, ctx), None)
     if _holds_free_outline(profiles):
         data["areas"] = areas
         data["volume_before"] = 0.0 if operation == "newBody" else geo.target_volume(ctx)
@@ -207,6 +211,27 @@ def _start_offset(feature, z, origin):
     return None if p is None else round(vec.dot(vec.sub(p, origin), z), 6) + 0.0
 
 
+MAX_WALL_FACES = 64
+
+
+def _wall_face(face):
+    """{ surface, point, normal } of one face a thin extrude of an open line made; a member that cannot be read is
+    null."""
+    return {"surface": geo.safe(lambda: geo.surface_kind(face), None),
+            "point": geo.safe(lambda: geo.point(face.pointOnFace), None),
+            "normal": _face_normal(face)}
+
+
+def _wall_faces(feature, ctx):
+    """The faces a thin extrude of an open line made (`faces`), as `_wall_face` records: Fusion lists no start or end
+    faces for it, so these show where its wall stands. Null when the faces cannot be read or there are more than
+    MAX_WALL_FACES."""
+    faces = geo.safe(lambda: geo.sequence_items(feature.faces), None)
+    if faces is None or len(faces) > MAX_WALL_FACES:
+        return None
+    return [_wall_face(geo.native_input(face, ctx)) for face in faces]
+
+
 def extrude_after(feature, ctx, data):
     """end_offset: signed distance from the first profile's sketch plane to a point on the end face (`_end_face`: the
     first face of `endFaces` parallel to the sketch plane, else the first one). start_offset, for an extrude that
@@ -216,7 +241,7 @@ def extrude_after(feature, ctx, data):
     unit normal at that point (null when it cannot be read). side_leans: how far each side face leans along the first
     profile's sketch normal (the taper check for several outlines). volume_after: for an extrude of text or spline
     outlines, the volume that was measured before the item is compared with (the target's, or the new bodies' summed
-    for a new body).
+    for a new body). wall_faces: for an extrude of an open line (`path`), the faces it made (`_wall_faces`).
     """
     faces = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
     profiles = data.get("profiles") or []
@@ -225,6 +250,8 @@ def extrude_after(feature, ctx, data):
     if "volume_before" in data:
         out["volume_after"] = (_new_bodies_volume(feature) if data.get("operation") == "newBody"
                                else geo.target_volume(ctx))
+    if "path" in data:
+        out["wall_faces"] = _wall_faces(feature, ctx)
     if frame is not None:
         leans = geo.safe(lambda: _side_leans(feature, frame["z"]), None)
         if leans is not None:
