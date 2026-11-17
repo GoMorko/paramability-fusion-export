@@ -33,6 +33,9 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
+    counts_warning(name), when given, says which steps in a new warning count for a row (`apply.new_warnings`); the
+    others are not named and cost no recompute. `rebase()` measures the baseline again before the next row, for a
+    caller that turned timeline items back on between runs.
     stop_when(), when given, is asked before each row; when it answers true the run ends there, cleanly: no later row
     runs, the parameters are put back as at the end of any run, and `halted` stays true for every later run of the
     job. A row that did not build is still checked first (`not_back`), so a stop never hides a broken design.
@@ -43,8 +46,9 @@ class RowExport:
     `{ after, items }`, the row run last and the steps in error. No later run of the job runs a row.
     """
 
-    def __init__(self, store, units, export_step, before_row=None, stop_when=None):
+    def __init__(self, store, units, export_step, before_row=None, stop_when=None, counts_warning=None):
         self.store = store
+        self.counts_warning = counts_warning
         self.units = units
         self.export_step = export_step
         self.before_row = before_row
@@ -59,6 +63,11 @@ class RowExport:
         self._saved = None
         self._baseline = None
         self._total = 0
+
+    def rebase(self):
+        """Measure the baseline again before the next row: timeline items were turned back on since it was measured,
+        and the errors and warnings they already had are not the rows' doing."""
+        self._baseline = None
 
     def _back_to_current(self):
         """Put the parameters back to their saved expressions and recompute before the next row, so a row never builds
@@ -121,6 +130,8 @@ class RowExport:
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline,
                                               full=row.get("step") is not False)
+                    warned = new_warnings(self.store, self._baseline, self.counts_warning) \
+                        if tolerate_build_errors else []
                 except RowBuildError as exc:
                     if tolerate_build_errors:
                         self._last_failed = True
@@ -128,7 +139,6 @@ class RowExport:
                                         "detail": exc.detail})
                         continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}", exc.detail) from exc
-                warned = new_warnings(self.store, self._baseline) if tolerate_build_errors else []
                 self.current_row = row["name"]
                 self.current_key = row_key(row)
                 result = {"name": row["name"], "values": values, "step_file": None}

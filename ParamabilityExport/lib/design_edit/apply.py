@@ -39,23 +39,28 @@ def warning_entries(store):
     return dict(read()) if read is not None else {}
 
 
-def new_warnings(store, baseline):
+def new_warnings(store, baseline, counts=None):
     """Names of the timeline items in warning now that were neither in warning nor in error in `baseline` (a
-    `Baseline`): a step that a row made unsure. As in `new_errors`, a step that reads in warning after a rebuild of
-    only the changed steps is read again after one full recompute. Never raises: an unreadable timeline gives none."""
+    `Baseline`): a step that a row made unsure. `counts(name)` keeps only the steps that matter to the caller (all
+    when None). As in `new_errors`, a step that reads in warning after a rebuild of only the changed steps is read
+    again after one full recompute; a step that is in error after that recompute fails the row (RowBuildError, as
+    `apply_row_values` raises it). Only a warning that counts leads to the recompute. An unreadable timeline gives
+    no warning."""
     def read():
         try:
             return [name for key, name in warning_entries(store).items()
-                    if key not in baseline.warnings and key not in baseline.errors]
+                    if key not in baseline.warnings and key not in baseline.errors
+                    and (counts is None or counts(name))]
         except Exception:
             return []
 
     found = read()
     if found:
-        try:
-            store.recompute()
-        except Exception:
-            pass
+        _recompute(store)
+        broken = [n for key, n in error_entries(store).items() if key not in baseline.errors]
+        if broken:
+            raise RowBuildError(f"This size does not build in Fusion: {broken[0]}",
+                                {"reason": "new_errors", "items": broken, "recompute_ok": True})
         found = read()
     return found
 

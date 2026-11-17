@@ -2764,9 +2764,13 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
   counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
   `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
-  first try (the baseline) does not count. When a step reads in warning after a rebuild of only the changed steps,
-  the design is recomputed in full once and read again, as for errors. The result of the row then has `warned`, the
-  names of those steps. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  first try (the baseline) does not count. Only a step that the part is built from counts (`counts_warning` of the
+  probe, which the runner gets). When such a step reads in warning after a rebuild of only the changed steps, the
+  design is recomputed in full once and read again, as for errors. A step that is in error after that recompute makes
+  the row a row that did not build. A warning on any other step costs no recompute. The result of the row then has
+  `warned`, the names of those steps. The trim turns some timeline items off for the tries, and these items show no
+  warning while they are off. Thus, when the items come back on before the discovery rows, the runner measures the
+  baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
   of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
   run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
   the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
