@@ -58,8 +58,8 @@ class Context:
         # and timeline index of each such round -> the Hosts it changed.
         self.corner_hosts = {}
         self.corner_steps = {}
-        # The solved sketches (`sketch_sizes.sketch_formulas`): (id of the sketch graph record, whether its plane is
-        # fixed) -> `SketchFormulas` or None.
+        # The solved sketches (`sketch_sizes.sketch_formulas`): (id of the sketch graph record, what tells whether its
+        # plane is fixed) -> `SketchFormulas` or None.
         self.sketch_formulas = {}
         sizes = list(table.sizes) if table is not None else []
         self.names = variable_names(sizes)

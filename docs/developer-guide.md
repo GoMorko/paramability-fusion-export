@@ -2084,10 +2084,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
     or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
     origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
-    reader marks it with `origin: true` in the sketch graph. When no ticked size moves or turns the sketch plane
-    (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`, `own_origin`), as it
-    keeps the origin of the sketch. When a size moves or turns the plane, the projection moves in the sketch. Then it
-    stays a measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
+    reader marks it with `origin: true` in the sketch graph. When the export can show that no ticked size moves or
+    turns the sketch plane (`plane_fixed`), the sketch solver keeps it as a fixed number (`sketch_solve/constants.py`,
+    `own_origin`), as it keeps the origin of the sketch. `plane_fixed` shows this for an origin plane, for a
+    construction plane with no ticked size behind it or behind what it is built on, and for a plane on the part when
+    the sketch item is found and no step before it reads a ticked size. In every other case, the answer is "not
+    fixed": a sketch without a reference, a sketch item that is not found, an outline that follows a face, or a sketch
+    of another component. When a size can move or turn the plane, the projection moves in the sketch. Then it stays a
+    measured input, and the output marks the sizes as for other projected geometry. The sizes that move the
     plane are also among the sizes of the plane (`placement_sizes`), so a line of such a sketch still gets them.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a

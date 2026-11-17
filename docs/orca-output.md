@@ -644,8 +644,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`, `hole_place`,
   `reach.projection_sizes`, `SketchFormulas.follows_projection`, `sketches.reads_input`). The sketch's own dimensions
   come after its projections, so they are never marked for it and still follow. A projection of the origin point, an
-  origin axis or an origin plane of the sketch's own component is no input when no ticked size moves or turns the
-  sketch plane (`reach.plane_fixed`): it is fixed, like the sketch origin. On a plane that a size moves, it is a
+  origin axis or an origin plane of the sketch's own component is no input when the export can show that no ticked
+  size moves or turns the sketch plane (`reach.plane_fixed`): it is fixed, like the sketch origin. Otherwise it is a
   measured input and marks the sizes as above.
 - A hole centre follows when the capture holds the frame of its sketch (`sketch_frame`) and the sketch's graph: the
   hole's plane is the sketch plane, turned so that its normal is the drilling direction, and `hole_x`, `hole_y` are

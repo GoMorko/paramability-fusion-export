@@ -175,6 +175,23 @@ class SketchPlaneTest(unittest.TestCase):
         self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile({"kind": "face"}), 2))
         self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(origin, borrowed="Lid"), 2))
 
+    def test_a_sketch_plane_that_cannot_be_shown_still_is_not_fixed(self):
+        # A face whose sketch item is not found: the sizes read before it are not known.
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile({"kind": "face"}), None))
+        # An outline that follows the face its extrude starts from, and a sketch without a reference.
+        origin = {"kind": "constructionPlane", "origin": True}
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(origin, on_start_face=True), 2))
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(None), 2))
+        # A plane built on a plane that a ticked size moves.
+        chained = {"kind": "constructionPlane", "token": "p2", "definition": "Offset", "built_on": [
+            {"entity_type": "ConstructionPlane", "token": "p1", "built_on": [{"origin": True}]}]}
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(chained), 2))
+        # A face whose sketch item is found: fixed only when no ticked size is read before it.
+        timeline = [step(0, "Base", reads=["4 mm"]), {"index": 1, "name": "Sketch9", "type": "Sketch"}]
+        self.assertTrue(reach.plane_fixed(self.table, timeline, self.profile({"kind": "face"}), None))
+        timeline[0] = step(0, "Base", reads=["h_mm"])
+        self.assertFalse(reach.plane_fixed(self.table, timeline, self.profile({"kind": "face"}), None))
+
     def test_a_sketch_without_a_reference_counts_as_on_a_face_unless_it_lies_on_an_origin_plane(self):
         # Fusion gives no reference for some sketches on faces.
         unread = {"sketch": "Sketch9", "frame": FRAME}

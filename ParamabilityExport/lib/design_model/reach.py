@@ -343,13 +343,44 @@ def _looks_like_origin(frame):
 
 
 def plane_fixed(table, timeline, profile, before):
-    """True when no ticked size moves or turns the plane the sketch of `profile` (`sketch`, `frame`, `reference`) sits
-    on (`placement_sizes` gives none): the projections of the origin of the sketch's own component then sit still in
-    the sketch (`sketch_solve.constants.own_origin`). False for a sketch of another component (`foreign`,
-    `borrowed`) and a face used as an outline, whose plane this cannot tell."""
-    if not isinstance(profile, dict) or profile.get("foreign") or profile.get("borrowed") or profile.get("face"):
+    """True only when the plane the sketch of `profile` (`sketch`, `frame`, `reference`) sits on is shown to move with
+    no ticked size: an origin plane, or a construction plane whose own sizes and the sizes of what it is built on
+    (`built_on`) are all unticked and, for a plane on the part, the sizes read before the sketch were found and none
+    is ticked. Unknown is False: no table, no reference, a sketch of another component (`foreign`, `borrowed`), a face
+    used as an outline, an outline that follows the face its extrude starts from (`on_start_face`), something built
+    on another component, or a sketch whose timeline item is not found. The projections of the origin of the
+    sketch's own component sit still in the sketch only on such a plane (`sketch_solve.constants.own_origin`)."""
+    if table is None or not isinstance(profile, dict) or any(
+            profile.get(key) for key in ("foreign", "borrowed", "face", "on_start_face")):
         return False
-    return not placement_sizes(table, timeline, profile, before)
+    reference = profile.get("reference")
+    if not isinstance(reference, dict):
+        return False
+    if reference.get("kind") == "constructionPlane" and reference.get("origin"):
+        return True
+    if reference.get("kind") == "constructionPlane" and not _built_without_sizes(table, reference):
+        return False
+    if reference.get("kind") == "constructionPlane" and not _plane_on_part(reference, profile.get("frame")):
+        return True
+    bound = _sketch_item(timeline, profile.get("sketch"), before)
+    if bound is None:
+        return False
+    if isinstance(reference.get("made_by"), int):
+        bound = min(bound, reference["made_by"])
+    return not any(name in table.ticked for name in _reads_before(table, timeline, bound))
+
+
+def _built_without_sizes(table, record, depth=8):
+    """True when no ticked size is behind the construction plane or axis `record` (a `reference` or one of its
+    `built_on` entries) or behind what it is built on; False for a record of another component or one past `depth`."""
+    if record.get("foreign") or depth < 0:
+        return False
+    kind = _CONSTRUCTION.get(record.get("entity_type")) or (
+        "constructionPlane" if record.get("kind") == "constructionPlane" else None)
+    if kind and record.get("token") and construction_sizes(table, kind, record["token"]):
+        return False
+    return all(_built_without_sizes(table, entry, depth - 1) for entry in record.get("built_on") or ()
+               if isinstance(entry, dict))
 
 
 def _plane_on_part(reference, frame):
