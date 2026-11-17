@@ -95,8 +95,10 @@ def start_of(path):
 
     A circle section carried along a path makes the same shape from either end, and round a closed path from any
     point, so the start only names the end faces (the sweep's end face check reads them). A full circle starts at a
-    point square to its normal. When Fusion does not say which way the first curve runs, an open path of several
-    curves starts at the end of the first curve that the second does not touch, and one curve at its own start."""
+    point square to its normal. When Fusion does not say which way the first curve runs, a path of several curves
+    that is not known to be closed starts at the end of the first curve that the second does not touch (no start when
+    both or neither end touch it, so the section is never put on a joint inside the path); a closed path, or one
+    curve, starts at the first curve's own start."""
     curves = path.get("curves") if isinstance(path, dict) else None
     if not isinstance(curves, list) or not curves or not all(isinstance(c, dict) for c in curves):
         return PATH_UNREAD
@@ -112,7 +114,7 @@ def start_of(path):
     opposed = first.get("opposed")
     if isinstance(opposed, bool):
         run = flip(first) if opposed else first
-    elif len(curves) > 1 and path.get("closed") is False:
+    elif len(curves) > 1 and path.get("closed") is not True:
         run = _joint_start(first, curves[1]) if readable(curves[1]) and curves[1].get("kind") != "circle" else None
     else:
         run = first
