@@ -2334,7 +2334,7 @@ stubs and never run. A member that cannot be read gives `null` or `other`, and t
 
 Hand checks PI1 and PI2 are in `docs/hand-checks.md`. The reader is `read_pipe.py`. Live check PI1 (Fusion 2706)
 confirmed the section place, the size as a diameter, the inward wall and `distanceOne` "1" with `distanceTwo` null on
-an open path.
+an open path. Live check PI2 confirmed that Fusion mitres a pipe at a sharp corner of an open path.
 
 - `PipeFeature.path` is read with the marker before the pipe (Fusion raises "Didn't roll editing feature back"
   otherwise), through the same path reader as a sweep (`path_record`). Note the `opposed` flag of the first curve

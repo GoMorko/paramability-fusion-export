@@ -9,17 +9,18 @@ Fusion builds a pipe as a sweep of a drawn section (live check PI1 in `docs/hand
 - `distance_one` is the share of the path the pipe covers (1 is the whole path). `distance_two` runs the other way
   round a closed path; Fusion gives none for an open path.
 
-Only a circle section is read as an outline: the API does not say which way a square or triangle section turns about
-the path. How Fusion builds a pipe at a sharp corner of its path is not known (a sweep mitres it), so a path with one
-gives a problem too (`corner_problem`). A `Problem` (`design_model/problem.py`) says why the pipe cannot be read.
+Fusion mitres a pipe at a sharp corner of an open path, as it mitres a sweep (live check PI2: the legs of a 90 degree
+corner meet on the plane that halves it). How it closes a closed path that starts on a sharp corner is not known, so
+that start gives a problem (`SEAM_CORNER`). Only a circle section is read as an outline: the API does not say which
+way a square or triangle section turns about the path. A `Problem` (`design_model/problem.py`) says why the pipe
+cannot be read.
 """
 import math
 
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import is_number
-from ..paths.curves import flip, near, readable, tangents, turn_deg
-from ..paths.tolerances import SMOOTH_JOIN_DEG, STRAIGHT_DEG
+from ..paths.curves import flip, near, readable, tangents
 from ..problem import Problem
 from .. import words
 
@@ -31,7 +32,7 @@ COVER_UNREAD = Problem("cover_unread", words.PIPE_COVER_UNREAD)
 PART_OF_PATH = Problem("part_of_path", words.PIPE_PART_OF_PATH, gap_hints.PIPE_PART_OF_PATH)
 PATH_UNREAD = Problem("path_unread", words.PIPE_PATH_UNREAD)
 START_UNREAD = Problem("start_unread", words.PIPE_START_UNREAD)
-SHARP_CORNER = Problem("sharp_corner", words.PIPE_SHARP_CORNER, gap_hints.SHARP_CORNER)
+SEAM_CORNER = Problem("seam_corner", words.PIPE_SEAM_CORNER, gap_hints.SHARP_CORNER)
 
 
 def _length(value):
@@ -135,14 +136,3 @@ def section_profile(data, start):
         area -= math.pi * inner * inner
     return {"frame": frame, "space": "sketch", "loops": loops}, area
 
-
-def corner_problem(curves, closed):
-    """`SHARP_CORNER` when the planned path (`PathPlan.curves`, in order) turns sharply where two parts meet, or where
-    a closed path meets itself; else None. Two lines meet sharply above `STRAIGHT_DEG`, a curve and its neighbour above
-    `SMOOTH_JOIN_DEG`, as the app takes them."""
-    pairs = list(zip(curves, curves[1:])) + ([(curves[-1], curves[0])] if closed and len(curves) > 1 else [])
-    for before, after in pairs:
-        limit = STRAIGHT_DEG if before["kind"] == after["kind"] == "line" else SMOOTH_JOIN_DEG
-        if turn_deg(tangents(before)[1], tangents(after)[0]) > limit:
-            return SHARP_CORNER
-    return None

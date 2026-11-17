@@ -9,7 +9,7 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, s
 from lib import orca_translate
 from lib.capture_model import gap_hints
 from lib.params import size_table
-from lib.sketch_values.motion import Affine, Motion
+from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion
 from lib.translator import translate
 
 PIPE = "pipe_line_arc"
@@ -50,6 +50,25 @@ def hollow(data, capture):
     made(capture, math.pi * (25 - 9) * (40 + 7.5 * math.pi))
 
 
+def flat_xy(points, closed=False):
+    """A path of lines through `points` on the XY plane."""
+    pairs = list(zip(points, points[1:] + (points[:1] if closed else [])))
+    return {"closed": closed, "kind": "sketch", "sketch": SKETCH, "sketch_token": "s1",
+            "frame": {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}, "edges": [],
+            "curves": [{"kind": "line", "start": list(a) + [0], "end": list(b) + [0], "opposed": False,
+                        "entity": "p%d" % n, "flat": {"kind": "line", "start": list(a), "end": list(b)}}
+                       for n, (a, b) in enumerate(pairs)]}
+
+
+def corner(data, capture):
+    """Live check PI2c: a 6 mm pipe along an L with a sharp corner, (0, 0) to (30, 0) to (30, 20)."""
+    data.update(section_size=6.0, path=flat_xy([[0, 0], [30, 0], [30, 20]]))
+    data["params"]["section_size"]["value"] = 6.0
+    data["faces_after"] = {"start": [{"point": [0.0, 1.5, 0.0], "normal": [-1.0, 0.0, 0.0]}],
+                           "end": [{"point": [30.0, 20.0, 1.5], "normal": [0.0, 1.0, 0.0]}]}
+    made(capture, 1413.716694)
+
+
 def straight(data, capture, opposed=False):
     """The first leg alone, a line from z 0 to z 40 (listed from z 40 when `opposed`)."""
     line = data["path"]["curves"][0]
@@ -86,6 +105,12 @@ class CopyTest(unittest.TestCase):
         (step,) = steps_of(result.recipe, "extrude")
         self.assertEqual(step["sketch"]["on"]["origin"], [0.0, 0.0, 0.0])
 
+    def test_a_sharp_corner_of_the_path_is_mitred_as_fusion_builds_it(self):
+        result = translate(pipe(corner))
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["line", "line"])
+        self.assertEqual(step["sketch"]["outer"]["radius"], 3.0)
+
     def test_a_pipe_round_a_full_circle_is_a_full_turn_revolve(self):
         def ring(data, capture):
             data["path"] = {"closed": True, "kind": "sketch", "sketch": SKETCH, "sketch_token": "s1",
@@ -117,12 +142,12 @@ class LeftOutTest(unittest.TestCase):
                 cause = self.refused(lambda data, _: data.update(change))
                 self.assertEqual(cause, gap_hints.PIPE_PART_OF_PATH)
 
-    def test_a_path_with_a_sharp_corner_is_left_out(self):
-        def corner(data, capture):
-            data["path"]["curves"][1] = {"kind": "line", "start": [0, 0, 40], "end": [20, 0, 40], "opposed": False,
-                                         "entity": "p1", "flat": {"kind": "line", "start": [0, -40], "end": [20, -40]}}
+    def test_a_closed_path_that_starts_on_a_sharp_corner_is_left_out(self):
+        def square(data, capture):
+            data["path"] = flat_xy([[0, 0], [40, 0], [40, 40], [0, 40]], closed=True)
+            data["faces_after"] = {"start": [], "end": []}
             made(capture, None)
-        self.assertEqual(self.refused(corner), gap_hints.SHARP_CORNER)
+        self.assertEqual(self.refused(square), gap_hints.SHARP_CORNER)
 
     def test_a_new_body_that_does_not_match_the_section_and_path_is_left_out(self):
         self.refused(lambda data, capture: made(capture, 4000.0))
@@ -157,9 +182,22 @@ class SizesTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["inner"][0]["radius"], {"expr": "0.5 * pipe_mm - wall_mm"})
         self.assertEqual(result.loose, [])
 
-    def test_a_wall_that_could_close_the_hole_marks_its_sizes(self):
+    def test_the_ranges_stop_where_the_wall_would_close_the_hole(self):
+        result = sized(pipe(hollow), STILL)
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["sketch"]["inner"][0]["radius"], {"expr": "0.5 * pipe_mm - wall_mm"})
+        sizes = result.recipe["sizes"]
+        self.assertGreater(0.5 * sizes["pipe_mm"]["min"] - sizes["wall_mm"]["max"], 0.0)
+        self.assertEqual(result.loose, [])
+
+    def test_typed_ranges_that_close_the_hole_mark_the_sizes(self):
         result = sized(pipe(hollow), STILL, ranges={"pipe_mm": (4.0, 14.0), "wall_mm": (1.0, 3.0)})
         self.assertIn("wall_mm", [d["name"] for d in result.dropped])
+
+    def test_the_first_look_reads_the_section_sizes_as_step_values(self):
+        (step,) = steps_of(sized(pipe(hollow), OPTIMISTIC).recipe, "sweep")
+        self.assertEqual((step["sketch"]["outer"]["radius"], step["sketch"]["inner"][0]["radius"]),
+                         ({"expr": "0.5 * pipe_mm"}, {"expr": "0.5 * pipe_mm - wall_mm"}))
 
     def test_without_a_probe_the_section_keeps_its_size(self):
         result = sized(pipe())
