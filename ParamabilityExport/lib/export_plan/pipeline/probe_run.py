@@ -85,11 +85,13 @@ class ProbeRun:
     probe keeps the states read before (`stopped`). The undo data of the tries is dropped before a row only when no
     check found a step worse and the row starts with every followed sketch as at E0.
 
-    A sketch that a row left off its start and that the keeper does not bring back is brought back the way that row
-    took it away (`_walk_row`: `RowExport.walk_back`, at most `walk_back.ATTEMPTS` times), once, before the next row:
-    tries run on a sketch left on its other solution can damage the steps built on it. After the tries (`settle`), a
-    followed sketch still off its start is put back by the keeper and then, when it stays off, brought back the same
-    way.
+    A sketch that a start read first shows off its start and that the keeper does not bring back is brought back,
+    once, before the next row, the way the rows run since it last read as at its start took it away (`_walk_rows`:
+    each row, the last first, at most `walk_back.ROWS_BACK` of them, `RowExport.walk_back` at most
+    `walk_back.ATTEMPTS` times each): tries run on a sketch left on its other solution can damage the steps built on
+    it, and the row that flipped it may be one before the last when a start was not read. After the tries (`settle`),
+    a followed sketch still off its start is put back by the keeper and then, when it stays off, each size those rows
+    moved is walked back alone from the other side of its start value (`_walk_back`, at most `walk_back.END_TRIES`).
 
     With a `time_limit` (seconds, from when the runner is made), the tries stop at the first row that would start after
     it (`RowExport.halted`): no later row runs, the rows planned are left out (`_left` is 0) and the probe is told which
@@ -129,8 +131,9 @@ class ProbeRun:
         self.redone = []  # keys of the rows run a second time
         self._tails = {}  # key of a batch's last row: the read once the values were back after it
         self._misses = {}  # sketch token to the put backs in a row that left it off its start
-        self._rows = {}  # key of a row run to the row
-        self._flipped_by = {}  # token of a sketch off its start to the row after which it was first seen so
+        self._ran = []  # the rows run, in order (`_before_row`)
+        self._clean_at = {}  # token of a sketch to the number of rows run when it last read as at E0, values back
+        self._flipped = set()  # tokens of the sketches the last start read showed off their start (`_note_off`)
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
         self.end = None  # `EndRead` of the put back after the tries (`settle`)
@@ -230,6 +233,7 @@ class ProbeRun:
             # check of the body is read here, in the state the end check reads it in.
             self.probe.keep_body_start()
         back = self._start_of(row, key, previous) if self.read_failure is None else False
+        self._ran.append(row)
         if back and self.job.back_clean:
             self._drop_undo()
 
@@ -241,41 +245,55 @@ class ProbeRun:
         read = self.reads.get(previous)
         if not row.get("again") and read is not None and not self.probe.off_outline(read):
             return True
+        known = set(self._flipped)
         start = self._try_read()
         if start is None:
             return False
         self.starts[key] = start
-        off = self._note_off(self.probe.off_start(start), previous)
+        off = self._note_off(self.probe.off_start(start))
         if not off:
             return True
         back = self._put_back(key, off=off)
-        left = self._note_off(self.probe.off_start(back), previous) if back is not None else off
-        flipper = self._rows.get(previous)
-        fresh = {t for t in left if flipper is not None and self._flipped_by.get(t) is flipper}
+        left = self._note_off(self.probe.off_start(back)) if back is not None else off
+        fresh = [t for t in left if t not in known]
         if fresh and self.read_failure is None:
-            back = self._walk_row(flipper, fresh, back if back is not None else start)
+            back = self._walk_rows(fresh, back if back is not None else start, key)
             if back is None:
                 return False
             self.backs[key] = back
-            left = self._note_off(self.probe.off_start(back), previous)
+            left = self._note_off(self.probe.off_start(back))
         return not left
 
-    def _note_off(self, off, previous):
-        """Keep, for each sketch in `off` (the tokens a read shows off their start), the row after which it was first
-        seen so (`_flipped_by`), and forget the sketches that read at their start again. Returns `off`."""
-        for token in [t for t in self._flipped_by if t not in off]:
-            del self._flipped_by[token]
-        row = self._rows.get(previous)
-        for token in off:
-            if token not in self._flipped_by and row is not None:
-                self._flipped_by[token] = row
+    def _note_off(self, off):
+        """Keep the sketches a start read shows off their start (`_flipped`): a sketch not among them before was first
+        seen off by this read. Returns `off`."""
+        self._flipped = set(off)
         return off
+
+    def _mark(self, read):
+        """Note, for each followed sketch that `read` (taken with the values back) shows as at E0, the number of rows
+        run so far (`_clean_at`): the rows run after it are those that may have taken it away."""
+        if read is None:
+            return read
+        off = set(self.probe.off_start(read))
+        for token in self.probe.followed_sketches():
+            if token not in off:
+                self._clean_at[token] = len(self._ran)
+        return read
+
+    def _since(self, tokens):
+        """The rows run since the first of the sketches `tokens` last read as at E0 with the values back."""
+        return self._ran[min(self._clean_at.get(t, 0) for t in tokens):] if tokens else []
 
     def _at_start(self):
         """`RowExport`'s check after it brought the design back: True when the followed sketches read as at E0 with
-        the values back, or the read failed (`read_failure` then stops the probe)."""
+        the values back, or the read failed (`read_failure` then stops the probe). The attempt's report entry gets
+        what the read showed."""
         read = self._try_read()
-        return read is None or not self.probe.left_start(read)
+        back = read is None or not self.probe.left_start(read)
+        if read is not None and self.job.walks and "back" not in self.job.walks[-1]:
+            self.job.walks[-1]["back"] = back
+        return back
 
     def _drop_undo(self):
         """Let Fusion forget the undo data of the tries so far (`undo_steps`); only called with every value back, no
@@ -287,7 +305,7 @@ class ProbeRun:
         """`_read_now` with every value back (only the outlines with `outline`), or None with `read_failure` set when
         the read failed."""
         try:
-            return self._read_now({}, outline=outline)
+            return self._mark(self._read_now({}, outline=outline))
         except ExportCancelled:
             raise
         except Exception as exc:
@@ -327,6 +345,8 @@ class ProbeRun:
         record = {"put_backs": self.put_backs, "again": len(self.redone)}
         if self.job.recoveries:
             record["walked_back"] = self.job.recoveries
+        if self.job.walks:
+            record["attempts"] = [dict(walk) for walk in self.job.walks]
         self.probe.note_recovery(record)
 
     def _export(self, path):
@@ -358,7 +378,6 @@ class ProbeRun:
         """Run the probe's rows. Returns their results."""
         done = len(self.rows)
         self._values.update((row_key(row), _row_values(row)) for row in rows)
-        self._rows.update((row_key(row), row) for row in rows)
         with self.port.progress(messages.TRY_VERB) as progress:
             def step(index, total, label):
                 # The window counts the tries of the whole export, not of this batch.
@@ -508,7 +527,7 @@ class ProbeRun:
         self.check_pending()
         self.end = EndRead()
         try:
-            read = self._read_now({}, outline=True)
+            read = self._mark(self._read_now({}, outline=True))
             if self.probe.left_start(read):
                 read = self._put_back(last=True, off=self.probe.off_start(read)) or read
                 read = self._walk_back(read)
@@ -523,32 +542,71 @@ class ProbeRun:
             self._drop_undo()
 
     def _walk_back(self, read):
-        """For each row after which a sketch still off its start in `read` was first seen off (`_flipped_by`; the row
-        run last for a sketch no start read saw off), bring
-        the design back the way that row took it away (`RowExport.walk_back`), at most `walk_back.ATTEMPTS` times,
-        reading the outlines after each attempt. Returns the last read."""
-        rows = {}
+        """After the tries: for the sketches still off their start in `read`, walk back alone each size that the rows
+        run since they last read as at E0 moved (`walk_back.one_size_moves`: once per side of its start value, the last
+        rows first), from the other side of its start value, until they read as at E0, at most `walk_back.END_TRIES`
+        walks in all. Sketches that last read as at E0 at the same point share their walks. Returns the last read, or
+        None when a read failed."""
+        groups = {}
         for token in self.probe.off_start(read):
-            row = self._flipped_by.get(token) or self._rows.get(self._previous)
-            if row is not None:
-                rows.setdefault(row_key(row), (row, set()))[1].add(token)
-        for row, tokens in rows.values():
-            read = self._walk_row(row, tokens, read)
+            groups.setdefault(self._clean_at.get(token, 0), []).append(token)
+        left = walk_back.END_TRIES
+        for since, tokens in sorted(groups.items()):
+            ran = self._ran[since:]
+            names = list(dict.fromkeys(n for row in ran for n in row.get("values") or {}))
+            start = walk_back.start_values(self.port.store, names, self.port.units)
+            for row, values in walk_back.one_size_moves(ran, start):
+                if left <= 0 or not set(tokens) & set(self.probe.off_start(read)):
+                    break
+                found = self._walk(dict(row, values=values), 0, walk_back.AT_END, tokens)
+                if found is False:
+                    continue
+                left -= 1
+                if found is None:
+                    return None
+                read = found
+        self._note()
+        return read
+
+    def _walk_rows(self, tokens, read, at):
+        """Bring the sketches `tokens`, off their start in `read`, back the way the rows run since they last read as
+        at E0 took them away (`_walk_row`), the last row first, at most `walk_back.ROWS_BACK` rows, a row that repeats
+        a later row's values left out. `at` is the key of the row about to run. Returns the last read, or None when a
+        read failed."""
+        for row in walk_back.distinct_last(self._since(tokens), walk_back.ROWS_BACK):
+            if not set(tokens) & set(self.probe.off_start(read)):
+                break
+            read = self._walk_row(row, tokens, read, at)
             if read is None:
                 return None
         return read
 
-    def _walk_row(self, row, tokens, read):
+    def _walk_row(self, row, tokens, read, at=None):
         """Bring the sketches `tokens`, off their start in `read`, back the way `row` took them away
         (`RowExport.walk_back`), at most `walk_back.ATTEMPTS` times, reading the outlines after each attempt. Returns
         the last read, or None when a read failed."""
         for attempt in range(walk_back.ATTEMPTS):
-            if not set(tokens) & set(self.probe.off_start(read)) or not self.job.walk_back(row, attempt):
+            if not set(tokens) & set(self.probe.off_start(read)):
                 break
-            read = self._try_read()
-            if read is None:
+            found = self._walk(row, attempt, at, tokens)
+            if found is False:
+                break
+            if found is None:
                 return None
+            read = found
         self._note()
+        return read
+
+    def _walk(self, row, attempt, at, tokens):
+        """Attempt number `attempt` of `RowExport.walk_back` for `row`, then a read of the outlines; the attempt's
+        report entry gets whether the sketches `tokens` read as at E0 (`back`). Returns the read, False when the
+        attempt had nothing to set, or None when the read failed."""
+        kept = len(self.job.walks)
+        if not self.job.walk_back(row, attempt, at):
+            return False
+        read = self._try_read()
+        if read is not None and len(self.job.walks) > kept:
+            self.job.walks[-1]["back"] = not set(tokens) & set(self.probe.off_start(read))
         return read
 
     def _retry(self, sizes):
@@ -605,7 +663,7 @@ class ProbeRun:
             self.before_discovery()
             # Items that were off for the tries are back on, with any warning or error they had all along.
             self.job.rebase()
-        base = self._read_now({})
+        base = self._mark(self._read_now({}))
         off = self.probe.off_start(base)
         back = self._put_back(full=True, off=off) if off else None
         self.probe.set_discovery_base(base, back)

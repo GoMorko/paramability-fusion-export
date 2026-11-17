@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 
-from lib.design_edit.walk_back import settings
+from lib.design_edit.walk_back import one_size_moves, settings
 
 
 class SettingsTest(unittest.TestCase):
@@ -19,6 +19,13 @@ class SettingsTest(unittest.TestCase):
 
     def test_a_length_steps_past_its_start_by_a_share_of_the_try(self):
         self.assertAlmostEqual(settings({"W": 50.0}, {"W": 40.0}, {"W": "mm"}, 0)[0]["W"], 39.0)
+
+
+class OneSizeMovesTest(unittest.TestCase):
+    def test_each_size_once_per_side_from_the_last_row_that_set_it_there(self):
+        rows = [{"values": {"W": 50.0, "H": 20.0}}, {"values": {"W": 30.0}}, {"values": {"W": 45.0, "H": 25.0}}]
+        moves = [values for _, values in one_size_moves(rows, {"W": 40.0, "H": 20.0})]
+        self.assertEqual(moves, [{"W": 45.0}, {"H": 25.0}, {"W": 30.0}])
 
 
 if __name__ == "__main__":

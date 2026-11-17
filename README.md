@@ -31,7 +31,8 @@ learning only.
    that was saved stays saved (with "Lighter on memory" ticked the add-in cannot undo, and the window says so). A parameter that no copied step uses
    is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
    When a change leaves a step in a new warning or error, or a sketch on its other solution, also with the values
-   back, the add-in tries to bring the design back. If it cannot, it stops the changes there and tells you which
+   back, the add-in tries to bring the design back: it sets the sizes of the recent changes a little past their
+   values from the other side and back, one change or one size at a time. If it cannot, it stops the changes there and tells you which
    step. At the end it compares the sketches and the volume and size of the body with the start, and tells you when
    they differ. A very small difference with nothing else changed counts as "not confirmed", not as a change.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as

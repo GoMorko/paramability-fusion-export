@@ -812,7 +812,8 @@ The check, step by step:
    values back: Sketch5 (now a warning). Only the tries before it were used."
 
 `RowExport.recoveries` counts the attempts. `probe.recovery.walked_back` in `report.json` gives the count when it is
-not 0.
+not 0. `RowExport.walks` keeps the first 24 attempts for `probe.recovery.attempts` (see "Solver flips and put backs").
+A walk step that Fusion refuses or cannot build is passed over, and the entry counts it in `failed`.
 
 The check uses no Fusion member that the export did not use before: the same `TimelineObject` members as the end
 check (`healthState`, `errorOrWarningMessage`, `isSuppressed`).
@@ -880,20 +881,52 @@ The pipeline protects against this:
 - The put backs that do not help are counted per sketch (`ProbeRun._misses`). When every sketch that is off its start
   had two put backs in a row that did not help (`MAX_PUT_BACK_MISSES`), no more are tried for them. A sketch that
   cannot be put back does not stop the put back of the other sketches.
-- When a sketch stays off its start after the put back, before the next row, the run brings it back the way the row
-  before took it away (`ProbeRun._walk_row`, the same two attempts as in "The check after a row, and the stop"). It
-  does this once per flip: `ProbeRun._flipped_by` keeps, for each sketch off its start, the row after which it was
-  first seen so. The read after the attempts is the state's `put_back`.
+- Each read with the values back (a start read, a put back read, the read after an attempt, the reads before the
+  discovery rows and after the tries) tells which followed sketches read as at E0. For each of these sketches,
+  `ProbeRun._clean_at` keeps the number of rows run at that read (`ProbeRun._mark`). The rows run after that number are
+  the rows that can have taken the sketch away (`ProbeRun._since`). The row that took it away is not always the row
+  run last. Example: row N flips a sketch only when its values go back. Row N reads the first outline, so the start of
+  row N+1 is not read. Only the start read of row N+2 shows the flip. Then rows N and N+1 both ran since the sketch
+  last read as at E0.
+- When a start read first shows a sketch off its start, and the sketch stays off after the put back, the run brings
+  it back before the next row (`ProbeRun._walk_rows`). It takes the rows run since the sketch last read as at E0, the
+  last row first, at most three rows (`walk_back.ROWS_BACK`). A row that sets the same values as a later row is left
+  out (a row run again repeats its first run). For each row it makes the same two attempts as in "The check after a
+  row, and the stop" (`ProbeRun._walk_row`). It stops at the first attempt after which the sketch reads as at E0. It
+  does this once per flip: `ProbeRun._flipped` keeps the sketches that the last start read showed off their start, and
+  only a sketch that is not in it is walked back. The read after the attempts is the state's `put_back`.
 - A row that did not start from a checked read, and after which the sketch was found flipped, is run once more from a
   checked start. The second run is marked `again`. Its first run is left out of the states.
 - Before the discovery rows, and once after all tries (`ProbeRun.settle`), the sketch is put back again, so the design
   is left on the solution it had. Before the discovery rows the read after the put back is a full read: it is the base
-  the discovery rows are compared with, box and parameters included. After all tries, a sketch that the keeper does
-  not bring back is brought back the way the row after which it was first seen off took it away (`ProbeRun._walk_back`;
-  the row run last when no start read saw it off).
+  the discovery rows are compared with, box and parameters included.
+- After all tries, a sketch that the keeper does not bring back is walked back one size at a time
+  (`ProbeRun._walk_back`). The run takes the rows run since the sketch last read as at E0. From these rows it makes a
+  list of sizes (`walk_back.one_size_moves`): each size that a row set away from its start value, once for each side
+  of the start value, with the value of the last row that set it on that side. The last rows come first, since a
+  sketch with two solutions keeps the solution that its last move gave it. Then, for each entry of the list, only
+  that size is set a small step past its start value on the other side (the first attempt of `walk_back.settings`),
+  the design is rebuilt, and every parameter goes back. After each walk the outlines are read. The walks stop when the
+  sketch reads as at E0, or after 16 walks in all (`walk_back.END_TRIES`). One size at a time is necessary: a row
+  that set several sizes can flip a sketch with only one of them, and the walk of the whole row can keep the sketch
+  where it is. Sketches that last read as at E0 at the same point share their walks.
 
 `probe.recovery` in `report.json` counts the extra rebuilds (`put_backs`, `again`, and `walked_back` for the attempts
-of `walk_back`). `health.flipped` names the sketches that stayed on their other solution for a while.
+of `walk_back`). `probe.recovery.attempts` lists the first 24 attempts (`walk_back.KEPT`, `walk_back.record`), in
+the order they ran. Each entry has:
+
+- `row`: the key of the row walked back.
+- `kind`: `other side` (the sizes a small step past their start values on the other side) or `walk` (the sizes in
+  steps from the row values to the start values).
+- `set`: the values set, one object per step, by Fusion name, in the unit of each parameter.
+- `at`: where the attempt ran: the key of the row about to run, `steps` (the check after a row found a step worse),
+  or `end` (after the tries).
+- `failed`: when there is one, the number of steps that Fusion refused or could not build.
+- `back`: whether the sketches walked back read as at E0 after the attempt. An attempt of the `steps` check has it
+  only when the steps came back too.
+
+Use the list to see which row and which size each attempt walked back, and which one brought the sketch back.
+`health.flipped` names the sketches that stayed on their other solution for a while.
 
 #### The time limit of the tries
 
@@ -953,8 +986,8 @@ pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline
       expressions are read back as text; any that did not take is set on its own, and one that still differs is
       listed in `health.unrestored`.
    2. The suppressed items are turned back on (`PutBack.end_trim`).
-   3. `run.settle()` puts a flipped sketch back: first with the keeper, then the way the try took it away
-      (`walk_back`). It drops the Undo data of the tries only when the sketches read as at E0 and no check found a
+   3. `run.settle()` puts a flipped sketch back: first with the keeper, then with a walk back of each size that the
+      rows since the sketch last read as at E0 moved, one size at a time (`walk_back`). It drops the Undo data of the tries only when the sketches read as at E0 and no check found a
       step worse.
 2. `probe.finish(read_now(), labels)` builds the motion file from the states (`probe/build.py`). It also lists the
    sizes the probe cannot follow: sizes left without rows by the cap (`untried`), sizes that the time limit left
@@ -2775,7 +2808,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   design with a timeline) and `timeline_control(store, name)` (the method, or None when the store has none).
 - `apply.py`, `runner.py` (`RowExport`, `row_key`), `restore.py` (`restore_parameters`), `marker.py`,
   `timeline_health.py` (`settle_timeline`), `walk_back.py` (the values set to bring the design back the way a try took
-  it away), `temp_copy.py`, `errors.py`.
+  it away, the rows and the single sizes to walk back, and the report entry of each attempt), `temp_copy.py`,
+  `errors.py`.
 
 #### fusion_reader
 
@@ -5317,7 +5351,7 @@ nothing in the part changed.
 | `restore_unchecked` | Sketches the restore check could not compare, with why. |
 | `restore_changed` | Sketches the restore check found on another outline, with why. |
 | `restore_body` | What of the body differed from E0 at the end (`measure_body`). |
-| `recovery` | `{ put_backs, again, walked_back? }`: the extra rebuilds for solver flips. |
+| `recovery` | `{ put_backs, again, walked_back?, attempts? }`: the extra rebuilds for solver flips, and the first 24 attempts to walk the design back (`{ row, kind, set, at, failed?, back? }`, see 1.8 "Solver flips and put backs"). |
 | `timeline` | `{ rolled, items, of, reason, suppressed, try_seconds }`: the marker roll (each try rebuilt `items` of the `of` items before the marker), why it did not roll, the "Faster tries" record (`asked`, `on`, `items`, `reason`, `left_off`) and the seconds the tries took. |
 | `time_limit` | `{ limit_seconds, hit, seconds?, left_out }`: the time limit of the tries (`null` for none), whether it stopped them, how long they had taken then, and the Fusion names of the sizes that got no try that built (1.8). |
 
@@ -5865,7 +5899,8 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    `health.body_unconfirmed`: the part differs only a little, or only after the end rebuild. The export was undone as
    a design that is not confirmed back.
    `health.tries_stopped` with `steps`: a try left these steps worse, and the attempts to bring the design back did
-   not help (`probe.recovery.walked_back`).
+   not help (`probe.recovery.walked_back`, and `probe.recovery.attempts` for the row, the sizes and the values of
+   each attempt).
 7. `probe.timeline.suppressed.left_off` and `health.left_off`: timeline items that stayed suppressed after "Faster
    tries", also after the end check tried to turn them on. The person got a message only for the items that the end
    check does not name already. Unsuppress them in the timeline.
