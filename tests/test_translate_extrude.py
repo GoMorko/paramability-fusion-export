@@ -308,6 +308,13 @@ class JoinThroughAllTest(unittest.TestCase):
         # The cap did not merge with a face of the body: nothing shows that the body reaches the end plane.
         self.assertIsNotNone(left_out(join_through(end_area=60.0), 3))
 
+    def test_a_join_whose_cap_stands_alone_is_copied_when_the_body_has_a_flat_face_on_the_end_plane(self):
+        (step,) = under_test(join_through(end_area=60.0, target_flat_faces=[[0.0, -1], [40.0, 1]]), 3)
+        self.assertEqual(step["extent"], "through")
+
+    def test_a_flat_face_on_the_end_plane_that_faces_back_shows_nothing(self):
+        self.assertIsNotNone(left_out(join_through(end_area=60.0, target_flat_faces=[[40.0, -1]]), 3))
+
     def test_a_tapered_join_through_all_is_left_out(self):
         side = {"kind": "throughAll", "positive": True, "taper_deg": -2.0}
         self.assertIsNotNone(left_out(join_through(side_one=side, side_leans=[math.sin(math.radians(2.0))] * 4), 3))

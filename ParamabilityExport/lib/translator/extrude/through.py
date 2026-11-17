@@ -5,8 +5,9 @@ The recipe's add or new extrude `through` with no distance runs from its sketch 
 of the part built so far: the plane through the part's farthest point along that normal. Fusion's join "All" with the
 target body as its only participant ends at the far side of that body. The two are taken to agree only when the
 capture shows it (`_join_far_side`): the measured end cap lies on the far side of the body's box before the step, and
-the face Fusion measured there is larger than the caps of the outlines, so the body had material on that plane and
-the box is not loose there."""
+the body had material on that plane (a flat face of the body there, or an end face larger than the outline caps), so
+the box is not loose there. A join through all onto a curved far side adds nothing in Fusion and has no end cap, so it
+is left out."""
 from ...capture_model import gap_hints
 from ...design_model.steps import extrude as dm
 from ...geometry import vec
@@ -24,8 +25,8 @@ THROUGH_TAPER_MARGIN_MM = 1.0
 _ADDS = "A join or new body through all is only copied one way, with no taper and no thin wall."
 _JOIN_UNSURE = ("This step extrudes through all, and the copy could not check that it ends where the part ends, so "
                 "it is left out.")
-_JOIN_BODIES = ("This step extrudes through all, and Fusion ends it at the far side of other bodies too, so it is "
-                "left out.")
+_JOIN_BODIES = ("This step extrudes through all and joins more than one body, and the copy cannot check where Fusion "
+                "ends it then, so it is left out.")
 
 
 def _farthest(box, origin, direction):
@@ -115,15 +116,37 @@ def _cap_areas(data):
     return total if profiles else None
 
 
+def _reaches_end(data, entry, origin, z, measured):
+    """True when the capture shows that the target body had material on the plane of the measured end (`measured`,
+    mm from `origin` along unit `z` times the side's sign) before the step, facing the way the extrude goes:
+
+    - the reader found a flat face of the body there whose outward normal points along the extrude
+      (`target_flat_faces`, offsets along the first outline's sketch normal from its sketch origin); or
+    - the face Fusion measured at the end is larger than the caps of all outlines together: a join merges its cap
+      with a face of the body on the same plane."""
+    frame = ((data.get("profiles") or [{}])[0] or {}).get("frame")
+    if isinstance(frame, dict) and isinstance(data.get("target_flat_faces"), list):
+        normal = vec.unit(frame["z"])
+        turn = vec.dot(normal, z)
+        if abs(abs(turn) - 1.0) <= 1e-9:
+            shift = vec.dot(vec.sub(origin, frame["origin"]), normal)
+            for offset, facing in data["target_flat_faces"]:
+                at = (offset - shift) * turn
+                if facing * turn == entry.sign and abs(at - measured) <= dm.LENGTH_TOL:
+                    return True
+    caps, end = _cap_areas(data), data.get("end_area")
+    return (caps is not None and isinstance(end, (int, float))
+            and end > caps * (1 + dm.CAP_RELATIVE_TOL) + dm.CAP_ABSOLUTE_TOL)
+
+
 def _join_far_side(ctx, item, plan, entry, data, origin, z, outlines):
     """Write a one sided join or new body through all as the recipe's extrude to the far side of the part (extent
     `through`, no distance), or give a Refusal.
 
     Fusion ends it at the far side of its participant bodies, so the target body must be the only one. The measured
     end must be an end cap on the far side of the target's box before the step, along the direction the plan settled
-    on. A box can be looser than the body, so that alone does not show where the body ends; the face Fusion measured
-    at the end must also be larger than the caps of all outlines together: a join merges its cap with a face of the
-    body on the same plane, so the body had material on that plane. The recipe's taper and thin wall do not go with
+    on. A box can be looser than the body, so that alone does not show where the body ends; the body must also have
+    material on the plane of the end (`_reaches_end`). The recipe's taper and thin wall do not go with
     this extent. Sizes that move the part before the step or the outlines may move its far side; the copy cannot
     check that Fusion and the recipe still end at the same place there, so they are marked."""
     participants = data.get("participants") or []
@@ -139,9 +162,7 @@ def _join_far_side(ctx, item, plan, entry, data, origin, z, outlines):
     far = _farthest(box, origin, vec.scale(z, entry.sign))
     if far <= dm.LENGTH_TOL or abs(measured * entry.sign - far) > dm.LENGTH_TOL:
         return Refusal(_JOIN_UNSURE, cause=gap_hints.THROUGH_ADDS)
-    caps, end = _cap_areas(data), data.get("end_area")
-    if (caps is None or not isinstance(end, (int, float))
-            or end <= caps * (1 + dm.CAP_RELATIVE_TOL) + dm.CAP_ABSOLUTE_TOL):
+    if not _reaches_end(data, entry, origin, z, measured):
         return Refusal(_JOIN_UNSURE, cause=gap_hints.THROUGH_ADDS)
     values.pin(ctx, item, entry.read.taper_path, "a taper of zero cannot follow it")
     movers = set(ctx.written_reads or ())
