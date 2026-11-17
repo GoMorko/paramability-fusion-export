@@ -9,10 +9,11 @@ the body had material on that plane (a flat face of the body there, or an end fa
 the box is not loose there. A join through all onto a curved far side adds nothing in Fusion and has no end cap, so it
 is left out."""
 from ...capture_model import gap_hints
+from ...capture_model.capture import same_body
 from ...design_model.steps import extrude as dm
 from ...geometry import vec
 from ...geometry.combine_volume import profile_area
-from .. import values
+from .. import notes, values
 from ..ranges import range_check
 from ..result import Refusal
 from ..sketch import sketch_motion
@@ -22,7 +23,7 @@ from .taper import MAX_TAPER_DEG
 
 # A tapered cut through all whose walls lean in ends this far (mm) past the part.
 THROUGH_TAPER_MARGIN_MM = 1.0
-_ADDS = "A join or new body through all is only copied one way, with no taper and no thin wall."
+_ADDS = "Only a join through all is copied, one way, with no taper and no thin wall."
 _JOIN_UNSURE = ("This step extrudes through all, and the copy could not check that it ends where the part ends, so "
                 "it is left out.")
 _JOIN_BODIES = ("This step extrudes through all and joins more than one body, and the copy cannot check where Fusion "
@@ -147,8 +148,22 @@ def _join_far_side(ctx, item, plan, entry, data, origin, z, outlines):
     end must be an end cap on the far side of the target's box before the step, along the direction the plan settled
     on. A box can be looser than the body, so that alone does not show where the body ends; the body must also have
     material on the plane of the end (`_reaches_end`). The recipe's taper and thin wall do not go with
-    this extent. Sizes that move the part before the step or the outlines may move its far side; the copy cannot
-    check that Fusion and the recipe still end at the same place there, so they are marked."""
+    this extent. A new body has no body before it to end at, so it is left out.
+
+    The recipe ends it at the far side of the part it built, and the proofs are measured on the exported body. So
+    every earlier step of the walk must be written (a left out step may change where the part ends), and the walk
+    must build the exported body itself at this step: not a tool body of a Combine, nor the body it was split from.
+
+    Sizes that move the part before the step or the outlines may move its far side; the copy cannot check that Fusion
+    and the recipe still end at the same place there, so they are marked."""
+    if data.get("operation") != "join":
+        return Refusal(_ADDS, cause=gap_hints.THROUGH_ADDS)
+    if ctx.outer is not None or not same_body(ctx.lineage_at(item.get("index", 0))[0], ctx.target):
+        return Refusal(_JOIN_UNSURE, cause=gap_hints.THROUGH_ADDS)
+    gaps = [gap for gap in ctx.gaps if gap.index is not None and gap.index < item.get("index", 0)]
+    if gaps:
+        return Refusal(notes.far_side_gap_reason([gap.name for gap in gaps]), [gap.id for gap in gaps],
+                       cause=gap_hints.AFTER_GAP)
     participants = data.get("participants") or []
     if not participants:
         return Refusal(_JOIN_UNSURE, cause=gap_hints.THROUGH_ADDS)

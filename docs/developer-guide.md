@@ -1154,7 +1154,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one), or ends on a tilted or curved face in a way the app cannot build (`extrude/up_to.py`, section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides") | Start and end on flat faces or planes, or give a distance. |
 | `extrudeStartOffset` | an extrude that starts at a distance from a face or plane, when the measured start face or end cap does not show which way the distance goes (same section) | Start the extrude on the face itself, or on a plane at that distance from the face. |
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
-| `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
+| `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, one in the walk of a tool body or of a body before a split, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
 | `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 90 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
@@ -1195,7 +1195,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `oldExport` | a step whose only records of another component are sketch outlines, planes or axes, in a capture that an add-in before 0.10.6 read (`addin` of the capture, `refs.old_writer`) | Export again with this version of the add-in. |
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
-| `afterGap` | a step that picks faces of a gap, repeats a gap, or sits on a floating join | Fix the step it builds on first. |
+| `afterGap` | a step that picks faces of a gap, repeats a gap, sits on a floating join, or extrudes through all to the far side of a part that a gap may change | Fix the step it builds on first. |
 | `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
 
 A step that does not copy is told in the app's user guide page "Steps that do not copy yet". `tests/test_gap_hints.py`
@@ -4249,7 +4249,18 @@ past the part. The recipe walk builds one body. Thus "the part" in the app is th
 the step (or, in a `toolBody`, the copy of the tool body before the step).
 
 `extrude/through.py` (`_join_far_side`) writes this extent only when the capture shows that Fusion and the app end
-the extrude at the same plane. The add-in checks these conditions, in this order:
+the extrude at the same plane. First, the add-in checks the walk:
+
+- The step is a join. A new body through all has no body before it to end at, so it is left out
+  (`throughAllAdds`).
+- The walk builds the exported body itself at this step. The reader measures the box, the end face and the flat
+  faces on the exported body. In the walk of a tool body of a Combine, or before a split while the walk builds the
+  body that was split, these measures are of another body. Thus the step is left out (`throughAllAdds`).
+- No earlier step of the walk is a gap. The app ends the extrude at the far side of the part that it built. A step
+  that is not in the copy can change where that part ends. Thus the step is left out after a gap, with the cause
+  `afterGap` and the ids of the earlier gaps, as for an extrude up to a tilted or curved face.
+
+Then the add-in checks these conditions, in this order:
 
 1. The target body is the only participant body (`participants`, read with `ctx.is_target`). When Fusion joins more
    bodies, the add-in cannot tell where Fusion ends the extrude, and the app knows only the target body. The cause
@@ -4283,7 +4294,9 @@ check the far side only at the sizes of the export. At other sizes, a different 
 farthest part, for example a curved face. The add-in cannot check that Fusion and the app find the same far side
 there. Thus the add-in marks these sizes ("may give unexpected results", with the step named): the sizes that the
 steps written before it read (`ctx.written_reads`), and the sizes that move its outlines
-(`sketch_motion.outline_movers`). A taper of zero that follows a size is pinned, as for a cut through all both ways.
+(`sketch_motion.outline_movers`). This mark is broad. It also marks sizes that cannot move the far side, for example
+the size of a small hole. The probe does not record the box of the body at each try (the motion file has only
+`box_max`, the union of all tries), so the add-in cannot tell which sizes move the body along the extrude. A taper of zero that follows a size is pinned, as for a cut through all both ways.
 
 The written step has no slab, so later picks on its faces do not follow it. Its length follows the part, so it is not
 repeatable: a pattern or a mirror of the step is left out. The Orca output still leaves a join through all out
