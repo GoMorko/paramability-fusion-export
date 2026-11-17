@@ -866,3 +866,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (Chamfer1)". In `report.json`, each entry of `probe.motion.spans.Width.failed` has a third number: the timeline
     position of the chamfer of Box (the `index` of that item in `capture.items`, not of the chamfer of Other). The
     state of that try in `probe.states` has `failed_at` with the same number. Afterwards the design is as before.
+75. RS1, a red step that builds at other sizes. Add a user parameter `Side` = 60 mm. On the XY plane sketch a
+    centred square of `Side` x `Side` and extrude it 5 mm up as a new body. Fillet its four vertical edges with 25 mm
+    in one Fillet step. Then set `Side` to 40 mm: Fusion cannot build the fillet now, and it is red in the timeline.
+    On the top face sketch a 6 mm circle on the centre and cut it through all.
+    Export: pick the body and tick `Side` with a range of 20 to 80 mm. Expect a recipe, not a fixed shape: a note says
+    the fillet "is in error in Fusion and changes nothing on the part, so the copy leaves it out too", the cut is
+    copied, and no step is left out. The range of `Side` stops at a value from 40 to 50 mm, with the reason
+    "Fillet1, in error in Fusion now, builds at ...". In `report.json` that try has `cleared: true` in
+    `probe.states`, and `probe.motion.spans.Side.cleared` lists it. Afterwards the fillet is red again, `Side` is
+    40 mm, and `health` has no `steps_changed`.

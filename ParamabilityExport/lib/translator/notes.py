@@ -35,19 +35,21 @@ def number_text(value):
 _TRY_KINDS = (("failed", True), ("changed", False), ("split", None))
 
 
-# The `broke` of a try that built with a new warning on a step (`Motion.spans` `warned`, also in `failed`).
-_WARNED = "warned"
+# The `broke` of a try that built with a new warning on a step (`Motion.spans` `warned`, also in `failed`), and of a
+# try where a step in error at the start built (`Motion.spans` `cleared`, also in `failed`).
+_WARNED, _CLEARED = "warned", "cleared"
 
 
 def _nearest_tries(span, now, kinds=("failed", "changed", "split")):
     """`(value, name, broke)` of the try nearest to `now` on each side, lowest first, among the `kinds` of
     `Motion.spans`: the values that did not rebuild (`failed`, `broke` true, `name` the step; `_WARNED` for a step
-    that showed a new warning there), that changed an outline (`changed`, `name` the sketch) or that left the part in
-    several pieces (`split`, `broke` None, `name` the number of pieces)."""
-    warned = {(v, name) for v, name, *_ in span.get("warned") or ()}
+    that showed a new warning there, `_CLEARED` for a step in error at the start that built there), that changed an
+    outline (`changed`, `name` the sketch) or that left the part in several pieces (`split`, `broke` None, `name` the
+    number of pieces)."""
+    marked = {(v, name): kind for kind in (_WARNED, _CLEARED) for v, name, *_ in span.get(kind) or ()}
     out = []
     for side in (-1, 1):
-        seen = [(v, name, _WARNED if broke is True and (v, name) in warned else broke)
+        seen = [(v, name, marked.get((v, name), broke) if broke is True else broke)
                 for key, broke in _TRY_KINDS if key in kinds
                 for v, name, *_ in span.get(key) or () if (v - now) * side > 0]
         if seen:
@@ -60,18 +62,21 @@ def _try_why(value, name, broke):
         return split_why([(value, name)])
     if broke == _WARNED:
         return warned_why([(value, name)])
+    if broke == _CLEARED:
+        return cleared_why([(value, name)])
     return not_rebuilt_why([(value, name)]) if broke else outline_changed_why([(value, name)])
 
 
 def not_built_why(span):
-    """Why a size was not measured: Fusion rebuilt the design at none of the values tried, or only in several pieces
-    or with a new warning on a step.
+    """Why a size was not measured: Fusion rebuilt the design at none of the values tried, or only in several pieces,
+    with a new warning on a step or with a step built that is in error now.
     Names the value nearest to the value now on each side and the step that failed there."""
     seen = _nearest_tries(span, span["low"], ("failed", "split"))
     tried = ["%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "")
              for v, step, broke in seen if broke is True]
     other = [split_why([(v, count)]) for v, count, broke in seen if broke is None]
     other += [warned_why([(v, step)]) for v, step, broke in seen if broke == _WARNED]
+    other += [cleared_why([(v, step)]) for v, step, broke in seen if broke == _CLEARED]
     if not other:
         return "the design does not rebuild in Fusion at %s, the nearest values tried, so it could not be measured" % (
             " or ".join(tried) or "the values tried")
@@ -147,6 +152,13 @@ def warned_why(warnings):
     12.5"."""
     return " and ".join("Fusion shows a warning on %s at %s" % (clip(step or "a step", MAX_NAME), number_text(v))
                         for v, step in warnings)
+
+
+def cleared_why(steps):
+    """What the size probe saw at the cut ends, from `(value, step)` of each step that is in error now and built
+    there: "Fillet3, in error in Fusion now, builds at 12.5"."""
+    return " and ".join("%s, in error in Fusion now, builds at %s" % (clip(step or "a step", MAX_NAME), number_text(v))
+                        for v, step in steps)
 
 
 def outline_changed_why(changes):
@@ -347,6 +359,22 @@ def health_warning_note(label, message):
     detail = _ends(plain(message or ""))
     return clip("Fusion shows a warning on %s%s. The copy follows what Fusion built, which may not be what was meant."
                 % (label, ": " + detail if detail else ""), MAX_NOTE)
+
+
+def in_error_note(label):
+    """A step Fusion shows in error that left the part as it was: the copy leaves it out too."""
+    return clip("%s is in error in Fusion and changes nothing on the part, so the copy leaves it out too." % label,
+                MAX_NOTE)
+
+
+def in_error_reason():
+    """Why a step Fusion shows in error that still changed the part is left out: Fusion keeps an older result of it."""
+    return "This step is in error in Fusion, and the part keeps an older result of it."
+
+
+def in_error_why(label):
+    """Why a size stays fixed next to a step in error that the copy leaves out: no try showed where the step builds."""
+    return "%s is in error in Fusion and may build at other values, and this size was not tried there" % label
 
 
 def split_face_note(label):

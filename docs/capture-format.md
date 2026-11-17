@@ -2042,7 +2042,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   the design with only that size changed, an untyped range stops at the farthest value that built
   (`tried_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
   end). A step of the part that shows a new warning at a try counts as a failure there (`spans.warned`, `Cut.warned`; the
-reason says "Fusion shows a warning on Revolve1 at 12.5"). A failure counts only when its step is one the part is built from: an item of the target's component, a
+reason says "Fusion shows a warning on Revolve1 at 12.5"). So does a try where a step of the part that is in error at
+  the start builds (`spans.cleared`, `Cut.cleared`; the reason says "Fillet1, in error in Fusion now, builds at 80"). A failure counts only when its step is one the part is built from: an item of the target's component, a
   step that made a Combine tool body or an item with `body_states`, or a failure with no step name; a step of another
   component, or a name no capture item has, cuts nothing and the size keeps the "followed between A and B" mark. The
   step is told by its timeline position (the third number of a `spans.failed` entry, the capture item `index`), since
@@ -2194,7 +2195,8 @@ the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed and that the part is built from, else the first step that failed (`failed`, the name, and
 `failed_at`, its timeline position; records of older versions have no `failed_at`). A row that built while a step of the part showed a warning it did not show before
-the tries is kept as a state that did not build, with that step in `failed` and `warned: true`. A ticked size the probe set to other values that no formula reads at the end is dropped with
+the tries is kept as a state that did not build, with that step in `failed` and `warned: true`. A row that built while a
+step of the part that was in error before the tries built too is kept the same way, with `cleared: true`. A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
 B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
 and volume (`volume_mm3` in each state read) read the same at every try that set it alone
@@ -2247,7 +2249,7 @@ move. `spans` gives, per size the probe set to other values, the lowest and high
 (the value now included) and `failed`, `[value, step, position]` for each value tried alone that did not build, with
 the timeline position of the step (`[value, step]` in records of older versions or when Fusion gave no position)
 (`probe.build.spans`), `warned`, the entries of `failed` where the step showed a new warning (only when there is
-one), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
+one), `cleared`, the entries of `failed` where a step in error at the start built (only when there is one), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
 separate pieces (only when there is one, see "Probe states"), and `kept` and `changed` for a size whose own row changed a followed outline (see the
 different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and

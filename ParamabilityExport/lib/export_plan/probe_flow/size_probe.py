@@ -14,7 +14,7 @@ from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
-from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
+from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
                       UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
@@ -126,7 +126,9 @@ class SizeProbe:
         as a row that did not build, with the number of pieces: the app cannot build the part there. A row where a
         step the part is built from shows a new warning (the result's `warned`, `tried_ranges.part_step`) is kept
         as a row that did not build too, with that step: Fusion may have built something else there than the copy
-        would, so the ranges stop before it as before a step in error. A row in error keeps the first step in error
+        would, so the ranges stop before it as before a step in error. So is a row where a step the part is built
+        from that is in error at the start builds (the result's `cleared`): the copy leaves that step out, so it
+        lacks what the step makes there. A row in error keeps the first step in error
         that the part is built from (the first step in error when none is). Each step is kept with its timeline
         position (`ProbeState.failed_at`), since another component can have a step of the same name."""
         for values, result, read, *rest in entries:
@@ -137,6 +139,7 @@ class SizeProbe:
                     "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
             apart = None if result.get("error") else pieces.came_apart(read, self.e0)
             warned = [step for step in map(as_step, result.get("warned") or ()) if self.counts_warning(step)]
+            cleared = [step for step in map(as_step, result.get("cleared") or ()) if self.counts_warning(step)]
             if result.get("error"):
                 detail = result.get("detail") or {}
                 steps = detail_steps(detail)
@@ -149,6 +152,12 @@ class SizeProbe:
                 self.dropped.append({"name": result.get("name"), "error": WARNED_TRY % name,
                                      "detail": {"reason": "new_warnings", "items": [n for _, n in warned],
                                                 "at": [a for a, _ in warned]}})
+            elif cleared:
+                at, name = cleared[0]
+                state = ProbeState(values or {}, built=False, failed=name, failed_at=at, cleared=True, **kept)
+                self.dropped.append({"name": result.get("name"), "error": CLEARED_TRY % name,
+                                     "detail": {"reason": "cleared_errors", "items": [n for _, n in cleared],
+                                                "at": [a for a, _ in cleared]}})
             elif apart:
                 state = ProbeState(values or {}, built=False, pieces=apart, **kept)
                 self.dropped.append({"name": result.get("name"), "error": pieces.APART_ERROR % apart})

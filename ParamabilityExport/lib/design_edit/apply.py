@@ -102,6 +102,19 @@ def new_warnings(store, baseline, counts=None, others=None):
     return found
 
 
+def cleared_errors(store, baseline):
+    """`[(position, name)]` of the timeline items in error in `baseline` that are not in error now: steps that build
+    with the values of a row although they did not at the start. A step the copy leaves out because Fusion shows it in
+    error may then make a shape the copy does not have. An unreadable timeline gives none. Never raises."""
+    if not baseline.errors:
+        return []
+    try:
+        now = error_entries(store)
+    except Exception:
+        return []
+    return [(position(key), name) for key, name in baseline.errors.items() if key not in now]
+
+
 def _set_each(store, expressions):
     """Set the expressions one at a time, then recompute; whether Fusion reported the recompute done. Raises
     RowBuildError when Fusion refuses an expression or the recompute raises."""

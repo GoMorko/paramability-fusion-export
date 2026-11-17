@@ -24,7 +24,8 @@ learning only.
 1. The add-in reads the steps of the body in the Fusion timeline: sketches, extrudes, holes, fillets and more.
 2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
    moves, and how much. Where a step of the body does not rebuild, or shows a new warning, the range of that
-   parameter stops before that value. The add-in finds the step by its place in the timeline, so a step of another
+   parameter stops before that value. A step that is red in the timeline now is left out of the copy; where it builds
+   at a value tried, the range stops before that value too. The add-in finds the step by its place in the timeline, so a step of another
    component with the same name (two components can each have a "Chamfer1") does not hide it.
 3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot
    confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. This also happens

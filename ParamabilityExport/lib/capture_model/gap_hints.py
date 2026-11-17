@@ -60,6 +60,7 @@ CHANGED_FROM_OTHER_COMPONENT = "changedFromOtherComponent"
 MADE_IN_OTHER_COMPONENT = "madeInOtherComponent"
 AFTER_GAP = "afterGap"
 ADDIN_ERROR = "addinError"
+FAILS_IN_FUSION = "failsInFusion"
 
 # Causes without a hint: a refusal that names no cause, and a step type with no handler and no cause in the table.
 REFUSED = "refused"
@@ -118,6 +119,7 @@ HINTS = {
     MADE_IN_OTHER_COMPONENT: "Model the body in the component you export, or export the component that holds it.",
     AFTER_GAP: "Fix the step it builds on first.",
     ADDIN_ERROR: "Send the report and the file export-trail.log from the ParamabilityExport temp folder with it.",
+    FAILS_IN_FUSION: "Fix the step that Fusion shows in red, then export again.",
 }
 
 

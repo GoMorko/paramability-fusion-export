@@ -4,7 +4,8 @@ import os
 from ..package.caps import check_step_size, check_total_size
 from ..timing import trail
 from . import walk_back
-from .apply import RowBuildError, apply_row_values, error_entries, measure_baseline, new_warnings, warning_entries
+from .apply import (RowBuildError, apply_row_values, cleared_errors, error_entries, measure_baseline, new_warnings,
+                    warning_entries)
 from .errors import StepExportError
 from .restore import restore_parameters
 from .timeline_health import changes, is_worse, read_timeline
@@ -233,7 +234,8 @@ class RowExport:
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
         then set every parameter it needs. A row that builds with timeline items in warning that were not in warning
         or in error in the baseline (`apply.new_warnings`) also gives 'warned': `(timeline position, name)` of each,
-        in timeline order.
+        in timeline order. A row that builds a step that was in error in the baseline (`apply.cleared_errors`) gives
+        'cleared': `(timeline position, name)` of each.
         A row without a STEP gives 'step_file': None as well.
         """
         if self._saved is None:
@@ -266,6 +268,7 @@ class RowExport:
                                               full=row.get("step") is not False)
                     warned = new_warnings(self.store, self._baseline, self.counts_warning, others) \
                         if tolerate_build_errors else []
+                    cleared = cleared_errors(self.store, self._baseline) if tolerate_build_errors else []
                     self._check_next, self._check_others = bool(warned), bool(others)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
@@ -279,6 +282,8 @@ class RowExport:
                 result = {"name": row["name"], "values": values, "step_file": None}
                 if warned:
                     result["warned"] = warned
+                if cleared:
+                    result["cleared"] = cleared
                 if row.get("step") is False:
                     self.export_step(None)
                     results.append(result)

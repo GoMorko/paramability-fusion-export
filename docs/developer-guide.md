@@ -733,7 +733,10 @@ full example.
    lists the new items in error: `items` has their names and `at` has their timeline positions, in the same order.
    Then it reads the steps in warning (`apply.new_warnings`). Each step in warning is a pair: its timeline position
    and its name. A new warning on a step the part is built from goes to the result (`warned`). A new warning on
-   another step does not, but the job notes it, for the check before the next row.
+   another step does not, but the job notes it, for the check before the next row. Then it reads the steps in error
+   again and compares them with the baseline (`apply.cleared_errors`). A step that was in error in the baseline and
+   is not in error now built at this row. Each such step goes to the result (`cleared`), as a pair of its timeline
+   position and its name. The job reads the steps in error for this only when the baseline has a step in error.
 7. For a probe row there is no STEP file (`"step": False`). The step callback reads the probe state instead
    (`ProbeRun._export`). A row with a STEP file (Export size choices) is recomputed in full after the change, and
    judged by that recompute, before its STEP is written.
@@ -1087,7 +1090,9 @@ The walk then makes one of these decisions from the role. The first rule that ma
 | a step of another component | `skipped`; but if it changed the body: stop |
 | a step whose body cannot be followed (token changed) | stop |
 | a step whose `bodies_after` is null | stop |
-| a step in error in Fusion that touches the body | stop |
+| a step in error in Fusion that touches the body or lists no body, and the body is the same before and after it (`target_changed` false) | `skipped`, with a note; the sizes that may make it build stay fixed while no try set them (see below) |
+| a step in error in Fusion that touches the body or lists no body, and the body changed (`target_changed` true) | gap, cause `failsInFusion` |
+| a step in error in Fusion that touches the body or lists no body, and the body was not measured around it (`target_changed` null) | stop, cause `failsInFusion` |
 | a step that does not touch the body | `skipped`, "Helper geometry" (with special cases for types that copy or move bodies) |
 | a step that makes another body, or a split | stop, unless `split_rules.stop_reason` allows the split |
 | a Split Face that left the body unchanged | `skipped` with a note |
@@ -1096,6 +1101,43 @@ The walk then makes one of these decisions from the role. The first rule that ma
 | a step that reaches into another component (`foreign`) | gap |
 | a step that picks faces of a gap | gap (`cause: picks`) |
 | otherwise | the handler runs |
+
+#### A step in error in Fusion
+
+Real designs often keep a step that Fusion shows in error (red in the timeline). The reader measures the body just
+before and just after each step (`target_changed`). The walk uses this measure to decide what the step did to the
+part:
+
+- The body is the same before and after the step (`target_changed` false). Fusion shows nothing of the step on the
+  part. The copy also leaves it out. The verdict is `skipped`, and the note "Fillet3 (fillet) is in error in Fusion
+  and changes nothing on the part, so the copy leaves it out too." goes to the item and to the package notes. There is
+  no gap, so the steps after it are copied as usual.
+- The body changed (`target_changed` true). Fusion keeps an older result of the step on the part (cached geometry),
+  for example a pattern that made only some of its copies. The copy cannot rebuild that result. The step becomes a
+  gap with the cause `failsInFusion` and the hint "Fix the step that Fusion shows in red, then export again." The
+  steps that pick faces of the gap or repeat it are gaps too (`afterGap`), as after any other gap.
+- The body was not measured around the step (`target_changed` null). The walk cannot tell what the step did. The
+  copy stops at the step with the cause `failsInFusion`, so the stop warning shows the same hint.
+
+A step that Fusion shows in error at the values now can build at other values. For example, a fillet that is too
+large for a thin plate builds when the plate is thicker. Then Fusion makes a shape that the copy does not have. Thus
+the sizes that can make the step build must not go past the values where it builds:
+
+- The size probe compares the steps in error after each try with the baseline (`apply.cleared_errors`, see 1.8, "One
+  row, in detail"). A
+  step of the part that is in error in the baseline and builds at a try makes that try a try that did not build
+  (`ProbeState.cleared`, `Motion.spans[size].cleared`). The range of the size stops at the farthest value tried at
+  which the step was still in error (`tried_ranges.built_ranges`, `Cut.cleared`). The reason says "Plate_width: the
+  range stops at 60, since Fillet1, in error in Fusion now, builds at 80." (`notes.cleared_why`).
+- Only a step that the part is built from counts (`tried_ranges.part_step`, by timeline position). A step in error in
+  another component cuts nothing.
+- A size that no try set alone has no span in the motion file. The walk makes such a size fixed when it may make the
+  passed step build (`walk._fix_untried`): the sizes that the steps written before it read (`Context.written_reads`)
+  and the sizes behind the values of the step itself (`design.params_of`). The reason is "Fillet3 (fillet) is in error
+  in Fusion and may build at other values, and this size was not tried there." The sizes that only later steps read
+  stay free, since a later step cannot change how an earlier step builds.
+- The first translation of an export (`OPTIMISTIC`) makes no size fixed for this reason. The probe tries only the
+  sizes that the first translation keeps free, and the tries come after it.
 
 Before the check for `foreign` records, the walk brings in the geometry of other components that the step can use as
 its own. The shared layer did this when it read the design (`design.read`), for each step of the component of the
@@ -1351,6 +1393,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
 | `afterGap` | a step that picks faces of a gap, repeats a gap, sits on a floating join, or extrudes through all to the far side of a part that a gap may change | Fix the step it builds on first. |
+| `failsInFusion` | a step that Fusion shows in error and that changed the part (a gap), or around which the part was not measured (a stop) | Fix the step that Fusion shows in red, then export again. |
 | `addinError` | a step whose handling raised an error that the add-in did not expect (a stop, 1.9.1) | Send the report and the file export-trail.log from the ParamabilityExport temp folder with it. |
 | `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
 
@@ -3121,6 +3164,14 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
   since Fusion shows a warning on Revolve1 at 12.5." (`Cut.warned`, `notes.warned_why`). A warning on a step of
   another component changes nothing.
+- A row that Fusion builds can also build a step that was in error in the baseline. The copy leaves such a step out
+  (1.9.1, "A step in error in Fusion"), so at that row Fusion makes a shape that the copy does not have. The runner
+  gives these steps in `cleared` (`apply.cleared_errors`): a key of the baseline errors that is not in the steps in
+  error after the row. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  of those steps that the part is built from, `failed_at` its position, and `cleared` true. Thus the rows nearer to
+  the value now and the halving run as for a failure. The span keeps the try in `failed`, and in `cleared` too, so the
+  reason says what Fusion did: "Thickness: the range starts at 3, since Fillet1, in error in Fusion now, builds at
+  2.5." (`Cut.cleared`, `notes.cleared_why`). A step of another component that builds changes nothing.
 - A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
   it could not be tried".
 - A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
@@ -3936,7 +3987,9 @@ A step becomes a gap (left out, recipe still written):
 - it picks faces of a gap, or may pick them (`cause: picks`);
 - it is a pattern or mirror of a gap;
 - it is a Combine whose tool cannot be built;
-- it is an extrude join that meets only material of earlier gaps, so it would float apart from the copy (1.9.3).
+- it is an extrude join that meets only material of earlier gaps, so it would float apart from the copy (1.9.3);
+- Fusion shows it in error and the part changed (`target_changed` true): Fusion keeps an older result of the step,
+  which the copy cannot rebuild (cause `failsInFusion`, 1.9.1).
 
 A step stops the copy (fixed shape):
 
@@ -3944,7 +3997,7 @@ A step stops the copy (fixed shape):
 - a step of another component or an assembly item changes the part;
 - the body cannot be followed (a new token with the same name);
 - the bodies of the step cannot be read (`bodies_after` null), or its reader failed (`read_error`);
-- Fusion shows the step in error;
+- Fusion shows the step in error and the part was not measured around it (`target_changed` null);
 - the step splits the part or makes another body, except a Split Body that `split_rules` allows;
 - a step with no handler whose effect cannot be told (`target_changed` null);
 - a handler answers `Refusal(stops=True)` (the split handler does this);
@@ -3957,8 +4010,8 @@ A stop that has a cause carries its hint: the `refusal` record holds it, the ear
 "Tip: ...", and the package note adds it when it fits (1.9.3).
 
 A step is passed by (skipped, no gap) when it is suppressed, a sketch, construction geometry, a step of another body
-that is never joined to the part, a Remove of another body (`target_changed` false), or a Split Face that left the body
-unchanged.
+that is never joined to the part, a Remove of another body (`target_changed` false), a Split Face that left the body
+unchanged, or a step that Fusion shows in error and that left the body unchanged (`target_changed` false, with a note).
 
 ### 3.11 How a pattern with copies on both sides is translated
 
@@ -5362,7 +5415,7 @@ nothing in the part changed.
 | Key | Meaning |
 | --- | --- |
 | `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
-| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error that the part is built from when it did not build, else the first step in error), `failed_at` (the timeline position of that step; not in records of older versions), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error that the part is built from when it did not build, else the first step in error), `failed_at` (the timeline position of that step; not in records of older versions), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `cleared` (true when the row built and `failed`, a step in error at the start, built too, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
 | `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, `items` with the names of the steps and `at` with their timeline positions). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
 | `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
 | `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
@@ -5381,7 +5434,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step, position]`; `[value, step]` in records of older versions or when Fusion gave no position), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step, position]`; `[value, step]` in records of older versions or when Fusion gave no position), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `cleared` (the entries of `failed` where a step in error at the start built, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |
