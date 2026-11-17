@@ -22,7 +22,8 @@ leaves out when the effect stays on the body and the rest of the timeline still 
   change (`target_changed` true); when it cannot tell, the copy stops;
 - a handler that answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a Combine whose
   tool cannot be built, a pattern whose sources it cannot repeat);
-- a step that reaches into another component (`foreign` records in its data);
+- a step that reaches into another component (`foreign` records in its data). An entry of `built_on` is no such
+  record: it says what a plane or axis of the part is built on, and only tells which sizes may move it;
 - a step that picks faces of a gap (see "Later steps that pick faces of a gap"), and a pattern or mirror of a gap;
 - an extrude join whose material meets only material of earlier gaps of its walk (`faces/floating.py`, reason "It sits on a
   step that was left out, so it would float apart from the copy."). The app's kernel refuses a step that leaves the

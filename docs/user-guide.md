@@ -90,6 +90,13 @@ as one that may move that component in the assembly, and the export tries it lik
 joint parameter is not ticked to start with). If the tries did not measure it, it is marked "may give unexpected results"
 for each such place, and never "nothing in this part moved with it".
 
+A plane or axis of the part's own component can be built on another component, for example a plane offset from the
+XY plane of the main design while the part sits in an assembly. That plane belongs to the part, so the steps that
+use it are copied. The export cannot tell which parameters move what the plane is built on. When an extrude goes up
+to such a plane or a sketch sits on it, the export tries it with every ticked parameter, and a parameter that the
+tries could not measure is marked "may give unexpected results". A mirror plane or a pattern axis built so marks
+every ticked parameter.
+
 When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12
 unticked parameters that act on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
 part is named in the result window ("These parameters also change this part"), and you tick it and export again to

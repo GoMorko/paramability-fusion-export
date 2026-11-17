@@ -244,6 +244,21 @@ class SketchPlaneTest(unittest.TestCase):
         self.assertEqual(reach.hole_plane_sizes(self.table, self.timeline, cut, origin), [])
 
 
+class BuiltOnAnotherComponentTest(unittest.TestCase):
+    def test_a_plane_built_on_another_component_may_move_with_every_ticked_size(self):
+        # t_mm is read only by the step itself: through the other component it may still move the plane.
+        found = sized_table([])
+        timeline = [step(0, "Base", reads=["h_mm"]), step(1, "Boss", reads=["t_mm"])]
+        chained = plane("p2", [plane("p1", [{"foreign": True}])], made_by=0)
+        self.assertEqual(reach.reach_sizes(found, timeline, timeline[1], chained), NAMES)
+        self.assertEqual(reach.reference_sizes(found, timeline, timeline[1], chained), NAMES)
+        reference = dict(chained, kind="constructionPlane")
+        self.assertEqual(reach.placement_sizes(found, timeline, {"sketch": "S", "frame": FRAME,
+                                                                 "reference": reference}, 1), NAMES)
+        # Built on the part alone, only the sizes read before the plane count.
+        self.assertEqual(reach.reach_sizes(found, timeline, timeline[1], plane("p2", [FACE], made_by=1)), ["h_mm"])
+
+
 class ReferenceSizesTest(unittest.TestCase):
     """The sizes that may move a plane, axis or face a step uses as a place (`reach.reference_sizes`)."""
 

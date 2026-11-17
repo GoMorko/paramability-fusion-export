@@ -3029,12 +3029,27 @@ Example. `Lift = 12 mm`. A plane is offset from the XY plane by `Lift`. A sketch
 - The reader reads the members of the plane or axis definition that name what it is built on (`_BUILT_ON_MEMBERS`
   in `read_reference.py`). Each name comes from the `ConstructionPlane...Definition` and
   `ConstructionAxis...Definition` objects of the API reference. An entity of another component goes into `built_on`
-  as `{ "foreign": true }`.
+  as `{ "foreign": true }`. The entry also names the component that owns the entity (`component`). It has
+  `root: true` when that component is the root component.
 - Sometimes the reader cannot tell what a plane is built on. The definition can be unreadable, or the chain can be
   deeper than three levels. Then the plane has no `built_on`. `reach.on_part` counts such a plane as built on the
-  part. It also counts a plane with a `{ "foreign": true }` entry as built on the part. The export does not measure
-  how those bases move, so the sizes are marked. This rule prevents a wrong copy: a plane that moves in Fusion, but
-  stays where it is in the copy.
+  part. The export does not measure how the base of such a plane moves, so the sizes read before the plane are
+  marked. This rule prevents a wrong copy: a plane that moves in Fusion, but stays where it is in the copy.
+- A plane of the part can be built on an entity of another component. Example: a part sits in an assembly as an
+  occurrence. A plane of the part is offset 9 mm from the XY plane of the root component. An extrude of the part goes
+  up to this plane.
+- This plane belongs to the part's component. The reader reads it natively, so its place is in the part's
+  coordinates. The extrude does not reach into another component. Only the `built_on` entry of the plane is
+  `{ "foreign": true }`. `refs.is_foreign` does not look into `built_on`, so the walk copies the extrude.
+- The export cannot tell which sizes move the entity of the other component. A size that changes the other
+  component can move it. A size that places an occurrence (a joint, for example) can move it too. Thus every ticked
+  size may move the plane (`reach.built_on_other`). `reach.reach_sizes`, `reach.reference_sizes` and
+  `reach.placement_sizes` then give every ticked size.
+- When an extrude starts from or reaches to the plane, the probe measures the plane with each of these sizes
+  (`reach.moving_reaches`). A size that does not move the plane is not marked. A size that moves it is followed as a
+  formula. When the export has no measured move, every ticked size is marked (`follow._built_shift`). The probe does
+  not measure other planes and axes of the part (a mirror plane, a pattern axis). For those, every ticked size is
+  marked. This rule prevents a wrong copy too.
 
 #### A turning axis
 

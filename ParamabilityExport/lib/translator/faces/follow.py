@@ -26,7 +26,7 @@ two steps cross is placed on both walls (faces/crossings.py).
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
-from ...design_model.reach import any_face_sizes, offset_param, on_part, reference_sizes
+from ...design_model.reach import any_face_sizes, built_on_other, offset_param, on_part, reference_sizes
 from ..sketch import sketch_motion
 from . import crossings, picks, shells
 from .copy_counts import stays_at_least
@@ -398,7 +398,11 @@ def _built_shift(ctx, item, ref, direction, what):
             return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
     elif len(parts) == 1 and parts[0].get("entity_type") in ("BRepEdge", "BRepFace"):
         return place_plane(ctx, item, dict(parts[0], dir=ref.get("dir")), direction, what)
-    ctx.doubt(reads_with_outer(ctx, item), "%s %s a %s built on part geometry that may move with it, and the copy "
+    names = reads_with_outer(ctx, item)
+    if built_on_other(ref) and ctx.table is not None:
+        # A size that acts on the other component, or places an occurrence, may move it too.
+        names = tuple(dict.fromkeys(tuple(names) + tuple(ctx.table.ticked)))
+    ctx.doubt(names, "%s %s a %s built on part geometry that may move with it, and the copy "
               "cannot follow that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
     return None
 

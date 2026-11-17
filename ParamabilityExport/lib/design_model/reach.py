@@ -14,7 +14,8 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
   geometry built on the part, every size an earlier step reads;
 - a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`), and any
   other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`, for a sketch line
-  `sketch_line_sizes`), and what may turn the direction of a rectangular pattern (`direction_sizes`);
+  `sketch_line_sizes`), and what may turn the direction of a rectangular pattern (`direction_sizes`). A plane or
+  axis of the part built on an entity of another component (`built_on_other`) may move with every ticked size;
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
 - the sizes a step reads (`step_sizes`, `item_reads`) and the sizes the probe has to try (`probed_sizes`,
@@ -40,6 +41,19 @@ def on_part(ref):
             return True
         return any(not isinstance(entry, dict) or entry.get("foreign") or on_part(entry) for entry in built)
     return True
+
+
+def built_on_other(record, depth=8):
+    """True when the plane or axis description `record` is built, at any depth of `built_on`, on an entity of another
+    component (`{ "foreign": true }`). The capture does not say which sizes move that entity: a size that acts on the
+    other component or one that places an occurrence may move it, as well as a size of the part. So every ticked size
+    may move `record` (`reach_sizes`, `reference_sizes`, `placement_sizes`)."""
+    if not isinstance(record, dict) or depth < 0:
+        return False
+    built = record.get("built_on")
+    return isinstance(built, list) and any(
+        isinstance(entry, dict) and (entry.get("foreign") is True or built_on_other(entry, depth - 1))
+        for entry in built)
 
 
 def _looks_like_origin(frame):
@@ -152,7 +166,8 @@ def placement_sizes(table, timeline, profile, before):
     component, still `foreign` or brought in (`borrowed`: its links and its own sizes say what moves it), or an outline
     the recipe places on the face its extrude starts from (`on_start_face`, an emboss), which follows that face. A sketch
     whose reference Fusion did not give counts as one on a face of the part, unless its frame lies on an origin plane
-    (Fusion gives no reference for some sketches on faces; older captures give none for any sketch)."""
+    (Fusion gives no reference for some sketches on faces; older captures give none for any sketch). Every ticked size
+    for a plane built on an entity of another component (`built_on_other`)."""
     if table is None or not isinstance(profile, dict) or profile.get("foreign") or profile.get("borrowed") \
             or profile.get("face") or profile.get("on_start_face"):
         return []
@@ -161,6 +176,8 @@ def placement_sizes(table, timeline, profile, before):
         if not profile.get("sketch") or _looks_like_origin(profile.get("frame")):
             return []
         reference = {"kind": "other"}
+    if built_on_other(reference):
+        return list(table.ticked)
     names = set()
     if reference.get("kind") == "constructionPlane" and reference.get("token"):
         names |= set(construction_sizes(table, "constructionPlane", reference["token"]))
@@ -249,9 +266,12 @@ def moving_reaches(item):
 def reach_sizes(table, timeline, item, record):
     """Fusion names of the ticked sizes that may move the face or construction plane `record` that the step `item`
     starts from or reaches to, in table order: every size an item of the body's component reads before the step (for
-    a plane, before the plane was made), and the sizes behind the planes of a chain."""
+    a plane, before the plane was made), and the sizes behind the planes of a chain. Every ticked size for a plane
+    built on an entity of another component (`built_on_other`)."""
     if table is None:
         return []
+    if built_on_other(record):
+        return list(table.ticked)
     bound = item.get("index")
     if record.get("entity_type") == "ConstructionPlane" and isinstance(record.get("made_by"), int):
         bound = record["made_by"] if bound is None else min(bound, record["made_by"])
@@ -305,10 +325,13 @@ def reference_sizes(table, timeline, item, record):
       it was made).
     Empty for an origin plane or axis, for a record of another component (`assembly`, `foreign`: its sizes come from
     its measured reference, `refs.mark_all`) and for a place worked out from another record of the step (`fixed`, the
-    axis of a sweep path arc: the step marks the sizes of that record)."""
+    axis of a sweep path arc: the step marks the sizes of that record). Every ticked size for construction geometry
+    built on an entity of another component (`built_on_other`)."""
     if (table is None or not isinstance(record, dict) or record.get("origin") or record.get("assembly")
             or record.get("foreign") or record.get("fixed")):
         return []
+    if built_on_other(record):
+        return list(table.ticked)
     names = set()
     pending = [record]
     while pending:

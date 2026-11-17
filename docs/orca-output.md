@@ -689,8 +689,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   built on the part, every size read before the step. For a line of a sketch (a revolve axis, a pattern axis), the
   sizes of that sketch and those that may move its plane, and every size read before the sketch when the sketch
   holds projections or may hold them (`reach.sketch_line_sizes`). Unknown counts as "may move": a record that does
-  not say what it is (an older capture), and construction geometry that does not say what it is built on or is built
-  on another component, may move with every size read before the step. The axis of a sweep path arc (`fixed`) is no
+  not say what it is (an older capture), and construction geometry that does not say what it is built on, may move
+  with every size read before the step. Construction geometry built on another component may move with every ticked
+  size (`reach.built_on_other`). The axis of a sweep path arc (`fixed`) is no
   place of its own: the path's sizes are marked. For a direction of a rectangular pattern taken from an edge or axis
   of the part, the same (the `own` place of the capture). For a direction taken from a sketch line, the same as for a
   line of a sketch. A direction whose source is unknown (an `unknown` place, or no place and no sketch in an older

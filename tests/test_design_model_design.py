@@ -84,6 +84,14 @@ class ReadTest(unittest.TestCase):
         self.assertEqual([kind for kind, _ in ctx.events], ["doubt", "unknown", "note"])
         self.assertEqual(ctx.events[0][1], ("lid_w",))
 
+    def test_a_plane_of_the_part_built_on_another_component_is_no_record_of_another_component(self):
+        # The plane is the part's own: what it is built on only says which sizes may move it.
+        own = {"kind": "toEntity", "entity_type": "ConstructionPlane", "token": "p1",
+               "plane": {"point": [0, 0, 9], "normal": [0, 0, 1]}, "built_on": [{"foreign": True}]}
+        other = dict(own, foreign=True)
+        steps = design.read(capture_of(item(1, data={"side_one": own}), item(2, data={"side_one": other})), Table())
+        self.assertEqual([s.foreign for s in steps], [False, True])
+
     def test_a_step_of_another_component_is_not_brought_in(self):
         step = design.read(capture_of(borrowing(in_target_component=False)), Table())[0]
         self.assertIs(step.brought, step.item)

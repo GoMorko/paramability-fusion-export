@@ -31,6 +31,10 @@ PLANE_TYPES = ("BRepFace", "ConstructionPlane")
 TARGET_SLOTS = ("start", "side_one", "side_two")
 # Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
 BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
+# Keys that are not looked into for records of another component: the body lists, and `built_on`, which says what a
+# plane or axis of the part is built on. Such a plane or axis is the part's own and has its place in the part's
+# coordinates; what it is built on only tells which sizes may move it (`reach.built_on_other`).
+_NOT_USED_HERE = BODY_LISTS + ("built_on",)
 # The first add-in version whose reader tells the part's own sketches and planes, seen through an occurrence, apart
 # from those of another component.
 OWN_GEOMETRY_TOLD_APART = (0, 10, 6)
@@ -45,11 +49,11 @@ def is_vector(value):
 
 def is_foreign(node):
     """A record of the step's data marked `foreign` by the reader: it belongs to another component. The bodies a step
-    lists are left to their own rules."""
+    lists are left to their own rules, and the entries of `built_on` are no records the step uses (`_NOT_USED_HERE`)."""
     if isinstance(node, dict):
         if node.get("foreign") is True:
             return True
-        return any(is_foreign(v) for k, v in node.items() if k not in BODY_LISTS)
+        return any(is_foreign(v) for k, v in node.items() if k not in _NOT_USED_HERE)
     if isinstance(node, list):
         return any(is_foreign(v) for v in node)
     return False
@@ -190,14 +194,14 @@ def bring_in(item):
 
 
 def _foreign_records(node, found):
-    """Fills `found` with the records of `node` marked `foreign`, leaving out the body lists and what sits inside a
-    foreign record."""
+    """Fills `found` with the records of `node` marked `foreign`, leaving out the body lists, `built_on` and what sits
+    inside a foreign record."""
     if isinstance(node, dict):
         if node.get("foreign") is True:
             found.append(node)
             return
         for key, value in node.items():
-            if key not in BODY_LISTS:
+            if key not in _NOT_USED_HERE:
                 _foreign_records(value, found)
     elif isinstance(node, list):
         for value in node:
