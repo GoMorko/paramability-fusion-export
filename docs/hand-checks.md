@@ -431,10 +431,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     to 50 and `Wall` to 4: the wall follows as in Fusion. In `report.json` the extrude item has `data.path` with two
     lines (`opposed` false) and `data.wall_faces` with 8 flat faces for a new body. The flush wall is copied too (8640
     mm3 with the plate): its `data.wall_faces` lists a face with its point on the plate, and
-    `data.target_faces_before` lists the plate's 6 faces. The 135 degree corner is left out ("a corner of it is too
-    sharp"); in Fusion, say whether the outer corner of that wall is one sharp tip, a cut corner or a round, and send
-    its volume and `data.wall_faces`, so sharper corners can be copied later. If a copy leaves the step out, send
-    `report.json` and the reason.
+    `data.target_faces_before` lists the plate's 6 faces. The 135 degree corner is copied too: Fusion keeps one sharp
+    tip at (34.83, -2) (8 flat faces, box x 0 to 34.83, y -2 to 15.56), and the copy matches its 1644.85 mm3. If a
+    copy leaves the step out, send `report.json` and the reason.
 41. RV6, a revolve to two sides with two angles. Add user parameters `Ahead` = 30 deg and `Back` = 50 deg. On the XZ
     plane draw a 5 by 20 mm rectangle from 10 to 15 mm away from the Z axis, its bottom on the XY plane. Revolve it
     about the Z axis as a new body, Extent Two Sides: angle one `Ahead`, angle two `Back`. Second design: the same with

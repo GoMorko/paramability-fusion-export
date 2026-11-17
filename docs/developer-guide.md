@@ -1157,7 +1157,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
 | `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, one in the walk of a tool body or of a body before a split, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
 | `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
-| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 90 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
@@ -4413,8 +4413,10 @@ The shape of the wall at other sizes. The app and Fusion build the same wall onl
 `line_problem` gives a problem in these conditions:
 
 - A line is 0.001 mm long or shorter.
-- A corner turns more than 90 degrees (`MAX_TURN_DEG`). Fusion was seen to keep a 90 degree corner sharp, as the
-  app does. A sharper corner is not proven yet (hand check 40 in `docs/hand-checks.md` has a 135 degree corner).
+- A corner turns more than 135 degrees (`MAX_TURN_DEG`). Fusion was seen to keep corners of 90 and 135 degrees
+  sharp, as the app does: the two outer sides of the wall run on until they meet in one tip. A sharper corner is
+  not proven yet. Example (hand check 40): the line goes from (0, 0) to (30, 0), then 20 mm at 135 degrees to
+  (15.858, 14.142). A 2 mm wall on side two has its tip at (34.828, -2), and the wall is 1644.853 mm3 at 15 mm.
 - At a corner, the side of the wall on the inner side of the turn cuts each of the two lines short. The cut is the
   reach of the wall on that side times tan(turn / 2). A line must be longer than what its two corners take.
 - Two lines that do not touch come nearer than two times the farthest reach of the wall. The wall reaches the
