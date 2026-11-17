@@ -3484,8 +3484,18 @@ Sizes:
   parameters of the pipe, so they follow the sizes behind those parameters. The rules of an outline then apply to
   them over the size ranges: a radius stays above zero, the hole stays inside the circle, and the circle stays clear
   of the tightest bend of the path. A size that breaks one of these rules is marked.
-- Without a motion file, the radii stay numbers and the sizes behind them are marked. The first translation (with
-  `OPTIMISTIC`) marks nothing.
+- Before that, the handler cuts the ranges where a radius would reach zero (`_open_section`). For a hollow pipe this
+  is where the wall would close the hole: the radius of the hole, half the size less the wall, must stay above zero
+  at every mix of the range ends. The cut is recorded, so the written ranges stop there. While the sweep handler
+  writes the step, the size table has the cut ranges, so the rules of the outline and of the path are tested inside
+  them. Thus the sizes are cut, not marked. When no shorter ranges keep the hole open (for example, ranges that the
+  person typed), the outline marks the sizes as for a drawn circle.
+- The first translation (with `OPTIMISTIC`) writes the outline as numbers. There the handler writes the radii as
+  formulas of the section values (`_first_look`). Thus the sizes behind the section count as sizes that a copied
+  step reads, as the distance of an extrude does. The size probe then does not try them on a guess. A size that the
+  probe tries on a guess, that changes the body and that moves no followed sketch, is marked as "it changes this part
+  in a way the copy does not follow" (`body_moved`). Without this, the section sizes got that mark.
+- Without a motion file, the radii stay numbers and the sizes behind them are marked.
 - The path follows sizes in the same way as the path of a sweep. But the copy keeps the section where Fusion had it.
   Thus a size that moves the start of the path is marked (`_keep_start`). A size that turns the path at its start is
   held by the sweep rule that the path must start square to its outline.
@@ -3495,11 +3505,16 @@ These pipes are left out:
 - A square or triangle section (cause `pipe`). The API does not tell which way the section turns about the path.
 - A pipe along a part of its path: `distance_one` is not 1, or `distance_two` is set and not 0 (cause
   `pipePartOfPath`).
-- A path with a sharp corner (cause `sharpCorner`). A sweep mitres such a corner, but it is not known how Fusion
-  builds a pipe there. Hand check PI2 asks for this.
+- A closed path that starts on a sharp corner (cause `sharpCorner`). It is not known how Fusion closes the pipe
+  there. Fusion starts a closed path of lines on a corner, so a closed path of lines only is always left out.
 - A section, a cover of the path or a path start that cannot be read, and an export of an older add-in that did not
   read pipes ("Export again with this version of the add-in", cause `oldExport`).
 - All that the sweep handler leaves out.
+
+A sharp corner of an open path is mitred, as for a sweep (3.8). Hand check PI2 showed that Fusion mitres a pipe:
+the two legs of a 90 degree corner meet on the plane that halves the corner, and the volume is the section area times
+the path length. The app builds a sharp corner of a sweep as a mitre too (`BRepBuilderAPI_RightCorner`). The limits
+of a sweep apply: corners between lines in one plane, at most 160 degrees, with room for the mitres.
 
 The Orca output does not copy a pipe. The step kind table gives the pipe the cause `pipe`, so the Orca gap has the
 same tip.

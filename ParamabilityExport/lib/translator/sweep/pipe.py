@@ -18,7 +18,8 @@ Sizes:
   moves the start of the path is marked (`_keep_start`). A size that turns the path where it starts is held by the
   sweep's rule that the path starts square to its outline.
 
-Left out: a square or triangle section, a pipe over part of its path, a path with a sharp corner (how Fusion builds a
+Sharp corners are mitred as for a sweep, which is how Fusion builds a pipe (live check PI2). Left out: a square or
+triangle section, a pipe over part of its path, a closed path that starts on a sharp corner (how Fusion closes the
 pipe there is not known), and what the sweep handler leaves out.
 """
 import contextlib
@@ -33,8 +34,9 @@ from ...design_model.steps import pipe as facts
 from ...design_model.steps.sweep import profile_points
 from ...geometry import vec
 from ...sketch_values import keys
-from ...sketch_values.motion import Affine
+from ...sketch_values.motion import Affine, Stuck
 from .. import values
+from ..ranges import kept_ranges
 from ..extrude import COMBINE
 from ..paths import path_limits
 from ..result import Refusal
@@ -75,6 +77,45 @@ class _WithSection:
         return getattr(self._motion, name)
 
 
+def _radii(ctx, item, data):
+    """The motion values of the outer radius and, for a hollow pipe, the hole's radius: half the section size, less
+    the wall for the hole."""
+    params = design.params_of(item)
+    outer = _term(params.get("section_size"), 0.5, data["section_size"])
+    if not data["hollow"]:
+        return [outer]
+    return [outer, outer.plus(_term(params.get("section_thickness"), -1.0, data["section_thickness"]))]
+
+
+@contextlib.contextmanager
+def _open_section(ctx, item, data):
+    """While the sweep handler writes the outline, the size table with the ranges cut where a radius of the section
+    would reach zero (a wall that closes the hole, a size that shrinks the pipe to nothing). The cut is recorded, so
+    the written ranges are the same; the outline's own rules and the path's then hold inside them. Without such a
+    cut (the radii hold over the whole ranges, or no shorter ranges keep them) the table stays, and the outline marks
+    the sizes as for a drawn circle. The context's table is put back afterwards."""
+    if not sketch_motion.active(ctx):
+        yield
+        return
+    rules = []
+    for raw, number in zip(_radii(ctx, item, data), facts.radii(data)):
+        q = sketch_motion.rendered(ctx.table, raw, number)
+        if not isinstance(q, Stuck) and q.sized:
+            rules.append((q, 1))
+    found = kept_ranges.holding_ranges(ctx.table, rules, values.ABOVE_ZERO) if rules else None
+    if not found:
+        yield
+        return
+    name = item.get("name", "a pipe")
+    ctx.cut(found, ("the hole of %s would close" if data["hollow"] else "%s would shrink to nothing") % name)
+    base = ctx.table
+    ctx.table = base.with_narrowed(found)
+    try:
+        yield
+    finally:
+        ctx.table = base
+
+
 @contextlib.contextmanager
 def _section_values(ctx, item, data, frame):
     """While the sweep handler writes the outline, every value of it as a motion value: the radii over the pipe's
@@ -84,11 +125,7 @@ def _section_values(ctx, item, data, frame):
     if not sketch_motion.active(ctx):
         yield False
         return
-    params = design.params_of(item)
-    outer = _term(params.get("section_size"), 0.5, data["section_size"])
-    radii = [outer]
-    if data["hollow"]:
-        radii.append(outer.plus(_term(params.get("section_thickness"), -1.0, data["section_thickness"])))
+    radii = _radii(ctx, item, data)
     prefix = keys.profile(item.get("index"), 0)
     given = {keys.plane(prefix): Affine(vec.dot(frame["origin"], frame["z"]))}
     for loop, radius in enumerate(radii):
@@ -137,6 +174,25 @@ def _keep_start(ctx, item, path, start):
                   % item.get("name", "a pipe"))
 
 
+def _first_look(ctx, item, data, outcome):
+    """In the first look (`OPTIMISTIC`) the outline is written as numbers. The radii are written as formulas of the
+    section's values there, so the sizes behind them count as sizes a copied step reads, as an extrude's distance
+    does: the size probe then does not try them as sizes that may move a sketch, which would mark them as changing
+    the part in a way the copy does not follow."""
+    outer = values.quantity(ctx, item, "section_size", data["section_size"]).scaled(0.5)
+    inner = None
+    if data["hollow"]:
+        wall = values.quantity(ctx, item, "section_thickness", data["section_thickness"])
+        inner = outer.plus(wall.scaled(-1.0))
+    for entry in outcome.entries:
+        sketch = entry.step.get("sketch")
+        if not isinstance(sketch, dict) or (sketch.get("outer") or {}).get("kind") != "circle":
+            continue
+        sketch["outer"]["radius"] = outer.json()
+        if inner is not None and sketch.get("inner"):
+            sketch["inner"][0]["radius"] = inner.json()
+
+
 def _keep_section(ctx, item, followed):
     """The section's values: followed through the outline, or written as numbers with their sizes marked. A first
     look without a motion file (`OPTIMISTIC`) fixes nothing."""
@@ -166,15 +222,17 @@ def handle(ctx, step):
         return path_limits.refusal(start)
     profile, area = facts.section_profile(data, start)
     found = planner.plan(path, profile["frame"], profile_points(profile), path_limits.options())
-    corner = None if is_problem(found) else facts.corner_problem(found.curves, found.closed)
-    if corner is not None:
-        return path_limits.refusal(corner)
+    if not is_problem(found) and found.moved:
+        # The planner moves an outline off a sharp corner of a closed path; Fusion starts the pipe on it.
+        return path_limits.refusal(facts.SEAM_CORNER)
     built = dict(data, solid=True, profiles=[profile], areas=[area], rail=None, guide_surfaces=[],
                  orientation="perpendicular", taper_deg=0.0, twist_deg=0.0)
-    with _section_values(ctx, item, data, profile["frame"]) as followed:
+    with _open_section(ctx, item, data), _section_values(ctx, item, data, profile["frame"]) as followed:
         outcome = sweep.handle(ctx, design.as_read(dict(item, data=built)))
     if isinstance(outcome, Refusal):
         return _as_pipe(outcome)
+    if getattr(ctx.motion, "optimistic", False):
+        _first_look(ctx, item, data, outcome)
     _keep_start(ctx, item, path, found.start)
     _keep_section(ctx, item, followed)
     return outcome

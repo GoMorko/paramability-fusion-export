@@ -688,13 +688,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
 
 63. PI2, pipes copied as sweeps. Add user parameters `PipeD` = 10 mm, `Wall` = 2 mm and `Run` = 40 mm. On the XZ
     plane draw a line from (0, 0) to (0, `Run`) mm (so it runs up Z), then a tangent arc of 90 degrees and radius
-    15 mm that ends pointing along +X. Make two copies of the design. In the first use Create > Pipe on the path:
-    Section Circle, Section Size `PipeD`, Hollow off, new body. In the second the same with Hollow on and Section
-    Thickness `Wall`. In the third draw a second sketch on the XY plane with an L of two lines that meet at a sharp
-    corner, (0, 0) to (30, 0) to (30, 20), and pipe it with Section Circle 6 mm.
-    Export: export the pipe body of each design and tick all parameters. The first two copy, each as one sweep of a
-    circle (a ring for the hollow pipe); the volume in Paramability matches Fusion's (Inspect > Properties) at the
-    values now and with `PipeD` at 12 mm, `Wall` at 3 mm and `Run` at 50 mm. The third is left out with the tip
-    "Round the sharp corner of the path with a sketch fillet."; in Fusion, look at the corner from above and write
-    down whether it is mitred (a sharp outside corner) or rounded, so a later version can copy it. Afterwards each
-    design is as before.
+    15 mm that ends pointing along +X. The arc must start on the end point of the line (draw it from that point):
+    an arc that only has a coincident constraint to the line makes the pipe follow the line alone. Make two copies
+    of the design. In the first use Create > Pipe on the path: Section Circle, Section Size `PipeD`, Hollow off, new
+    body. In the second the same with Hollow on and Section Thickness `Wall`. In the third draw a second sketch on
+    the XY plane with an L of two lines that meet at a sharp corner, (0, 0) to (30, 0) to (30, 20), and pipe it
+    with Section Circle 6 mm.
+    Export: export the pipe body of each design and tick all parameters. Each copies as one sweep of a circle (a
+    ring for the hollow pipe, its hole radius `0.5 * PipeD - Wall`). `PipeD` and `Wall` are sizes and are not marked
+    "may give unexpected results"; for the hollow pipe the range of `PipeD` starts and the range of `Wall` stops
+    where the wall would close the hole. The volume in Paramability matches Fusion's (Inspect > Properties) at the
+    values now and with `PipeD` at 12 mm, `Wall` at 3 mm and `Run` at 50 mm. The corner of the third pipe is mitred
+    (1413.717 mm3, as in Fusion). Afterwards each design is as before.

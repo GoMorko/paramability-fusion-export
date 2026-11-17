@@ -226,7 +226,7 @@ PIPE_COVER_UNREAD = "How much of its path this pipe covers could not be read fro
 PIPE_PART_OF_PATH = "This pipe covers only part of its path, which is not copied."
 PIPE_PATH_UNREAD = "The path of this pipe could not be read from Fusion."
 PIPE_START_UNREAD = "Where the path of this pipe starts could not be read from Fusion."
-PIPE_SHARP_CORNER = "Pipes along a path with a sharp corner are not copied."
+PIPE_SEAM_CORNER = "This pipe starts on a sharp corner of its closed path, which is not copied."
 
 
 def sweep_settings_unread(missing, said):
