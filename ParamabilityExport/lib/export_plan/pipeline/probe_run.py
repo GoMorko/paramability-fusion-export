@@ -1,4 +1,7 @@
 """The try runner: runs the probe rows in one job, reads each state and puts the followed sketches back."""
+from dataclasses import dataclass, field
+from typing import Optional
+
 from ...design_edit.marker import MARKER_LOST
 from ...design_edit import walk_back
 from ...design_edit.runner import ExportCancelled, RowExport, row_key
@@ -35,6 +38,22 @@ def _marker_lost(read):
     """True when a probe read (one state, or one per part) says it could not put the timeline marker back."""
     reads = read if isinstance(read, list) else [read]
     return any(isinstance(r, dict) and MARKER_LOST in (r.get("unread") or {}) for r in reads)
+
+
+@dataclass
+class EndRead:
+    """What the read of the put back after the tries (`ProbeRun.settle`) found.
+
+    back: True when every followed sketch reads as at the start, False when one reads off it, None when the read
+      failed or did not run.
+    gap_mm: the gap to the start in that read (`Probe.measure_restore`), only worked out when `back` is False; None
+      when it cannot be told.
+    changed: the sketches that read another outline in it (`Probe.restore_changed`), only when `back` is False.
+    """
+
+    back: Optional[bool] = None
+    gap_mm: Optional[float] = None
+    changed: list = field(default_factory=list)
 
 
 def _row_values(row):
@@ -114,6 +133,7 @@ class ProbeRun:
         self._flipped_by = {}  # token of a sketch off its start to the row after which it was first seen so
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
+        self.end = None  # `EndRead` of the put back after the tries (`settle`)
         self.undo = port.undo_steps
         self.job = RowExport(port.store, port.units, self._export, self._before_row, self._out_of_time,
                              counts_warning=self.probe.counts_warning, before_check=self._home,
@@ -348,12 +368,16 @@ class ProbeRun:
         if self.job.recoveries:
             self._note()
         if self.job.not_back is not None:
-            self.port.log("tries stopped: %s stayed worse with the values back after %s"
-                          % (", ".join(self.job.not_back["items"]), self.job.not_back["after"]))
-            self.probe.note_stop(self.job.not_back, rows[len(results):])
+            self._note_stop(rows[len(results):])
         if self.job.halted:
             self._note_halt(rows[len(results):])
         return results
+
+    def _note_stop(self, unrun):
+        """Log the stop of the tries on a broken design and tell the probe, with the rows that did not run."""
+        self.port.log("tries stopped: %s stayed worse with the values back after %s"
+                      % (", ".join(self.job.not_back["items"]), self.job.not_back["after"]))
+        self.probe.note_stop(self.job.not_back, unrun)
 
     def _time_note(self, at, total):
         """The time line of the progress window for try number `at` of `total` (`messages.time_note`). Never raises."""
@@ -457,21 +481,40 @@ class ProbeRun:
             self._check_reads()
         self.probe.add_states(self.probe_states(done))
 
+    def check_pending(self):
+        """Run the check of the timeline steps that the row run last asked for (`RowExport.check_pending`), with every
+        value back. A step that stays worse stops the tries there, and the probe is told (`note_stop`). Never raises: a
+        failure leaves the steps not known to be clean."""
+        stopped = self.job.not_back is not None
+        try:
+            if self.job.check_pending() and not stopped:
+                self._note_stop([])
+        except Exception as exc:
+            self.job.back_clean = False
+            self.port.log(f"checking the steps after the last try failed: {exc!r}")
+
     def settle(self):
-        """Put the followed sketches back when they read otherwise than at E0 now, with the values back, so the design
-        is left on the solution it had: the keeper first, then, for a sketch still off its start, the way back of the
-        row after which it was first seen off (`_walk_back`). Then drop the undo data of the tries (`_drop_undo`) when
-        the sketches read as at E0 and no check found a step worse. Never raises."""
-        back = False
+        """Run the check the last row asked for (`check_pending`), then put the followed sketches back when they read
+        otherwise than at E0 now, with the values back, so the design is left on the solution it had: the keeper first,
+        then, for a sketch still off its start, the way back of the row after which it was first seen off
+        (`_walk_back`). `end` keeps what the last read found (`EndRead`). Then drop the undo data of the tries
+        (`_drop_undo`) when the sketches read as at E0 and no check found a step worse or could not read the steps.
+        Never raises."""
+        self.check_pending()
+        self.end = EndRead()
         try:
             read = self._read_now({}, outline=True)
             if self.probe.left_start(read):
                 read = self._put_back(last=True, off=self.probe.off_start(read)) or read
                 read = self._walk_back(read)
-            back = read is not None and not self.probe.left_start(read)
+            if read is not None:
+                self.end.back = not self.probe.left_start(read)
+                if not self.end.back:
+                    self.end.gap_mm = self.probe.measure_restore(read)
+                    self.end.changed = list(self.probe.restore_changed)
         except Exception as exc:
             self.port.log(f"putting a sketch back after the tries failed: {exc!r}")
-        if back and self.job.back_clean and self.job.not_back is None:
+        if self.end.back is True and self.job.back_clean and self.job.not_back is None:
             self._drop_undo()
 
     def _walk_back(self, read):
@@ -545,8 +588,11 @@ class ProbeRun:
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
         and keep what they found. `before_discovery` runs first when rows are left for them. Returns the parameters that
-        changed the part. After the tries stopped on a broken design (`stopped`) or on the time limit nothing is read:
-        every candidate is kept as not tried."""
+        changed the part. The check the last measured row asked for runs first (`check_pending`), against the baseline
+        of those rows: a lasting damage stops the tries here instead of becoming the baseline of the discovery rows.
+        After the tries stopped on a broken design (`stopped`) or on the time limit nothing is read: every candidate is
+        kept as not tried."""
+        self.check_pending()
         if self.job.not_back is not None or self.job.halted:
             self.probe.discovery_rows(list(tries), 0)
             return []

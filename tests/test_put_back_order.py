@@ -270,9 +270,19 @@ class SingleBodyOrderTest(unittest.TestCase):
     def test_a_cancel_puts_back_then_warns_about_values_steps_and_items(self):
         store = OrderStore(changed="Fillet1", heals=False, stuck=["Lid sketch"], stuck_param="box_count")
         calls, health = export(order_port(store, cancel_at=4))
+        def walk(count, size):
+            return ["store.set_expressions(box_count, cube_mm)", "store.set_expression(box_count, %s)" % count,
+                    "store.set_expression(cube_mm, %s mm)" % size, "store.recompute"]
+        back = ["store.current_expressions", "store.set_expressions(box_count, cube_mm)",
+                "store.set_expression(box_count, 3)", "store.set_expression(cube_mm, 26 mm)",
+                "store.set_expression(box_count, 3)", "store.recompute"]
+        check = ["store.timeline_health", "store.recompute", "store.timeline_health"]
         self.assertEqual(calls, START_ONE + [
             "rows",
-            *STUCK_BACK, "store.unsuppress_items", "log(steps still turned off)", "read(outline)", "undo.drop",
+            # The check the cancelled try asked for runs before any Undo drop: Fillet1 stays worse after both ways back.
+            *STUCK_BACK, *check, *walk("-0.625", "26.65"), *back, *check,
+            *walk(2, "21.125"), *walk(1, "22.75"), *walk(1, "24.375"), *back, *check, "log(tries stopped)",
+            "store.unsuppress_items", "log(steps still turned off)", "read(outline)",  # no Undo drop
             *STUCK_BACK, "store.unroll_marker",  # closed: values and marker back, then the warnings
             "port.warn_unrestored(['box_count'])",
             "store.return_marker", "store.timeline_health", *FULL_COMPUTE, "store.set_expressions(8 values)",

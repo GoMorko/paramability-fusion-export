@@ -37,6 +37,14 @@ class HealthStore(FakeStore):
         return [step(0, "Sketch1")] + [step(at, name, health)
                                        for at, (name, health) in enumerate(self.steps(self).items(), start=1)]
 
+    def warning_entries(self):
+        """The steps in warning, as Fusion reads them from the same health as the timeline."""
+        found = dict(super().warning_entries())
+        for at, (name, health) in enumerate(self.steps(self).items(), start=1):
+            if health == "warning" and name not in found.values():
+                found[at] = name
+        return list(found.items())
+
 
 def rows(*pairs):
     return keyed(*(size_row(name, value) for name, value in pairs))
@@ -110,6 +118,21 @@ class StopAtDamageTest(unittest.TestCase):
                                        counts_warning=lambda name: counted)
                 self.assertEqual(len(results), 1)
                 self.assertEqual(job.not_back["items"], ["Sketch5"])
+
+    def test_a_warning_that_does_not_count_and_is_gone_with_the_values_back_costs_no_timeline_read(self):
+        class Counted(HealthStore):
+            reads = 0
+
+            def timeline_health(self):
+                self.reads += 1
+                return super().timeline_health()
+
+        def warns(exprs):
+            return [(2, "Fillet2")] if number(exprs["off"]) == 10 else []
+
+        store = Counted(lambda s: {"Fillet2": "warning" if s.exprs != START else "ok"}, warns=warns)
+        job, results = run_job(store, rows(("off", 10.0), ("cube", 20.0)), counts_warning=lambda name: False)
+        self.assertEqual((len(results), job.not_back, store.reads), (2, None, 1))  # the baseline read only
 
 
 def lid_with(curves):
@@ -248,6 +271,81 @@ class WalkBackTest(unittest.TestCase):
         run.settle()
         self.assertFalse(fusion.flipped)
         self.assertEqual(fusion.store.exprs, START)
+
+
+class PendingCheckTest(unittest.TestCase):
+    """The damage of the row run last is checked before any Undo drop and before the discovery baseline."""
+
+    def damage_last(self):
+        """A run whose last row does not build and leaves Sketch5 in warning for good; the sketches read as at the
+        start, so no read asks for the row to run again."""
+        damaged = []
+
+        def solve(store):
+            if number(store.exprs["off"]) == 10:
+                damaged.append(True)
+
+        fusion = Fusion()
+        fusion.store = HealthStore(lambda s: {"Sketch5": "warning" if damaged else "ok"},
+                                   bad_when=lambda e: number(e["off"]) == 10, on_recompute=solve)
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        port = FakePort(store=fusion.store, units=UNITS)
+        undo_steps.attach(port, undo_steps.UndoSteps(lambda flag: True, port.log))
+        run = ProbeRun(port, "", probe, before_discovery=lambda: self.rebased.append(True))
+        run.run_rows(rows(("off", 10.0)))
+        return run, probe, port
+
+    def setUp(self):
+        self.rebased = []
+
+    def test_the_last_row_is_checked_before_the_undo_data_is_dropped(self):
+        run, probe, port = self.damage_last()
+        dropped = port.undo_steps.record["steps"]
+        run.settle()
+        self.assertEqual(run.stopped["items"], ["Sketch5"])
+        self.assertEqual(port.undo_steps.record["steps"], dropped)
+        self.assertEqual(probe.stopped["items"], ["Sketch5"])
+
+    def test_a_lasting_damage_of_the_last_measured_row_stops_before_the_discovery_rows(self):
+        run, probe, port = self.damage_last()
+        tbl = table(PARAMS, TICKED, MODEL)
+        from tests.test_probe_flow import size
+        found = run.discover([dict(size(tbl, "cube", "mm"), end=12.0)])
+        self.assertEqual(found, [])
+        self.assertIsNotNone(run.stopped)
+        self.assertEqual(self.rebased, [])  # the items were not turned on and the baseline kept
+        self.assertEqual(len(run.rows), 1)
+
+    def test_an_unreadable_timeline_keeps_the_undo_data_but_does_not_stop_the_tries(self):
+        def unreadable(store):
+            raise RuntimeError("the timeline cannot be read")
+
+        store = HealthStore(unreadable, bad_when=lambda e: number(e["off"]) == 10)
+        port = FakePort(store=store, units=UNITS)
+        undo_steps.attach(port, undo_steps.UndoSteps(lambda flag: True, port.log))
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), Fusion().read)
+        run = ProbeRun(port, "", probe)
+        run.run_rows(rows(("off", 10.0), ("cube", 20.0), ("height", 40.0)))
+        run.settle()
+        self.assertEqual((len(run.rows), run.stopped), (3, None))
+        self.assertFalse(run.job.back_clean)
+        self.assertEqual(port.undo_steps.record["steps"], 0)
+
+
+class WalkErrorTest(unittest.TestCase):
+    def test_an_error_inside_a_walk_still_puts_the_values_back(self):
+        class Breaks(FakeStore):
+            def read_value(self, name):
+                if self.exprs != START:
+                    raise RuntimeError("Fusion stopped answering")
+                return super().read_value(name)
+
+        store = Breaks(START)
+        job = RowExport(store, UNITS, lambda path: None)
+        job.run([], "", lambda *a: True)
+        with self.assertRaises(RuntimeError):
+            job.walk_back(size_row("height", 40.0), 0)
+        self.assertEqual(store.exprs, START)
 
 
 class EndCheckTest(unittest.TestCase):

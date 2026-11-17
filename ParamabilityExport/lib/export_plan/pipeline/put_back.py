@@ -1,7 +1,10 @@
 """The put back of one export: what the export changed in the design and brings back, in one order, on every way the
 export ends. Both export pipelines hold one. Pure: no Fusion imports."""
+import dataclasses
+
 from ...design_edit.restore import restore_parameters
 from ...design_edit.timeline_health import FULL_COMPUTE, VALUES_AGAIN, read_timeline, settle_timeline
+from ...geometry.tolerances import RESTORE_TOLERANCE_MM
 from .. import health as health_module
 from ..timeline_trim import TryTimeline
 from ..undo_steps import drop_after
@@ -96,18 +99,24 @@ class PutBack:
         self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
 
     def _after_tries(self, run):
-        """Put every parameter back, turn the suppressed items back on and put a sketch left on another solution back
-        (`ProbeRun.settle`). Never raises, so it also runs when the tries ended with an error or a cancel. The run's
+        """Put every parameter back, run the check of the steps the last try asked for (`ProbeRun.check_pending`), turn
+        the suppressed items back on and put a sketch left on another solution back (`ProbeRun.settle`). Never raises, so it also runs when the tries ended with an error or a cancel. The run's
         sketch keeper is kept for the health record."""
         self._note_tries()
         self._tries_back = run
         self.keeper = run.keeper
         try:
             self.restore()
+        except Exception as exc:
+            self.port.log(f"putting the design back after the tries failed: {exc!r}")
+        # The check the last try asked for compares with the baseline of the tries, read with the same items off.
+        run.check_pending()
+        try:
             self.end_trim()
         except Exception as exc:
             self.port.log(f"putting the design back after the tries failed: {exc!r}")
         run.settle()
+        self._note_undo()
 
     # ---- the end of the export ---------------------------------------------------------------------------------
 
@@ -170,6 +179,15 @@ class PutBack:
         steps = self.port.undo_steps
         return bool(steps is not None and steps.record.get("applied"))
 
+    def _note_undo(self):
+        """Tell the outcome that Fusion forgot Undo data (`rollback.ExportOutcome.undo_dropped`), so the export is never
+        aborted, also when no health record can be made. Never raises."""
+        try:
+            if self.outcome is not None and self.undo_dropped():
+                self.outcome.undo_dropped = True
+        except Exception as exc:
+            self.port.log(f"reading the undo steps failed: {exc!r}")
+
     def left_off(self):
         """The items of the tries still turned off (`TryTimeline.left_off`)."""
         return list(self.roll.left_off) if self.roll is not None else []
@@ -205,16 +223,27 @@ class PutBack:
 
     def _failed_health(self):
         """The health record of an export that stopped. The end check must have run: without it nothing says the steps
-        are as before, so this raises and the outcome keeps no health. The sketches are not read again here: a try
-        that left one on another solution shows through the keeper (`deferred_left`) or the stop of the tries
-        (`stopped`) only."""
+        are as before, so this raises and the outcome keeps no health. The sketches are not read again here: when the
+        tries ran, the read of the put back after them (`ProbeRun.end`) tells whether they came back. When it could not
+        tell, the record says the sketches are not confirmed back (`restore_unverified`); when they read off their
+        start, it carries the gap and the sketches on another outline from that read."""
         if self.settled is None:
             raise RuntimeError("the timeline steps were not compared with the start")
-        return health_module.make_health(self.health_inputs(health_module.NOT_NEEDED, "", [], ()))
+        run = self._tries_back
+        end = getattr(run, "end", None) if run is not None else None
+        if run is None or (end is not None and end.back is True):
+            return health_module.make_health(self.health_inputs(health_module.NOT_NEEDED, "", [], ()))
+        gap, changed = (end.gap_mm, end.changed) if end is not None else (None, [])
+        if end is not None and end.back is False and not changed and (
+                gap is None or gap <= RESTORE_TOLERANCE_MM):
+            gap = None  # off its start by the probe's own test: never let the gap alone say "back"
+        inputs = self.health_inputs(health_module.MEASURED, "", [], (), changed)
+        return health_module.make_health(dataclasses.replace(inputs, gap_mm=gap, gap_after_mm=None))
 
     def close(self, health):
         """The export is made: values and marker back, the items that stayed off named, then the last Undo step dropped
         when `health` says the design is as it was (`undo_steps.drop_after`)."""
+        self._note_undo()
         self._note_health(lambda: health)
         self.restore()
         self._end_roll()
@@ -225,6 +254,7 @@ class PutBack:
         """The export stopped: values and marker back, then the person is told which parameters did not go back,
         which timeline steps differ from the start (the end check runs here when it has not yet) and which items stayed
         off. The warnings never raise, so the reason the export stopped is the one that reaches the person."""
+        self._note_undo()
         failed = self.restore()
         self._end_roll()
         if failed:

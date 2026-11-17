@@ -330,10 +330,11 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
                     undo_steps.attach(FusionPartsPort(design, bodies, units, captures), steps), request, tmp)
             written = time.perf_counter()
             write_package(out_path, result.manifest, result.files)
+            outcome.saved = True
             log("package written in %.2f s" % (time.perf_counter() - written))
         return os.path.basename(out_path), result
 
-    saved = export_common.run_guarded(design, marker, work)
+    saved = export_common.run_guarded(design, marker, work, outcome=outcome)
     undo = rollback.decide(outcome)
     if saved is not None:
         _show_result(saved[0], saved[1], form["ticked"], parts=body is None, undo=undo)

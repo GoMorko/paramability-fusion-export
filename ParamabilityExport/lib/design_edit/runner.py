@@ -4,7 +4,7 @@ import os
 from ..package.caps import check_step_size, check_total_size
 from ..timing import trail
 from . import walk_back
-from .apply import RowBuildError, apply_row_values, measure_baseline, new_warnings
+from .apply import RowBuildError, apply_row_values, error_entries, measure_baseline, new_warnings, warning_entries
 from .errors import StepExportError
 from .restore import restore_parameters
 from .timeline_health import changes, is_worse, read_timeline
@@ -44,8 +44,10 @@ class RowExport:
     job. A row that did not build is still checked first (`not_back`), so a stop never hides a broken design.
     With build errors tolerated, the row after a row that may have left the design changed first checks, with the
     parameters back and before `before_row`, that every timeline step is as in the baseline (`_worse`): the row did not
-    build, a step showed a new warning (counted or not), or the caller asked for the check (`check_back`, a row that
-    read a sketch on another outline). The steps are read (`timeline_health.read_timeline`) and compared, by step,
+    build, a step showed a new warning that counts, or the caller asked for the check (`check_back`, a row that read a
+    sketch on another outline). A row that showed only new warnings that do not count is checked so only when, with
+    the parameters back, an item is still in a warning or an error the baseline did not have (`_others_left`, a read
+    of the health of the items alone). The steps are read (`timeline_health.read_timeline`) and compared, by step,
     with their read at the baseline; a warning or an error the baseline already had does not count. A step that is
     worse (`timeline_health.is_worse`) is read again after one full recompute. When one is still worse, the job tries
     to bring the design back the way the row took it away (`walk_back`, at most `walk_back.ATTEMPTS` times, each
@@ -54,7 +56,10 @@ class RowExport:
     last, the names of the steps still worse and their changes (`timeline_health.changes`). No later run of the job
     runs a row. `before_check()`, when given, runs before the steps are read (the place to bring the timeline marker
     back where the tries hold it); `at_start()`, when given, says whether the followed sketches read as at the start.
-    `back_clean` is False once a check found a step worse, until a later check finds the steps as in the baseline.
+    `back_clean` is False once a check found a step worse or could not read the steps (nor the steps of the
+    baseline), until a later check finds the steps as in the baseline. Steps that cannot be read never stop the run.
+    `check_pending()` runs the check the row run last asked for, for a caller that ends the tries or measures the
+    baseline again (`rebase`) and must not leave that row unchecked.
     """
 
     def __init__(self, store, units, export_step, before_row=None, stop_when=None, counts_warning=None,
@@ -75,6 +80,7 @@ class RowExport:
         self._last = None  # the label of the row run last
         self._last_row = None  # the row run last
         self._check_next = False  # whether the design is checked before the next row (`_stopped`)
+        self._check_others = False  # the row run last showed only new warnings that do not count (`_others_left`)
         self.back_clean = True  # False while the last check found a step worse than in the baseline
         self.recoveries = 0  # attempts made to bring the design back the way a row took it away (`walk_back`)
         self._saved = None
@@ -86,6 +92,13 @@ class RowExport:
         """Measure the baseline again before the next row: timeline items were turned back on since it was measured,
         and the errors and warnings they already had are not the rows' doing."""
         self._baseline = None
+
+    def check_pending(self):
+        """Run the check of the steps that the row run last asked for (`_stopped`), with the parameters back; nothing
+        when no check is pending or the job has not run. True when the run stopped (`not_back`)."""
+        if self._saved is None or self._baseline is None:
+            return self.not_back is not None
+        return self._stopped()
 
     def check_back(self):
         """Check the design against the baseline before the next row (`_stopped`), as after a row that did not build:
@@ -100,17 +113,36 @@ class RowExport:
         failed = restore_parameters(self.store, self._saved)
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
+    def _pending(self):
+        """True when the row run last asked for the check of the steps (`_stopped`)."""
+        return self._check_next or self._check_others
+
+    def _others_left(self):
+        """For a row that showed only new warnings that do not count: True when, with the parameters back, a timeline
+        item is still in a warning or an error it did not have in the baseline. Reads only the health of the items
+        (`apply.warning_entries`, `apply.error_entries`), not the whole timeline; True when that read fails."""
+        base = self._baseline
+        try:
+            warned = [k for k in warning_entries(self.store) if k not in base.warnings and k not in base.errors]
+            return bool(warned or [k for k in error_entries(self.store) if k not in base.errors])
+        except Exception:
+            return True
+
     def _stopped(self):
         """True when an earlier row left the design changed with the parameters back (`not_back`). Only a row that
-        asked for the check (`_check_next`) is followed by it."""
+        asked for the check (`_check_next`) is followed by it; a row that showed only new warnings that do not count is
+        followed by it when one is still there with the parameters back (`_others_left`)."""
+        if self.not_back is None and self._check_others and not self._check_next:
+            self._check_others = False
+            self._check_next = self._others_left()
         if self.not_back is None and self._check_next:
-            self._check_next = False
+            self._check_next = self._check_others = False
             if self.before_check is not None:
                 self.before_check()
             worse = self._worse()
             if worse:
                 worse = self._recover(worse)
-            self.back_clean = not worse
+            self.back_clean = worse == []  # None: the steps could not be read
             if worse:
                 self.not_back = {"after": self._last, "items": [c["name"] for c in worse],
                                  "steps": [{"name": c["name"], "before": c["before"], "after": c["after"]}
@@ -127,16 +159,16 @@ class RowExport:
 
     def _worse(self):
         """The steps worse than in the baseline with the parameters back, read again after one full recompute when
-        any is: a rebuild of only the changed steps can leave a state that a full one clears. Empty when the steps
+        any is: a rebuild of only the changed steps can leave a state that a full one clears. None when the steps
         cannot be read."""
         worse = self._worse_now()
         if not worse:
-            return []
+            return worse
         try:
             self.store.recompute()
         except Exception:
             pass
-        return self._worse_now() or []
+        return self._worse_now()
 
     def walk_back(self, row, attempt):
         """Attempt number `attempt` to bring the design back the way `row` took it away (`walk_back.settings`): its
@@ -150,19 +182,22 @@ class RowExport:
             return False
         self.recoveries += 1
         trail.line("bringing the design back after %r, attempt %d" % (row.get("label") or row.get("name"), attempt + 1))
-        walk_back.walk(self.store, self.units, steps, self._baseline)
-        self._back_to_current()
+        try:
+            walk_back.walk(self.store, self.units, steps, self._baseline)
+        finally:
+            self._back_to_current()
         return True
 
     def _recover(self, worse):
         """Try to bring the design back the way the row run last took it away (`walk_back`), at most
         `walk_back.ATTEMPTS` times, the parameters put back after each attempt. Stops at the first attempt after which
-        no step is worse and the followed sketches read as at the start (`at_start`). Returns the steps still worse."""
+        no step is worse and the followed sketches read as at the start (`at_start`). Returns the steps still worse, or
+        None when the last read of the steps failed."""
         for attempt in range(walk_back.ATTEMPTS):
             if not self.walk_back(self._last_row, attempt):
                 break
             worse = self._worse()
-            if not worse and (self.at_start is None or self.at_start()):
+            if worse == [] and (self.at_start is None or self.at_start()):
                 return []
         return worse
 
@@ -172,7 +207,7 @@ class RowExport:
         if not self.halted and (self.stop_when is None or not self.stop_when()):
             return False
         self.halted = True
-        if self._check_next and self._saved is not None:
+        if self._pending() and self._saved is not None:
             if index > 1:
                 self._back_to_current()
             self._stopped()
@@ -194,6 +229,8 @@ class RowExport:
             if self._baseline is None:
                 self._baseline = measure_baseline(self.store)
                 self._steps = read_timeline(self.store)
+                if self._steps is None:
+                    self.back_clean = False  # no check can confirm the steps against this baseline
             results = []
             count = len(rows)
             for index, row in enumerate(rows, start=1):
@@ -208,7 +245,7 @@ class RowExport:
                 if self.before_row is not None:
                     self.before_row(row)
                 self._last, self._last_row = row.get("label") or row["name"], row
-                self._check_next = False
+                self._check_next = self._check_others = False
                 trail.line("try %d of %d %r: %s" % (index, count, self._last, row["values"]))
                 others = []
                 try:
@@ -216,7 +253,7 @@ class RowExport:
                                               full=row.get("step") is not False)
                     warned = new_warnings(self.store, self._baseline, self.counts_warning, others) \
                         if tolerate_build_errors else []
-                    self._check_next = bool(warned or others)
+                    self._check_next, self._check_others = bool(warned), bool(others)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
                         self._check_next = True

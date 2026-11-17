@@ -220,7 +220,13 @@ def _changed_line(text, found, health):
 
 
 def health_lines(health):
-    """Plain sentences for the result window, most important first. Empty when all is well."""
+    """Plain sentences for the result window, most important first. Empty when all is well: the lines about the
+    design (`design_lines`), then those about the copy (`copy_lines`)."""
+    return design_lines(health) + copy_lines(health)
+
+
+def design_lines(health):
+    """The lines about the state of the design after the export: what did not come back, what could not be checked."""
     if not health:
         return []
     lines = []
@@ -256,6 +262,15 @@ def health_lines(health):
         fix = (" " + NO_UNDO_ADVICE) if health.get("undo_dropped") else ", or use Undo in Fusion."
         lines.append(clip("These sketches may not update until you edit them: %s. Open each one and finish it%s"
                           % (_names(health["deferred_left"]), "." + fix if fix.startswith(" ") else fix), MAX_LINE))
+    return lines
+
+
+def copy_lines(health):
+    """The lines about the copy the export made: sketches that stayed on another solution during the tries, tries that
+    stopped early, sketches that could not be measured. They still hold after Fusion undid the export."""
+    if not health:
+        return []
+    lines = []
     if health.get("flipped"):
         lines.append(clip("During the tries Fusion left %s on its other solution after a value was put back. The "
                           "tries made while it stayed there were not used to judge any size." % _names(health["flipped"]),
