@@ -32,10 +32,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the picked body alone: with more bodies, the export cannot tell where Fusion ends it. The export must also show that
   Fusion ended it on the far side of that body: its end face lies on the far side of the body, and the body has a flat
   face on that plane (or the end face merged with one). Else it is left out with a reason. A join through all onto a
-  curved top adds nothing in Fusion and is left out. A join through all both ways,
+  curved top adds nothing in Fusion and is left out. A join through all after a step that the copy left out is left
+  out too, and so is one that builds the tool body of a Combine. A join through all both ways,
   with a taper or with a thin wall, and a new body through all, are left out. Each size that may change the body before
   the join, or move its outline, is marked "may give unexpected results" with the step named: the export cannot check
-  that Fusion and the copy still end it at the same place at other sizes.
+  that Fusion and the copy still end it at the same place at other sizes. This marks more sizes than needed (also a
+  hole size or a fillet radius that cannot move the far side), because the export cannot tell which sizes move the
+  body along the extrude. Give the extrude a distance or end it on a face to keep these sizes unmarked.
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be

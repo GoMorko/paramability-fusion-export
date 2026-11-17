@@ -21,6 +21,9 @@ from lib.translator import translate
 from lib.design_model import roles, tool_chains
 from lib.translator.combine import tool_walk
 from lib.translator.context import Context
+from lib.design_model.steps import extrude as dm
+from lib.translator.extrude.side import RecipeSide
+from lib.translator.extrude.through import resolve_through
 from lib.translator.faces import follow
 from lib.translator.faces.placer import ADD, CUT, Placer
 from lib.translator.faces.slabs import Motion as CopyMotion, Slab
@@ -128,6 +131,24 @@ class WrittenToolTest(unittest.TestCase):
                     target_box_before={"min": [0, 0, 0], "max": [400, 400, 400]})
         inner = tool_of(translate(capture))["features"][1]
         self.assertAlmostEqual(inner["distance"], 14 + (100 + 100 + 196) ** 0.5 + 1, places=6)
+
+    def test_a_join_through_all_inside_a_tool_is_not_copied_as_through(self):
+        # The measured proofs of a join through all are read on the exported body, not on the tool, so a walk of the
+        # tool refuses a join that the walk of the exported body would copy.
+        capture = load_capture("extrude_cut_through_one")
+        item = capture["items"][3]
+        item["data"].update(operation="join", end_offset=40.0, end_normal=[1.0, 0.0, 0.0], end_area=200.0)
+        z, start = [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+
+        def resolved(ctx):
+            side = dm.SidePlan(dm.THROUGH, "side_one", 1, None, 0.0, measured=40.0)
+            plan = [RecipeSide("through-one", 1, None, 0.0, adjusts=True, read=side)]
+            ctx.enter(item)
+            return resolve_through(ctx, plan, item["data"], start, z, "add", item=item), plan[0].extent
+
+        outer = Context(capture)
+        self.assertEqual(resolved(outer), (None, "through"))
+        self.assertIsNotNone(resolved(outer.child(PLATE, "t_"))[0])
 
     def test_a_cut_through_all_without_measures_of_the_tool_refuses(self):
         capture = load_capture("combine_tool_cut_inside")
