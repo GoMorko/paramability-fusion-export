@@ -1,6 +1,7 @@
 """Thin extrudes of an open line: the wall along a chain of sketch lines is copied with square ends and sharp
 corners on the side the faces Fusion made show; every case the copy cannot prove is refused."""
 import copy
+import math
 import unittest
 
 from tests import context  # noqa: F401
@@ -96,6 +97,22 @@ class ThinLineCopyTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["outer"]["segments"][-1]["to"], [30.0, -20.0])
         self.assertEqual(step["thin"]["side"], "outside")
 
+    def test_a_135_degree_corner_is_copied_with_the_sharp_tip_fusion_makes(self):
+        # Fusion, side two, 2 mm wall, 15 mm high: top face (0, -2), (0, 0), (15.858, 14.142), (17.272, 15.556),
+        # (30, 0), (34.828, -2); 1644.853 mm3.
+        end = [round(30.0 - 20.0 * 0.5 ** 0.5, 6), round(20.0 * 0.5 ** 0.5, 6)]
+        corners = thin_line.band([[0, 0], [30, 0], end], 0.0, 2.0)
+        fusion = [[0, -2], [0, 0], [15.858, 14.142], [17.272, 15.556], [30, 0], [34.828, -2]]
+        self.assertEqual(sorted([round(c, 3) for c in p] for p in corners), sorted(fusion))
+        area = 0.5 * abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(corners, corners[1:] + corners[:1])))
+        self.assertAlmostEqual(area * HEIGHT, 1644.853, places=2)
+
+        def turned(data):
+            data["path"]["curves"][1]["flat"]["end"] = end
+            wall("side2", corners)(data)
+        step = only_step(with_edit(turned))
+        self.assertEqual((step["thin"]["side"], step["thin"]["corners"]), ("outside", "sharp"))
+
     def test_a_symmetric_extrude_is_copied(self):
         def symmetric(data):
             wall("center", MIDDLE, -HEIGHT / 2, HEIGHT / 2)(data)
@@ -154,8 +171,8 @@ class ThinLineFlushTest(unittest.TestCase):
 
 
 class ThinLineRefusalTest(unittest.TestCase):
-    def test_a_corner_sharper_than_a_square_corner_is_left_out(self):
-        tip = [30.0 - 20.0 * 0.5 ** 0.5, 20.0 * 0.5 ** 0.5]
+    def test_a_corner_sharper_than_135_degrees_is_left_out(self):
+        tip = [30.0 - 20.0 * math.cos(math.radians(30.0)), 20.0 * math.sin(math.radians(30.0))]
 
         def sharp(data):
             data["path"]["curves"][1]["flat"]["end"] = tip

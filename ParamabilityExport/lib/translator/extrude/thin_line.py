@@ -41,10 +41,11 @@ from ..sketch.written_loops import curves_at, value, written_reads
 JOIN_TOL = 1e-4
 # A line must be longer than this (mm) after its corners took their part of it.
 LENGTH_TOL = 1e-3
-# A corner turns by at most this: Fusion was seen to keep a 90 degree corner sharp, as the app does. A sharper corner
-# is left out until Fusion is seen to keep it sharp too (docs/hand-checks.md, T2-open).
-MAX_TURN_DEG = 90.0
-_TURN_TOL_DEG = 1e-6
+# A corner turns by at most this: Fusion was seen to keep corners of 90 and 135 degrees sharp, one tip where the outer
+# sides meet, as the app does. A sharper corner is left out until Fusion is seen to keep it sharp too
+# (docs/hand-checks.md, T2-open). The tolerance allows for the rounding of the captured points.
+MAX_TURN_DEG = 135.0
+_TURN_TOL_DEG = 1e-3
 # A face Fusion made lies on a face of the wall within this (mm), and its normal within this sine.
 FACE_TOL = 1e-3
 NORMAL_TOL = 1e-4
