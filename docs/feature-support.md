@@ -71,6 +71,7 @@ can be.
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
 | Revolve: two sides with two angles | Copied | - | Partly | Needs Orca | Left out when one angle is 90 or 270 degrees and the start face fits both sides. Two equal angles keep their numbers. Orca: both angles keep their numbers. |
 | Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | |
+| Revolve or circular pattern: axis on a cone or torus face | Copied | - | Copied | - | A cylinder, a cone or a torus face turns about its own axis. A sphere or a free-form face has no axis and the step is left out. The sizes that may move the face are marked. |
 | Sweep: path in one plane (lines, arcs, splines) | Copied | - | Partly | Needs Orca | Paramability: a path of lines and arcs follows sizes; a spline path is copied as measured. Orca: the path keeps its numbers, one outline without holes, no sharp corners. |
 | Sweep: path in 3D | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: lines joined by tangent arcs, as measured. Splines in 3D are left out. |
 | Sweep: twist, taper, parallel orientation | Copied | - | Left out | Needs Orca | Paramability: with a note to check the shape. A twist together with a taper is left out. |

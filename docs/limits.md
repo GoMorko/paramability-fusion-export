@@ -50,7 +50,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
-  read) leaves the revolve out of the copy; the reason says which of these it is.
+  read) leaves the revolve out of the copy; the reason says which of these it is. A face is round when it is a
+  cylinder, a cone or a torus. A sphere or a free-form face has no axis. A circular pattern about such a face is left
+  out for the same reason.
 - A revolve or pattern axis, a mirror or split plane, or a pattern direction of the part that the copy keeps where it
   is now (an edge, a face, a construction axis or plane, a line of a sketch) is not moved by the sizes. Each size
   that may move it is marked "may give unexpected results" with the step named. When the export cannot tell what such

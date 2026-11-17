@@ -240,6 +240,8 @@ def circular(ctx, step, sources=None, total_angle=None):
     solids, finishes = sources
     axis = data.get("axis") or {}
     if "point" not in axis or "dir" not in axis:
+        if axis.get("type") == "BRepFace" and axis.get("geometry"):
+            return Refusal("The turning axis of this pattern is a face that is not round, which cannot be copied.")
         return Refusal("The turning axis of this pattern could not be read.")
     count = int(data.get("quantity") or 1)
     if count < 2:
