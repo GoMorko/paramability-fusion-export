@@ -5,7 +5,9 @@ the copy follows makes a different outline, and where the part came apart into s
 one piece, since a form should not offer a value the design cannot take. Only a failure in a step the part is built
 from counts (`part_step`, by the step's timeline position, since names repeat across components). A try where such a
 step showed a new warning counts as one that did not build (the probe keeps it in `Motion.spans` `failed`, and in
-`warned` too): Fusion may have built another shape there than the copy. Where a sketch the copy follows makes a
+`warned` too): Fusion may have built another shape there than the copy. So does a try where such a step that is in
+error at the start built (`failed`, and `cleared` too): the copy leaves that step out, so it lacks what the step makes
+there. Where a sketch the copy follows makes a
 different outline (`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried
 that kept it, and where Fusion built the part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at
 the farthest value tried that kept it in one. These are facts of the tries, so the recipe translator and the probe both
@@ -111,6 +113,13 @@ def outline_cut(table, entry, span):
     return low, high, found
 
 
+def _marked(found, span, key):
+    """The ends of `found` (side to `(value, step)` of `failure_cut`) whose try is listed under `key` of the span
+    (`warned` or `cleared`)."""
+    listed = {(f[0], f[1]) for f in span.get(key) or ()}
+    return {side: f for side, f in found.items() if tuple(f) in listed}
+
+
 def built_ranges(table, motion, capture=None):
     """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
     (`Motion.spans`: a value tried with only that size changed), at which a followed sketch makes a different outline
@@ -127,12 +136,11 @@ def built_ranges(table, motion, capture=None):
         if not span or not size or "min" not in size:
             continue
         low, high, found = failure_cut(table, e, span, mine)
-        warnings = {(w[0], w[1]) for w in span.get("warned") or ()}
-        warned = {side: f for side, f in found.items() if tuple(f) in warnings}
-        found = {side: f for side, f in found.items() if side not in warned}
+        warned, cleared = (_marked(found, span, key) for key in ("warned", "cleared"))
+        found = {side: f for side, f in found.items() if side not in warned and side not in cleared}
         kept_low, kept_high, changed = outline_cut(table, e, span)
         split_low, split_high, split = split_cut(table, e, span)
-        cut = (Cut(low, high, found, warned=warned).meet(Cut(kept_low, kept_high, changed=changed))
+        cut = (Cut(low, high, found, warned=warned, cleared=cleared).meet(Cut(kept_low, kept_high, changed=changed))
                .meet(Cut(split_low, split_high, split=split)))
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut

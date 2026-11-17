@@ -23,6 +23,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the
   add-in could not confirm the design; the export is undone then too. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
   recomputes; the add-in then compares the curves themselves, so this is not taken for another outline.
+- A step that Fusion shows in red (an error) is not copied. When the part is the same before and after it, the copy
+  leaves it out with a note and goes on. When the part changed (Fusion keeps an older result of the step), it is left
+  out like a step that cannot be copied. When the part could not be measured around it, the part is saved as a fixed
+  shape. Where a try of a size makes a red step of the part build, the range of that size stops before that value; a
+  size that may make it build and that was not tried stays fixed. A red step of another component changes no range.
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.
 - The rounds and chamfers on the copies of a rectangular pattern follow its count: the copy writes them for every

@@ -11,7 +11,8 @@ through it (`brought`, `brought_data`). An item the copy cannot hold either stop
 on the body and the rest of the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
 handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
 out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
-the copy.
+the copy. A step Fusion shows in error goes by what the reader measured around it: passed by with a note when the
+body stayed the same, a gap when it changed, a stop when it was not measured.
 """
 import traceback
 
@@ -19,6 +20,7 @@ from ..capture_model import gap_hints, gap_picks, step_kinds
 from ..design_model import design, roles
 from ..design_model.reach import construction_fixes
 from . import notes as wording
+from ..sketch_values import coverage
 from .bodies import split_rules
 from .faces import floating
 from .gaps import stops
@@ -83,6 +85,23 @@ def _unsupported_reason(item):
 def _gap_ids(ctx, item):
     """Ids of the gaps whose faces `item` picks, or may pick."""
     return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
+
+
+def _fix_untried(ctx, item):
+    """Fix the sizes that may make `item`, a step Fusion shows in error and that changes nothing on the part, build
+    while no try showed where it does: the sizes the steps written so far read and those behind the step's own
+    values. The probe's tries cut the range of each size they set before a value where the step builds
+    (`tried_ranges.built_ranges`), so a size with a span in the motion file keeps its range. The first look of an
+    export (`OPTIMISTIC`) fixes nothing: the tries come after it, and they try only the sizes it leaves free."""
+    if ctx.table is None or getattr(ctx.motion, "optimistic", False):
+        return
+    names = set(ctx.written_reads)
+    for record in design.params_of(item).values():
+        if isinstance(record, dict) and record.get("name"):
+            names |= ctx.table.depends(record["name"])
+    untried = sorted(name for name in names if coverage.span(ctx.motion, name) is None)
+    if untried:
+        ctx.doubt(untried, wording.in_error_why(_label(item)), fixed=True)
 
 
 def walk_items(ctx, result):
@@ -169,7 +188,19 @@ def walk_items(ctx, result):
 
         touches = role.touches
         if step.has(design.FAILS) and (touches or not item.get("bodies_after")):
-            return refuse(item, step.problem(design.FAILS).words)
+            # A step Fusion shows in error: the part as the reader measured it around the step tells what it did.
+            if role.changed is False:
+                note = wording.in_error_note(_label(item))
+                result.items.append(make_verdict(item, SKIPPED, note=note))
+                result.notes.append(note)
+                _fix_untried(ctx, item)
+                return None
+            if role.changed is not True:
+                return refuse(item, step.problem(design.FAILS).words, cause=gap_hints.FAILS_IN_FUSION)
+            if not leave_out(item, wording.in_error_reason(), _gap_ids(ctx, item), cause=gap_hints.FAILS_IN_FUSION):
+                return False
+            made_in_component = True
+            return None
 
         handler = ctx.handlers.get(item.get("type"))
         if not touches and not item["bodies_after"] and (handler is None or roles.changes_named_bodies(item)):

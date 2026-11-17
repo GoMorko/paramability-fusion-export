@@ -58,10 +58,11 @@ def run(fusion, probe, sizes):
     return rows, results
 
 
-def shared_name_ranges(at, error=False):
+def shared_name_ranges(at, error=False, cleared=False):
     """The range cuts after the tries of `off`, with the timeline item at position `at` in warning (in error with
-    `error`) once `off` is above 5.5 mm. The part's own step at 6 and a step of another component at 9 are both named
-    "Extrude6", as Fusion names steps per component."""
+    `error`) once `off` is above 5.5 mm; with `cleared` it is in error at the start and builds once `off` is above
+    5.5 mm. The part's own step at 6 and a step of another component at 9 are both named "Extrude6", as Fusion names
+    steps per component."""
     capture = copy.deepcopy(CAPTURE)
     for item in capture["items"]:
         item["in_target_component"] = True
@@ -69,7 +70,11 @@ def shared_name_ranges(at, error=False):
                              "in_target_component": False, "data": {}})
     fusion = Fusion()
     trouble = lambda exprs: [(at, "Extrude6")] if number(exprs["off"]) > 5.5 else []  # noqa: E731
-    if error:
+    if cleared:
+        fusion.store.errors = [(at, "Extrude6")]
+        fusion.store.on_recompute = lambda store: setattr(store, "errors", [] if trouble(store.exprs) else
+                                                          [(at, "Extrude6")])
+    elif error:
         fusion.store.errors = []
         fusion.store.on_recompute = lambda store: setattr(store, "errors", trouble(store.exprs))
     else:
@@ -146,6 +151,19 @@ class WarnedTryTest(unittest.TestCase):
         run.discover([dict(size(tbl, "cube", "mm"), end=12.0)])
         self.assertEqual(run.rows[-1][0]["varied"], ["cube"])
         self.assertNotIn("warned", run.rows[-1][1])
+
+
+class ClearedTryTest(unittest.TestCase):
+    """A try where a step of the part that is in error at the start builds counts as a try that did not build: the copy
+    leaves that step out, so the range stops before it."""
+
+    def test_a_step_of_the_part_in_error_at_the_start_that_builds_at_a_try_cuts_the_range_before_it(self):
+        cut = shared_name_ranges(6, cleared=True)["off"]
+        self.assertEqual(cut[1], 5.0)
+        self.assertEqual(cut.cleared["high"][1], "Extrude6")
+
+    def test_a_step_of_another_component_in_error_at_the_start_that_builds_cuts_nothing(self):
+        self.assertNotIn("off", shared_name_ranges(9, cleared=True))
 
 
 class SizeProbeTest(unittest.TestCase):

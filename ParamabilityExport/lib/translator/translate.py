@@ -425,6 +425,10 @@ def _cut_notes(table, sizes, ctx):
                     if seen and hit and side in seen.warned and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if warnings:
             causes.append(wording.warned_why(warnings))
+        cleared = [seen.cleared[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                   if seen and hit and side in seen.cleared and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if cleared:
+            causes.append(wording.cleared_why(cleared))
         changes = [seen.changed[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
                    if seen and hit and side in seen.changed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if changes:

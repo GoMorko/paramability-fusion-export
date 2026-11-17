@@ -272,6 +272,14 @@ sits on a step that was left out". The add-in checks this against its own model 
 extrude whenever it cannot tell. The result window lists every step left out with its reason. In `report.json` each
 of them has the verdict `leftOut`.
 
+A step that Fusion shows in red (an error) is treated by what it did to the part. When the part is the same before
+and after it, Fusion shows nothing of the step, so the copy leaves it out too, with a note, and copies the steps
+after it. When the part changed (Fusion keeps an older result of the step, for example a pattern with only some of
+its copies), the step is left out like any other step that cannot be copied, with the tip "Fix the step that Fusion
+shows in red, then export again." A red step can build at other sizes, and then Fusion makes a shape that the copy
+does not have. So where the add-in tried a size and the red step built, the range of that size stops before that
+value. A size that may make the red step build and that the add-in did not try stays fixed.
+
 A size that only a left out step reads is still offered as a size, marked "may give unexpected results" with a reason
 that says so: it changes nothing in the copy until the step is added. Sizes that other steps read too stay plain
 sizes.
@@ -286,7 +294,7 @@ shows a short line with the same step (Fusion decides how long it stays):
 - the place of the part in the assembly cannot be used, or a step of another component or an assembly step changes
   the part;
 - the body cannot be followed through the timeline, or a step cannot be read from Fusion;
-- a step that Fusion shows as an error;
+- a step that Fusion shows as an error, when the add-in could not measure the part just before and just after it;
 - a step that splits the part or makes another body. A Split Body by a plane, a flat face or a solid body is copied
   when the part comes out of it as one piece and no later step changes another piece together with it: the copy
   follows the body it was split from and removes the other side, also for a tool body that a Combine takes. A split

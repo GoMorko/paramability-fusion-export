@@ -36,7 +36,8 @@ of an export): nothing is known about it.
 are the lowest and highest values of the states that built (the value now included), `failed` lists each value tried
 alone that Fusion could not rebuild, with the first step that failed there and, when the try gave it, that step's
 timeline position (`[value, step, position]`; `[value, step]` in files of older versions), `warned` (only when there is one) the
-entries of `failed` where Fusion built the part but that step showed a new warning, and `split` (only when there is one) each
+entries of `failed` where Fusion built the part but that step showed a new warning, `cleared` (only when there is one)
+the entries of `failed` where Fusion built the part and that step, in error at the start, built too, and `split` (only when there is one) each
 value tried alone where Fusion built the part in several separate pieces, with how many. A size whose `low` and `high`
 are its value now and that has `failed` or `split` entries was not measured at all.
 

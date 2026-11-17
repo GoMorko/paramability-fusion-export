@@ -9,6 +9,8 @@ NOT_TRIED_STOPPED = "not tried: the tries stopped early, after a try left a step
 NOT_TRIED_TIME = "not tried: the tries ran out of time"
 # Why a try that Fusion built is kept as one that did not: a step of the part shows a new warning there.
 WARNED_TRY = "Fusion shows a warning on %s at this size"
+# Why a try that Fusion built is kept as one that did not: a step of the part in error at the start builds there.
+CLEARED_TRY = "%s builds at this size, but it is in error in Fusion now and the copy leaves it out"
 
 
 def not_built_try(value, step):
