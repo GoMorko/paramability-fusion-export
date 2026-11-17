@@ -12,6 +12,15 @@ def _error_state():
         return 2
 
 
+def _warning_state():
+    """Fusion's warning health value; 1 when adsk.fusion cannot be imported (tests)."""
+    try:
+        import adsk.fusion
+        return adsk.fusion.FeatureHealthStates.WarningFeatureHealthState
+    except ImportError:
+        return 1
+
+
 class DesignParameterStore:
     """User parameters and timeline health of one design, shaped for export_plan.
 
@@ -223,14 +232,23 @@ class DesignParameterStore:
     def error_entries(self):
         """(timeline position, name) of each item before the marker whose health is error. Empty for a design
         without a timeline."""
+        return self._entries_in(_error_state())
+
+    def warning_entries(self):
+        """(timeline position, name) of each item before the marker whose health is warning. Empty for a design
+        without a timeline."""
+        return self._entries_in(_warning_state())
+
+    def _entries_in(self, state):
+        """(timeline position, name) of each item before the marker that is not suppressed and whose health
+        (`TimelineObject.healthState`) is `state`. Empty when the timeline cannot be read."""
         try:
             timeline = self.design.timeline
             entries = []
-            error = _error_state()
             end = timeline.count if self.marker is None else min(self.marker["position"], timeline.count)
             for i in range(end):
                 item = timeline.item(i)
-                if not item.isSuppressed and item.healthState == error:
+                if not item.isSuppressed and item.healthState == state:
                     entries.append((i, item.name))
             return entries
         except Exception:

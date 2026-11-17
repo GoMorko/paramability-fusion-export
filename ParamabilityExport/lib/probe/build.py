@@ -345,6 +345,8 @@ def _state_record(state):
     out = {"values": state.values, "built": state.built}
     if state.failed:
         out["failed"] = state.failed
+    if state.warned:
+        out["warned"] = True
     patterns = (state.read or {}).get("patterns")
     if state.built and isinstance(patterns, dict) and patterns:
         out["patterns"] = patterns
@@ -374,7 +376,8 @@ def body_changes(run, current):
 def spans(states, current):
     """`Motion.spans`: per size a state sets to another value than `current` has, the lowest and highest value of the
     states that built (the current value included), `[value, step]` for each state that set it alone and did not
-    build, and `split`: `[value, pieces]` for each state that set it alone and left the part in several pieces (only
+    build, `warned`: the same `[value, step]` again for those where the step showed a new warning (only when there is
+    one), and `split`: `[value, pieces]` for each state that set it alone and left the part in several pieces (only
     when there is one). `states` are `ProbeState` records."""
     out = {}
     for state in states:
@@ -388,6 +391,8 @@ def spans(states, current):
                 span.setdefault("split", []).append([value, state.pieces])
             elif len(moved) == 1:
                 span["failed"].append([value, state.failed or ""])
+                if state.warned:
+                    span.setdefault("warned", []).append([value, state.failed or ""])
     return out
 
 

@@ -54,20 +54,22 @@ FREE, DERIVED, CONSTANT, FIXED, NOT_OFFERED = "free", "derived", "constant", "fi
 
 class Cut(tuple):
     """`(low, high)` a size range is cut to. `failed` holds, for each end that was cut (`"low"`, `"high"`), the
-    `(value, step)` of the nearest try Fusion did not rebuild past it; `changed` the `(value, sketch)` of the nearest
-    try past it where a sketch the copy follows made a different outline; `split` the `(value, pieces)` of the nearest
-    try past it where the part came apart into several pieces."""
+    `(value, step)` of the nearest try Fusion did not rebuild past it; `warned` the `(value, step)` of the nearest try
+    past it where Fusion built the part but the step showed a new warning; `changed` the `(value, sketch)` of the
+    nearest try past it where a sketch the copy follows made a different outline; `split` the `(value, pieces)` of the
+    nearest try past it where the part came apart into several pieces."""
 
-    def __new__(cls, low, high, failed=None, changed=None, split=None):
+    def __new__(cls, low, high, failed=None, changed=None, split=None, warned=None):
         out = super().__new__(cls, (low, high))
         out.failed = dict(failed or {})
         out.changed = dict(changed or {})
         out.split = dict(split or {})
+        out.warned = dict(warned or {})
         return out
 
     def meet(self, other):
         """The cut that holds both: the higher low end and the lower high end, each with the try behind it."""
-        found = {"failed": {}, "changed": {}, "split": {}}
+        found = {"failed": {}, "changed": {}, "split": {}, "warned": {}}
         for side, at, pick in (("low", 0, max), ("high", 1, min)):
             won = other if pick(self[at], other[at]) != self[at] else self
             for kind, held in found.items():

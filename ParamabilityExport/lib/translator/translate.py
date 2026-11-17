@@ -411,6 +411,10 @@ def _cut_notes(table, sizes, ctx):
                     if seen and hit and side in seen.failed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if failures:
             causes.append(wording.not_rebuilt_why(failures))
+        warnings = [seen.warned[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                    if seen and hit and side in seen.warned and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if warnings:
+            causes.append(wording.warned_why(warnings))
         changes = [seen.changed[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
                    if seen and hit and side in seen.changed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if changes:

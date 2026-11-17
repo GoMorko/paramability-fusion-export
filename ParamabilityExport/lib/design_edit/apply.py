@@ -1,6 +1,7 @@
 """Apply one size row to the design and read back the resulting numbers."""
 from ..package.units import to_manifest_value
 from ..params.expressions.text import format_expression
+from .store import timeline_control
 
 
 class RowBuildError(Exception):
@@ -18,17 +19,45 @@ class RowBuildError(Exception):
 
 class Baseline:
     """How the design recomputes with the parameters untouched: whether Fusion reported success, and the timeline
-    items already in error, as {key: name}. Rows are judged against it, so a design with trouble elsewhere still
-    gets its sizes checked."""
+    items already in error and in warning, as {key: name}. Rows are judged against it, so a design with trouble
+    elsewhere still gets its sizes checked."""
 
-    def __init__(self, recompute_ok=True, errors=None):
+    def __init__(self, recompute_ok=True, errors=None, warnings=None):
         self.recompute_ok = recompute_ok
         self.errors = dict(errors or {})
+        self.warnings = dict(warnings or {})
 
 
 def error_entries(store):
     """{key: name} of the timeline items in error. The key tells apart items that share a name."""
     return dict(store.error_entries())
+
+
+def warning_entries(store):
+    """{key: name} of the timeline items in warning; empty for a store that does not read warnings."""
+    read = timeline_control(store, "warning_entries")
+    return dict(read()) if read is not None else {}
+
+
+def new_warnings(store, baseline):
+    """Names of the timeline items in warning now that were neither in warning nor in error in `baseline` (a
+    `Baseline`): a step that a row made unsure. As in `new_errors`, a step that reads in warning after a rebuild of
+    only the changed steps is read again after one full recompute. Never raises: an unreadable timeline gives none."""
+    def read():
+        try:
+            return [name for key, name in warning_entries(store).items()
+                    if key not in baseline.warnings and key not in baseline.errors]
+        except Exception:
+            return []
+
+    found = read()
+    if found:
+        try:
+            store.recompute()
+        except Exception:
+            pass
+        found = read()
+    return found
 
 
 def new_errors(store, before):
@@ -76,7 +105,8 @@ def _recompute(store):
 
 
 def measure_baseline(store):
-    """Recompute once with the parameters as they are and note the result and the items in error. Never raises."""
+    """Recompute once with the parameters as they are and note the result and the items in error and in warning.
+    Never raises."""
     try:
         ok = store.recompute() is not False
     except Exception:
@@ -85,7 +115,11 @@ def measure_baseline(store):
         errors = error_entries(store)
     except Exception:
         errors = {}
-    return Baseline(ok, errors)
+    try:
+        warnings = warning_entries(store)
+    except Exception:
+        warnings = {}
+    return Baseline(ok, errors, warnings)
 
 
 def set_all(store, expressions):

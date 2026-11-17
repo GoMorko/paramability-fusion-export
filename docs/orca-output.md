@@ -547,7 +547,9 @@ not judged to meet material where Orca removes nothing.
   back by the angle of one side and turns by the sum: the start face tells which side (`back_sides`), and both angles
   keep their numbers. When the start face fits both sides (one angle of 90 or 270 degrees), it is left out with the
   cause `revolveSides`. Left out: an axis off the sketch plane, an outline across the axis, an outline with holes,
-  several outlines. A cut is checked against the copied part like any cut.
+  several outlines. A cut is checked against the copied part like any cut. The outline and the axis keep their drawn
+  numbers in Orca (the sizes that move them are marked), so the outline cannot pass to the other side of the axis in
+  the copy; the recipe output cuts the ranges for that instead (developer guide 3.14, "The side of the axis").
 
 ### Sweeps, lofts and splines
 

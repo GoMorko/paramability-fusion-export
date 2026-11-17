@@ -6,13 +6,14 @@ from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
 from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, series
 from ...probe.state import ProbeState
+from ...design_model.tried_ranges import part_step
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
 from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
-                      UNREADABLE, UNTRIED, not_built_try, watched_why)
+                      UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
 from .states import body_changed, box_numbers, marked_states, same_numbers
@@ -116,7 +117,11 @@ class SizeProbe:
         before the row ran, and `again`, true for a row run a second time (`pipeline.ProbeRun`).
 
         A row that built the part in several separate pieces, while it was one at E0 (`pieces.came_apart`), is kept
-        as a row that did not build, with the number of pieces: the app cannot build the part there."""
+        as a row that did not build, with the number of pieces: the app cannot build the part there. A row where a
+        step the part is built from shows a new warning (the result's `warned`, `tried_ranges.part_step`) is kept
+        as a row that did not build too, with that step: Fusion may have built something else there than the copy
+        would, so the ranges stop before it as before a step in error."""
+        mine = part_step(self.capture)
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
             more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
@@ -124,10 +129,15 @@ class SizeProbe:
             kept = {"start": start if isinstance(start, dict) else None,
                     "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
             apart = None if result.get("error") else pieces.came_apart(read, self.e0)
+            warned = [name for name in result.get("warned") or () if mine(name)]
             if result.get("error"):
                 detail = result.get("detail") or {}
                 state = ProbeState(values or {}, built=False, failed=(detail.get("items") or [""])[0], **kept)
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
+            elif warned:
+                state = ProbeState(values or {}, built=False, failed=warned[0], warned=True, **kept)
+                self.dropped.append({"name": result.get("name"), "error": WARNED_TRY % warned[0],
+                                     "detail": {"reason": "new_warnings", "items": warned}})
             elif apart:
                 state = ProbeState(values or {}, built=False, pieces=apart, **kept)
                 self.dropped.append({"name": result.get("name"), "error": pieces.APART_ERROR % apart})

@@ -1183,6 +1183,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
+| `revolveAxisSide` | a revolve whose outline would reach or cross its axis inside size ranges that the person typed (3.14) | Type size ranges that keep the outline on one side of the axis, or leave the ranges to the add-in. |
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
@@ -1796,7 +1797,8 @@ one folder per family of steps.
     and `path_rebuilt.py` the rules of a path read back from written numbers, for the checks over the size ranges.
   - `loft/`: `step.py`, `loft_sections.py`. The volume of the corner pairing is in `design_model/steps/loft.py`.
   - `revolve/step.py` (see 3.14; which side each angle of a revolve to two sides turns to is in
-    `design_model/steps/revolve.py`), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
+    `design_model/steps/revolve.py`) with `revolve/axis_side.py` (the ranges where the outline stays on its side of
+    the axis), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
     of a tapped hole, see 3.12). They read the hole and the thread through `design_model/steps/hole.py` and
     `thread.py`; they keep the caps of the recipe, the values that follow sizes and the refusals.
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
@@ -2758,6 +2760,18 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 
 - Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component, or a step
   that built a tool body. A failure in another component cuts nothing.
+- A row that Fusion builds can still be wrong. A step can show a warning: for example, a revolve whose outline crosses
+  its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
+  counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
+  `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
+  first try (the baseline) does not count. When a step reads in warning after a rebuild of only the changed steps,
+  the design is recomputed in full once and read again, as for errors. The result of the row then has `warned`, the
+  names of those steps. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
+  run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
+  the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
+  since Fusion shows a warning on Revolve1 at 12.5." (`Cut.warned`, `notes.warned_why`). A warning on a step of
+  another component changes nothing.
 - A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
   it could not be tried".
 - A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
@@ -3900,6 +3914,42 @@ An intersect of several outlines keeps the part only where any of the outlines t
 one intersect for each outline. It writes one `toolBody` step with `combine: "intersect"`. In that step, the first
 outline makes a new body and the other outlines join it.
 
+#### The side of the axis
+
+Fusion turns a revolve toward one side of the sketch plane. Fusion keeps that side when the outline is on the other
+side of the axis. Thus, when the outline passes to the other side of the axis, the turn about the axis reverses. When
+the outline touches the axis or crosses it, Fusion can build the step with a warning. The recipe writes one turn about
+the axis by the right hand rule, and this turn does not change. The app refuses an outline that crosses its axis.
+Thus the copy is correct only while the outline stays on the side of the axis where it is now.
+
+Example. A box is 40 x 20 mm, and its height is a size. A line on the top front edge of the box is the axis. The
+outline is a 10 x 3 mm rectangle on the XZ plane, from z = 12 to z = 15. The revolve turns it 90 degrees toward the
+box. At the height 10, the axis is below the outline. At the height 15, the axis is on the top edge of the outline.
+At the height 20, the axis is above the outline. Fusion then turns the outline into the box, but a copy with one
+turn would turn it out of the box.
+
+`revolve/axis_side.py` (`keep_side`) does this check after the handler writes the steps. The check uses each written
+`revolve` step: its outline and its axis point, as numbers or formulas. When no size moves the outline or the axis,
+there is nothing to check. Else the check calculates the distance of the outline from the axis, across the axis, at
+these size settings:
+
+- the ends and the corners of the ranges of the sizes that the step reads (`range_check.corners`);
+- the inner settings too, when a formula is more than sums and products (`range_check.needs_inner`).
+
+A line gives its two ends. An arc gives its two ends, and the point nearest to the axis or farthest from it when that
+point is on the arc. A circle and an ellipse give their nearest and farthest points. A free curve gives its samples.
+
+At the current sizes, the outline is on one side of the axis. The rule is that the outline stays on that side, more
+than 0.0001 mm (`SIDE_TOL_MM`) away from the axis. An outline that touches the axis now (for example a vase drawn
+from its centre line) can stay on the axis, but it must not pass it. When the rule fails at a setting, the check
+finds the shorter ranges where it holds (`kept_ranges.holding_ranges_where`) and cuts the ranges there
+(`Context.cut`, with the reason "the outline of ... would reach its axis"). In most designs the outline and the axis
+move in a straight line with the sizes. Then the halvings find the place where the outline reaches the axis, and the
+range stops at the step of the form before it. In the example, the range of the height stops at 11.99.
+
+When no shorter ranges keep the rule, the step is left out with the cause `revolveAxisSide`. This occurs when every
+size that the step reads has a range that the person typed.
+
 The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
 marked.
@@ -4440,8 +4490,8 @@ nothing in the part changed.
 | Key | Meaning |
 | --- | --- |
 | `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
-| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
-| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed` or `new_errors`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
 | `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
 | `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
 | `motion` | The motion file (below). |
@@ -4457,7 +4507,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |

@@ -5,7 +5,8 @@ from typing import Protocol
 # The timeline controls. A store that works on a design with no timeline leaves them out, and the code that uses
 # one goes on without it (see `timeline_control`).
 TIMELINE_CONTROLS = (
-    "timeline_health", "turn_on", "keep_marker", "roll_marker", "unroll_marker", "suppress_items", "unsuppress_items")
+    "timeline_health", "turn_on", "keep_marker", "roll_marker", "unroll_marker", "suppress_items", "unsuppress_items",
+    "warning_entries")
 
 
 class ParameterStore(Protocol):
@@ -34,6 +35,8 @@ class ParameterStore(Protocol):
       it the marker is not rolled.
     suppress_items(items) / unsuppress_items(): turn timeline items off for the tries and on again. Without it
       nothing is suppressed.
+    warning_entries(): {key: name} of the timeline items before the marker whose health is warning, keyed as
+      `error_entries`. Without it no warning is read.
     """
 
     def saved_expressions(self): ...
