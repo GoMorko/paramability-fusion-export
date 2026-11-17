@@ -283,8 +283,8 @@ class SingleBodyOrderTest(unittest.TestCase):
         self.assertEqual(calls, START_ONE + [
             "rows",
             # The check the cancelled try asked for runs before any Undo drop: Fillet1 stays worse after both ways back.
-            *STUCK_BACK, *check, *walk("-0.625", "26.65"), *back, *check,
-            *walk(2, "21.125"), *walk(1, "22.75"), *walk(1, "24.375"), *back, *check, "log(tries stopped)",
+            *STUCK_BACK, *check, *walk("0.1125", "26.65"), *back, *check,
+            *walk("2.2528125", "21.125"), *walk("1.505625", "22.75"), *walk("0.7584375", "24.375"), *back, *check, "log(tries stopped)",
             "store.unsuppress_items", "log(steps still turned off)", "read(outline)",  # no Undo drop
             *STUCK_BACK, "store.unroll_marker",  # closed: values and marker back, then the warnings
             "port.warn_unrestored(['box_count'])",

@@ -1,7 +1,9 @@
 """The values the walk back sets after a try left a sketch on its other solution (`design_edit.walk_back.settings`)."""
 import unittest
 
-from ParamabilityExport.lib.design_edit.walk_back import settings
+from tests import context  # noqa: F401
+
+from lib.design_edit.walk_back import settings
 
 
 class SettingsTest(unittest.TestCase):
