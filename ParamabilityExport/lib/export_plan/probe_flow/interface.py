@@ -10,7 +10,8 @@ class Probe(Protocol):
 
     read_now(values, outline, park): read the design as it is now (`SizeProbe.read_now`).
     followed_sketches(): tokens of the sketches read at every row (the sketch keeper keeps them).
-    left_start(read), off_outline(read), matches_start(read): what a read shows about the followed sketches.
+    left_start(read), off_start(read), off_outline(read), matches_start(read): what a read shows about the followed
+      sketches (`off_start` gives the tokens of those that read otherwise than at the start).
     probe_rows(sizes, extra), pair_rows, far_rows, far_pair_rows, nearer_rows, check_rows (sizes, room): the rows of
       each phase, in the order `ProbeRun.measure` asks for them.
     add_states(entries): the states of the rows run (`ProbeRun.probe_states`).
@@ -22,17 +23,22 @@ class Probe(Protocol):
     discovery_rows(candidates, room), set_discovery_base(read, put_back), discover(entries), also_changes: the
       discovery rows and the unticked parameters they showed changing the part.
     finish(after, labels): build the motion; returns the sizes the probe cannot follow.
-    measure_restore(after), restore_unchecked: the gap to the first read once the values are back.
+    measure_restore(after), restore_unchecked, restore_changed: the gap to the first read once the values are back,
+      the sketches that could not be compared and those found on another outline.
+    measure_body(): what of the body differs from the first read once the design is back.
     """
 
     also_changes: list
     restore_unchecked: list
+    restore_changed: list
 
     def read_now(self, values=None, outline=False, park=False): ...
 
     def followed_sketches(self): ...
 
     def left_start(self, read): ...
+
+    def off_start(self, read): ...
 
     def off_outline(self, read): ...
 
@@ -71,3 +77,5 @@ class Probe(Protocol):
     def finish(self, after, labels): ...
 
     def measure_restore(self, after): ...
+
+    def measure_body(self): ...

@@ -19,8 +19,9 @@ class PutBack:
     - `hold_timeline` before the tries; the try runner calls `end_trim` before the discovery tries;
     - `tries_done(run)` once the tries ran and `tries_ended(run)` on every way out of them: the values and the items go
       back and a sketch left on another solution is put back (`ProbeRun.settle`) before the probe's last read;
-    - `settle(read_gap, read_outline_gap)` once the export is made: values and items back, the sketch gap read, the
-      marker back, the end check, and the outlines read again when the end check rebuilt the design;
+    - `settle(read_gap, read_outline_gap, read_body)` once the export is made: values and items back, the sketch gap
+      read, the marker back, the end check, the outlines read again when the end check rebuilt the design, and the
+      body compared with its start;
     - `close(health)` when the export is made, `close_failed()` when it stops: the values and the marker go back once
       more and the person is told what did not; a made export then drops its last Undo step when the design is as it
       was.
@@ -37,6 +38,7 @@ class PutBack:
         self.settled = None  # `TimelineSettle` of the end check
         self.gap_mm = None
         self.gap_after_mm = None
+        self.body_changed = []  # what of the body differs from the start once the design is back
         self._tries_back = None  # the try run the design was put back after
         self.outcome = getattr(request, "outcome", None)  # the `rollback.ExportOutcome` this export fills in
 
@@ -109,10 +111,11 @@ class PutBack:
 
     # ---- the end of the export ---------------------------------------------------------------------------------
 
-    def settle(self, read_gap, read_outline_gap):
+    def settle(self, read_gap, read_outline_gap, read_body=None):
         """Bring the design back once the export is made. `read_gap()` is the sketch gap after the restore (None when
         it cannot be told; never raises), `read_outline_gap()` the gap from a read of the outlines only (None without
-        a probe)."""
+        a probe), `read_body()` what of the body differs from its start, read last, once the marker and every step
+        are back (empty without a probe)."""
         with self.timing.span("restore"):
             self.restore()
             self.end_trim()
@@ -123,6 +126,17 @@ class PutBack:
             self._settle_steps()
         with self.timing.span("probe"):
             self.gap_mm, self.gap_after_mm = self._gap_after_settle(gap, read_outline_gap)
+            self.body_changed = self._body(read_body)
+
+    def _body(self, read_body):
+        """What `read_body()` finds changed in the body, or nothing without it. Never raises."""
+        if read_body is None:
+            return []
+        try:
+            return list(read_body() or [])
+        except Exception as exc:
+            self.port.log(f"reading the body after the export failed: {exc!r}")
+            return []
 
     def _settle_steps(self):
         """Compare the timeline steps with the start and bring back what differs (`timeline_health.settle_timeline`),
@@ -164,13 +178,15 @@ class PutBack:
         """Sketches whose compute flag the keeper could not put back (`SketchKeeper.deferred_left`)."""
         return list(getattr(self.keeper, "deferred_left", None) or [])
 
-    def health_inputs(self, probe, probe_error, unchecked, flipped):
+    def health_inputs(self, probe, probe_error, unchecked, flipped, changed=()):
         """The `health.HealthInputs` of the export, with what the probe tells: its status and error, what the restore
-        check could not compare and the sketches that stayed on another outline for a while."""
+        check could not compare, the sketches that stayed on another outline for a while and those it found on
+        another outline at the end (`changed`)."""
         return health_module.HealthInputs(
             unrestored=self.unrestored, gap_mm=self.gap_mm, probe=probe, probe_error=probe_error, unchecked=unchecked,
             flipped=flipped, stopped=self.stopped, steps=self.settled, deferred_left=self.deferred_left(),
-            gap_after_mm=self.gap_after_mm, left_off=self.left_off(), undo_dropped=self.undo_dropped())
+            gap_after_mm=self.gap_after_mm, left_off=self.left_off(), undo_dropped=self.undo_dropped(),
+            outlines_changed=changed, body_changed=self.body_changed)
 
     def _note_tries(self):
         """Tell the outcome that the tries changed the design from here on (`rollback.ExportOutcome.touched`)."""

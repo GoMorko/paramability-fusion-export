@@ -12,9 +12,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   outline came back after it. Such a size keeps its range up to the last value tried that kept the outline (the
   add-in halves toward it, as for a value that does not rebuild); only when no other value works is it not a size,
   and the reason says why. The tries made while a sketch stayed on its other solution count against no size, and
-  the result window says so in one line. When the sketch still reads another outline after the export, the result
-  window names it so you can look at it in Fusion. Fusion sometimes gives a projected curve a new name when it
-  recomputes; the add-in then knows it by its place in the outline.
+  the result window says so in one line. A sketch that stays on its other solution is brought back the way the try
+  took it away: the size set a little past its value on the other side and back, or walked back in small steps.
+  When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop
+  there; only the tries before it are used, and the sizes not tried yet are marked. When the sketch still reads
+  another outline after the export, or the body has another volume or size than before, the result window says that
+  your design is changed. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
+  recomputes; the add-in then compares the curves themselves, so this is not taken for another outline.
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.
 - The rounds and chamfers on the copies of a rectangular pattern follow its count: the copy writes them for every

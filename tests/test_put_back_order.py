@@ -95,9 +95,13 @@ class OrderStore(TrimStore):
         return super().recompute()
 
     def timeline_health(self):
-        return [{"index": 0, "name": "Sketch1", "type": "Sketch", "health": "ok", "message": "", "suppressed": False},
-                {"index": 1, "name": self.changed or "Fillet1", "type": "FilletFeature",
-                 "health": "warning" if self.warning else "ok", "message": "", "suppressed": False}]
+        steps = [{"index": 0, "name": "Sketch1", "type": "Sketch", "health": "ok", "message": "", "suppressed": False},
+                 {"index": 1, "name": self.changed or "Fillet1", "type": "FilletFeature",
+                  "health": "warning" if self.warning else "ok", "message": "", "suppressed": False}]
+        if self.broken:
+            steps.append({"index": 2, "name": "RemoveBody1", "type": "RemoveFeature", "health": "error",
+                          "message": "", "suppressed": False})
+        return steps
 
     def turn_on(self, steps):
         return []
@@ -218,6 +222,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",  # tries done
             "read(full)",  # the probe's last read
             "store.current_expressions", "read(full)", *END_CHECK,
+            "read(full)",  # the body compared with its start
             "store.current_expressions", "undo.drop",  # closed
         ])
         self.assertTrue(health["undo_dropped"])
@@ -232,6 +237,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "read(full)",
             "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, "store.return_marker",
             "read(outline)",  # the sketches after the end rebuild
+            "read(full)",  # the body compared with its start
             "store.current_expressions", "port.warn_left_off(['Lid sketch'], True)",  # closed, no Undo drop
         ])
         self.assertEqual(health["end_actions"], ["full_compute"])
@@ -244,7 +250,7 @@ class SingleBodyOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
             "read(full)",
             "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, *VALUES_AGAIN,
-            "store.return_marker", "read(outline)",
+            "store.return_marker", "read(outline)", "read(full)",
             "store.current_expressions",
         ])
         self.assertEqual(health["end_actions"], ["full_compute", "values_again"])
@@ -254,9 +260,9 @@ class SingleBodyOrderTest(unittest.TestCase):
         self.assertEqual(calls, START_ONE + [
             "rows", "log(size probe failed)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)",
-            "log(putting a sketch back after the tries failed)", "undo.drop",
+            "log(putting a sketch back after the tries failed)",  # not read back: the Undo data is kept
             "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
-            *END_CHECK,
+            *END_CHECK, "read(full)",
             "store.current_expressions",
         ])
         self.assertEqual(health["probe"], "failed")
@@ -293,9 +299,10 @@ class SingleBodyOrderTest(unittest.TestCase):
         calls, health = export(order_port(OrderStore(broken_above=70)))
         self.assertEqual(calls, START_ONE + [
             "rows", "read(outline)", "rows",
-            "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)",  # a step worse: no Undo drop
             "read(full)",
-            "store.current_expressions", "read(full)", *END_CHECK,
+            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, *VALUES_AGAIN,
+            "store.return_marker", "read(outline)", "read(full)",
             "store.current_expressions",
         ])
         self.assertIn("tries_stopped", health)
@@ -317,7 +324,7 @@ class SeveralBodiesOrderTest(unittest.TestCase):
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "read(outline)", "undo.drop",
             "read(full)", "read(full)",
             "store.current_expressions", "read(full)", "read(full)", *END_CHECK, *FULL_COMPUTE,
-            "store.return_marker", "read(outline)", "read(outline)",
+            "store.return_marker", "read(outline)", "read(outline)", "read(full)", "read(full)",
             "store.current_expressions", "undo.drop",
         ])
         self.assertEqual(health["steps_recovered"], ["Fillet1"])
@@ -339,9 +346,9 @@ class SeveralBodiesOrderTest(unittest.TestCase):
         self.assertEqual(calls, START_TWO + [
             "rows", "log(size probe failed)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)",
-            "log(putting a sketch back after the tries failed)", "undo.drop",
+            "log(putting a sketch back after the tries failed)",
             "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
-            *END_CHECK,
+            *END_CHECK, "read(full)", "read(full)",
             "store.current_expressions",
         ])
         self.assertEqual(health["probe"], "failed")

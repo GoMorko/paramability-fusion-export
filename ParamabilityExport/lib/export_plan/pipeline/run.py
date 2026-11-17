@@ -69,13 +69,13 @@ class _Pipeline:
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
-        self.put_back.settle(self._restore_gap, self._outline_gap)
+        self.put_back.settle(self._restore_gap, self._outline_gap, self._body_check)
         with timing.span("probe"):
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         flipped = self.motion.flipped if self.motion is not None else ()
         health = health_module.make_health(self.put_back.health_inputs(
-            self.probe_status, self.probe_error, self._unchecked(), flipped))
+            self.probe_status, self.probe_error, self._unchecked(), flipped, self._changed()))
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
@@ -242,6 +242,14 @@ class _Pipeline:
     def _unchecked(self):
         """What the restore check could not compare, for the health record."""
         return list(self.probe.restore_unchecked) if self.probe is not None else []
+
+    def _changed(self):
+        """The sketches the restore check found on another outline, for the health record."""
+        return list(self.probe.restore_changed) if self.probe is not None else []
+
+    def _body_check(self):
+        """What of the part's body differs from its first read once the design is back, or nothing without a probe."""
+        return self.probe.measure_body() if self.probe is not None else []
 
     def _close_probe(self):
         """The probe's record for `report.json`, or None when it did not run or failed."""
