@@ -38,6 +38,7 @@ class PutBack:
         self.gap_mm = None
         self.gap_after_mm = None
         self._tries_back = None  # the try run the design was put back after
+        self.outcome = getattr(request, "outcome", None)  # the `rollback.ExportOutcome` this export fills in
 
     @classmethod
     def start(cls, port, request, timing):
@@ -58,6 +59,7 @@ class PutBack:
     def hold_timeline(self, captures, unchanged):
         """Hold the marker early and turn off the items the tries of `captures` do not use (`TryTimeline.begin`;
         `unchanged()` tells the design reads as at the start)."""
+        self._note_tries()
         self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin(captures, unchanged)
 
@@ -95,6 +97,7 @@ class PutBack:
         """Put every parameter back, turn the suppressed items back on and put a sketch left on another solution back
         (`ProbeRun.settle`). Never raises, so it also runs when the tries ended with an error or a cancel. The run's
         sketch keeper is kept for the health record."""
+        self._note_tries()
         self._tries_back = run
         self.keeper = run.keeper
         try:
@@ -169,9 +172,34 @@ class PutBack:
             flipped=flipped, stopped=self.stopped, steps=self.settled, deferred_left=self.deferred_left(),
             gap_after_mm=self.gap_after_mm, left_off=self.left_off(), undo_dropped=self.undo_dropped())
 
+    def _note_tries(self):
+        """Tell the outcome that the tries changed the design from here on (`rollback.ExportOutcome.touched`)."""
+        if self.outcome is not None:
+            self.outcome.touched = True
+
+    def _note_health(self, make):
+        """Give the outcome the health that `make()` returns. A failure is logged and leaves the outcome without one,
+        which counts as a design that is not confirmed back (`rollback.decide`)."""
+        if self.outcome is None:
+            return
+        try:
+            self.outcome.health = make()
+        except Exception as exc:
+            self.port.log(f"the health of the export could not be made: {exc!r}")
+
+    def _failed_health(self):
+        """The health record of an export that stopped. The end check must have run: without it nothing says the steps
+        are as before, so this raises and the outcome keeps no health. The sketches are not read again here: a try
+        that left one on another solution shows through the keeper (`deferred_left`) or the stop of the tries
+        (`stopped`) only."""
+        if self.settled is None:
+            raise RuntimeError("the timeline steps were not compared with the start")
+        return health_module.make_health(self.health_inputs(health_module.NOT_NEEDED, "", [], ()))
+
     def close(self, health):
         """The export is made: values and marker back, the items that stayed off named, then the last Undo step dropped
         when `health` says the design is as it was (`undo_steps.drop_after`)."""
+        self._note_health(lambda: health)
         self.restore()
         self._end_roll()
         self._warn_left_off()
@@ -187,6 +215,7 @@ class PutBack:
             self._tell("the parameters that did not go back", lambda: self.port.warn_unrestored(failed))
         self._warn_steps()
         self._tell("the timeline items left off", self._warn_left_off)
+        self._note_health(self._failed_health)
 
     def _tell(self, what, warn):
         """Run `warn()`; a failure is logged, not raised."""

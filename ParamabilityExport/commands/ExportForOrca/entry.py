@@ -7,6 +7,7 @@ from ... import config
 from ...lib.design_edit.marker import marker_note, read_marker
 from ...lib.dialog_model.orca_result import preview as left_out_preview
 from ...lib.design_edit.timeline_health import read_timeline
+from ...lib.export_plan.rollback import ExecuteGate
 from ...lib.export_plan.size_offers import ORCA, offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
@@ -101,15 +102,13 @@ def _on_created(args):
         command.validateInputs,
         lambda a: setattr(a, "areInputsValid", recipe_dialog.inputs_valid(a.inputs, offers, limit=1)),
         _command_handlers)
-    exported = {"started": False}
+    gate = ExecuteGate(log)
 
     def on_execute(args):
-        """Run the export once per dialog."""
-        if exported["started"]:
-            return
-        exported["started"] = True
-        export_flow.run_export(design, parameters, model_params, design_unit,
-                               recipe_dialog.read_form(args.command.commandInputs, offers), captures, timeline_start)
+        """Run the export once per dialog, and have Fusion undo it when the design is not back."""
+        gate.run(args, lambda outcome: export_flow.run_export(
+            design, parameters, model_params, design_unit, recipe_dialog.read_form(args.command.commandInputs, offers),
+            captures, timeline_start, outcome=outcome))
 
     handlers.on_execute(command.execute, on_execute, _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)

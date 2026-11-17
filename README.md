@@ -25,7 +25,9 @@ learning only.
 2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
    moves, and how much. Where a step does not rebuild, or shows a new warning, the range of that parameter stops
    before that value.
-3. It sets all parameters back to their values. Your design does not change. A parameter that no copied step uses
+3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot
+   confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. The file stays
+   saved (with "Lighter on memory" ticked it cannot, and the window says so). A parameter that no copied step uses
    is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
    Fusion made it.

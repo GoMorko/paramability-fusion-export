@@ -3,6 +3,7 @@ size, write the file. One size gives a plain part; two or more give a dropdown o
 import os
 import tempfile
 
+from ...lib.export_plan import rollback
 from ...lib.export_plan.assemble import build_package
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name, saved_message
 from ...lib.design_edit.runner import RowExport
@@ -19,8 +20,15 @@ from ...lib.package.writer import write_package
 from .. import export_common
 
 
-def run_export(design, parameters, form):
-    """Run one export. Parameters are always put back before this returns."""
+def run_export(design, parameters, form, outcome=None):
+    """Run one export and return its `rollback.ExportOutcome`. Never raises. Parameters are always put back before
+    this returns. `outcome` is the record the export fills in (made here when None); the caller reads it to tell Fusion
+    to undo the export when the design is not back (`rollback.ExecuteGate`)."""
+    outcome = rollback.ExportOutcome() if outcome is None else outcome
+    return export_common.contained(outcome, lambda: _run_export(design, parameters, form, outcome))
+
+
+def _run_export(design, parameters, form, outcome):
     app = export_common.app()
     read = read_sizes(form["sizes_text"], parameters)
     if read.problems:
@@ -48,6 +56,7 @@ def run_export(design, parameters, form):
     job = RowExport(store, units, export_step)
 
     def work():
+        outcome.touched = True  # the rows change the parameters from here on
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             with ProgressDialog("Export size choices") as progress:
                 results = job.run(read.rows, tmp, progress.step)
@@ -58,5 +67,9 @@ def run_export(design, parameters, form):
             write_package(out_path, manifest, files)
         message_box(saved_message(len(results), os.path.basename(out_path)))
 
-    export_common.run_guarded(design, marker, work, lambda: job.restore_failures,
-                              lambda: export_common.settle_steps(store, start, saved))
+    export_common.run_guarded(
+        design, marker, work, lambda: job.restore_failures,
+        lambda: export_common.settle_steps(store, start, saved, outcome, lambda: job.restore_failures))
+    undo = rollback.decide(outcome)
+    if undo.says:
+        export_common.tell_undone(undo)

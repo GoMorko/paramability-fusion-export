@@ -85,6 +85,8 @@ class ExportRequest:
     # What the export writes: "paramability" (a recipe package) or "orca" (an OrcaSlicer project,
     # `export_plan.orca_export`). The Orca output reads a mesh instead of a STEP and runs no size tries.
     output: str = "paramability"
+    # The `rollback.ExportOutcome` the export fills in (`put_back.PutBack`), on every way it ends; None keeps no record.
+    outcome: Optional[object] = None
 
 
 @dataclass

@@ -9,7 +9,8 @@ from ..lib.design_edit.apply import RowBuildError
 from ..lib.design_edit.errors import StepExportError
 from ..lib.design_edit.marker import not_put_back_message, put_back
 from ..lib.design_edit.timeline_health import settle_timeline
-from ..lib.export_plan.health import left_off_line, steps_lines
+from ..lib.export_plan import rollback
+from ..lib.export_plan.health import HealthInputs, left_off_line, make_health, steps_lines
 from ..lib.package.naming import addin_version, writer_text
 from ..lib.design_edit.runner import ExportCancelled
 from ..lib.export_plan import messages
@@ -77,13 +78,36 @@ def warn_steps(lines):
     message_box("\n\n".join(lines), error=True)
 
 
-def settle_steps(store, start, saved):
+def settle_steps(store, start, saved, outcome=None, unrestored=lambda: ()):
     """For an export that keeps no health record of its own: compare the timeline steps with `start`, rebuild when one
-    differs (`timeline_health.settle_timeline`) and tell the person what is still changed. Never raises."""
+    differs (`timeline_health.settle_timeline`) and tell the person what is still changed. Never raises.
+
+    With an `outcome` (`rollback.ExportOutcome`) its health is made here from the steps and `unrestored()`, the names
+    of the parameters that did not go back. When the check fails the outcome keeps no health, which counts as a
+    design that is not confirmed back."""
     try:
-        warn_steps(steps_lines(settle_timeline(store, start, saved, log)))
+        settled = settle_timeline(store, start, saved, log)
+        if outcome is not None:
+            outcome.health = make_health(HealthInputs(unrestored=unrestored(), steps=settled))
+        warn_steps(steps_lines(settled))
     except Exception as exc:
         log(f"checking the timeline steps after the export failed: {exc!r}")
+
+
+def contained(outcome, run):
+    """Run `run()` and return `outcome`. An exception that no guard caught is shown and logged, not raised: an export
+    never raises into the handler of the command, which must still tell Fusion to undo it (`rollback.ExecuteGate`)."""
+    try:
+        run()
+    except Exception:
+        error_box("The export stopped.")
+    return outcome
+
+
+def tell_undone(undo):
+    """Tell the person that Fusion undoes the export, or that it could not be undone (`rollback.lines`), for an export
+    that saved no file."""
+    message_box("\n\n".join(rollback.lines(undo)), error=True)
 
 
 def run_guarded(design, marker, work, unrestored=lambda: (), settle=None):

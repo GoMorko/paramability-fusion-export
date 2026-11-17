@@ -15,7 +15,7 @@ from ...lib.export_plan import health as health_module
 from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_parts_pipeline, run_pipeline
-from ...lib.export_plan import undo_steps
+from ...lib.export_plan import rollback, undo_steps
 from ...lib.export_plan.time_limit import DEFAULT_SECONDS
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
@@ -249,16 +249,16 @@ def position_pending(design):
         return False
 
 
-def _show_result(file_name, result, ticked, parts=False):
+def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBACK):
     """The result dialog for a recipe. A part saved as a fixed shape (or a dialog that cannot start) gets the message
     box, which starts with the stopping step, and then a line in Fusion's status area. A design that may be changed
-    gets its own message box first.
+    gets its own message box first; when the export is undone (`undo`, `export_plan.rollback`) that box says so.
 
     The file is saved by now, so nothing here may report a failed export."""
     manifest, report, health = result.manifest, result.report, result.health
     try:
         make_view = parts_result_view if parts else result_view
-        view = make_view(file_name, manifest, report, result.table, ticked)
+        view = make_view(file_name, manifest, report, result.table, ticked, undo)
     except Exception as exc:
         log(f"result view failed: {exc!r}")
         view = None
@@ -271,22 +271,32 @@ def _show_result(file_name, result, ticked, parts=False):
         except Exception as exc:
             log(f"saved message failed: {exc!r}")
             text, notice = "Saved %s." % file_name, ""
-        message_box(health_module.with_lines(text, health), error=health_module.design_changed(health))
+        message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.says)
         status_notice(notice)
     else:
-        if health_module.design_changed(health):
-            message_box("\n\n".join(health_module.health_lines(health)), error=True)
+        if health_module.design_changed(health) or undo.says:
+            message_box("\n\n".join(rollback.check_lines(health, undo)), error=True)
         result_dialog.show(view)
 
 
-def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None, command=None):
-    """Run one export. Parameters are always put back before this returns.
+def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None, command=None,
+               outcome=None):
+    """Run one export and return its `rollback.ExportOutcome`. Never raises. Parameters are always put back before
+    this returns.
 
     `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again.
     `timeline_start` is the timeline steps read when the dialog opened (`timeline_health.read_timeline`), before the
     dialog's capture moved the marker; the export compares the steps with it at the end.
     `command` is the running Fusion command; with the dialog's "lighter on memory" box on, the tries end its steps
-    without undo data (`undo_steps`)."""
+    without undo data (`undo_steps`).
+    `outcome` is the record the export fills in (made here when None): the caller reads it to tell Fusion to undo the
+    export when the design is not back (`rollback.ExecuteGate`). The window of this export says so too."""
+    outcome = rollback.ExportOutcome() if outcome is None else outcome
+    return export_common.contained(outcome, lambda: _run_export(
+        design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome))
+
+
+def _run_export(design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome):
     app = export_common.app()
     bodies = form["bodies"]
     body = form["body"]
@@ -306,7 +316,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
         title=title, writer=export_common.writer_for(app), up_axis=form["up_axis"], parameters=parameters,
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
         marker=marker, faster_tries=bool(form.get("faster_tries", True)), timeline_start=timeline_start,
-        probe_time_limit=form.get("probe_time_limit", DEFAULT_SECONDS))
+        probe_time_limit=form.get("probe_time_limit", DEFAULT_SECONDS), outcome=outcome)
 
     units = {p["name"]: p["unit"] for p in parameters}
     steps = undo_steps.command_steps(command, log) if form.get("light_undo") else None
@@ -324,5 +334,8 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
         return os.path.basename(out_path), result
 
     saved = export_common.run_guarded(design, marker, work)
+    undo = rollback.decide(outcome)
     if saved is not None:
-        _show_result(saved[0], saved[1], form["ticked"], parts=body is None)
+        _show_result(saved[0], saved[1], form["ticked"], parts=body is None, undo=undo)
+    elif undo.says:
+        export_common.tell_undone(undo)

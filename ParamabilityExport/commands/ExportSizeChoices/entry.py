@@ -9,7 +9,9 @@ from ...lib.dialog_model.sizes_table import new_table
 from ...lib.fusion_reader.design_info import detect_up_axis
 from ...lib.fusion_reader.parameters import list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
+from ...lib.export_plan.rollback import ExecuteGate
 from ...lib.fusion_ui import export_dialog, handlers
+from ...lib.fusion_ui.log import log
 from .. import panel
 from . import export_flow
 
@@ -55,9 +57,10 @@ def _on_created(args):
         command.validateInputs,
         lambda a: setattr(a, "areInputsValid", export_dialog.inputs_valid(a.inputs, parameters, table)),
         _command_handlers)
+    gate = ExecuteGate(log)
     handlers.on_execute(
         command.execute,
-        lambda a: export_flow.run_export(
-            design, parameters, export_dialog.read_form(a.command.commandInputs, parameters, table)),
+        lambda a: gate.run(a, lambda outcome: export_flow.run_export(
+            design, parameters, export_dialog.read_form(a.command.commandInputs, parameters, table), outcome)),
         _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: None, _command_handlers)

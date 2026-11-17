@@ -820,3 +820,20 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     The second extrude is copied, not left out with "reaches into another component". `Width` is not marked
     "may give unexpected results". In Paramability the post is 15 mm tall and ends 25 mm above the base of the tray,
     as in Fusion. Afterwards the design is as before.
+
+72. RB1, the undo of an export that left a step worse. Model a part where a try flips a sketch. Add user parameters
+    `Base` = 40 mm and `Lift` = 10 mm. Sketch 1 on the XY plane: a triangle with one corner on the origin, one corner
+    `Base` along X on the X axis, and the third corner set by two dimensions (a 30 mm side and a 50 mm side), so
+    the sketch has two solutions and a change of `Base` can flip it to the other one. Extrude it 5 mm. Sketch 2 on
+    the top face of that extrude: project one edge of the extrude and draw a rectangle that uses the projected edge
+    as a side. Extrude sketch 2 up by `Lift`. Save the design.
+    Export: pick the body, tick `Base` and `Lift`, leave "Lighter on memory" off, then click OK. Expect Fusion to
+    show a message that the export is undone. Then expect the timeline to show no new warning (yellow) or error (red)
+    that it did not have before, the export's steps gone from Edit, Undo (Undo goes back to your own last edit, not
+    to a step of the export), and the result window to say that the add-in undid the export and that the design is as
+    before. The `.paramability` file is saved and opens in Paramability. Note the message Fusion shows and how long
+    the undo takes after the tries end. Repeat with "Lighter on memory" ticked: Fusion shows no undo message, the
+    design stays as the put back left it, and the window says that the export could not be undone because Lighter on
+    memory was on, and advises to close the design without saving. If your design does
+    not leave a step worse (it comes back clean), the export must not be undone: Fusion shows no message and the
+    result window has no undo lines.
