@@ -271,10 +271,10 @@ def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBA
         except Exception as exc:
             log(f"saved message failed: {exc!r}")
             text, notice = "Saved %s." % file_name, ""
-        message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.abort)
+        message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.says)
         status_notice(notice)
     else:
-        if health_module.design_changed(health) or undo.abort:
+        if health_module.design_changed(health) or undo.says:
             message_box("\n\n".join(rollback.check_lines(health, undo)), error=True)
         result_dialog.show(view)
 
@@ -337,5 +337,5 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
     undo = rollback.decide(outcome)
     if saved is not None:
         _show_result(saved[0], saved[1], form["ticked"], parts=body is None, undo=undo)
-    elif undo.abort:
+    elif undo.says:
         export_common.tell_undone(undo)

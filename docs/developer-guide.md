@@ -1595,9 +1595,11 @@ Which part the abort reaches:
    transaction, and it holds the whole export: the capture, every try and the put back. The abort undoes all of it.
 2. With "Lighter on memory" on, the tries call `Command.beginStep(makeExistingStepNonUndoable=True)` (`undo_steps`).
    Each call ends the current step of the command without Undo data and starts a new step. Fusion cannot undo a step
-   that ended so. The abort reaches only the step that is open at the end, that is the part after the last call. The
-   tries before it stay in the design. This is why the rollback is `partial` in this case, and the window says so
-   and gives the advice of `health.NO_UNDO_ADVICE`.
+   that ended so. The abort would reach only the step that is open at the end, that is the part after the last call.
+   That step holds the put back and the end check. An abort could undo a repair of the end check, and leave the design
+   worse than the put back left it. The add-in must never make the design worse. So it does not abort in this case
+   (`health.undo_dropped`). It sets `Rollback.undo_unavailable` instead, and the window says that the export could
+   not be undone because "Lighter on memory" was on, and gives the advice of `health.NO_UNDO_ADVICE`.
 3. A call of `beginStep` fires the execute event again. That event comes while the first one still runs, or after it.
    The gate runs no export on it and sets no abort on it. Only the first event holds the verdict.
 
@@ -1607,6 +1609,8 @@ When the add-in aborts (`rollback.decide`):
   an end check that could not confirm the design is back (for example `restore_unverified`). It aborts also when
   no warning line is shown for it. The window then still says what happened.
 - No health record exists and the tries ran (`touched`). The state is unknown, so the add-in undoes the export.
+- It does not abort when `health.undo_dropped` is set, even when the design is not confirmed back (see point 2
+  above). The window tells the person instead.
 - It does not abort when the tries did not start and the health record shows no problem. Such an export changed
   nothing that the abort would undo. This is the case of a STEP file that fails, a capture that fails and a cancel
   before the tries.
@@ -1614,11 +1618,12 @@ When the add-in aborts (`rollback.decide`):
   from `PutBack.close_failed`.
 
 What the person sees. The "Check your design" part of the result window says that the add-in undid everything the
-export did and that the design is as before; it also says that the file is saved. With a partial undo it says that the
-add-in could only undo the last part, and it gives the advice to close the design without saving. The view data holds
-`rolled_back` (the add-in asked Fusion to undo) and `partial`. When the export saved no file (it stopped), a message
-box says the same. After a full undo the lines about the design (Undo advice, changed steps) are not shown, because
-they no longer hold.
+export did and that the design is as before; it also says that the file is saved. When "Lighter on memory" was on, the add-in
+does not ask Fusion to undo. The window says that it could not undo the export, and it gives the advice to close the
+design without saving and to open the version saved before the export (`health.NO_UNDO_ADVICE`; the lines of the health
+record stay and carry it). The view data holds `rolled_back` (the add-in asked Fusion to undo) and `undo_unavailable`.
+When the export saved no file (it stopped), a message box says the same. After a full undo the lines about the design
+(Undo advice, changed steps) are not shown, because they no longer hold.
 
 The three buttons use the same gate: `Export for Paramability`, `Export size choices` and `Export for Orca`.
 `run_export` of each never raises and returns its `ExportOutcome`. Export size choices has no `PutBack`: its own
@@ -1626,7 +1631,7 @@ end check (`export_common.settle_steps`) gives the outcome its health, and the r
 
 What only a live check can prove: that Fusion undoes the whole transaction when `executeFailed` is set after a long
 export, and how long that takes; that the first event decides, and a later event does not undo the abort; which text
-Fusion shows; that the result window still opens after an abort; and what Fusion keeps with "Lighter on memory" on.
+Fusion shows; that the result window still opens after an abort; and that with "Lighter on memory" on Fusion shows no abort and the design stays as the put back left it.
 The hand check RB1 in `docs/hand-checks.md` covers the first four.
 
 The tests are in `tests/test_rollback.py`.

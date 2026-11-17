@@ -184,14 +184,9 @@ not have the call or refuses it, the export runs as with the box off. `report.js
 When the check at the end cannot confirm that the design is back as it was, the add-in asks Fusion to undo the whole
 export. Fusion then shows a message, and the design returns to how it was when you clicked OK. The file stays saved. The
 result window says that the export was undone, and that the sizes in the file need a look. An export that stopped or was
-cancelled and put the design back is not undone. With "Lighter on memory" ticked Fusion can undo only the last part of
-the export, and the window says so: then close the design without saving and open the version you saved.
-
-When the check at the end cannot confirm that the design is back as it was, the add-in asks Fusion to undo
-the whole export. Fusion then shows a message, and the design returns to how it was when you clicked OK. The file stays
-saved. The result window says that the export was undone, and that the sizes in the file need a look. An export that
-stopped or was cancelled and put the design back is not undone. With "Lighter on memory" ticked Fusion can undo only the
-last part of the export, and the window says so: then close the design without saving and open the version you saved.
+cancelled and put the design back is not undone. With "Lighter on memory" ticked the add-in does not ask Fusion to undo,
+because Fusion can undo only the last part of the export and that could make the design worse. The window then says that
+the export could not be undone: close the design without saving and open the version you saved.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle

@@ -80,7 +80,8 @@ def _section(key, title, lines):
 
 def orca_view(file_name, report, ticked=(), rollback=NO_ROLLBACK):
     """Plain data for the result dialog: `title`, `sections` (`check`, `result`, `variables`, `left_out`, `next`)
-    `message`, the same text for a message box, `rolled_back` and `partial` (as in `result_rows.result_view`). A section
+    `message`, the same text for a message box, `rolled_back` and `undo_unavailable` (as in
+    `result_rows.result_view`). A section
     without content is absent."""
     orca = report.get("orca") or {}
     parameters = [parameter_line(p) for p in orca.get("parameters") or []]
@@ -93,7 +94,7 @@ def orca_view(file_name, report, ticked=(), rollback=NO_ROLLBACK):
     ]
     sections = [s for s in sections if s]
     return {"title": TITLE, "sections": sections, "message": view_message(sections),
-            "rolled_back": rollback.abort, "partial": rollback.partial}
+            "rolled_back": rollback.abort, "undo_unavailable": rollback.undo_unavailable}
 
 
 def preview(capture, up_axis="z"):

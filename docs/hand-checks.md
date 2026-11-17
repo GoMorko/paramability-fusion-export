@@ -832,7 +832,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     that it did not have before, the export's steps gone from Edit, Undo (Undo goes back to your own last edit, not
     to a step of the export), and the result window to say that the add-in undid the export and that the design is as
     before. The `.paramability` file is saved and opens in Paramability. Note the message Fusion shows and how long
-    the undo takes after the tries end. Repeat with "Lighter on memory" ticked: the window says the undo was partial
-    and advises to close the design without saving. Note which part of the tries Fusion kept. If your design does
+    the undo takes after the tries end. Repeat with "Lighter on memory" ticked: Fusion shows no undo message, the
+    design stays as the put back left it, and the window says that the export could not be undone because Lighter on
+    memory was on, and advises to close the design without saving. If your design does
     not leave a step worse (it comes back clean), the export must not be undone: Fusion shows no message and the
     result window has no undo lines.

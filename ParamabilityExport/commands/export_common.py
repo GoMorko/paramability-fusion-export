@@ -105,7 +105,8 @@ def contained(outcome, run):
 
 
 def tell_undone(undo):
-    """Tell the person that Fusion undoes the export (`rollback.lines`), for an export that saved no file."""
+    """Tell the person that Fusion undoes the export, or that it could not be undone (`rollback.lines`), for an export
+    that saved no file."""
     message_box("\n\n".join(rollback.lines(undo)), error=True)
 
 

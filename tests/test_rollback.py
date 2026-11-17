@@ -69,9 +69,13 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(health_lines(health), [])
         self.assertTrue(rollback.check_lines(health, undone))
 
-    def test_a_change_after_forgotten_undo_data_is_a_partial_undo(self):
-        undone = decide(ExportOutcome({"unrestored": ["wall_mm"], "undo_dropped": True}, touched=True))
-        self.assertTrue(undone.abort and undone.partial)
+    def test_a_change_after_forgotten_undo_data_is_not_aborted_and_says_the_undo_was_not_possible(self):
+        health = {"unrestored": ["wall_mm"], "undo_dropped": True}
+        verdict = decide(ExportOutcome(health, touched=True))
+        self.assertEqual(verdict, Rollback(abort=False, undo_unavailable=True, changed=True))
+        self.assertTrue(verdict.says)
+        unconfirmed = decide(ExportOutcome(dict(CLEAN, steps_unread=True, undo_dropped=True), touched=True))
+        self.assertTrue(unconfirmed.undo_unavailable and not unconfirmed.abort)
 
 
 class ExportOutcomeTest(unittest.TestCase):
@@ -84,7 +88,7 @@ class ExportOutcomeTest(unittest.TestCase):
     def test_a_step_that_stays_changed_is_aborted(self):
         outcome, _ = run(order_port(OrderStore(changed="Fillet1", heals=False)))
         self.assertTrue(aborts(outcome))
-        self.assertFalse(decide(outcome).partial)
+        self.assertFalse(decide(outcome).undo_unavailable)
 
     def test_a_parameter_that_will_not_go_back_is_aborted(self):
         outcome, _ = run(order_port(OrderStore(stuck_param="box_count")))
@@ -118,10 +122,11 @@ class ExportOutcomeTest(unittest.TestCase):
         changed, _ = run(order_parts_port(OrderStore(changed="Fillet1", heals=False)), parts=True)
         self.assertTrue(aborts(changed))
 
-    def test_forgotten_undo_data_makes_the_undo_partial(self):
+    def test_forgotten_undo_data_means_no_abort_but_a_word_about_it(self):
         outcome, _ = run(order_port(OrderStore(changed="Fillet1", heals=False)), light_undo=True)
         verdict = decide(outcome)
-        self.assertTrue(verdict.abort and verdict.partial)
+        self.assertTrue(verdict.undo_unavailable)
+        self.assertFalse(verdict.abort)
         clean, _ = run(order_port(OrderStore()), light_undo=True)
         self.assertFalse(aborts(clean))
 
@@ -142,6 +147,12 @@ class ExecuteGateTest(unittest.TestCase):
     def test_a_clean_export_leaves_the_abort_off(self):
         args = Args()
         ExecuteGate().run(args, lambda outcome: (setattr(outcome, "health", CLEAN), setattr(outcome, "touched", True)))
+        self.assertFalse(args.executeFailed)
+
+    def test_no_abort_when_fusion_forgot_undo_data(self):
+        args = Args()
+        health = {"broken": ["Fillet1"], "undo_dropped": True}
+        ExecuteGate().run(args, lambda outcome: setattr(outcome, "health", health))
         self.assertFalse(args.executeFailed)
 
     def test_a_second_event_does_not_run_or_abort_again(self):
@@ -207,19 +218,19 @@ class ResultViewTest(unittest.TestCase):
         result = self._result()
         args = (result.manifest, result.report, result.table, TICKED)
         plain = result_view("box.paramability", *args)
-        self.assertEqual((plain["rolled_back"], plain["partial"]), (False, False))
+        self.assertEqual((plain["rolled_back"], plain["undo_unavailable"]), (False, False))
         full = result_view("box.paramability", *args, rollback=Rollback(True, False, True))
-        self.assertEqual((full["rolled_back"], full["partial"]), (True, False))
-        partial = result_view("box.paramability", *args, rollback=Rollback(True, True, True))
-        self.assertEqual((partial["rolled_back"], partial["partial"]), (True, True))
+        self.assertEqual((full["rolled_back"], full["undo_unavailable"]), (True, False))
+        unavailable = result_view("box.paramability", *args, rollback=Rollback(False, True, True))
+        self.assertEqual((unavailable["rolled_back"], unavailable["undo_unavailable"]), (False, True))
 
-    def test_a_full_undo_replaces_the_advice_to_use_undo_and_a_partial_one_keeps_what_changed(self):
+    def test_a_full_undo_drops_the_health_lines_and_one_that_was_not_possible_keeps_them(self):
         health = {"broken": ["Fillet1"], "undo_dropped": True}
         result = self._result()
         report = dict(result.report, health=health)
         args = (result.manifest, report, result.table, TICKED)
         full = section_lines(result_view("box.paramability", *args, rollback=Rollback(True, False, True)), "check")
-        partial = section_lines(result_view("box.paramability", *args, rollback=Rollback(True, True, True)), "check")
+        partial = section_lines(result_view("box.paramability", *args, rollback=Rollback(False, True, True)), "check")
         shown = section_lines(result_view("box.paramability", *args), "check")
         self.assertTrue(full)
         self.assertFalse([line for line in full if "Fillet1" in line])
@@ -233,7 +244,7 @@ class ResultViewTest(unittest.TestCase):
         undone = Rollback(True, False, True)
         view = parts_result_view("parts.paramability", parts.manifest, parts.report, parts.table, TICKED, undone)
         self.assertTrue(view["rolled_back"])
-        self.assertFalse(view["partial"])
+        self.assertFalse(view["undo_unavailable"])
         orca = orca_view("box.3mf", {"health": {"broken": ["Fillet1"]}}, TICKED, undone)
         self.assertTrue(orca["rolled_back"])
         self.assertTrue(section_lines(orca, "check"))
@@ -246,6 +257,13 @@ class ResultViewTest(unittest.TestCase):
                            rollback=decide(ExportOutcome(report["health"], touched=True)))
         self.assertTrue(view["rolled_back"])
         self.assertTrue(section_lines(view, "check"))
+
+    def test_the_advice_for_a_design_that_may_be_changed_shows_once(self):
+        from lib.export_plan.health import NO_UNDO_ADVICE
+        for health in (dict(CLEAN, steps_unread=True, undo_dropped=True),
+                       dict(CLEAN, broken=["Fillet1"], undo_dropped=True)):
+            shown = rollback.check_lines(health, decide(ExportOutcome(health, touched=True)))
+            self.assertEqual(sum(NO_UNDO_ADVICE in line for line in shown), 1)
 
     def test_no_lines_without_an_abort(self):
         self.assertEqual(rollback.lines(Rollback()), [])

@@ -258,14 +258,15 @@ def _build(file_name, manifest, report, table, ticked, result_extra=(), rollback
     ]
     sections = [found for found in sections if found]
     return {"sections": sections, "message": view_message(sections), "rolled_back": rollback.abort,
-            "partial": rollback.partial}
+            "undo_unavailable": rollback.undo_unavailable}
 
 
 def result_view(file_name, manifest, report, table, ticked, rollback=NO_ROLLBACK):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
     Keys: `sections` and `message` (the same text for a message box), `rolled_back` (Fusion was told to undo the
-    export, `export_plan.rollback`; the `check` section then says so) and `partial` (the undo cannot reach all of it).
+    export, `export_plan.rollback`; the `check` section then says so) and `undo_unavailable` (the design is not
+    confirmed back and the export could not be undone, because Lighter on memory was on; the `check` section says so).
     Each section is `{key, title, lines, rows}`;
     the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,

@@ -31,7 +31,7 @@ def _show_result(file_name, result, ticked, undo=rollback.NO_ROLLBACK):
         log(f"Orca result view failed: {exc!r}")
         message_box("Saved %s." % file_name)
         return
-    if health_module.design_changed(result.health) or undo.abort:
+    if health_module.design_changed(result.health) or undo.says:
         message_box("\n\n".join(rollback.check_lines(result.health, undo)), error=True)
     result_dialog.show(view)
 
@@ -78,5 +78,5 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
     undo = rollback.decide(outcome)
     if saved is not None:
         _show_result(saved[0], saved[1], form["ticked"], undo)
-    elif undo.abort:
+    elif undo.says:
         export_common.tell_undone(undo)

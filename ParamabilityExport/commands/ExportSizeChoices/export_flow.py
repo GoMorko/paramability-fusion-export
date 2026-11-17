@@ -71,5 +71,5 @@ def _run_export(design, parameters, form, outcome):
         design, marker, work, lambda: job.restore_failures,
         lambda: export_common.settle_steps(store, start, saved, outcome, lambda: job.restore_failures))
     undo = rollback.decide(outcome)
-    if undo.abort:
+    if undo.says:
         export_common.tell_undone(undo)
