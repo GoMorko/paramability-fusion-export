@@ -20,6 +20,7 @@ read_reference.py), so the translators can tell whether sizes move them.
 The path of a path pattern is read as a sweep path is (`read_sweep.path_record`); a path of one body edge also says
 what it is (`path_place`). Each setting of a path pattern that cannot be read is null, and the translators refuse it.
 """
+from ..capture_model import step_kinds
 from . import read_geometry as geo
 from . import read_extent, read_solid
 from .placement import from_assembly, ref_record
@@ -124,8 +125,12 @@ UNSAFE_INPUTS = "unsafe inputs"
 
 def _faces_safe_input(entity):
     """True for an input feature whose pattern elements Fusion 2706 lists the faces of without a crash, as live checks
-    showed: a hole, and a one-sided extrude that makes a new body, joins or cuts."""
-    return geo.type_name(entity) == "HoleFeature" or read_solid.one_sided_extrude(entity)
+    showed (`StepType.pattern_faces`): a hole, and a one-sided extrude that makes a new body, joins or cuts."""
+    spec = step_kinds.step_type(geo.type_name(entity))
+    safe = spec.pattern_faces if spec is not None else None
+    if safe == step_kinds.PATTERN_FACES_ONE_SIDED:
+        return read_solid.one_sided_extrude(entity)
+    return safe == step_kinds.PATTERN_FACES_ALWAYS
 
 
 def element_faces_skipped(inputs, entity_type):

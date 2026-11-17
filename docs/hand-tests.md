@@ -2102,7 +2102,8 @@ capture in `report.json`.
   crash. Read live without a crash: patterns of holes (T19a, T19b, T50, CP1) and of one-sided extrude cuts (T58).
   The reader reads `PatternElement.faces` only when every input of a pattern of features is a hole or a one-sided
   extrude that makes a new body, joins or cuts (`read_repeat.element_faces_skipped`); else the capture has
-  `faces_skipped`. Before you add a type to that list, read the faces of a pattern of that type live.
+  `faces_skipped`. The list is `pattern_faces` in the step kind table (`capture_model/step_kinds.py`). Before you
+  add a type to it, read the faces of a pattern of that type live.
 - `suppressedElementsIds` as a list of integers.
 - `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
