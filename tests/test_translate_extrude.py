@@ -221,8 +221,8 @@ class ExtentTest(unittest.TestCase):
             side_one={"kind": "throughAll", "positive": True, "taper_deg": 2.0}))
         self.assertIn("both ways", left_out(result)["reason"])
 
-    def test_through_all_join_refuses(self):
-        result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))
+    def test_through_all_join_without_a_measured_end_refuses(self):
+        result = variant("extrude_cut_through_one", lambda d: d.update(operation="join", end_offset=None))
         self.assertIsNotNone(left_out(result))
         self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.THROUGH_ADDS]])
 
@@ -274,6 +274,43 @@ class ExtentTest(unittest.TestCase):
         frame = capture["items"][-1]["data"]["profiles"][1]["frame"]
         frame.update(z=[0, 0, -1], y=[0, -1, 0])
         self.assertIsNotNone(left_out(translate(capture)))
+
+
+def join_through(**changes):
+    """The one way extrude through all of `extrude_cut_through_one` as a join of the 10 x 6 outline (60 mm2) along +x
+    into the 40 mm long plate: its end cap measured at the plate's far end (x 40), merged with the plate's 20 x 10 end
+    face. `changes` update the data."""
+    def edit(d):
+        d.update(operation="join", end_offset=40.0, end_normal=[1.0, 0.0, 0.0], end_area=200.0)
+        d.update(changes)
+    return variant("extrude_cut_through_one", edit)
+
+
+class JoinThroughAllTest(unittest.TestCase):
+    def test_a_join_that_ends_on_the_far_side_of_the_target_reaches_the_far_side_of_the_part(self):
+        result = join_through()
+        (step,) = under_test(result, 3)
+        self.assertEqual((step["extent"], step["combine"], step["sketch"]["on"]["normal"]), ("through", "add", [1, 0, 0]))
+        self.assertNotIn("distance", step)
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_join_that_ends_short_of_the_far_side_is_left_out(self):
+        self.assertIsNotNone(left_out(join_through(end_offset=30.0), 3))
+
+    def test_a_join_with_several_participant_bodies_is_left_out(self):
+        bodies = [{"token": "t1", "name": "Body1"}, {"token": "t2", "name": "Body2"}]
+        result = join_through(participants=bodies)
+        self.assertIsNotNone(left_out(result, 3))
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.THROUGH_BODIES]])
+
+    def test_a_join_whose_end_face_is_only_its_own_cap_is_left_out(self):
+        # The cap did not merge with a face of the body: nothing shows that the body reaches the end plane.
+        self.assertIsNotNone(left_out(join_through(end_area=60.0), 3))
+
+    def test_a_tapered_join_through_all_is_left_out(self):
+        side = {"kind": "throughAll", "positive": True, "taper_deg": -2.0}
+        self.assertIsNotNone(left_out(join_through(side_one=side, side_leans=[math.sin(math.radians(2.0))] * 4), 3))
 
 
 class MeasuredLengthTest(unittest.TestCase):

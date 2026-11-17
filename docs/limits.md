@@ -28,6 +28,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   direction points to a side without material there, the other side is used, with a note. A tapered one is copied
   as a tapered cut that ends past the part; one whose walls lean in ends just past it, and is left out when its
   outline would come close to closing there.
+- A join through all to one side is copied as an extrude to the far side of the part. Fusion ends it at the far side
+  of the bodies it joins, so it is copied only when it joins the picked body alone. The export must also show that
+  Fusion ended it on the far side of that body: its end face lies on the far side of the body, and that face is larger
+  than the outlines, so the body had material there. Else it is left out with a reason. A join through all both ways,
+  with a taper or with a thin wall, and a new body through all, are left out. Each size that may change the body before
+  the join, or move its outline, is marked "may give unexpected results" with the step named: the export cannot check
+  that Fusion and the copy still end it at the same place at other sizes.
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be

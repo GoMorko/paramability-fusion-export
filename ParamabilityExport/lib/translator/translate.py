@@ -42,6 +42,8 @@ DRAFT_VERSIONS = {"angleTwoDeg": 17}
 PITCH_DIAMETER_VERSION = 17
 # A shell that grows outward, rounds its corners or has no open faces needs this version.
 SHELL_VERSION = 17
+# An add or new extrude through all to the far side of the part (no distance) needs this version.
+THROUGH_ADDS_VERSION = 17
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 256
 # Recipes before version 15 take at most 64 copies per pattern count (both linear counts together for a grid).
@@ -547,6 +549,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
                   + [_counts_version(step, ctx.table) for step in written]
                   + [_sweep_version(step) for step in written]
                   + [_shell_version(step) for step in written]
+                  + [THROUGH_ADDS_VERSION for step in written if step["kind"] == "extrude"
+                     and step.get("extent") == "through" and step.get("combine") in ("add", "new")]
                   + [getattr(step, "version", 0) for step in written])
     if version < PITCH_DIAMETER_VERSION:
         for step in written:

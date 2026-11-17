@@ -42,6 +42,8 @@ Scale of a body is copied only when the body measured after it has the size and 
 Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.
+A join "through all" is copied only when it joins this body alone and Fusion ended it on the far side of this body.
+The add-in marks the sizes that change the body before it "may give unexpected results" (`docs/limits.md`).
 A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
 range of that parameter stops before the outline reaches the axis.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors

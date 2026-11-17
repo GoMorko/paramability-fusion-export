@@ -18,6 +18,7 @@ EXTRUDE_END_FACE = "extrudeEndFace"
 EXTRUDE_START_OFFSET = "extrudeStartOffset"
 EXTRUDE_WAY = "extrudeWay"
 THROUGH_ADDS = "throughAllAdds"
+THROUGH_BODIES = "throughAllBodies"
 THIN_OUTLINE = "thinOutline"
 ROUND_KIND = "roundKind"
 ROUND_CHANGING = "roundChanging"
@@ -71,6 +72,7 @@ HINTS = {
     EXTRUDE_START_OFFSET: "Start the extrude on the face itself, or on a plane at that distance from the face.",
     EXTRUDE_WAY: "End the extrude on a flat face or plane, or give it a distance.",
     THROUGH_ADDS: "Give the extrude a distance, or end it on a face or plane.",
+    THROUGH_BODIES: "Let the extrude join only this body, or give it a distance.",
     THIN_OUTLINE: "Draw one closed outline for the wall, or shell a solid body.",
     ROUND_KIND: "Use a fillet with one radius.",
     ROUND_CHANGING: "Give the changing radius a fillet of its own with one edge and no radii between the ends.",
