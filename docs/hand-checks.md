@@ -866,3 +866,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (Chamfer1)". In `report.json`, each entry of `probe.motion.spans.Width.failed` has a third number: the timeline
     position of the chamfer of Box (the `index` of that item in `capture.items`, not of the chamfer of Other). The
     state of that try in `probe.states` has `failed_at` with the same number. Afterwards the design is as before.
+75. AX1, a cone or a torus face as the turning axis. Add a user parameter `PotH` = 40 mm. On the XZ plane sketch a
+    tapered pot as one closed outline: bottom 30 mm wide, top 50 mm wide, `PotH` high, with the centre line on the Z
+    axis (the outer side line is slanted). Revolve it 360 degrees about the Z axis as a new body, so the outer wall
+    is a cone. Add a 3 mm hole 6 mm deep in the top face, 10 mm from the centre, and a Circular Pattern of it with 6
+    copies whose axis is the conical outer wall (pick the face, not the Z axis). Then, on the XZ plane, sketch a 6 x
+    6 mm square 8 mm outside the wall at the top, and Revolve it 90 degrees as a Join with the conical wall as the
+    axis. For the torus, revolve a circle of 6 mm diameter, centred 25 mm from the Z axis, about the Z axis, and make
+    a Circular Pattern of a 2 mm hole in the top face with the toroidal face as its axis.
+    Export: tick `PotH` with a range of 30 to 60. Expect the revolve and both patterns to copy, with no gap "a face
+    that is not round". In `report.json` the `axis` of these steps holds `entity_type: "BRepFace"`, `surface` `Cone`
+    (or `Torus`), a `point` and a `dir` along Z. `PotH` is marked "may give unexpected results" with those steps
+    named. The copy matches the Fusion part at the values the add-in tried. A Circular Pattern whose axis is the face
+    of a sphere is still left out with "a face that is not round".

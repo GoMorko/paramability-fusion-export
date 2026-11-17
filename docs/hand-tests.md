@@ -1971,7 +1971,7 @@ read the capture in `report.json`.
   definition (`entity` is assumed); `ToEntityExtentDefinition.entity` and `.offset`.
 - `ThroughAllExtentDefinition.isPositiveDirection`, and the type name of the "all" extent (`AllExtentDefinition`).
 - A flipped one sided extrude storing a negative distance: compare `side_one.distance` with `end_offset`.
-- `RevolveFeature.axis` (sketch line, construction axis, linear edge, cylindrical face), `isProjectAxis`,
+- `RevolveFeature.axis` (sketch line, construction axis, linear edge, cylindrical, conical or toroidal face), `isProjectAxis`,
   `extentDefinition` (`AngleExtentDefinition.angle`, `isSymmetric`; `TwoSidesAngleExtentDefinition.angleOne`,
   `angleTwo`), `startFaces` and the sign of `start_face_normal`.
 - `Profile.areaProperties().area` and `BRepFace.area` (cm2, read as `profile_area` and `end_area`), and
@@ -2105,7 +2105,7 @@ capture in `report.json`.
   `faces_skipped`. The list is `pattern_faces` in the step kind table (`capture_model/step_kinds.py`). Before you
   add a type to it, read the faces of a pattern of that type live.
 - `suppressedElementsIds` as a list of integers.
-- `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
+- `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical, conical or toroidal face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
 - `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.
 

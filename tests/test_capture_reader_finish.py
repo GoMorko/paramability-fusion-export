@@ -424,6 +424,18 @@ class CircularPatternTest(unittest.TestCase):
         self.assertEqual(data["elements"][1]["frame"]["x"], [0.0, 1.0, 0.0])
         self.assertEqual(data["sources"], [1])
 
+    def test_a_cone_face_axis_is_read_and_a_sphere_face_has_none(self):
+        def read_axis(surface, **geometry):
+            face = Obj("fusion::BRepFace", geometry=Obj("core::" + surface, **geometry))
+            return read_pattern("CircularPatternFeature", [element(1, (0, 0, 0))],
+                                inputEntities=Coll([source_feature(1)]), patternEntityType="FeaturesPatternEntityType",
+                                axis=face, quantity=param(3.0), totalAngle=param(2 * 3.141592653589793))["axis"]
+        cone = read_axis("Cone", origin=P(5, 5, 0), axis=Obj(x=0.0, y=0.0, z=3.0))
+        self.assertEqual((cone["point"], cone["dir"], cone["surface"]), ([5, 5, 0], [0.0, 0.0, 1.0], "Cone"))
+        sphere = read_axis("Sphere", origin=P(5, 5, 0))
+        self.assertNotIn("dir", sphere)
+        self.assertEqual(sphere["geometry"], "Sphere")
+
     def test_an_edge_axis_says_where_the_edge_is(self):
         line = edge("e1", 5)
         line.geometry = Obj("core::Line3D", startPoint=P(0, 0, 0), endPoint=P(10, 0, 0))

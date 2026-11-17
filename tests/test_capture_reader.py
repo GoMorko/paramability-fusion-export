@@ -659,6 +659,25 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(odd["axis"], {"kind": "other", "type": "Vertex"})
         self.assertEqual(odd["extent"], {"kind": "other", "type": "NewExtentDefinition"})
 
+    def test_a_cone_or_torus_face_is_an_axis_like_a_cylinder_and_a_sphere_is_not(self):
+        two = Obj("fusion::TwoSidesAngleExtentDefinition", angleOne=param(math.radians(30)),
+                  angleTwo=param(math.radians(60)))
+        for surface in ("Cone", "Torus"):
+            face = Obj("fusion::BRepFace", geometry=Obj("core::" + surface, origin=P(1, 2, 3), axis=Obj(x=0, y=2.0, z=0)))
+            self.assertEqual(self.read(face, two)["axis"], {"point": [1, 2, 3], "dir": [0, 1, 0],
+                                                            "entity_type": "BRepFace", "surface": surface})
+        sphere = Obj("fusion::BRepFace", geometry=Obj("core::Sphere", origin=P(1, 2, 3)))
+        self.assertEqual(self.read(sphere, two)["axis"], {"kind": "other", "type": "BRepFace", "geometry": "Sphere"})
+
+    def test_a_cone_face_whose_axis_cannot_be_read_gives_a_reason_not_a_guess(self):
+        two = Obj("fusion::TwoSidesAngleExtentDefinition", angleOne=param(math.radians(30)),
+                  angleTwo=param(math.radians(60)))
+        cone = Obj("fusion::BRepFace", geometry=Obj("core::Cone", origin=P(1, 2, 3)))
+        axis = self.read(cone, two)["axis"]
+        self.assertEqual((axis["kind"], axis["type"]), ("other", "BRepFace"))
+        self.assertIn("error", axis)
+        self.assertNotIn("dir", axis)
+
     def test_two_sides_name_the_parameters_of_both_angles(self):
         two = Obj("fusion::TwoSidesAngleExtentDefinition",
                   angleOne=Obj(name="d4", expression="30 deg", value=math.radians(30)),

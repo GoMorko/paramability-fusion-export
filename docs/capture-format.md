@@ -807,7 +807,8 @@ against `samples`.
 ```
 
 - `axis` from a `SketchLine` (`worldGeometry`), a `ConstructionAxis` (`geometry`, an `InfiniteLine3D`), a linear
-  `BRepEdge` (`geometry`, a `Line3D`) or a cylindrical `BRepFace` (`geometry`, a `Cylinder`); else `{ "kind":
+  `BRepEdge` (`geometry`, a `Line3D`) or a `BRepFace` that turns about an axis (`geometry`, a `Cylinder`, `Cone` or
+  `Torus`: `origin` and `axis`); else `{ "kind":
   "other", "type" }` with the entity type, plus `geometry` (the curve or surface type) for an edge or face, or `error`
   when reading the revolve axis raised. The translator's refusal says which of these the axis is. An axis from a sketch line also has `entity` (the line's token), `sketch_token` and `sketch` (the
   sketch's token and name); one from a construction axis has `token`. Circular pattern axes are read the same way.

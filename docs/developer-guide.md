@@ -3356,6 +3356,18 @@ Example. `Lift = 12 mm`. A plane is offset from the XY plane by `Lift`. A sketch
 A revolve, a circular pattern and a Move turn about an axis. The reader records what the axis is
 (`read_reference.axis_with_reference`): an origin axis, a construction axis, an edge, a face or a sketch line.
 
+A face is an axis when its surface turns about one axis of its own. `read_solid.axis_of` reads the `origin` (a point on
+the axis) and the `axis` of a `Cylinder`, a `Cone` and a `Torus` face in the same way. A sphere and a free-form surface
+have no axis of their own. For these, `axis_of` gives `{ kind: "other", type: "BRepFace", geometry: <surface type> }`,
+and the revolve (`revolve/step.py`, `_axis_refusal`) or the circular pattern (`repeat/repeat_circular.py`) is left out with the reason "a face that is not round". `read_repeat` (the axis of a circular pattern),
+`probe_refs` (the axis that the probe reads again at each try) and `read_reference` (the place of a construction axis)
+call `axis_of`, so the three kinds of face work in all of them. The record of such a face has `entity_type:
+"BRepFace"` and its `surface`. Thus `reach.reference_sizes` and `follow.place_plane` treat a cone or a torus face like
+a cylinder face: every size that an earlier step of the body reads is marked, unless the face is the wall of one
+extrude that does not move (`follow._round_face_axis`). A cone face that a tapered extrude made is not that wall, so
+its sizes are marked. A coil has no axis face to read: its axis is fitted from the measured end faces
+(`translator/coil/coil_fit.py`).
+
 Example. `AxisAt = 5 mm`. Sketch2 has a vertical line at `AxisAt` from the origin. A revolve turns a rectangle of
 Sketch1 about that line.
 
@@ -5689,6 +5701,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
+| `Cone.origin`, `Cone.axis`, `Torus.origin`, `Torus.axis` (as `Cylinder.origin`, `Cylinder.axis`) | `read_solid.py` (`axis_of`) | A face that is the axis of a revolve, of a circular pattern or of a rectangular pattern direction. Checked against the API stubs that Fusion installs (`adsk/core.py`): all four are read-only properties. A member that is missing reads as null and gives a gap. Hand check AX1 builds the cases. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_extent.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `PatternElement.faces` | `read_repeat.py` | Crashed Fusion 2706 itself (no Python error) on a rectangular pattern of features with a Combine among its inputs. The reader reads it only when every input is a hole or a one-sided extrude that makes a new body, joins or cuts (proven live); else `faces_skipped` (hand-tests "Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)"). |
 | `PatternElement.transform`, `PatternElement.faces`, `Feature.faces`, `BRepFace.centroid`, `BRepFace.area`, `BRepFace.nativeObject` | `read_repeat.py` | Fusion 2706 gives the transforms of a circular pattern one step ahead (hand check CP1). The translators place circular copies by their ids and check the places of up to 12 sampled copies against their faces (3.21). Rectangular, path and body patterns, and the space of the faces of a pattern in a placed component, are not measured yet: hand checks PE1, PE2 and PE3. A face list that cannot be read is null, and that copy is not checked. |

@@ -146,6 +146,16 @@ class ReadRefsTest(unittest.TestCase):
         found, _ = read(self.a, {"2.side_one": dict(hint("f1", "plane", path=""), own=True)})
         self.assertEqual(found["2.side_one"], {"point": [5.0, 5.0, 10.0], "normal": [0.0, 0.0, 1.0]})
 
+    def test_a_cone_or_torus_face_of_the_part_is_an_axis_and_a_sphere_face_is_not(self):
+        for token, surface in (("cone", "Cone"), ("ring", "Torus"), ("ball", "Sphere")):
+            geometry = Obj("core::" + surface, origin=P(5, 5, 0), axis=vector((0, 0, 2)))
+            self.a.entities[token] = [Obj("fusion::BRepFace", entityToken=token, geometry=geometry)]
+        found, unread = read(self.a, {"%d.axis" % n: dict(hint(t, "axis", path=""), own=True)
+                                      for n, t in enumerate(("cone", "ring", "ball"))})
+        self.assertEqual(found, {"0.axis": {"point": [5.0, 5.0, 0.0], "dir": [0.0, 0.0, 1.0]},
+                                 "1.axis": {"point": [5.0, 5.0, 0.0], "dir": [0.0, 0.0, 1.0]}})
+        self.assertEqual(unread, {"2.axis": probe_refs.NO_GEOMETRY})
+
     def test_an_axis_a_direction_and_a_point_are_read_by_their_shape(self):
         self.a.add_axis()
         self.a.add_point()

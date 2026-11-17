@@ -323,8 +323,13 @@ def _sketch_line_axis(entity):
     return found
 
 
+# The surfaces of a face that turn about one axis; each has `origin` (a point on the axis) and `axis` (a Vector3D).
+_TURNED_SURFACES = ("Cylinder", "Cone", "Torus")
+
+
 def axis_of(entity):
-    """Axis of a revolve from a sketch line, construction axis, linear edge or cylindrical face."""
+    """Axis of a revolve from a sketch line, construction axis, linear edge or a face with an axis of its own (a
+    cylinder, a cone or a torus: `origin` and `axis`). Any other face (a sphere, a free-form surface) has none."""
     name = geo.type_name(entity)
     if name == "SketchLine":
         return _sketch_line_axis(entity)
@@ -338,10 +343,10 @@ def axis_of(entity):
             return line_axis(line)
         return {"kind": "other", "type": name, "geometry": geo.type_name(line)}
     if name == "BRepFace":
-        cylinder = entity.geometry
-        if geo.type_name(cylinder) == "Cylinder":
-            return {"point": geo.point(cylinder.origin), "dir": geo.unit_vector(cylinder.axis)}
-        return {"kind": "other", "type": name, "geometry": geo.type_name(cylinder)}
+        surface = entity.geometry
+        if geo.type_name(surface) in _TURNED_SURFACES:
+            return {"point": geo.point(surface.origin), "dir": geo.unit_vector(surface.axis)}
+        return {"kind": "other", "type": name, "geometry": geo.type_name(surface)}
     return {"kind": "other", "type": name}
 
 
