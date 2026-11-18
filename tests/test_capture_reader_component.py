@@ -469,7 +469,8 @@ class ForeignTest(unittest.TestCase):
         edge_set = with_edges("ConstantRadiusFilletEdgeSet", [stray], radius=model_param("d", "r", 0.2),
                               isTangentChain=False, continuity="TangentSurfaceContinuityType")
         record = self.read_data(self.tray.feature("FilletFeature", "F", edgeSets=Coll([edge_set])))["sets"][0]["edges"][0]
-        self.assertEqual(record, geo_edge_record(stray.nativeObject))
+        # The corners come from the native edge too (the moved one runs from 6 to 8).
+        self.assertEqual(record, dict(geo_edge_record(stray.nativeObject), ends=[[0, 0, 0], [2, 0, 0]]))
 
     def test_fillet_edges_and_shell_inputs_from_another_body_are_flagged(self):
         stray = edge("e1", 1)
