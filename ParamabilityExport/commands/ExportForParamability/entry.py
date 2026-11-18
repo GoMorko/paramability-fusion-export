@@ -17,7 +17,7 @@ from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui import handlers, progress, recipe_dialog, result_dialog, timeline_select
 from ...lib.timing.timer import Timer
-from .. import panel
+from .. import export_common, panel
 from . import export_flow
 
 _handlers = handlers.HandlerList()
@@ -111,6 +111,7 @@ def _on_created(args):
     recipe_dialog.build(
         command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit, stop=stop,
         marker_note=note)
+    _add_version(command)
     shown = {"bodies": (body.entityToken,) if body is not None else (), "stop": stop}
 
     def show_step(inputs, button):
@@ -172,3 +173,13 @@ def _document_of(design):
     except Exception as exc:
         log(f"reading the document of the design failed: {exc!r}")
         return None
+
+
+def _add_version(command):
+    """A last line in the export dialog with the version of this add-in, so a person who loaded several copies sees
+    which one runs. Never raises."""
+    try:
+        text = "Add-in version %s" % export_common.addin_release()
+        command.commandInputs.addTextBoxCommandInput("pm_addin_version", "", text, 1, True)
+    except Exception as exc:
+        log(f"showing the add-in version failed: {exc!r}")

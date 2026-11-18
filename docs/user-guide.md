@@ -204,6 +204,9 @@ A try that reads a flat face a step uses as its outline (see `docs/limits.md`) l
 until the values are put back, so Fusion rebuilds the steps after it once per try instead of twice. The marker
 is always back where the tries hold it before the next read and when the tries end.
 
+The last line of the dialog shows the version of the add-in that runs ("Add-in version 0.14.3"). When you load
+several copies of the add-in, check that line before you export.
+
 The box "Lighter on memory" is off to start with, and it is an experiment too. A long export can make Fusion grow to
 many GB, because Fusion keeps Undo data for every try until the export ends. When you tick the box, the add-in asks
 Fusion to forget the tries as they run, each time all values are back where they were (Fusion's preview call
