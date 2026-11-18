@@ -9,7 +9,7 @@ from ...probe.state import ProbeState
 from ...timing import trail
 from ...design_edit.apply import as_step, detail_steps
 from ...design_model.tried_ranges import part_step
-from ...sketch_values.motion import SHAPE, UNREAD
+from ...sketch_values.motion import ENDED_STOPPED, ENDED_TIME, SHAPE, UNREAD
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
@@ -61,6 +61,7 @@ class SizeProbe:
         self._unrun = []  # the sizes of the rows planned that did not run because the tries stopped
         self.time_limit = None  # `{ limit_seconds, hit, seconds }` of the tries' time limit (`note_time_limit`)
         self._timed_out = []  # the sizes of the rows the time limit kept from running
+        self._unfinished = {}  # size to `{side: why}` of the sides whose nearer tries never ran (`note_unfinished`)
         self._changes = None  # (number of states, `outline_changes`) of the last time it was worked out
         self._mine = None  # `tried_ranges.part_step` of the capture, made once (`counts_warning`)
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
@@ -239,6 +240,21 @@ class SizeProbe:
                     self.discovery.append({"param": param, "moved": None, "tried": False, "reason": NOT_TRIED_TIME})
             else:
                 self._timed_out.extend(p for p in row.get("varied") or [] if p not in self._timed_out)
+
+    def note_unfinished(self, sizes, states=None, moving=None):
+        """After the tries stopped early (`note_stop`) or ran out of time (`note_time_limit`): keep the sides of the
+        sizes where the nearer tries were still to come (`plan.nearer_left`), so the values between the farthest value
+        that built and the nearest one that did not were never tried. `finish` writes them into `Motion.spans`
+        (`unfinished`). When the nearer tries had used their rows (`plan.MAX_NEARER_ROWS`), the search had ended
+        anyway and nothing is kept. `states` and `moving` are the marked states and the moving sizes to judge by, this
+        probe's own by default (`ProbeGroup` passes those of all parts)."""
+        why = ENDED_STOPPED if self.stopped else ENDED_TIME if self._hit_limit() else None
+        if why is None or (states is None and self.schedule.nearer_room(plan.MAX_NEARER_ROWS) <= 0):
+            return
+        states = self._marked() if states is None else states
+        moving = self.moving_sizes() if moving is None else moving
+        for param, sides in plan.nearer_left(sizes, states, moving).items():
+            self._unfinished.setdefault(param, {}).update((side, why) for side in sides)
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -511,6 +527,9 @@ class SizeProbe:
         if self.motion is not None:
             self.motion.untried = list(self.untried)
             self.motion.timed_out = list(timed)
+            for param, sides in self._unfinished.items():
+                if param in self.motion.spans:
+                    self.motion.spans[param]["unfinished"] = dict(sides)
             self.motion.body_moved = self._body_only({f["param"] for f in found})
         self.measure_restore(after)
         return found

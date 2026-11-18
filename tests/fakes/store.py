@@ -10,7 +10,7 @@ class FakeStore:
 
     bad_when(exprs): the timeline item `bad_item` is in error while it holds.
     breaks: `(name, above)`: a value of `name` above `above` leaves "RemoveBody1" in error for good, also once the
-      values are back, as Fusion can leave a step that lost its input.
+      values are back, as Fusion can leave a step that lost its input; `bad_when` still holds beside it.
     reject: expressions that set_expression always refuses; flaky: names refused once, then accepted.
     stuck: names that change but are never set back to their first expression.
     answers: what recompute returns, in turn (the last one repeats); an answer that is an exception is raised.
@@ -73,9 +73,8 @@ class FakeStore:
     def error_items(self):
         if self.errors is not None:
             return [name for _, name in self.errors]
-        if self.breaks is not None:
-            return ["RemoveBody1"] if self.broken else []
-        return [self.bad_item] if self.bad_when(self.exprs) else []
+        broken = ["RemoveBody1"] if self.breaks is not None and self.broken else []
+        return broken + ([self.bad_item] if self.bad_when(self.exprs) else [])
 
     def error_entries(self):
         if self.errors is not None:

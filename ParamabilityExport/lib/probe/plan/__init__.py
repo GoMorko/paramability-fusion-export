@@ -42,7 +42,7 @@ re-exports what the rest of the add-in reads as `plan.<name>`.
 from .covered import FACE, SCANNERS, Scan, outline_face, scan
 from .extra_rows import DISCOVERY_KEY, MAX_DISCOVERY, check_rows, discovery_left, discovery_rows
 from .near_far import far_pair_rows, far_rows, near_values, pair_rows, probe_rows
-from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_rows
+from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_left, nearer_rows
 from .references import NO_PLACE, NO_TOKEN, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_PLANE, SHAPE_POINT, is_vector, refs
 from .request import request, symmetric_patterns
 from .rows import MAX_PROBE_ROWS, RETRY_NOTE, state_values
@@ -51,5 +51,5 @@ __all__ = [
     "BISECT_STEPS", "DISCOVERY_KEY", "FACE", "MAX_DISCOVERY", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS",
     "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS",
     "Scan", "check_rows", "discovery_left", "discovery_rows", "far_pair_rows", "far_rows", "is_vector", "near_values",
-    "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan", "state_values",
+    "nearer_left", "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan", "state_values",
     "symmetric_patterns"]

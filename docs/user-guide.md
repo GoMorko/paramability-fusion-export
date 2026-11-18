@@ -143,7 +143,11 @@ file's `cuts` list, where Paramability shows it as a quiet note next to the size
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
 any value tried is not a size, and the reason names the values and the step Fusion stopped at. When a try leaves the
 design broken (a step stays in error even with your values back), the tries stop there, since every later try would
-fail for that reason; the result window says so. A taper that follows
+fail for that reason; the result window says so. When the tries stop early like this, or run out of time, before the
+values between the last value that built and the first one that did not were tried, the range still stops at the last
+value that built, and its reason adds "no value between was tried", why, and a tip: untick the size that stopped the
+tries, or raise the time limit. The design may build at some of those values; a later export that tries them can give
+a longer range. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
 tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
 the sizes behind its taper and its outline, and those ranges stop where the cut would close. A length or a count

@@ -441,10 +441,32 @@ def _cut_notes(table, sizes, ctx):
                    if (cut_low and abs(ends[0] - low) < 1e-9) or (cut_high and abs(ends[1] - high) < 1e-9)]
         if not causes:
             continue
+        causes += _unfinished_causes(seen, ((low, cut_low), (high, cut_high)), len(causes))
         words, why = wording.cut_words(cut_low, cut_high, low, high), "; ".join(dict.fromkeys(causes))
         out.append({"name": e.name, "reason": wording.cut_reason(e.name, words, why), "words": words, "why": why,
                     "min": low, "max": high})
     return out
+
+
+def _unfinished_causes(seen, ends, listed):
+    """The reasons for the cut ends of `seen` (a `Cut`) whose values up to the try past them were never tried, since
+    the tries ended early (`Cut.unfinished`); `ends` are `(end, cut)` of the low and the high end of the range left,
+    `listed` the number of reasons before. The values are named unless the reason has one cause before and every
+    end cut is such an end."""
+    if not seen or not seen.unfinished:
+        return []
+    found = {}
+    for side, at, (end, hit) in (("low", 0, ends[0]), ("high", 1, ends[1])):
+        if not hit or side not in seen.unfinished or abs(seen[at] - end) >= 1e-9:
+            continue
+        past = next((kind[side][0] for kind in (seen.failed, seen.warned, seen.cleared, seen.changed,
+                                                       seen.split) if side in kind),
+                    None)
+        if past is not None:
+            found.setdefault(seen.unfinished[side], []).append((end, past))
+    cut = sum(1 for _, hit in ends if hit)
+    return [wording.untried_between_why(why, () if listed == 1 and len(gaps) == cut else gaps)
+            for why, gaps in found.items()]
 
 
 def _narrow_spans(table, motion):

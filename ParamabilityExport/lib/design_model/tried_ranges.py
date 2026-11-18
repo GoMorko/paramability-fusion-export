@@ -120,11 +120,23 @@ def _marked(found, span, key):
     return {side: f for side, f in found.items() if tuple(f) in listed}
 
 
+def _with_unfinished(cut, span):
+    """`cut` with `unfinished` set for each end that a try of the span cut and where the tries ended before they looked
+    for the last value that builds (`Motion.spans` `unfinished`). The end does not move: it stays at the farthest value
+    that built, since the values past it were not tried."""
+    seen = (cut.failed, cut.warned, cut.cleared, cut.changed, cut.split)
+    ended = {side: why for side, why in (span.get("unfinished") or {}).items() if any(side in s for s in seen)}
+    if not ended:
+        return cut
+    return Cut(cut[0], cut[1], cut.failed, cut.changed, cut.split, cut.warned, cut.cleared, ended)
+
+
 def built_ranges(table, motion, capture=None):
     """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
     (`Motion.spans`: a value tried with only that size changed), at which a followed sketch makes a different outline
     (`outline_cut`), or at which the part came apart into several pieces (`split_cut`). On that side the range stops at
-    the farthest value that built in one piece and kept the outline. An end
+    the farthest value that built in one piece and kept the outline; when the tries ended before they looked for the
+    last value that builds on that side (`Motion.spans` `unfinished`), the `Cut` says so (`unfinished`). An end
     the person typed is kept, and a range that would shrink to the value now is left as it is (the size could not be
     measured). A failure in a step the part is not built from (`capture` items of other components) cuts nothing: the
     part itself may rebuild there."""
@@ -142,6 +154,7 @@ def built_ranges(table, motion, capture=None):
         split_low, split_high, split = split_cut(table, e, span)
         cut = (Cut(low, high, found, warned=warned, cleared=cleared).meet(Cut(kept_low, kept_high, changed=changed))
                .meet(Cut(split_low, split_high, split=split)))
+        cut = _with_unfinished(cut, span)
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut
     return out

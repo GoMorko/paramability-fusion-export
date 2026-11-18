@@ -39,7 +39,10 @@ timeline position (`[value, step, position]`; `[value, step]` in files of older 
 entries of `failed` where Fusion built the part but that step showed a new warning, `cleared` (only when there is one)
 the entries of `failed` where Fusion built the part and that step, in error at the start, built too, and `split` (only when there is one) each
 value tried alone where Fusion built the part in several separate pieces, with how many. A size whose `low` and `high`
-are its value now and that has `failed` or `split` entries was not measured at all.
+are its value now and that has `failed` or `split` entries was not measured at all. `unfinished` (only when there is
+one) maps a side ("low", "high") to why the tries ended before they looked for the last value that builds between
+the farthest value that built and the nearest one past it that did not (`ENDED_STOPPED`: a try left the design
+broken with the values back, `ENDED_TIME`: the time limit): the values between were never tried.
 
 A value that follows its sizes along a curve the copy can write is a sum of products instead:
 `{ "const": 2, "sum": [ { "k": 1, "of": [["", "wall", 1], ["cot", "angle", 0.5]] } ] }` is
@@ -55,6 +58,9 @@ VERSION = 1
 
 CURVE, SHAPE, TURNS, UNREAD, UNTRIED = "curve", "shape", "turns", "unread", "untried"
 CAUSES = (CURVE, SHAPE, TURNS, UNREAD, UNTRIED)
+
+# Why the tries ended before a side of a size was narrowed (`Motion.spans` `unfinished`).
+ENDED_STOPPED, ENDED_TIME = "stopped", "time"
 
 _EPS = 1e-12
 # A term whose factor rounds to zero at the 9 decimals the files keep (the sum of two parts that cancel) is no term.
@@ -231,7 +237,8 @@ class Motion:
         self.refs = dict(refs or {})  # reference key to "" (measured) or why it could not be measured
         # Fusion names of sizes that changed the body (its box) in a try but moved no followed sketch or reference
         self.body_moved = list(body_moved or [])
-        # Fusion name to { low, high, failed }: the values a size was measured between, and the ones that did not build
+        # Fusion name to { low, high, failed, ... }: the values a size was measured between, and the ones that did not
+        # build (the module text lists every key)
         self.spans = dict(spans or {})
         # `<item>/face` to the token of the flat face used as an outline that the probe read at every try
         self.faces = dict(faces or {})

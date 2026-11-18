@@ -58,20 +58,23 @@ class Cut(tuple):
     past it where Fusion built the part but the step showed a new warning; `cleared` the `(value, step)` of the nearest
     try past it where a step in error at the start built; `changed` the `(value, sketch)` of the nearest try past it
     where a sketch the copy follows made a different outline; `split` the `(value, pieces)` of the nearest try past it
-    where the part came apart into several pieces."""
+    where the part came apart into several pieces. `unfinished` holds, for an end whose values up to that try were
+    never tried because the tries ended early, why they ended (`Motion.spans` `unfinished`)."""
 
-    def __new__(cls, low, high, failed=None, changed=None, split=None, warned=None, cleared=None):
+    def __new__(cls, low, high, failed=None, changed=None, split=None, warned=None, cleared=None,
+                unfinished=None):
         out = super().__new__(cls, (low, high))
         out.failed = dict(failed or {})
         out.changed = dict(changed or {})
         out.split = dict(split or {})
         out.warned = dict(warned or {})
         out.cleared = dict(cleared or {})
+        out.unfinished = dict(unfinished or {})
         return out
 
     def meet(self, other):
         """The cut that holds both: the higher low end and the lower high end, each with the try behind it."""
-        found = {"failed": {}, "changed": {}, "split": {}, "warned": {}, "cleared": {}}
+        found = {"failed": {}, "changed": {}, "split": {}, "warned": {}, "cleared": {}, "unfinished": {}}
         for side, at, pick in (("low", 0, max), ("high", 1, min)):
             won = other if pick(self[at], other[at]) != self[at] else self
             for kind, held in found.items():

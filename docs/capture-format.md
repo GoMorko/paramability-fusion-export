@@ -2252,7 +2252,11 @@ the timeline position of the step (`[value, step]` in records of older versions 
 (`probe.build.spans`), `warned`, the entries of `failed` where the step showed a new warning (only when there is
 one), `cleared`, the entries of `failed` where a step in error at the start built (only when there is one), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
 separate pieces (only when there is one, see "Probe states"), and `kept` and `changed` for a size whose own row changed a followed outline (see the
-different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+different outline item below), and `unfinished` (only when there is one): per side (`low`, `high`) why the tries ended
+before the nearer tries and the halving on that side ran (`stopped` after a broken design, `time` after the time
+limit; `SizeProbe.note_unfinished`, `plan.nearer_left`). The cut on that side stays at the farthest value that built
+(`Cut.unfinished`), and the cut reason adds "no value between was tried, as the tries stopped early. Tip: untick the
+size that stopped them" or "as the tries ran out of time. Tip: raise the time limit" (`notes.untried_between_why`). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
 and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A size that no state

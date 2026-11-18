@@ -21,7 +21,8 @@ from lib.export_plan.size_offers import offers, table_for_body
 from lib.design_model import step_links
 from lib.params import size_table
 from lib.probe import plan
-from lib.sketch_values.motion import Motion, Stuck
+from lib.sketch_values.motion import ENDED_STOPPED, ENDED_TIME, Motion, Stuck
+from lib.timing.export_timing import ExportTiming
 from lib.translator import notes, translate
 
 NAME = "linked_pipe_hole"
@@ -215,11 +216,11 @@ def _mm(store, name):
     return float(re.match(r"\s*([-0-9.eE+]+)", store.exprs[name]).group(1))
 
 
-def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None, apart_when=None):
+def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None, apart_when=None, breaks=None):
     """Fusion where the box outline (and the body's box and volume) follows width and depth and the hole follows the
     pipe (unless `still`). With `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when
-    it holds for the pipe diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the
-    parameters away from their start at every read."""
+    it holds for the pipe diameter in mm; with `apart_when`, the body reads as two solids then. `breaks` is as for
+    `FakeStore`. `varied` lists the parameters away from their start at every read."""
     def read(request):
         out = copy.deepcopy(port.e0)
         scale = {"s1": (_mm(port.store, "width_mm") / 40.0, _mm(port.store, "depth_mm") / 30.0),
@@ -246,7 +247,8 @@ def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None,
             out["pieces"] = {"lumps": 2 if apart_when(_mm(port.store, "pipe_d_mm")) else 1, "others": []}
         return out
 
-    port = FakePort(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item), reader=read)
+    port = FakePort(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item, breaks=breaks),
+                    reader=read)
     port.varied = []
     return port
 
@@ -290,6 +292,50 @@ class RangeCutTest(unittest.TestCase):
         result = self.export("PipeExtrude")
         self.assertEqual(pipe_range(result), (6.0, 24.0))
         self.assertNotIn("cut", result.report["sizes"])
+
+
+class UnfinishedRangeTest(unittest.TestCase):
+    """As `RangeCutTest`, with the pipe tried first (a favourite): its far end 24 fails, and the tries end before the
+    values between 15 and 24 are tried. The range stays at 15, and the reason says those values were not tried."""
+
+    def export(self, breaks=None, limit=None, favourite="pipe_d_mm"):
+        port = pipe_port(bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) > 20, bad_item="Extrude2", breaks=breaks)
+        clock = [0.0]  # each recompute takes 10 s on the export's clock
+        port.store.on_recompute = lambda store: clock.__setitem__(0, clock[0] + 10.0)
+        port.timing = ExportTiming(lambda: clock[0])
+        params = [dict(p, is_favorite=p["name"] == favourite) for p in USER]
+        request = ExportRequest(title="Box", writer="test", up_axis="z", parameters=params, model_params=MODEL,
+                                design_unit="mm", ticked=table_for_body(USER, "mm", MODEL, CAPTURE).ticked,
+                                ranges={}, probe_time_limit=limit)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_pipeline(port, request, tmp)
+        self.assertEqual(port.store.exprs, START)
+        [cut] = result.report["sizes"]["cut"]
+        return result, cut["reason"], result.report["probe"]["motion"]["spans"]["pipe_d_mm"]
+
+    def test_tries_stopped_by_a_broken_design_leave_the_range_at_the_last_value_built_and_say_why(self):
+        # The far end of the width (80) leaves the design broken with the values back, right after the pipe's 24.
+        result, reason, span = self.export(breaks=("width_mm", 50))
+        self.assertIsNotNone(result.report["probe"]["stopped"])
+        self.assertEqual(pipe_range(result), (6.0, 15.0))
+        self.assertEqual(span["unfinished"], {"high": ENDED_STOPPED})
+        self.assertIn(notes.untried_between_why(ENDED_STOPPED), reason)
+
+    def test_tries_that_ran_out_of_time_leave_the_range_at_the_last_value_built_and_say_why(self):
+        result, reason, span = self.export(limit=240)
+        self.assertTrue(result.report["probe"]["time_limit"]["hit"])
+        self.assertEqual(pipe_range(result), (6.0, 15.0))
+        self.assertEqual(span["unfinished"], {"high": ENDED_TIME})
+        self.assertIn(notes.untried_between_why(ENDED_TIME), reason)
+
+    def test_tries_that_end_early_after_the_last_value_built_was_found_keep_the_plain_reason(self):
+        # The pipe is tried last: its halving ends at 19.5 before the time limit stops the tries.
+        result, reason, span = self.export(limit=430, favourite=None)
+        self.assertTrue(result.report["probe"]["time_limit"]["hit"])
+        self.assertEqual(pipe_range(result), (6.0, 19.5))
+        self.assertNotIn("unfinished", span)
+        self.assertEqual(reason, notes.cut_reason("pipe_d_mm", "the range stops at 19.5",
+                                                  notes.not_rebuilt_why([(20.625, "Extrude2")])))
 
 
 class OutlineRangeTest(unittest.TestCase):

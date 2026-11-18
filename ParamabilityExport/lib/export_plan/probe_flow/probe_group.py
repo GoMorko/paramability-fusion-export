@@ -96,6 +96,17 @@ class ProbeGroup:
         for probe in self.probes:
             probe.note_time_limit(record, unrun)
 
+    def note_unfinished(self, sizes):
+        """Keep in every part the sides whose nearer tries never ran (`SizeProbe.note_unfinished`), judged as the group
+        plans its nearer rows: over the shared rows, with the outline changes and moving sizes of every part."""
+        if self.schedule.nearer_room(plan.MAX_NEARER_ROWS) <= 0:
+            return
+        moving = list(dict.fromkeys(n for probe in self.probes for n in probe.moving_sizes()))
+        changed = set().union(*(probe.outline_changes() for probe in self.probes))
+        states = marked_states(self.probes[0].states, changed)
+        for probe in self.probes:
+            probe.note_unfinished(sizes, states, moving)
+
     def time_left_out(self):
         """The sizes the time limit left without a try, over the parts."""
         return list(dict.fromkeys(name for probe in self.probes for name in probe.time_left_out()))

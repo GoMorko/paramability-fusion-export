@@ -1,6 +1,7 @@
 """Plain sentences for the package notes. Each is at most 200 characters, with no dashes."""
 from ..package.text import clip, plain
 from ..design_model.words import type_words
+from ..sketch_values.motion import ENDED_STOPPED, ENDED_TIME
 
 MAX_NOTE = 200
 MAX_NAME = 60
@@ -145,6 +146,23 @@ def not_rebuilt_why(failures):
     (Chamfer3) or 0.5 (Fillet2)"."""
     return "Fusion did not rebuild the design at %s" % " or ".join(
         "%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "") for v, step in failures)
+
+
+# Why the values between a cut end and the try past it were never tried, by `Motion.spans` `unfinished` cause, with
+# what the designer can do about it.
+_ENDED_WHY = {
+    ENDED_STOPPED: "as the tries stopped early. Tip: untick the size that stopped them",
+    ENDED_TIME: "as the tries ran out of time. Tip: raise the time limit",
+}
+
+
+def untried_between_why(ended, gaps=()):
+    """Why the range may stop sooner than the design needs: the tries ended before any value between the cut end and
+    the try past it was tried. `ended` is the cause (`Motion.spans` `unfinished`); `gaps` are `(end, try)` pairs to
+    name, empty when the reason names nothing else: "no value between 0.5 and 40 was tried, as the tries ran out of
+    time. Tip: ..."."""
+    where = " or ".join("between %s and %s" % (number_text(a), number_text(b)) for a, b in gaps) or "between"
+    return "no value %s was tried, %s" % (where, _ENDED_WHY.get(ended, _ENDED_WHY[ENDED_STOPPED]))
 
 
 def warned_why(warnings):

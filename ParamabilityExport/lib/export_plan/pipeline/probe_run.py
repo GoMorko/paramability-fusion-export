@@ -629,7 +629,9 @@ class ProbeRun:
         """The near rows, then the near pair rows, rows nearer still for the sizes whose rows did not build, then the
         far range ends while rows are left (and nearer rows for those that did not build) and the far pair rows, then
         the rows that check the other sizes of a value that one size moves along a curve (`SizeProbe.check_rows`).
-        Each batch is planned once the batch before it has run, so no row repeats a value known not to build."""
+        Each batch is planned once the batch before it has run, so no row repeats a value known not to build. When the
+        tries stopped early or ran out of time, the probe keeps the sides whose nearer tries never ran
+        (`SizeProbe.note_unfinished`)."""
         if rows:
             self.run_rows(rows)
         pairs = self.probe.pair_rows(sizes, self._left())
@@ -646,6 +648,9 @@ class ProbeRun:
         check = self.probe.check_rows(sizes, self._left())
         if check:
             self.run_rows(check)
+        if self.job.halted or self.job.not_back is not None:
+            # Before `_note_unplanned`: planning the nearer rows there counts them against `plan.MAX_NEARER_ROWS`.
+            self.probe.note_unfinished(sizes)
         if self.job.halted:
             self._note_unplanned(sizes)
 

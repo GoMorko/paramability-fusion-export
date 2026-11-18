@@ -77,6 +77,24 @@ def _nearer_for(size, states, moved):
     return out
 
 
+# The side of the value now each `_nearer_for` label tries, as `Motion.spans` and `params.size_table.Cut` name it.
+_SIDES = {"min": "low", "max": "high"}
+
+
+def nearer_left(sizes, states, moved=()):
+    """`{param: [side, ...]}`: the sides ("low", "high") of each size where `nearer_rows` would still try a value
+    nearer to its value now (`NEARER_STEPS`) or between a value that built and a farther one that did not (`_between`).
+    On such a side the search for the last value that builds has not ended. A "check" row is not counted: it does not
+    look for that value. Arguments as for `nearer_rows`."""
+    states = as_states(states)
+    out = {}
+    for size in sizes:
+        sides = [_SIDES[label] for label, _ in _nearer_for(size, states, set(moved)) if label in _SIDES]
+        if sides:
+            out[size["param"]] = sides
+    return out
+
+
 def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
     """The next rows that try sizes nearer to their value now, after rows that did not build.
 

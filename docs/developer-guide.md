@@ -979,6 +979,54 @@ What the person and the report see:
 
 Hand check TL1 in `docs/hand-checks.md` tests this in Fusion.
 
+#### When the tries end before a range end is found
+
+The tries can end early in two ways. A try can leave the design broken with the values back (`RowExport.not_back`,
+`probe.stopped`). Or the time limit can stop the tries (`RowExport.halted`). In both cases, no row runs after that
+point.
+
+The rows run in phases (see "The rows, in order"). The far rows of all sizes run in one batch. The nearer rows and the
+halving of each size come after that batch (`ProbeRun._retry`). Thus an early end can come after the far row of a size
+failed, but before the halving between its farthest value that built and that failed value. Example: `Pipe` is 12
+now, with a range of 6 to 24. Its near rows at 9 and 15 build. Its far row at 24 fails. Then a far row of another size
+leaves the design broken, and the tries stop. No value between 15 and 24 was tried.
+
+The range then stops at 15. That is correct: 15 is the farthest value that built, and the copy never offers a
+value that was not seen to build. But the range can be much shorter than the design allows. So the reason must say that
+the values between were not tried.
+
+How the export finds these sides:
+
+1. At the end of `ProbeRun.measure`, when the tries stopped early or ran out of time, the runner calls
+   `probe.note_unfinished(sizes)`. It calls it before `_note_unplanned`, because `_note_unplanned` plans nearer rows,
+   and those rows count against `plan.MAX_NEARER_ROWS`.
+2. `SizeProbe.note_unfinished` asks `plan.nearer_left` which sides still have a nearer row or a halving row to come.
+   It uses the same states and the same moving sizes as `nearer_rows`. A "check" row does not count, because it does
+   not look for the last value that builds. When the nearer rows had already used all of `plan.MAX_NEARER_ROWS`, the
+   search had ended anyway, and nothing is kept. `ProbeGroup.note_unfinished` judges over the shared rows of all parts,
+   as `ProbeGroup.nearer_rows` does, and gives the result to each part.
+3. The probe keeps the cause: `ENDED_STOPPED` ("stopped") after a broken design, `ENDED_TIME` ("time") after the time
+   limit (`sketch_values/motion.py`).
+4. `SizeProbe.finish` writes the sides into `Motion.spans[size]["unfinished"]`, for example `{"high": "stopped"}`. The
+   motion file goes into `report.json` (`probe.motion`). No saved format of the package changes.
+5. `tried_ranges.built_ranges` cuts the range as before. Then `_with_unfinished` copies the sides into
+   `Cut.unfinished`, but only for an end that a try of the span cut (a failure, a warning, an outline change or a
+   split). `Cut.meet` keeps `unfinished` with the end that wins, so a parts file keeps it too.
+6. `translate._cut_notes` adds one more cause for such an end (`_unfinished_causes`, `notes.untried_between_why`). When
+   the reason has only one cause before it and every cut end is such an end, the cause does not repeat the values:
+   "Pipe: the range stops at 15, since Fusion did not rebuild the design at 24 (Extrude2); no value between was
+   tried, as the tries stopped early. Tip: untick the size that stopped them." Otherwise it names them: "no value
+   between 15 and 24 was tried". After the time limit, the end of the cause is "as the tries ran out of time.
+   Tip: raise the time limit". A reason has at most 200 characters (`notes.MAX_NOTE`), so the cause is short.
+
+Tests: `UnfinishedRangeTest` in `tests/test_geometry_links.py` runs the whole export for a stop, for a time limit, and
+for a time limit that comes after the halving ended.
+
+The cut end does not move. The cause only tells the person why the range can be short and what to do.
+
+When the halving had already ended before the early end, `nearer_left` finds nothing for that side. The reason then
+stays as it is.
+
 #### The end of the probe
 
 The put back of the design is one object per export, `PutBack` (`lib/export_plan/pipeline/put_back.py`). Both
@@ -2820,7 +2868,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 
 - `plan/`: what to read and which rows to run. `covered.py` (`scan`), `references.py` (`refs`), `request.py`
   (`request`, `symmetric_patterns`), `rows.py` (one row, `MAX_PROBE_ROWS`), `near_far.py` (`probe_rows`, `pair_rows`,
-  `far_rows`, `far_pair_rows`), `nearer.py` (`nearer_rows`), `extra_rows.py` (`check_rows`, `discovery_rows`),
+  `far_rows`, `far_pair_rows`), `nearer.py` (`nearer_rows`, `nearer_left`), `extra_rows.py` (`check_rows`, `discovery_rows`),
   `history.py` (what earlier states show). The package re-exports the names the rest of the add-in reads as
   `plan.<name>`. The choice of which sizes get rows is not here any more: it is in `export_plan/probe_flow/sizes.py`.
 - `state.py`: `ProbeState`, the record of one probe state (`json()`, `from_json()`, `as_states()`,
@@ -3182,6 +3230,9 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   longer touch the part, or when a cut cuts the part in two. The app builds a part only in one piece. The reasons
   "no value other than 40 could be copied" and "could not be measured" name such tries too. A typed end is never cut,
   as for the other cuts.
+- When the tries stopped early or ran out of time before the halving on a side, the end stays at the farthest value
+  that built, and the reason adds that no value between was tried, with a tip (`Motion.spans[size].unfinished`,
+  `Cut.unfinished`, `notes.untried_between_why`; see 1.8, "When the tries end before a range end is found").
 - A cut leaves an end that it does not move at its exact value. It does not round that end to hundredths
   (`kept_ranges.holding_ranges_where`).
 - A size that built at no value other than its value now is not a size. Its reason: "no value other than 40 could be
@@ -5536,7 +5587,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step, position]`; `[value, step]` in records of older versions or when Fusion gave no position), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `cleared` (the entries of `failed` where a step in error at the start built, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step, position]`; `[value, step]` in records of older versions or when Fusion gave no position), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `cleared` (the entries of `failed` where a step in error at the start built, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), `kept`, `changed` when a row changed an outline, and `unfinished` (`{side: "stopped" or "time"}`, only when the tries ended before the halving on that side). |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |
@@ -5925,6 +5976,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
 | A size is marked | `sizes.loose` with a reason | A value could not follow (3.1), a pick on moving geometry (3.3), the audit | checklist 4.10.2 |
 | A size is not a size | `sizes.dropped` | Not read by any copied step, or tried and changes nothing, or cannot follow | `used`, `tried`; `probe.motion.spans` |
 | Range too short | `sizes.cut` with `why` | A step failed in Fusion, or a sketch changed outline, or a recipe rule | checklist 4.10.3 |
+| A range stops with "no value between was tried" | `sizes.cut`; `probe.motion.spans[...].unfinished`; `probe.stopped` or `probe.time_limit.hit` | The tries ended before the halving on that side | untick the size that stopped the tries, or raise the limit (1.8) |
 | Sketch sizes all marked "could not be tried" | `health.probe: failed`, `probe` missing | The probe failed to start or a read failed | `health.probe_error`, the log |
 | Sizes marked "it changes a sketch and could not be tried" | `probe.untried` not empty | The 64 row cap | untick sizes you do not need |
 | Strange size results after a failed try | `health.flipped`, `probe.recovery`, `probe.after_rows.changed` | A sketch with two solutions flipped | the sketch's constraints in Fusion |
@@ -5989,6 +6041,9 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
 1. Find the size in `sizes.cut`. Read `why`:
    - "Fusion did not rebuild the design at X (Step)": a try failed in Fusion.
    - "Sketch makes a different outline at X": a try changed the outline.
+   - "no value between was tried, as the tries stopped early" or "ran out of time": the tries ended before the
+     halving on that side. Look at `probe.motion.spans[<Fusion name>].unfinished`, and at `probe.stopped` or
+     `probe.time_limit`. The cut end is right, but the range can be longer.
    - "the part comes apart into N separate pieces in Fusion at X": a try left the part in several pieces. Look at
      `probe.motion.spans[<Fusion name>].split` and at the states with `pieces`. In Fusion, set that value and look at
      the browser: does a post, or a half of the part, show as its own body?
