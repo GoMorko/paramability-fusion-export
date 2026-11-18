@@ -936,7 +936,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: pick the body of `Box`, tick `Width` with a range of 20 to 90 mm, tick "Lighter on memory", then click OK.
     Expect the result window to say that the add-in could not undo the export, and to show the part "Reopen the
     design" with the button "Reopen the design from its last save". Click the button. Expect the result window to
-    close, the design to close without a question and open again in about 2 s, with no unsaved changes, the fillet of
+    close (or to say that the design reopens when you close it; then close it), the design to close without a question and open again in about 2 s, with no unsaved changes, the fillet of
     the holder as it was before the export, and the timeline marker where it was. The `.paramability` file stays
     saved. Repeat with one change after the save (for example move the timeline marker one step and back): the
     result window has no reopen button, and it gives the advice to close the design without saving. Repeat with the
@@ -1048,13 +1048,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     x 30 mm and extrude it 20 mm up as a new body. Shell the top face inward by `Wall`. Fillet the four vertical
     outside edges, radius 8 mm, so that a small `Width` makes the fillet fail.
     Export: tick `Width` (12 to 80 mm) and `Lighter on memory`.
-    The export ends. The Text Commands window may say that the result event did not fire at first. A line in the
-    status area says the result window opens in a moment, and within about 8 seconds the window "Saved for
-    Paramability" opens once, with no long message box after it. The first section "Reopen the design" is open and
+    The export ends. While the export runs, a line in the status area says the result window opens when the export
+    has ended. Right after the export command ends, the window "Saved for Paramability" opens once, with no long
+    message box after it. The Text Commands window says "the result window opens when ParamabilityExportCommand has
+    ended"; when it says "opening the result window now" instead, note the command it names. The first section "Reopen the design" is open and
     its button is visible without scrolling. "Check your design" and "Result" are open too; "Sizes", "Left out" and
     "More sizes" are folded and open when their title is clicked. A long list scrolls inside its box. Close and
     open the window again from a second export: it still opens. Afterwards the design is as it was; do not click the
-    button unless you want to test the reopen.
+    button unless you want to test the reopen. When you do click it, the window closes by itself or says "The design
+    reopens when you close this window", and the design reopens only after the window is closed.
 88. PW1, one progress window. Use a design with several sizes that move sketches, so that the tries run in many batches.
     Export: tick all sizes.
     One window "Measuring how your sketches follow each size ..." shows from the first try to the end. It does not

@@ -242,8 +242,9 @@ design from its last save" only when both of these were true when you opened the
 - The design had no unsaved changes.
 
 Then the saved version is exactly the design as it was before the export, so the reopen loses only the changes of the
-export. When you click the button, the result window closes. Fusion closes the design without saving and opens the
-same saved version again, in about 2 seconds. When someone saved a newer version in the meantime, the add-in opens the
+export. When you click the button, the add-in asks Fusion to close the result window. When the window stays open, the
+window says "The design reopens when you close this window": close it. Then Fusion closes the design without saving
+and opens the same saved version again, in about 2 seconds. When someone saved a newer version in the meantime, the add-in opens the
 version that you had open. The view and the Undo history of this design are lost. The add-in never saves the design and
 never deletes anything. Nothing happens until you click.
 

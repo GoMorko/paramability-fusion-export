@@ -2090,17 +2090,39 @@ The view also has `summary`: a short text with the file name, the number of size
 the first line of the check section. When the window cannot start, the message box shows the summary, not the whole
 text.
 
-The window opens in a custom event, after the export command has ended. Fusion can refuse `fireCustomEvent` while the
-export command still runs. This happens when "Lighter on memory" ticked, because the tries call `Command.beginStep`.
-Then `result_dialog.show` writes a line in Fusion's status area and starts `event_retry.fire_later`. This function
-makes a `threading.Timer` that fires the event again after 0.5, 1, 2 and 4 seconds. The Fusion API documents
-`fireCustomEvent` as safe to call from another thread. The thread does nothing else in Fusion: a message box or a
-window from a background thread is not allowed. The view stays in `result_dialog._pending` until the event handler
-`on_event` runs. The handler cancels the pending fires first, and does nothing when no view is pending, so the window
-opens only once. When the event fires but the window cannot start, `on_event` shows the summary in a message box (this
-is on the main thread). When every fire fails, the thread writes the summary to the log, and the status line stays.
-`result_dialog.remove` and `reopen.remove` call `event_retry.cancel`, so no timer outlives the add-in. `reopen.request`
-uses the same retry for the reopen event; a reopen that never starts is logged only.
+The window opens when Fusion reports that the export command has ended. The add-in does not use a custom event and
+does not use a background thread for this. Two live facts from Fusion 2706 are the reason:
+
+- After an export with "Lighter on memory" ticked, `Application.fireCustomEvent` returns False. The export calls
+  `Command.beginStep`. The call stays False also after `unregisterCustomEvent` and `registerCustomEvent` again. In a
+  plain script it also returned False.
+- Python background threads do not run in Fusion between events. A `threading.Timer` stayed alive for minutes and its
+  function never ran. A retry from a timer thread thus never fires.
+
+The route is this:
+
+1. When the add-in starts, `result_dialog.start` adds a handler to `UserInterface.commandTerminated`
+   (`handlers.on_command_terminated`). The handler class is `adsk.core.ApplicationCommandEventHandler`, and its
+   arguments (`ApplicationCommandEventArgs`) have `commandId`. The handler object stays in a `HandlerList`, so Python
+   does not delete it. `result_dialog.remove` takes the handler off the event (`commandTerminated.remove`) when the
+   add-in stops.
+2. `result_dialog.show(view, command_id)` only keeps the view and `command_id`. `command_id` is the id of the command
+   that calls it: `config.EXPORT_COMMAND_ID` or `config.ORCA_COMMAND_ID`. When `UserInterface.activeCommand` is that
+   id, `show` writes the line "Saved. The result window opens when the export has ended." in Fusion's status area and
+   returns.
+3. When `commandTerminated` fires with the same id (any `terminationReason`), `result_dialog.on_terminated` starts the
+   window: it adds the button definition and calls `CommandDefinition.execute()`. A command with another id changes
+   nothing. The view is removed when the window starts, so the window opens only once.
+4. When the active command is not the one that called `show` (for example `show` is called outside a command), or the
+   handler could not be added, the window starts at once in the same way.
+5. The window and the message box never show together. The message box with the summary shows only when the window
+   cannot start.
+6. A view that never got its window (the end of the command was never reported) is dropped when the next export
+   starts: `export_common.contained` calls `result_dialog.drop_pending` and the add-in writes a line in the log.
+
+What only a live check can prove: that `UserInterface.activeCommand` has the id of the export command while the export
+runs (the log line says which command was running), and that `CommandDefinition.execute()` is allowed inside the
+handler of `commandTerminated`. Hand check 87 (RW1) covers this.
 
 A part saved as a fixed shape gets a message box instead. Its first line names the stopping step. Fusion's status line
 (bottom right) shows a short form of the same (`lib/fusion_ui/notice.py`). When the design may be changed (a parameter
@@ -2254,7 +2276,8 @@ version again. The result window can do this for the person, with a button. The 
 - `lib/export_plan/rollback.py`: `reopen_offered` (the decision) and the texts of the window.
 - `lib/dialog_model/result_rows.py`: the section `reopen` of the view, and `reopen_view` (a view with only this
   section).
-- `lib/fusion_ui/result_dialog.py`: the button. `lib/fusion_ui/reopen.py`: the custom event that runs the reopen.
+- `lib/fusion_ui/result_dialog.py`: the button and the handler of `commandTerminated`. `lib/fusion_ui/reopen.py`: the
+  mark of the click and the reopen that runs when the result window has ended.
 
 The start read. A reopen is safe only when the saved version is the same as the design before the export. If the
 design had unsaved changes, a reopen deletes the work of the person. Thus `_on_created` in `entry.py` reads
@@ -2293,17 +2316,17 @@ true, it keeps the document and the `SavedStart` in `fusion_ui/reopen.py` (`keep
   opens.
 
 The click. The reopen must not run inside an event of a command. Thus the button does not close the design. The
-click calls `reopen.request`, and `request` fires the custom event `ParamabilityExportReopenEvent`. Fusion runs the
-handler of the event (`reopen.run_pending`) after the click event has returned. This is the same pattern as the result
-window itself (`result_dialog.show`). Two copies of the add-in can be loaded at the same time (for example an older
-version and a new one), and they use the same event names. When one copy stops, it removes the events of both. Thus,
-when an event does not fire, `result_dialog.show` and `reopen.request` register the event again and fire it one more
-time (`_fire`). When the second fire also fails, `event_retry` fires again later from a background thread (see 1.11,
-"After the export, in Fusion"). The handler does these steps:
+click calls `reopen.request`. `request` does two things. It marks the reopen as asked for. Then it tries to end the
+result window: when `UserInterface.activeCommand` is the command of the result window, it calls
+`terminateActiveCommand`. Fusion may refuse this call inside the event of the click, so a failure is only logged.
+The window also shows a line, "The design reopens when you close this window". The person can then close the window by
+hand.
 
-1. It ends the result window: when `UserInterface.activeCommand` is the command of the result window, it calls
-   `terminateActiveCommand`. When this fails, it shows a message and does nothing more.
-2. It calls `saved_start.reopen` with a `FusionReopen` door.
+The reopen runs when Fusion reports that the result window's command has ended. `result_dialog.on_terminated` gets
+`commandTerminated` for the id `result_dialog.COMMAND_ID` and calls `reopen.window_ended`. `window_ended` does nothing
+when the person did not click the button: a window that ends without the click reopens nothing. When the click was
+made, it takes what `keep` kept (so it runs once) and calls `saved_start.reopen` with a `FusionReopen` door. The reopen
+needs no custom event and no background thread. The reasons are in 1.11 ("After the export, in Fusion").
 
 The reopen (`saved_start.reopen`) does these steps in this order. Each step that fails stops the reopen and gives a
 plain message:
@@ -2320,13 +2343,14 @@ plain message:
 The add-in never saves the design and never deletes a file. Only the click of the person starts the reopen.
 
 What only a live check can prove (hand check RO1 in `docs/hand-checks.md`): that the button shows and the click
-closes the result window; that `terminateActiveCommand` from the custom event ends the result window; that the close
+closes the result window, or that the line "The design reopens when you close this window" shows when Fusion refuses
+`terminateActiveCommand` inside the click event; that the reopen runs after the result window has ended; that the close
 asks nothing and the open gives the design with `isModified` false and the start state back. A live test on Fusion
 2706, outside the add-in, showed that the close and the open of the same version take about 2 s and give the start
 state back.
 
-The tests are in `tests/test_reopen.py`. The groups, the summary and the later fires are in
-`tests/test_result_window.py`.
+The tests are in `tests/test_reopen.py`. The groups, the summary and the moment the window opens (fakes with a
+`commandTerminated` event that the test fires) are in `tests/test_result_window.py`.
 
 #### The end check of the timeline
 
@@ -6578,7 +6602,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `TimelineObject.isSuppressed` (set) | `rows.py` (`suppress_items`) | An item may stay off. Only with "Faster tries" (on to start with). `left_off` names it, and the end check turns it on again. |
 | `TimelineObject.index` (get) | `rows.py` (`_on_with_marker_rolled`) | Read to find the lowest item to turn on. A value that is not a number gives no second try for that item. |
 | `Command.beginStep(makeExistingStepNonUndoable=True)` | `undo_steps.py` (through the port) | A preview call. Only with "Lighter on memory". Undo may not step back through the export. On a failed call no further call is made. |
-| `Document.dataFile`, `Document.isModified`, `Document.close(False)`, `Documents.open`, `Data.findFileById`, `DataFile.id`, `versionNumber`, `versions`, `parentProject`; `UserInterface.activeCommand`, `terminateActiveCommand` | `saved_design.py`, `fusion_ui/reopen.py` | Only after the person clicks "Reopen the design from its last save". The close loses the changes of the export, so the add-in offers it only for a cloud design that had no unsaved changes at the start. The version is found before the close; a close that fails leaves the design open. Checked against the installed stubs. Hand check RO1. |
+| `Document.dataFile`, `Document.isModified`, `Document.close(False)`, `Documents.open`, `Data.findFileById`, `DataFile.id`, `versionNumber`, `versions`, `parentProject`; `UserInterface.activeCommand`, `terminateActiveCommand`, `UserInterface.commandTerminated` (`ApplicationCommandEventHandler`, `ApplicationCommandEventArgs.commandId`) | `saved_design.py`, `fusion_ui/reopen.py`, `fusion_ui/result_dialog.py` | Only after the person clicks "Reopen the design from its last save". The close loses the changes of the export, so the add-in offers it only for a cloud design that had no unsaved changes at the start. The version is found before the close; a close that fails leaves the design open. Checked against the installed stubs. Hand check RO1. |
 | `SketchPoint.move`, `Sketch.isComputeDeferred` | `sketch_keep.py` | Moves sketch points back after a solver flip. The flag goes back to its start value, read back. |
 | `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again, with the marker held at the first such step when a plain set fails. |
 | `Occurrences.addNewComponent`, `BRepBody.copyToComponent`, `Occurrence.deleteMe` | `step_export.py`, `temp_copy.py` | The temporary copy adds timeline items; they must all go. |
