@@ -272,6 +272,8 @@ def _fold_into_slot(ctx, item, folded):
 
 def _round_set_refusal(one):
     """The Refusal of a round set the copy cannot write, else None."""
+    if one.unread:
+        return Refusal(shared.ROUND_SET_UNREAD, cause=gap_hints.SET_UNREAD)
     if one.kind not in _ROUND_KINDS:
         return Refusal(_FILLET_SET_REFUSALS.get(one.kind, "This kind of round is not copied yet."),
                        cause=gap_hints.ROUND_KIND if one.kind in _FILLET_SET_REFUSALS else None)
@@ -421,6 +423,8 @@ def _chamfer_parts(ctx, item, sets, sides):
 
 def _bevel_set_refusal(one):
     """The Refusal of a chamfer set the copy cannot write, else None."""
+    if one.unread:
+        return Refusal(shared.CHAMFER_SET_UNREAD, cause=gap_hints.SET_UNREAD)
     if one.problem:
         return Refusal(_CHAMFER_PROBLEMS[one.problem])
     if one.follows_step:

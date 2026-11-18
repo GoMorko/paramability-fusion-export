@@ -45,6 +45,12 @@ def with_edges(edge_set_type, edges, **kw):
     return Obj("fusion::" + edge_set_type, edges=Coll(edges), **kw)
 
 
+class DeadSet(Obj):
+    @property
+    def edges(self):
+        raise RuntimeError("2 : InternalValidationError : xlFillet")
+
+
 class FilletTest(unittest.TestCase):
     def test_constant_set_with_edge_and_face_inputs_expanded_and_unique(self):
         e1, e2, e3 = edge("e1", 1), edge("e2", 2), edge("e3", 3, closed=True)
@@ -113,8 +119,30 @@ class FilletTest(unittest.TestCase):
         item = read(feature("FilletFeature", "Fillet1"))
         self.assertIn("read_error", item["data"])
 
+    def test_a_set_whose_inputs_cannot_be_read_is_kept_alone_and_the_others_are_read(self):
+        # Fusion 2706: a set picked by a face with tangent chain on, whose face has no tangent neighbours.
+        dead = DeadSet("fusion::ConstantRadiusFilletEdgeSet", radius=param(0.1), isTangentChain=True,
+                       continuity="TangentSurfaceContinuityType")
+        kept = with_edges("ConstantRadiusFilletEdgeSet", [edge("e1", 1)], radius=param(0.2), isTangentChain=True,
+                          continuity="TangentSurfaceContinuityType")
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([dead, kept])))
+        self.assertNotIn("read_error", data)
+        first, second = data["sets"]
+        self.assertEqual((first["kind"], first["radius"], first["edges"], first["tangent_chain"]),
+                         ("constant", 1.0, [], True))
+        self.assertIn("read_error", first)
+        self.assertNotIn("read_error", second)
+        self.assertEqual([e["token"] for e in second["edges"]], ["e1"])
+
 
 class ChamferTest(unittest.TestCase):
+    def test_a_chamfer_set_whose_inputs_cannot_be_read_is_kept_alone(self):
+        dead = DeadSet("fusion::EqualDistanceChamferEdgeSet", distance=param(0.1), isTangentChain=True)
+        kept = with_edges("EqualDistanceChamferEdgeSet", [edge("a", 1)], distance=param(0.1))
+        data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll([dead, kept]),
+                                 cornerType="ChamferCornerType"))
+        self.assertEqual([("read_error" in s, len(s["edges"])) for s in data["sets"]], [(True, 0), (False, 1)])
+
     def test_edge_set_kinds(self):
         sets = [
             with_edges("EqualDistanceChamferEdgeSet", [edge("a", 1)], distance=param(0.1)),

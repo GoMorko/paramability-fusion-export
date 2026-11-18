@@ -73,6 +73,14 @@ class GroupTest(unittest.TestCase):
                 self.assertEqual(finishes(result), [])
                 self.assertEqual(left_out(result, "Fillet2")["cause"], causes.HAND_PICKED)
 
+    def test_a_round_with_a_set_whose_edges_are_not_known_is_left_out(self):
+        capture = plate(("FilletFeature", TOP, 2.0))
+        unread = dict(finish_item(0, "FilletFeature", [], 1.0)["data"]["sets"][0], input_kinds=[], read_error="x")
+        capture["items"][-1]["data"]["sets"].append(unread)
+        result = translate(capture)
+        self.assertEqual(finishes(result), [])
+        self.assertEqual(left_out(result, "Fillet2")["cause"], gap_hints.SET_UNREAD)
+
     def test_edges_not_on_the_copy_are_left_out(self):
         result = translate(plate(("ChamferFeature", [[20, 0, 12]], 1.0)))
         self.assertEqual(finishes(result), [])

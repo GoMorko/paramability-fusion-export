@@ -22,6 +22,7 @@ THROUGH_BODIES = "throughAllBodies"
 THIN_OUTLINE = "thinOutline"
 ROUND_KIND = "roundKind"
 ROUND_CHANGING = "roundChanging"
+SET_UNREAD = "setUnread"
 SHELL_KIND = "shellKind"
 REPEAT_FACES = "repeatFaces"
 SWEEP_KIND = "sweepKind"
@@ -80,6 +81,8 @@ HINTS = {
     THIN_OUTLINE: "Draw one closed outline for the wall, or shell a solid body.",
     ROUND_KIND: "Use a fillet with one radius.",
     ROUND_CHANGING: "Give the changing radius a fillet of its own with one edge and no radii between the ends.",
+    SET_UNREAD: "Pick the edges of that set, or turn Tangent Chain off for its face, or remove the set if it changes "
+                "nothing.",
     SHELL_KIND: "Shell one way only, inward or outward, with sharp or rounded corners.",
     REPEAT_FACES: "Pattern or mirror the feature or the body.",
     SWEEP_KIND: "Use a twist or a taper alone, or a loft between two outlines.",

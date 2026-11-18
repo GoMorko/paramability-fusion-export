@@ -69,6 +69,15 @@ class LeftOutTest(unittest.TestCase):
         self.assertEqual(next(v for v in result.items if v["index"] == SHELL)["gap"], "gap_2")
         self.assertEqual(check_recipe(result.recipe), [])
 
+    def test_a_step_that_could_not_be_read_but_changed_the_body_is_left_out_with_the_steps_that_pick_it(self):
+        def edit(capture):
+            capture["items"][SHELL].update(data={"read_error": "boom"}, target_changed=True)
+        result = translate(tray(edit))
+        self.assertIsNone(result.refusal)
+        self.assertEqual(gap_names(result), ["Shell1", "Fillet1"])
+        self.assertEqual(next(g for g in result.gaps if g["name"] == "Fillet1")["dependsOn"], ["gap_2"])
+        self.assertEqual(check_recipe(result.recipe), [])
+
     def test_a_handler_refusal_mid_timeline_is_left_out(self):
         result = translate(tray(lambda c: c["items"][SHELL]["data"].update(shell_type="rounded")))
         self.assertIsNone(result.refusal)

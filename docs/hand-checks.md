@@ -991,8 +991,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     face sketch a 20 x 20 mm square from (10, 10) mm and extrude it 10 mm up as a join (the boss). On the plate top
     face sketch a slot 30 mm long and 10 mm wide with round ends, centred at (55, 20) mm along X, and cut it 5 mm deep.
     Make one Fillet with three sets (rows): set 1 picks the top face of the boss with Tangent Chain off, radius
-    `Round` (Fusion 2706 cannot list the edges of a set picked by a face with Tangent Chain on, and the export then
-    copies the steps only: check that too, once, and expect "This step could not be read from Fusion"); set 2 picks one
+    `Round` (with Tangent Chain on, Fusion 2706 cannot list the edges of this set and rounds nothing for it: see
+    UF1); set 2 picks one
     straight edge of the slot rim with Tangent Chain on, radius 1 mm; set 3 picks the vertical edge of the plate at
     (80, 40) mm with Tangent Chain off, radius 3 mm.
     Second design: the same, but set 3 picks the vertical edge of the boss at (30, 30) mm, which meets the top face of
@@ -1023,4 +1023,23 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Sixth design: one round step (`turn_deg` of the groove edge near 150, so its round reaches 3.7 times its radius).
     Afterwards each design is as before. Checked in Fusion 2706 with 0.14.3 plus this change, except the views in
     Paramability.
-
+86. UF1, a fillet set picked by a face with Tangent Chain on. Add a user parameter `Width` = 40 mm.
+    First design: on the XY plane sketch a centre rectangle `Width` x 30 mm on the origin and extrude it 10 mm up as a
+    new body. Fillet the four vertical edges, radius 3 mm. Add a second Fillet: pick the front face (the flat side at
+    y = -15 mm) with Tangent Chain on, radius 1 mm. Fusion rounds the whole top rim and the whole bottom rim.
+    Second design: the same box without the rounded corners. On its top face sketch a centre rectangle 16 x 10 mm on
+    the origin and extrude it 6 mm up as a join (the boss). Make one Fillet with two sets: set 1 picks the top face of
+    the boss with Tangent Chain on, radius 1 mm; set 2 picks the top front edge of the box (y = -15 mm, z = 10 mm),
+    radius 2 mm. Then make one Chamfer with two sets: set 1 picks the bottom face of the box with Tangent Chain on,
+    0.5 mm; set 2 picks the vertical edge at (20, 15) mm with Tangent Chain off, 1 mm. Then on the XY plane sketch a
+    circle of 4 mm diameter at (-12, 0) mm and cut it 10 mm up.
+    Export: tick `Width` (20 to 80 mm).
+    First design: the second fillet is one round step with `faceEdges`; `Width` is marked "may give unexpected
+    results". In Paramability the copy matches Fusion at every `Width`.
+    Second design: Fusion rounds only the front edge (set 1 rounds nothing) and chamfers only the vertical edge
+    (the chamfer lists one set). In `report.json` set 1 of the fillet has `read_error` and no edges, and set 2 has
+    its edge. The fillet is left out with "Fusion did not give the edges of a set of this round" and the tip "Pick
+    the edges of that set, or turn Tangent Chain off for its face, or remove the set if it changes nothing." The
+    extrudes, the chamfer and the cut are copied, and the export writes a recipe. The copy differs from Fusion only
+    by the round on the front edge. Afterwards each design is as before. Checked in Fusion 2706 with 0.14.3 plus
+    this change, through the API, except the views in Paramability.

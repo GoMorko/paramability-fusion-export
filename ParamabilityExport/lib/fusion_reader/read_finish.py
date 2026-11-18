@@ -7,7 +7,10 @@ chamfer set also keeps how its edges were picked: the faces it was given (`faces
 chains (`tangent_chain`), and on each picked edge of a chain `seed`, so the copy can pick the same way. Each edge
 also has its box (`box`), and an edge of a fillet the largest angle between the normals of its two faces (`turn_deg`),
 so the copy can tell whether two sets of one step lie apart.
-A required collection that cannot be read raises, and the walk records that as a read_error for the item.
+A required collection that cannot be read raises, and the walk records that as a read_error for the item. The
+inputs of one fillet or chamfer set are the exception: when they cannot be read, that set alone gets `read_error` and
+no edges, and the other sets are read as usual. Fusion 2706 does this for a set picked by a face with tangent chain
+on whose face has no tangent neighbours: such a set rounds nothing, and reading its inputs raises.
 
 A chamfer with two distances, or a distance and an angle, also records at each edge point the outward normals of
 the edge's two faces (`sides`, before) and the normal of the chamfer face nearest to it (`cut_normals`, after). The
@@ -132,7 +135,13 @@ def _edge_set(edge_set, ctx, tangent_default=True, measure=None, turns=False):
     """The edges of a set as records. `measure(edge, record)` gives more keys for the record of each edge, or None.
     `turns` adds `turn_deg` to each record (fillets)."""
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
-    kinds, edges, faces, seeds = expand_edges(strict_items(edge_set.edges), tangent_chain)
+    try:
+        inputs = strict_items(edge_set.edges)
+    except Exception as exc:
+        # Only this set is unknown: the other sets of the step are still read (see the module text).
+        return {"input_kinds": [], "edges": [], "tangent_chain": tangent_chain,
+                "read_error": str(exc) or type(exc).__name__}
+    kinds, edges, faces, seeds = expand_edges(inputs, tangent_chain)
     records = [geo.edge_record(e, ctx) for e in edges]
     for record, edge in zip(records, edges):
         native = geo.native_input(edge, ctx)

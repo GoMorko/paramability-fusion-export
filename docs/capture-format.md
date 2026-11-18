@@ -938,6 +938,10 @@ against `samples`.
   set (not one the chain added) has `"seed": true`. `faces` lists the face inputs, as the shell's `faces` records
   (`point` is `BRepFace.pointOnFace`); it is absent when the set has no face input or a face cannot be read. Captures
   of add-in 0.5.0 and older have none of these keys.
+- A set whose inputs cannot be read (`edges` of the set raises) has `read_error` with the message, an empty
+  `input_kinds` and an empty `edges` list; its kind, sizes, `tangent_chain` and parameters are read as usual. The
+  other sets of the step are read as usual. Fusion 2706 does this for a face picked with Tangent Chain on that has no
+  tangent neighbours. Captures of add-in 0.14.3 and older give the whole item `read_error` instead.
 - EDGE: `{ "token", "closed": bool, "points": [[..]] }`. `points` holds the middle point for an open edge and the
   points at 0.25 and 0.75 of the parameter range for a closed edge (`startVertex` equal to `endVertex`), from
   `BRepEdge.evaluator`. A fillet or chamfer EDGE also has `box`, the box of the edge (`BRepEdge.boundingBox`,

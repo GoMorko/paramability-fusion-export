@@ -483,8 +483,11 @@ says so (`timelineObject.rollTo(True)`). This is why there are two readers.
 
 Every Fusion call in a reader is wrapped in `geo.safe(...)` (`lib/fusion_reader/read_geometry.py`). A member that
 raises gives `null` or `"other"`. The reader never invents a value. The translator then refuses what it cannot read.
-When a reader function raises, the step's data becomes `{"read_error": "..."}` and the translator stops the copy at
-that step ("This step could not be read from Fusion.").
+When a reader function raises, the step's data becomes `{"read_error": "..."}` ("This step could not be read from
+Fusion."). The reader also measures the body before and after the step (`target_changed`). When the body changed
+(`target_changed` true), the translator leaves the step out as a gap. When the reader does not know whether the body
+changed (`target_changed` null), the translator stops the copy at that step. A step whose faces a later step picks
+makes that later step a gap too, by the usual rules (see 1.9.3).
 
 Types without a reader (sketches, construction geometry, a thicken) get `"data": {}`. They still get `target_before`
 and `target_after`. So even a step the add-in does not know says where it changed the body and by how much.
@@ -1422,7 +1425,8 @@ The walk then makes one of these decisions from the role. The first rule that ma
 | a step that does not touch the body | `skipped`, "Helper geometry" (with special cases for types that copy or move bodies) |
 | a step that makes another body, or a split | stop, unless `split_rules.stop_reason` allows the split |
 | a Split Face that left the body unchanged | `skipped` with a note |
-| a step whose reader failed (`read_error`) | stop |
+| a step whose reader failed (`read_error`), and the body changed (`target_changed` true) | gap, cause `refused` |
+| a step whose reader failed (`read_error`), and the body was not measured around it or did not change | stop |
 | a step type with no handler | gap, with the type's `unsupported` reason |
 | a step that reaches into another component (`foreign`) | gap |
 | a step that picks faces of a gap | gap (`cause: picks`) |
@@ -1703,6 +1707,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet that are not apart from it (see "Sets of one step copied one after the other"), with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
+| `setUnread` | a set of a round or chamfer whose inputs Fusion does not give (a face with Tangent Chain on and no tangent neighbours, see "A set whose edges Fusion does not give") | Pick the edges of that set, or turn Tangent Chain off for its face, or remove the set if it changes nothing. |
 | `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
 | `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
 | `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
@@ -4020,6 +4025,34 @@ The handlers (`finishes/finish.py`) use `finishes/set_split.py`:
 Captures of add-in 0.14.3 or older have no `box` and no `turn_deg`, so their steps stay in one piece. The hand check
 MP1 in `docs/hand-checks.md` checks the result in Fusion and in the app.
 
+#### A set whose edges Fusion does not give
+
+The reader reads the inputs of each set of a round or chamfer with `edges` (`FilletEdgeSet.edges`,
+`ChamferEdgeSet.edges`), with the marker before the step. For most sets, this gives the edges and faces that the
+person picked. For one kind of set, Fusion 2706 does not give them:
+
+- The set picks a face, and Tangent Chain is on (`isTangentChain` true).
+- No other face meets that face smoothly (the face has no tangent neighbours).
+
+For such a set, reading `edges` raises an error ("InternalValidationError : xlFillet"). Fusion also does not round or
+cut anything for this set. In a step with only this set, Fusion cannot build the step at all ("No fillet edge
+found"). The API has no other member that gives the picked face of a set. When the face has tangent neighbours,
+`edges` gives the faces that meet it smoothly (Fusion 2706 does not list the picked face itself). Hand check UF1
+shows both cases.
+
+The reader (`read_finish._edge_set`) keeps such a set in the step. The set gets `read_error` with the message of
+Fusion, an empty `edges` list, empty `input_kinds`, and `tangent_chain`. The kind, the size and the parameters of the
+set are read as usual. The other sets of the step are read as usual too.
+
+The shared layer gives `FinishSet.unread` for such a set. The handlers (`_round_set_refusal`, `_bevel_set_refusal`)
+refuse the set with the reason "Fusion did not give the edges of a set of this round, so the copy cannot tell what
+it rounds." (or "... of this chamfer, ... what it cuts."). The cause is `setUnread`. The copy does not guess the
+edges of the set. It also does not take the set for a set that rounds nothing, because the API cannot show this.
+
+A set with no edges has no edge boxes. Thus the set is never `apart` from the other sets of the step, and the
+handler leaves out the whole step as a gap. The copy writes the steps before and after it. The Orca output leaves the
+step out with the same reason and cause.
+
 #### A construction plane
 
 A step can use a construction plane: a sketch on it, an extrude that reaches to it, a mirror across it, a split along
@@ -4645,6 +4678,8 @@ after the step is unknown.
 A step becomes a gap (left out, recipe still written):
 
 - its type has no handler, and the reader saw it change the body (`target_changed` true): a thicken, for example;
+- its reader failed (`read_error`), and the reader saw it change the body (`target_changed` true). The copy does not
+  know what the step did, but the step's effect stays on the body;
 - it is a modelled thread or a coil that the copy cannot hold (a profile that is not a 60 degree form, a taper, a spiral,
   a cap that is passed, a step in a tool body: see 3.12 and 3.13);
 - its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
@@ -4672,7 +4707,8 @@ A step stops the copy (fixed shape):
 - the place of the part in the assembly cannot be used, or the part comes from a linked design;
 - a step of another component or an assembly item changes the part;
 - the body cannot be followed (a new token with the same name);
-- the bodies of the step cannot be read (`bodies_after` null), or its reader failed (`read_error`);
+- the bodies of the step cannot be read (`bodies_after` null);
+- the reader of the step failed (`read_error`) and the part was not measured around it (`target_changed` null);
 - Fusion shows the step in error and the part was not measured around it (`target_changed` null);
 - the step splits the part or makes another body, except a Split Body that `split_rules` allows;
 - a step with no handler whose effect cannot be told (`target_changed` null);
@@ -6498,6 +6534,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
 | `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_hole.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
+| `FilletEdgeSet.edges`, `FilletEdgeSet.isTangentChain`, `ChamferEdgeSet.edges` | `read_finish.py` (`_edge_set`) | Read with the marker before the step. For a face with Tangent Chain on, `edges` gives the faces that meet it smoothly, without the face itself. When the face has no tangent neighbours, `edges` raises (Fusion 2706, hand check UF1): only that set gets `read_error`, and its step is left out. |
 | `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `PipeFeature.path`, `sectionType`, `sectionSize`, `isHollow`, `sectionThickness`, `distanceOne`, `distanceTwo`, `startFaces`, `endFaces` | `read_pipe.py` | The path can be read only with the marker before the pipe. Hand check PI1 (Fusion 2706) confirmed the place of the section, the size as a diameter and the inward wall. A member that is missing reads as null, and the pipe is left out. |
