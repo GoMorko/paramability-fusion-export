@@ -16,6 +16,7 @@ before it.
 from ...geometry import vec
 from . import revolve_walls
 from .placer import ADD, CUT, Placer
+from .revolve_placer import kin
 from .slabs import AXIAL_TOL, LATERAL_TOL, Place, as_quantity
 
 # Offset directions are written with this many digits, so a formula holds no rounding noise.
@@ -114,7 +115,7 @@ class Shell(Placer):
         if self.unknown_open:
             return None
         for revolve in reversed(self.turned):
-            others = [placer for placer in self.before if placer is not revolve]
+            others = [placer for placer in self.before if placer is not revolve and not kin(placer, revolve)]
             found = revolve_walls.inner_place(revolve, p, edge, self._opened_on(revolve), self.thickness, others)
             if found is not None:
                 return found

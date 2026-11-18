@@ -16,7 +16,8 @@ sizes that may move it are marked (`ref_motion.check_own_axis`). A caller that h
 values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are. Fusion turns toward the same side of
 the sketch plane whichever side of the axis the outline is on, so the ranges are cut where the written outline would
 reach its axis (`axis_side.keep_side`). Each written revolve step hands the walk a placer (faces/revolve_placer.py), so
-later picks on its faces follow sizes; a revolve held in a `toolBody` gets none.
+later picks on its faces follow sizes; a revolve held in a `toolBody` gets none. Outlines that share a curve also hand
+the placer of the outline they make together (faces/revolve_joined.py), for picks where they meet.
 """
 import math
 
@@ -31,6 +32,7 @@ from ...design_model import words as shared
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
 from ..faces.placer_makers import RevolveMaker
+from ..faces.revolve_joined import joined_revolves
 from ..faces.revolve_placer import Turn
 from ..faces.tool_placer import JoinedWalk
 from ..ranges import range_check
@@ -424,6 +426,7 @@ def handle(ctx, step):
     if combine == "intersect" and len(steps) > 1:
         return _held(ctx, item, steps, combine)
     out = StepResult()
-    for recipe_step, turn in zip(steps, turns):
-        out.add(recipe_step, [RevolveMaker(turn)])
+    joined = joined_revolves(ctx, [profile for profile, _, _, _ in built], turns)
+    for n, (recipe_step, turn) in enumerate(zip(steps, turns)):
+        out.add(recipe_step, [RevolveMaker(turn, joined.get(n))])
     return out

@@ -70,7 +70,7 @@ can be.
 | Revolve: full turn or angle | Copied | - | Copied | - | Paramability: a later shell, fillet or chamfer that picks its faces or edges follows its sizes, also on the inner walls a shell leaves on a full turn and on an end face whose angle stays. A pick on an end face that turns with a size, or inside a shelled part turn, keeps its place, and the sizes are marked. Orca: one outline without holes, the axis in the sketch plane. |
 | Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
 | Revolve: two sides with two angles | Copied | - | Partly | Needs Orca | Left out when one angle is 90 or 270 degrees and the start face fits both sides. Two equal angles keep their numbers. Orca: both angles keep their numbers. |
-| Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | |
+| Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | Paramability: outlines that share a line make one outline for the picks of later steps, so a round or chamfer where they meet (also inside a shell) follows the sizes. When the outlines overlap, or a size moves one so that they meet in another way, such a pick keeps its place and the sizes are marked. |
 | Revolve or circular pattern: axis on a cone or torus face | Copied | - | Copied | - | A cylinder, a cone or a torus face turns about its own axis. A sphere or a free-form face has no axis and the step is left out. The sizes that may move the face are marked. |
 | Sweep: path in one plane (lines, arcs, splines) | Copied | - | Partly | Needs Orca | Paramability: a path of lines and arcs follows sizes; a spline path is copied as measured. Orca: the path keeps its numbers, one outline without holes, no sharp corners. |
 | Sweep: path in 3D | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: lines joined by tangent arcs, as measured. Splines in 3D are left out. |
@@ -195,8 +195,8 @@ Sorted by how many printing projects it helps:
 
 1. Rounds and chamfers of more kinds: variable radius with radii between the ends (app change), two radii, Rule
    Fillet and Full Round Fillet.
-2. Picks that follow sizes on the end faces of a revolve whose angle is a size, on the inner walls a shell leaves on
-   a part turn, and inside a revolve of several outlines (add-in only).
+2. Picks that follow sizes on the end faces of a revolve whose angle is a size, and on the inner walls a shell leaves
+   on a part turn (add-in only).
 3. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), Rib and Web (add-in only):
    walls, brackets and stiffeners.
 4. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a closed path of lines (add-in only),

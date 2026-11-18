@@ -970,10 +970,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     fillet and the chamfer copied with `near` points that hold formulas of `Diameter`, `Height` and `Wall`. In
     Paramability set `Height` to 50, `Diameter` to 80 and `Wall` to 3, then to 30, 40 and 1.5: the rounds stay on the
     inner rim and the inner bottom edge, and the chamfer on the floor inside, as in Fusion at the same values. In the
-    second design the inner bottom edge lies where the inside wall meets the second outline: expect its sizes marked
-    "may give unexpected results", and no round on a wrong edge. Afterwards each design is as before. Checked in
-    Fusion 2706 with 0.14.3 plus this change: the picks hold formulas of the sizes, the second design marks its sizes
-    and keeps fixed picks; the size changes in Paramability are still to check.
+    second design the two outlines share the side line from z = 0 to 20, so they make one body and the shell hollows
+    the ring too: the inner bottom edge lies at x = `Diameter` / 2 + 3. The add-in places the picks on the outline of
+    the two outlines together (RV11): expect no size marked, the rounds on the inner rim and on that inner bottom edge
+    with formulas of the sizes, and in Paramability the rounds on the same edges as in Fusion at the same values.
+    Afterwards each design is as before. Checked in Fusion 2706 with 0.14.3: the first design's picks hold formulas
+    of the sizes; the size changes in Paramability and the second design with the joined outline are still to
+    check.
 
 84. RV10, picks on the end faces of a half turn. Add user parameters `Height` = 40 mm and `Diameter` = 60 mm. On the
     XZ plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`, with its left side on the z
@@ -1072,3 +1075,21 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and, for the failing tries, `confirm_new_errors`; `health_passes` is about one per try; `timeline_reads` is small;
     `calls.after_tries` has `end_check`. `timing.probe.tries_seconds` per failing try is lower than with the release
     build. Afterwards the design is as it was.
+90. RV11, picks where the outlines of one revolve meet. Add user parameters `Radius` = 20 mm, `Height` = 10 mm and
+    `Wall` = 1.5 mm. On the XZ plane draw two closed outlines that share a line. The body: a rectangle from x = 0 to
+    `Radius` and from z = 0 to `Height`, with its left side on the z axis. The flange below it: the points (0, -1),
+    (`Radius` + 0.5, -1), (`Radius`, 0) and (0, 0), so that its outer edge leans out by 0.5 mm and its top is the
+    bottom of the body. Revolve both outlines in one Revolve, a full turn about the z axis, as a new body. Shell it
+    `Wall` inside, with the bottom face (z = -1) open. Chamfer by 0.5 mm the flat ceiling inside (z = `Height` -
+    `Wall`), picking the face, and in the same Chamfer, by 0.3 mm, the inner rim edge where the inside wall meets the
+    open bottom (at z = -1, about 18.8 mm from the axis). Make a second design the same with a third outline in the
+    same Revolve: a lip on the side, the triangle (`Radius`, 2), (`Radius` + 1, 2), (`Radius`, `Lip`), with a user
+    parameter `Lip` = 4 mm.
+    Export: tick `Radius`, `Height` and `Wall` (and `Lip` in the second design, with the range 2 to 12 mm typed).
+    In the first design expect no size marked "may give unexpected results", the range of `Wall` stopping at about
+    2.23 ("the inside wall of Revolve1 that Chamfer1 picks would shrink to nothing"), and both chamfers copied with
+    `near` points that hold formulas of the sizes. In Paramability set `Radius` to 25, `Height` to 12 and `Wall` to 2,
+    then to 15, 8 and 1: the chamfers stay on the ceiling inside and on the inner rim, as in Fusion at the same
+    values. In the second design (past `Lip` = 10 the tip of the lip leaves the side) expect the sizes marked "may
+    give unexpected results" and the rim chamfer with fixed points, not on a wrong edge. Afterwards each design is as
+    before.

@@ -460,6 +460,11 @@ def _crossing(points):
     return False
 
 
+def loop_crosses(points):
+    """True when the closed loop through `points` crosses, touches or folds back on itself (`_crossing`)."""
+    return _crossing(points)
+
+
 def _ring_chain(loop, raw_loop, sketch):
     """`_chain` of a loop, also for a rect (its four corners in order); [] for a loop without corners."""
     if loop["kind"] == "rect":

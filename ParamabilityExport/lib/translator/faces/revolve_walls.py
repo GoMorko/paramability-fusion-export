@@ -17,9 +17,11 @@ where an inner wall would shrink to nothing, or the opening would close.
 
 Not placed: a revolve that does not turn a full circle; a point near a corner where an inner wall rounds off, meets
 a curved wall at an angle or ends on the axis away from a line on it; a point closer than the thickness to a kept
-face; a point whose outer face, or the face next to it, another step covers (a second outline of the same revolve,
-an extrude joined to it); a point that a step before the shell places or claims. The shell claims such a point
-(`RevolvePlacer.hollowed`), so its sizes are marked.
+face; a point whose outer face, or the face next to it, another step covers (an extrude joined to it, or a second
+outline of the same revolve that has no joined outline with it); a point that a step before the shell places or
+claims. The shell claims such a point (`RevolvePlacer.hollowed`), so its sizes are marked. Outlines of one revolve
+that share a curve are placed as the one outline they make together (faces/revolve_joined.py), so an inner wall that
+runs across them is placed there.
 """
 import math
 

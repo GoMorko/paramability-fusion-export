@@ -50,7 +50,7 @@ class Turn:
     `total` is None for a full circle."""
 
     def __init__(self, profile, outline, table, axis_point, axis_raw, axis_dir, back=0.0, total=None):
-        self.frame = profile["frame"]
+        self.profile, self.frame = profile, profile["frame"]
         self.footprint = Footprint(profile)
         self.outline, self.table = outline, table
         self.axis_point, self.axis_raw = list(axis_point), axis_raw
@@ -82,6 +82,12 @@ def _tidy(value):
     if isinstance(value, Affine) and value.terms and abs(value.const) <= CONSTANT_TOL:
         return Affine(0.0, value.terms, value.sketch)
     return value
+
+
+def kin(a, b):
+    """True when one of two placers is the joined outline of a revolve and the other one of the outlines it joins:
+    their faces are the same faces, not faces of two steps."""
+    return any(p is b for p in getattr(a, "joins", ())) or any(p is a for p in getattr(b, "joins", ()))
 
 
 class _Spot:
@@ -126,10 +132,12 @@ class RevolvePlace:
 class RevolvePlacer(Placer):
     """The faces of one written revolve step `step_id` (named `label` in reasons): `turn` is its `Turn`, `before` the
     placers of the steps written before it, whose faces a point of the revolve may also lie on, `combine` how it
-    meets the part (new, add or cut)."""
+    meets the part (new, add or cut). The placer of the outline that several touching outlines of one revolve make
+    together (faces/revolve_joined.py) holds the placers of those outlines in `joins`."""
 
     is_copy = False
     taper = None
+    joins = ()
 
     def __init__(self, step_id, label, turn, before, combine="add"):
         self.id, self.label, self.combine = step_id, label, combine
