@@ -3489,6 +3489,10 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   (Fillet2) or 50 (Fillet2), the nearest values tried, so it could not be measured".
 - When the person typed a wide range and the rows covered less, the size is loose: "it was followed between 20 and
   68.75; beyond that it could not be tried".
+- When a loose size has another reason too, `notes.with_span` adds the span to that reason (`notes.Spanned`). The span
+  is the most important fact for the person. Thus, when the note is longer than 200 characters (`notes.MAX_NOTE`),
+  `notes.loose_reason` shortens the other reason and keeps the span. When the other reason would then have fewer than
+  40 characters, the words after the span ("beyond that ...") go first.
 
 #### Cuts that come from the recipe rules
 

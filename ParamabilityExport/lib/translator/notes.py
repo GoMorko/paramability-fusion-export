@@ -113,22 +113,42 @@ def span_why(span, low, high):
     return Past(where, "it was followed %s; %s" % (span_words(span), _beyond(span)))
 
 
+class Spanned(str):
+    """A reason with the values the size was followed between added: `head` is the reason, `tails` the span words,
+    longest first. `loose_reason` shortens the head, never the span, when the note would grow past its limit."""
+
+    def __new__(cls, head, tails, where=None):
+        out = super().__new__(cls, "%s; %s" % (head, tails[0]))
+        out.head, out.tails, out.where = head, tuple(tails), where
+        return out
+
+
 def with_span(why, span, low, high):
-    """`why` with the measured span added, or the span reason alone when there is no `why`. A `why` that would grow
-    past the note limit stays as it is."""
+    """`why` with the measured span added, or the span reason alone when there is no `why`."""
     if why is None:
         return span_why(span, low, high)
-    text = "%s; it was followed %s, %s" % (_ends(why), span_words(span), _beyond(span))
-    if len(text) > MAX_NOTE - 80:
-        return why
-    return Past(why.where, text) if getattr(why, "where", None) else text
+    follow = "it was followed %s" % span_words(span)
+    return Spanned(_ends(why), ("%s, %s" % (follow, _beyond(span)), follow), getattr(why, "where", None))
+
+
+# The fewest characters of its own reason a loose note with a span keeps; below that it drops what lies past the span.
+_MIN_HEAD = 40
 
 
 def loose_reason(name, why):
     """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."., or
-    "<name> may give unexpected results past 2.05: <why>." when the reason is a `Past`."""
+    "<name> may give unexpected results past 2.05: <why>." when the reason is a `Past`. A `Spanned` reason that is too
+    long keeps its span and shortens its own reason."""
     where = getattr(why, "where", None)
-    return clip("%s may give unexpected results%s: %s." % (name, " " + where if where else "", _ends(why)), MAX_NOTE)
+    lead = "%s may give unexpected results%s: " % (name, " " + where if where else "")
+    text = plain("%s%s." % (lead, _ends(why)))
+    if len(text) <= MAX_NOTE or not isinstance(why, Spanned):
+        return clip(text, MAX_NOTE)
+    lead = plain(lead) + " "
+    for tail in why.tails:
+        room = MAX_NOTE - len(lead) - len(plain(tail)) - 3
+        if room >= _MIN_HEAD or tail == why.tails[-1]:
+            return clip("%s%s; %s." % (lead, clip(why.head, max(room, 3)), tail), MAX_NOTE)
 
 
 def cut_words(cut_low, cut_high, low, high):

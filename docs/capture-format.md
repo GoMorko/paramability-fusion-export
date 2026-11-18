@@ -2210,7 +2210,8 @@ or a measured place (`design_model.reach.probed_sizes`) and whose rows all faile
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
 free size measured over less than its range is loose with "it was followed between A and B; beyond that it could not
-be tried" (added to its other reason when there is one and it fits the note), unless the range was cut to the values
+be tried" (added to its other reason when there is one; a note too long for 200 characters shortens the other
+reason and keeps the span), unless the range was cut to the values
 that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
