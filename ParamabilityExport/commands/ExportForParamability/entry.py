@@ -15,7 +15,7 @@ from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.saved_design import read_saved_start
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui.log import log, message_box
-from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog, timeline_select
+from ...lib.fusion_ui import handlers, progress, recipe_dialog, result_dialog, timeline_select
 from ...lib.timing.timer import Timer
 from .. import panel
 from . import export_flow
@@ -33,6 +33,7 @@ def start():
 
 
 def stop():
+    progress.close_all()
     panel.remove_button(config.EXPORT_COMMAND_ID)
     _handlers.clear()
     _command_handlers.clear()

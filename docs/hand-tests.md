@@ -1928,6 +1928,8 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
 - Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
   `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
   the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.
+  One window serves every batch of tries: `ProgressDialog.maximumValue` is set when the total grows, `hide` is called
+  once at the end of the export, and a `hide` that raises is logged. Hand check PW1.
 
 ### Several bodies in the picker
 

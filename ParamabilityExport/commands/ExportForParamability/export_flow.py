@@ -32,6 +32,7 @@ from ...lib.fusion_ui import reopen, result_dialog
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui.notice import status_notice
+from ...lib.fusion_ui.progress import DialogSet
 from ...lib.package.writer import write_package
 from ...lib.timing.capture_timer import CaptureTimer
 from ...lib.timing import trail
@@ -124,6 +125,7 @@ class FusionPort:
         self.store = DesignParameterStore(design)
         self._captures = captures
         self.timing = ExportTiming()
+        self._windows = DialogSet(export_common.progress_dialog)
 
     def _current(self):
         return resolve_body(self.design, self.token, self.body)
@@ -149,7 +151,7 @@ class FusionPort:
         return SketchKeeper(self.design, tokens)
 
     def progress(self, verb):
-        return export_common.progress_dialog(verb)
+        return self._windows.get(verb)
 
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)
@@ -177,6 +179,7 @@ class FusionPartsPort:
         self.store = DesignParameterStore(design)
         self._captures = captures
         self.timing = ExportTiming()
+        self._windows = DialogSet(export_common.progress_dialog)
 
     def _current(self, index):
         return resolve_body(self.design, self.tokens[index], self.bodies[index])
@@ -204,7 +207,7 @@ class FusionPartsPort:
         return SketchKeeper(self.design, tokens)
 
     def progress(self, verb):
-        return export_common.progress_dialog(verb)
+        return self._windows.get(verb)
 
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)
