@@ -848,6 +848,15 @@ net for it.
    judged by that recompute, before its STEP is written.
 8. In a `finally` block, the parameters go back.
 
+The try runner gives the job a store that counts its calls (`design_edit/metered.py`, `MeteredStore`). The store
+passes every call to the real store without a change. It counts the full rebuilds by the part of the export that asked
+for them, the sets of parameters, the passes over the timeline items for health and the reads of the whole timeline,
+with the seconds of each. The counts go to `timing.probe.calls` (see 4.2). A part of the export gives its label to the
+rebuilds made inside it with `metered.caller`. When one part runs inside another, the rebuilds count under the label
+of the outer part: a walk back that meets a row error counts all its rebuilds as walk steps. The labels are `row` (the
+rebuild that gives a row its numbers), `confirm_new_errors`, `counting_warning`, `check_after_row`, `sketch_put_back`,
+`baseline`, `rebase`, `end_check`, `walk_step`, `put_back_values` and `other`.
+
 So each row costs two rebuilds: one with the new values and one to put the values back. A row whose read includes an
 outline face leaves the marker before the face's step (`park`, `read_faces(stay=True)`); the change that puts the
 values back then moves it home, so the face read adds no third rebuild. `ProbeRun._home` brings the marker back before
@@ -3387,6 +3396,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `timeline_health.py` (`settle_timeline`), `walk_back.py` (the values set to bring the design back the way a try took
   it away, the rows and the single sizes to walk back, and the report entry of each attempt), `temp_copy.py`,
   `errors.py`.
+- `metered.py`: `MeteredStore` (a store that counts its calls for `timing.probe.calls`), `caller` (the label of the
+  rebuilds made inside a block) and `note` (an outcome count). Both functions do nothing for a store that is not a
+  `MeteredStore`.
 - `saved_start.py`: `SavedStart` (the saved state of the design at the start of an export, see 1.11).
 
 #### fusion_reader
@@ -6364,7 +6376,7 @@ seconds, rounded to 0.01. A failure of the timing code drops the block and chang
 | `total` | From the start of the pipeline to the moment `report.json` is made. The dialog's read before OK and the file write are not in it. |
 | `phases` | One time per stage of section 1.1. `after_stop` and `outline_check` (the check that written outlines do not cross themselves, 3.2) are already inside the translate phases. A stage that did not run is 0. |
 | `capture` | The timeline read: `cached: true` when the dialog read it before the OK click (then its time is not part of this export). `marker_moves` counts the marker moves and their time. `readers` is the time of all step readers. `placement` is the place of the picked body, read once before the walk. `tail` is the read after the walk, split in `tail_parts` (`target`, `parameters`, `links`, `graphs`). `by_type` and `by_component` add up the time per step type and per component. `slowest` lists the 10 slowest steps. A several-body export has `captures`, one per body. |
-| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
+| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `calls` (what the tries asked of Fusion: the full rebuilds by the part of the export that asked, the sets and put backs of parameters, the passes over the timeline items for health, the reads of the whole timeline, and the outcomes `rescued` and `check_cleared`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
 | `undo` | The "Lighter on memory" record: `{ on: false }`, or `{ on, applied, steps, error }` (1.11). |
 
 The time of one step in the capture is mostly the marker move that builds it. So a step type that is slow in
@@ -6830,9 +6842,15 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    faces (the marker roll check and the read after the tries are not counted). A `faces` part with
    a large time means outline face reads, each of which moves the marker before the face's step. A large `refs` part
    points at the place of the body read at each state (`probe_refs._target_back`); it fetches only three vertices.
-8. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
+8. Read `timing.probe.calls`. A try that builds costs about two rebuilds (set the values, put them back). A try that
+   fails can cost more: `computes.confirm_new_errors` is the extra rebuild after a row that showed new errors, and
+   `rescued` counts those after which the row built. `computes.counting_warning` is the extra rebuild after a warning
+   that counts. `computes.check_after_row` is the rebuild of the check after a row, and `check_cleared` counts those
+   after which a step that read worse was fine. `computes.walk_step` is every rebuild of the walks back.
+   `health_passes` and `timeline_reads` count the reads of the timeline items. The end check adds `computes.end_check`.
+9. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
    sizes that got no try (1.8).
-9. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and
+10. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and
    `by_type` name the steps Fusion rebuilds slowly. When `probe` is large, compare `rebuild` with `read`: a large
    `read` time points to many outline face reads or borrowed sketches.
 

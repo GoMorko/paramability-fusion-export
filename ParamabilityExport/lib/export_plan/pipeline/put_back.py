@@ -2,6 +2,7 @@
 export ends. Both export pipelines hold one. Pure: no Fusion imports."""
 import dataclasses
 
+from ...design_edit import metered
 from ...design_edit.restore import restore_parameters
 from ...design_edit.timeline_health import FULL_COMPUTE, VALUES_AGAIN, read_timeline, settle_timeline
 from ...geometry.tolerances import RESTORE_TOLERANCE_MM
@@ -9,7 +10,8 @@ from ...timing import trail
 from .. import health as health_module
 from ..timeline_trim import TryTimeline
 from ..undo_steps import drop_after
-from .try_summary import with_try_seconds
+from ...timing.timer import Timer
+from .try_summary import add_end_check, with_try_seconds
 
 
 class PutBack:
@@ -181,7 +183,11 @@ class PutBack:
         once per export, after the parameters, the suppressed items, the sketches and the marker are back. Items of
         the tries that would not turn back on and that this turned on leave `TryTimeline.left_off`."""
         if self.settled is None:
-            self.settled = settle_timeline(self.port.store, self.steps_start, self.saved, self.port.log)
+            counts = Timer(self.timing.clock)
+            store = metered.MeteredStore(self.port.store, counts)
+            with metered.caller(store, metered.END_CHECK):
+                self.settled = settle_timeline(store, self.steps_start, self.saved, self.port.log)
+            add_end_check(self.timing.probe, counts)
             if self.roll is not None and self.settled.recovered:
                 self.roll.back_on(self.settled.recovered)
         return self.settled

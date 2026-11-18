@@ -3,7 +3,7 @@ import os
 
 from ..package.caps import check_step_size, check_total_size
 from ..timing import trail
-from . import walk_back
+from . import metered, walk_back
 from .apply import (RowBuildError, apply_row_values, cleared_errors, error_entries, measure_baseline, new_warnings,
                     warning_entries)
 from .errors import StepExportError
@@ -96,6 +96,7 @@ class RowExport:
         self.walks = []  # the first `walk_back.KEPT` of those attempts, for the report (`walk_back`)
         self._saved = None
         self._baseline = None
+        self._rebased = False  # the baseline is measured again because `rebase` was asked
         self._steps = None  # the timeline steps read with the baseline (`timeline_health.read_timeline`)
         self._total = 0
 
@@ -103,6 +104,16 @@ class RowExport:
         """Measure the baseline again before the next row: timeline items were turned back on since it was measured,
         and the errors and warnings they already had are not the rows' doing."""
         self._baseline = None
+        self._rebased = True
+
+    def _measure(self):
+        """Measure the baseline and read the steps with it, counted as the baseline, or as a `rebase` when that was
+        asked since the last measure."""
+        label = metered.REBASE if self._rebased else metered.BASELINE
+        self._rebased = False
+        with metered.caller(self.store, label):
+            self._baseline = measure_baseline(self.store)
+            self._steps = read_timeline(self.store)
 
     def check_pending(self):
         """Run the check of the steps that the row run last asked for (`_stopped`), with the parameters back; nothing
@@ -180,8 +191,7 @@ class RowExport:
             return False
         self.ended.append(dict(record, **more))
         self._ended_now = True
-        self._baseline = measure_baseline(self.store)
-        self._steps = read_timeline(self.store)
+        self._measure()
         return True
 
     def _worse_now(self):
@@ -200,11 +210,15 @@ class RowExport:
         worse = self._worse_now()
         if not worse:
             return worse
-        try:
-            self.store.recompute()
-        except Exception:
-            pass
-        return self._worse_now()
+        with metered.caller(self.store, metered.CHECK_AFTER_ROW):
+            try:
+                self.store.recompute()
+            except Exception:
+                pass
+        worse = self._worse_now()
+        if worse == []:
+            metered.note(self.store, metered.CHECK_CLEARED)
+        return worse
 
     @trail.staged("walk back")
     def walk_back(self, row, attempt, at=None):
@@ -225,7 +239,8 @@ class RowExport:
             self.walks.append(entry)
         trail.line("bringing the design back after %r, attempt %d" % (row.get("label") or row.get("name"), attempt + 1))
         try:
-            failed = walk_back.walk(self.store, self.units, steps, self._baseline)
+            with metered.caller(self.store, metered.WALK_STEP):
+                failed = walk_back.walk(self.store, self.units, steps, self._baseline)
         finally:
             self._back_to_current()
         if failed:
@@ -275,8 +290,7 @@ class RowExport:
             self._saved = self.store.saved_expressions()
         try:
             if self._baseline is None:
-                self._baseline = measure_baseline(self.store)
-                self._steps = read_timeline(self.store)
+                self._measure()
                 if self._steps is None:
                     self.back_clean = False  # no check can confirm the steps against this baseline
             results = []

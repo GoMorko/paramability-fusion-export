@@ -1,6 +1,7 @@
 """Apply one size row to the design and read back the resulting numbers."""
 from ..package.units import to_manifest_value
 from ..params.expressions.text import format_expression
+from . import metered
 from .store import timeline_control
 
 
@@ -94,7 +95,8 @@ def new_warnings(store, baseline, counts=None, others=None):
 
     found = read(others)
     if found:
-        _recompute(store)
+        with metered.caller(store, metered.COUNTING_WARNING):
+            _recompute(store)
         broken = _broken(store, baseline)
         if broken:
             raise _new_errors(broken, True)
@@ -141,10 +143,11 @@ def _recompute(store):
 def measure_baseline(store):
     """Recompute once with the parameters as they are and note the result and the items in error and in warning.
     Never raises."""
-    try:
-        ok = store.recompute() is not False
-    except Exception:
-        ok = False
+    with metered.caller(store, metered.BASELINE):
+        try:
+            ok = store.recompute() is not False
+        except Exception:
+            ok = False
     try:
         errors = error_entries(store)
     except Exception:
@@ -187,14 +190,18 @@ def apply_row_values(store, units, values, baseline=None, full=False):
     baseline = baseline or Baseline()
     expressions = {name: format_expression(value, units[name]) for name, value in values.items()}
     # After one change Fusion gives no answer for the rebuild as a whole (None): the steps in error decide alone.
-    if set_all(store, expressions):
-        ok = _recompute(store) if full else None
-    else:
-        ok = _set_each(store, expressions)
+    with metered.caller(store, metered.ROW):
+        if set_all(store, expressions):
+            ok = _recompute(store) if full else None
+        else:
+            ok = _set_each(store, expressions)
     broken = _broken(store, baseline)
     if broken and ok is None:
-        _recompute(store)
+        with metered.caller(store, metered.CONFIRM_NEW_ERRORS):
+            _recompute(store)
         broken = _broken(store, baseline)
+        if not broken:
+            metered.note(store, metered.RESCUED)
     if broken:
         raise _new_errors(broken, ok)
     if ok is False and baseline.recompute_ok:

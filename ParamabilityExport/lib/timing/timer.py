@@ -70,6 +70,10 @@ class Timer:
     def count(self, name):
         return self._counts.get(name, 0)
 
+    def names(self, prefix=""):
+        """The names that have a count, in the order they were first added, that start with `prefix`."""
+        return [name for name in self._counts if name.startswith(prefix)]
+
     def entry(self, name):
         """`{ count, seconds }` of a name."""
         return {"count": self.count(name), "seconds": rounded(self.seconds(name))}

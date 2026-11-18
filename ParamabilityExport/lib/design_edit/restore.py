@@ -1,5 +1,6 @@
 """Put user parameters back to their saved expressions."""
 from ..params.expressions.text import is_plain_number
+from . import metered
 from .apply import set_all
 
 
@@ -14,13 +15,20 @@ def restore_order(saved):
 
 
 def restore_parameters(store, saved):
-    """Set back every parameter whose expression changed, with one rebuild. Never raises.
+    """Set back every parameter whose expression changed, with one rebuild. Never raises. A store that counts calls
+    (`metered.MeteredStore`) counts them as put backs.
 
     store is a `store.ParameterStore`. The changed ones go back in one change when it can (`apply.set_all`): Fusion
     rebuilds once, with no full recompute. The expressions are then read back, as text, and those that did not take go back one at a time as below.
     Else they are set one at a time and the design is recomputed; a parameter that refuses is then retried once after
     the others. Returns the names that could not be restored.
     """
+    with metered.caller(store, metered.PUT_BACK_VALUES):
+        return _restore(store, saved)
+
+
+def _restore(store, saved):
+    """The body of `restore_parameters`."""
     pending = _differing(store, saved, restore_order(saved))
     batched = bool(pending) and set_all(store, {n: saved[n] for n in pending})
     if batched:
