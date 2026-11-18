@@ -128,7 +128,7 @@ Fusion closes suddenly. Send it with your bug report (`docs/user-guide.md`, "The
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
-- This is version 0.14.2. It needs Paramability 1.7.0 or newer to open its files.
+- This is version 0.14.3. It needs Paramability 1.7.0 or newer to open its files.
 
 ## More information
 
