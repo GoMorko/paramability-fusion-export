@@ -153,7 +153,9 @@ tries are the most likely to break the design; your favourite sizes still come f
 values between the last value that built and the first one that did not were tried, the range still stops at the last
 value that built, and its reason adds "no value between was tried", why, and a tip: untick the size that stopped the
 tries, or raise the time limit. The design may build at some of those values; a later export that tries them can give
-a longer range. A taper that follows
+a longer range. When the tries end before the range ends of a size were tried at all, its range stops at the values
+that built in its first tries, and its reason says "no value below A or past B was tried", why, and the same tip. An
+end that you typed keeps its value. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
 tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
 the sizes behind its taper and its outline, and those ranges stop where the cut would close. A length or a count

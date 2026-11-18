@@ -156,13 +156,16 @@ _ENDED_WHY = {
 }
 
 
-def untried_between_why(ended, gaps=()):
+def untried_between_why(ended, gaps=(), beyond=()):
     """Why the range may stop sooner than the design needs: the tries ended before any value between the cut end and
-    the try past it was tried. `ended` is the cause (`Motion.spans` `unfinished`); `gaps` are `(end, try)` pairs to
-    name, empty when the reason names nothing else: "no value between 0.5 and 40 was tried, as the tries ran out of
-    time. Tip: ..."."""
-    where = " or ".join("between %s and %s" % (number_text(a), number_text(b)) for a, b in gaps) or "between"
-    return "no value %s was tried, %s" % (where, _ENDED_WHY.get(ended, _ENDED_WHY[ENDED_STOPPED]))
+    the try past it, or past the cut end where no try lies past it, was tried. `ended` is the cause (`Motion.spans`
+    `unfinished`); `gaps` are `(end, try)` pairs to name, empty when the reason names nothing else; `beyond` are
+    `(side, end)` pairs of the ends with no try past them: "no value between 0.5 and 40 or past 60 was tried, as the
+    tries ran out of time. Tip: ..."."""
+    where = ["between %s and %s" % (number_text(a), number_text(b)) for a, b in gaps]
+    where += ["%s %s" % ("below" if side == "low" else "past", number_text(end)) for side, end in beyond]
+    return "no value %s was tried, %s" % (" or ".join(where) or "between",
+                                          _ENDED_WHY.get(ended, _ENDED_WHY[ENDED_STOPPED]))
 
 
 def warned_why(warnings):

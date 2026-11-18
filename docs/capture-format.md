@@ -2256,7 +2256,11 @@ different outline item below), and `unfinished` (only when there is one): per si
 before the nearer tries and the halving on that side ran (`stopped` after a broken design, `time` after the time
 limit; `SizeProbe.note_unfinished`, `plan.nearer_left`). The cut on that side stays at the farthest value that built
 (`Cut.unfinished`), and the cut reason adds "no value between was tried, as the tries stopped early. Tip: untick the
-size that stopped them" or "as the tries ran out of time. Tip: raise the time limit" (`notes.untried_between_why`). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+size that stopped them" or "as the tries ran out of time. Tip: raise the time limit" (`notes.untried_between_why`). A
+side whose far try never ran before the tries ended (`plan.far_left`: a try of that size alone built, none reached the
+range end and none failed on that side) is in `unfinished` too; with no try past the span on that side, the range is
+cut to the span there (`tried_ranges.untried_cut`, a typed end kept) and the reason says "no value below A or past B
+was tried" with the same tip. A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
 and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A size that no state

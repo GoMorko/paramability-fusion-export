@@ -1215,6 +1215,43 @@ The cut end does not move. The cause only tells the person why the range can be 
 When the halving had already ended before the early end, `nearer_left` finds nothing for that side. The reason then
 stays as it is.
 
+A size can also lose its far rows. This occurs when the tries end before the far rows of that size run. Examples: a
+far row of an earlier size leaves the design broken, the time limit comes in the far phase, or the tries of that size
+end because of a lasting change outside the part. Then the size has only its near rows. The far rows of that size are
+planned and not run, or they are never planned. Without a cut, the recipe would offer the full range of such a size.
+The person could then pick a value that was never tried, and the design can fail at that value.
+
+Thus `note_unfinished` also asks `plan.far_left` which sides have no far try:
+
+1. The size has at least one try of its own that built. A size without such a try keeps the old treatment: it is
+   untried, or it gets `TIMED_OUT_WHY`, or it is not a size.
+2. On that side, no try of the size alone reached the range end.
+3. On that side, no try of the size alone failed, changed a followed outline or left the part in pieces. When such a
+   try exists, the range stops before it anyway, and `nearer_left` tells if the halving had ended.
+
+`plan.far_left` does not depend on the nearer rows that are left. The probe keeps these sides in the same
+`Motion.spans[size]["unfinished"]` with the same causes (`ENDED_STOPPED`, `ENDED_TIME`). For an ended size, the cause
+is `ENDED_STOPPED`. The other sizes are not marked after a size-only end.
+
+`tried_ranges.untried_cut` cuts such a side. It cuts only when the side is in `unfinished` and no try lies past the
+span end on that side. Thus the side of `nearer_left` keeps its old cut, and a failure in a step of another component
+(which cuts nothing) does not start this cut. The end moves to the span end: the farthest value that built. A typed
+end is kept. A range that would shrink to the value now is not cut (the size could not be measured), as for the other
+cuts. `built_ranges` joins this cut with the other cuts (`Cut.meet`). The `Cut` has the cause in `unfinished`, and it
+has no try for that side.
+
+`translate._cut_notes` writes the reason for such an end. It does this also when the end has no other cause.
+`_unfinished_causes` gives these ends to `notes.untried_between_why` as `beyond`, and the words name the end: "Depth:
+the range runs from 22.5 to 37.5, since no value below 22.5 or past 37.5 was tried, as the tries stopped early. Tip:
+untick the size that stopped them." The values are always named, because no other cause names them.
+
+A size whose rows the row cap (`MAX_PROBE_ROWS`) cut, with no early end, keeps the old treatment. It is loose with "it
+was followed between A and B". A clean export (no early end) gives the same ranges and reasons as before.
+
+Tests: `UnfinishedRangeTest` in `tests/test_geometry_links.py` (the sizes after a stop stop at their near values; a
+time limit cuts only the side whose far try did not run; a typed end is kept; a clean export keeps every range and
+reason) and `tests/test_size_only_stop.py` (only the ended size is cut).
+
 #### The end of the probe
 
 The put back of the design is one object per export, `PutBack` (`lib/export_plan/pipeline/put_back.py`). Both
@@ -3441,6 +3478,9 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 - When the tries stopped early or ran out of time before the halving on a side, the end stays at the farthest value
   that built, and the reason adds that no value between was tried, with a tip (`Motion.spans[size].unfinished`,
   `Cut.unfinished`, `notes.untried_between_why`; see 1.8, "When the tries end before a range end is found").
+- When the tries ended before the far try on a side ran, that side stops at the farthest value that built, and the
+  reason says that no value past it was tried, with the same tip (`tried_ranges.untried_cut`; see 1.8, "When the
+  tries end before a range end is found").
 - A cut leaves an end that it does not move at its exact value. It does not round that end to hundredths
   (`kept_ranges.holding_ranges_where`).
 - A size that built at no value other than its value now is not a size. Its reason: "no value other than 40 could be

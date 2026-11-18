@@ -10,8 +10,10 @@ error at the start built (`failed`, and `cleared` too): the copy leaves that ste
 there. Where a sketch the copy follows makes a
 different outline (`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried
 that kept it, and where Fusion built the part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at
-the farthest value tried that kept it in one. These are facts of the tries, so the recipe translator and the probe both
-read them here. An end the person typed is kept.
+the farthest value tried that kept it in one. Where the tries ended early before the far try of a side ran
+(`Motion.spans` `unfinished` with no try past the span), the range stops at the farthest value that built there, since
+no value past it was tried. These are facts of the tries, so the recipe translator and the probe both read them here.
+An end the person typed is kept.
 """
 from ..geometry.tolerances import SAME_SIZE
 from ..params.size_table import Cut
@@ -131,12 +133,32 @@ def _with_unfinished(cut, span):
     return Cut(cut[0], cut[1], cut.failed, cut.changed, cut.split, cut.warned, cut.cleared, ended)
 
 
+def untried_cut(table, entry, span):
+    """The range of a free size cut to the measured span (`span` as `Motion.spans`) on each side where the tries ended
+    before its far try ran (`unfinished`) and no try lies past the span end there: no value past the farthest value
+    that built was tried. The `Cut` holds why the tries ended (`unfinished`) and no try. An end the person typed is
+    kept."""
+    size = table.sizes[entry.size_name]
+    typed = table.typed_ends(entry.name)
+    tries = [f[0] for key in ("failed", "changed", "split") for f in span.get(key) or ()]
+    ends, ended = [size["min"], size["max"]], {}
+    for side, at, sign in (("low", 0, -1), ("high", 1, 1)):
+        why, end = (span.get("unfinished") or {}).get(side), span[side]
+        if why is None or typed[at] or (ends[at] - end) * sign <= SAME_SIZE:
+            continue
+        if any((v - end) * sign > SAME_SIZE for v in tries):
+            continue
+        ends[at], ended[side] = end, why
+    return Cut(ends[0], ends[1], unfinished=ended)
+
+
 def built_ranges(table, motion, capture=None):
     """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
     (`Motion.spans`: a value tried with only that size changed), at which a followed sketch makes a different outline
     (`outline_cut`), or at which the part came apart into several pieces (`split_cut`). On that side the range stops at
     the farthest value that built in one piece and kept the outline; when the tries ended before they looked for the
-    last value that builds on that side (`Motion.spans` `unfinished`), the `Cut` says so (`unfinished`). An end
+    last value that builds on that side (`Motion.spans` `unfinished`), the `Cut` says so (`unfinished`). A side where
+    the tries ended before its far try ran stops at the farthest value that built too (`untried_cut`). An end
     the person typed is kept, and a range that would shrink to the value now is left as it is (the size could not be
     measured). A failure in a step the part is not built from (`capture` items of other components) cuts nothing: the
     part itself may rebuild there."""
@@ -154,7 +176,7 @@ def built_ranges(table, motion, capture=None):
         split_low, split_high, split = split_cut(table, e, span)
         cut = (Cut(low, high, found, warned=warned, cleared=cleared).meet(Cut(kept_low, kept_high, changed=changed))
                .meet(Cut(split_low, split_high, split=split)))
-        cut = _with_unfinished(cut, span)
+        cut = _with_unfinished(cut, span).meet(untried_cut(table, e, span))
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut
     return out

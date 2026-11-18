@@ -31,7 +31,8 @@ learning only.
    A size that also changes steps of another component gets its range ends after the other sizes (your favourites
    still come first), since its tries are the most likely to break the design.
    When the tries end early, the range stops at the last value that built, and its note says that the values after it
-   were not tried.
+   were not tried. This is also true for a size whose range ends were not tried yet: its range stops at the values
+   that built in its first tries. A range end that you typed is kept.
 3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot
    confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. This also happens
    for an export that you cancel or that stops, when the add-in cannot confirm that your design came back. A file
