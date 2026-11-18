@@ -16,6 +16,7 @@ from ..lib.design_edit.runner import ExportCancelled
 from ..lib.export_plan import messages
 from ..lib.fusion_reader import design_info
 from ..lib.fusion_reader.capture import MarkerError
+from ..lib.fusion_ui import result_dialog
 from ..lib.fusion_ui.log import error_box, log, message_box
 from ..lib.fusion_ui.progress import ProgressDialog, close_all
 from ..lib.package.caps import PackageCapError
@@ -100,7 +101,9 @@ def settle_steps(store, start, saved, outcome=None, unrestored=lambda: ()):
 
 def contained(outcome, run):
     """Run `run()` and return `outcome`. An exception that no guard caught is shown and logged, not raised: an export
-    never raises into the handler of the command, which must still tell Fusion to undo it (`rollback.ExecuteGate`)."""
+    never raises into the handler of the command, which must still tell Fusion to undo it (`rollback.ExecuteGate`).
+    A result of an earlier export that never got its window is dropped first (`result_dialog.drop_pending`)."""
+    result_dialog.drop_pending()
     try:
         run()
     except Exception:

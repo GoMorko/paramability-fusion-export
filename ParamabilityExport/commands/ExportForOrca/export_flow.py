@@ -7,6 +7,7 @@ design back and checks it, as for a recipe (`export_plan.pipeline`).
 import os
 import tempfile
 
+from ... import config
 from ...lib.dialog_model.orca_result import orca_view
 from ...lib.design_edit.marker import read_marker
 from ...lib.export_plan import health as health_module
@@ -33,7 +34,7 @@ def _show_result(file_name, result, ticked, undo=rollback.NO_ROLLBACK):
         return
     if health_module.design_changed(result.health) or undo.says:
         message_box("\n\n".join(rollback.check_lines(result.health, undo)), error=True)
-    result_dialog.show(view)
+    result_dialog.show(view, config.ORCA_COMMAND_ID)
 
 
 def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None,
