@@ -1488,8 +1488,11 @@ and height 20 (4 turns): the tube is 4 pi sqrt(400 pi^2 + 25) = 792.06 mm3, box 
 `quarter_upright` are a quarter turn of radius 10 and pitch 20 (height 5), where the ends show most: the tube is
 51.79 mm3, box (127.697, 127.697, 1.047) to (139, 139, 7.953), and Fusion's coil 5 pi^2 = 49.35 mm3, box (128, 128, 1)
 to (139, 139, 8), its ends on the planes x = 128 and y = 128. A `square` probe has the circle square to the helix at
-its start, an `upright` probe has it on the plane through the axis. An `upright` probe that builds Fusion's box and
-volume would show that Orca's sweep keeps the section on planes through the axis after all.
+its start, an `upright` probe has it on the plane through the axis. Built in OrcaSlicer 2.5.1 on 2026-11-19: both
+`square` probes gave the tube (792.1 and 51.8 mm3, the tube's box). `spring_upright` gave Fusion's volume (789.6 mm3)
+and its box within 0.01 mm, but `quarter_upright`, with Fusion's volume (49.3 mm3), ends 0.14 mm off the plane x =
+128 (box from x 127.857): Orca's sweep does not keep the section on planes through the axis everywhere, so its end
+faces lean, and the copy leaves coils out.
 
 A Press Pull of a whole round face has captures in `tests/orca_press_round.py`. Save one with `python3 -m
 tests.orca_press_round <name> <file>` and give the file to `write`. The volumes are exact. All three built with these
