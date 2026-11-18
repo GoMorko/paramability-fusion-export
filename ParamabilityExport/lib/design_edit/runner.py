@@ -61,10 +61,16 @@ class RowExport:
     baseline), until a later check finds the steps as in the baseline. Steps that cannot be read never stop the run.
     `check_pending()` runs the check the row run last asked for, for a caller that ends the tries or measures the
     baseline again (`rebase`) and must not leave that row unchecked.
+    `contain(worse, row)`, when given, is asked when steps stay worse after the walks back (`worse`, the changes of
+    `timeline_health.changes`; `row`, the row run last). A dict means the caller ends the tries of the sizes behind
+    it and goes on with the others: instead of `not_back`, `ended` gets `{ after, items, steps }` with the dict's
+    keys, the run ends there (the caller runs the rows it keeps), and the baseline is measured again, so later rows
+    are compared with the design as it is now. `back_clean` then stays False for good: the undo data holds a change
+    the job does not undo.
     """
 
     def __init__(self, store, units, export_step, before_row=None, stop_when=None, counts_warning=None,
-                 before_check=None, at_start=None):
+                 before_check=None, at_start=None, contain=None):
         self.store = store
         self.counts_warning = counts_warning
         self.units = units
@@ -78,6 +84,9 @@ class RowExport:
         self.current_key = ""
         self.restore_failures = []
         self.not_back = None
+        self.contain = contain
+        self.ended = []  # the checks after which the tries of some sizes ended and the others went on (`contain`)
+        self._ended_now = False  # the check run last ended the tries of some sizes (`_stopped`)
         self._last = None  # the label of the row run last
         self._last_row = None  # the row run last
         self._check_next = False  # whether the design is checked before the next row (`_stopped`)
@@ -131,9 +140,11 @@ class RowExport:
             return True
 
     def _stopped(self):
-        """True when an earlier row left the design changed with the parameters back (`not_back`). Only a row that
-        asked for the check (`_check_next`) is followed by it; a row that showed only new warnings that do not count is
-        followed by it when one is still there with the parameters back (`_others_left`)."""
+        """True when an earlier row left the design changed with the parameters back (`not_back`), or this check ended
+        the tries of the sizes behind such a row (`ended`, see `contain`). Only a row that asked for the check
+        (`_check_next`) is followed by it; a row that showed only new warnings that do not count is followed by it when
+        one is still there with the parameters back (`_others_left`)."""
+        self._ended_now = False
         if self.not_back is None and self._check_others and not self._check_next:
             self._check_others = False
             self._check_next = self._others_left()
@@ -145,12 +156,33 @@ class RowExport:
                 worse = self._worse()
                 if worse:
                     worse = self._recover(worse)
-            self.back_clean = worse == []  # None: the steps could not be read
             if worse:
-                self.not_back = {"after": self._last, "items": [c["name"] for c in worse],
-                                 "steps": [{"name": c["name"], "before": c["before"], "after": c["after"]}
-                                           for c in worse]}
-        return self.not_back is not None
+                record = {"after": self._last, "items": [c["name"] for c in worse],
+                          "steps": [{"name": c["name"], "before": c["before"], "after": c["after"]} for c in worse]}
+                if not self._contained(worse, record):
+                    self.not_back = record
+            self.back_clean = worse == [] and not self.ended  # None: the steps could not be read
+        return self.not_back is not None or self._ended_now
+
+    def _contained(self, worse, record):
+        """True when `contain` takes the steps still `worse` after the row run last: the run ends, `ended` keeps
+        `record` with what `contain` gave, and the baseline and its steps are measured again with the parameters
+        back. A `contain` that raises takes nothing."""
+        if self.contain is None:
+            return False
+        try:
+            more = self.contain(worse, self._last_row)
+        except ExportCancelled:
+            raise
+        except Exception:
+            more = None
+        if not isinstance(more, dict):
+            return False
+        self.ended.append(dict(record, **more))
+        self._ended_now = True
+        self._baseline = measure_baseline(self.store)
+        self._steps = read_timeline(self.store)
+        return True
 
     def _worse_now(self):
         """The changes of the steps now against the baseline (`timeline_health.changes`) that are worse. None when the

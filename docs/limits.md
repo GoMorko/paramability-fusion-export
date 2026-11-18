@@ -17,7 +17,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   The tries walked back are those made since the sketch last read as it was, not only the last one. At the end of the
   tries, each size those tries changed is walked back alone, at most 16 times in all.
   When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop
-  there; only the tries before it are used, and the sizes not tried yet are marked. When the sketch still reads
+  there; only the tries before it are used, and the sizes not tried yet are marked. When that step belongs to another
+  component and the part does not need it, and the part reads as before, only the tries of the sizes behind it end
+  (the size of that try, and every size that changes that component); the other sizes are tried in full. The sizes
+  whose tries ended keep only the values tried before, and their reasons say that the values after them were not
+  tried. Your design is changed then, so the export is undone at its end (with "Lighter on memory" ticked the add-in
+  cannot undo it, and the window says so). When the sketch still reads
   another outline after the export, or the body has another volume or size than before, the result window says that
   your design is changed, and the add-in asks Fusion to undo the export. A very small difference of the body with
   nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the
@@ -32,7 +37,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   times. Each size gets this halving right after the try of its range ends, before the next size. When the tries stop
   early (a try left the design broken with your values back) or run out of time before that halving, the values
   between were never tried, and the range can be much shorter than the design allows. This can only occur for the
-  size whose try stopped the tries, or the size tried when the time ran out. Its reason says so, with a tip: untick
+  size whose try stopped the tries, a size whose tries ended because a try changed another component, or the size
+  tried when the time ran out. Its reason says so, with a tip: untick
   the size that stopped the tries, or raise the time limit, and export again.
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.

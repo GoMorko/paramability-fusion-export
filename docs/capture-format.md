@@ -2665,11 +2665,18 @@ tries stop there and the changed design is not read again (no start read, no ske
 whose parameters are kept as not tried). A size that moves a sketch and whose own tries were planned but did not run
 is listed in `probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing.
 `probe.stopped` (`{ after, items, steps? }`: the label of the try run last, the steps still worse and, in `steps`,
-`{ name, before, after }` of each) and `health.tries_stopped` (the same) say so, and the motion is built from the
-tries before. The Undo data of the tries is dropped (Lighter on memory) only before a try that starts with no step
-worse and every followed sketch as at its first read, and after the tries only when the same holds. At the end
-of every export the timeline steps are compared with the start (`design_edit.timeline_health`), see "Timeline steps
-after the export" below; `health.broken` names the steps in error that were fine before (at most 5).
+`{ name, before, after }` of each) and `health.tries_stopped` (the same) say so, and the motion is built from the tries
+before. When every step still worse is outside what the tries need (it has a timeline position, no capture needs it for
+the tries, no part is built from it, and it names its component) and the part reads as at the start with the values
+back, only the tries of the sizes behind it end (`export_plan.pipeline.outside_damage`): the sizes the try moved and
+every user parameter that drives a step or a sketch of that component. The other sizes go on, compared with a baseline
+measured again. `probe.ended` and `health.tries_ended` list `{ after, items, steps, components, sizes }` for each such
+try, the motion keeps `unfinished` "stopped" for the sides of those sizes whose nearer tries never ran, and a discovery
+try of such a parameter is kept as "not tried: a try left a step of its component worse than before". The design is
+changed, so the export is undone at its end. The Undo data of the tries is dropped (Lighter on memory) only before a try
+that starts with no step worse and every followed sketch as at its first read, and after the tries only when the same
+holds. At the end of every export the timeline steps are compared with the start (`design_edit.timeline_health`), see
+"Timeline steps after the export" below; `health.broken` names the steps in error that were fine before (at most 5).
 
 Time limit of the tries. The tries (the rows and the discovery rows, `ProbeRun`) have a time limit: the choice of the
 dialog's list "Stop the size tries after" (`ExportRequest.probe_time_limit` in seconds, `None` for no limit; the default

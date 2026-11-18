@@ -39,6 +39,7 @@ class PutBack:
         self.roll = None  # `TryTimeline` of the tries, once they hold the timeline
         self.keeper = None  # the sketch keeper of the tries
         self.stopped = None  # `ProbeRun.stopped`
+        self.ended = []  # `ProbeRun.ended`: the tries after which the tries of some sizes ended
         self.settled = None  # `TimelineSettle` of the end check
         self.gap_mm = None
         self.gap_after_mm = None
@@ -100,6 +101,7 @@ class PutBack:
         if self._tries_back is not run:
             self._after_tries(run)
         self.stopped = run.stopped
+        self.ended = list(run.ended)
         self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
 
     def _after_tries(self, run):
@@ -230,10 +232,10 @@ class PutBack:
         another outline at the end (`changed`)."""
         return health_module.HealthInputs(
             unrestored=self.unrestored, gap_mm=self.gap_mm, probe=probe, probe_error=probe_error, unchecked=unchecked,
-            flipped=flipped, stopped=self.stopped, steps=self.settled, deferred_left=self.deferred_left(),
-            gap_after_mm=self.gap_after_mm, left_off=self.left_off(), undo_dropped=self.undo_dropped(),
-            outlines_changed=changed, body_changed=self.body_changed, body_small=self.body_small,
-            body_unconfirmed=self.body_unconfirmed, body_unchecked=self.body_unchecked)
+            flipped=flipped, stopped=self.stopped, ended=self.ended, steps=self.settled,
+            deferred_left=self.deferred_left(), gap_after_mm=self.gap_after_mm, left_off=self.left_off(),
+            undo_dropped=self.undo_dropped(), outlines_changed=changed, body_changed=self.body_changed,
+            body_small=self.body_small, body_unconfirmed=self.body_unconfirmed, body_unchecked=self.body_unchecked)
 
     def _note_tries(self):
         """Tell the outcome that the tries changed the design from here on (`rollback.ExportOutcome.touched`)."""

@@ -882,7 +882,9 @@ The check, step by step:
    job reads the steps again
    (with one full rebuild when one is worse) and asks `at_start` (`ProbeRun._at_start`) whether the followed sketches
    read as at E0. When the steps are back and the sketches read as at E0, it stops the attempts.
-5. When a step is still worse after the attempts, the tries stop. `RowExport.not_back` is `{ after, items, steps }`:
+5. When a step is still worse after the attempts, the job asks `contain` (`ProbeRun._contain`) whether only the
+   sizes behind this row must end (see "A lasting change outside the part" below). When the answer is no, the tries
+   stop. `RowExport.not_back` is `{ after, items, steps }`:
    the label of the row run last, the names of the steps that stay worse, and for each step its health before and
    after. No later row runs, in this batch or a later one. The sizes of the rows planned that did not run get the
    treatment of tries that did not run (`SizeProbe.note_stop`). The result window says which try left which step in
@@ -895,6 +897,89 @@ A walk step that Fusion refuses or cannot build is passed over, and the entry co
 
 The check uses no Fusion member that the export did not use before: the same `TimelineObject` members as the end
 check (`healthState`, `errorOrWarningMessage`, `isSuppressed`).
+
+#### A lasting change outside the part
+
+A size can also drive steps of other components. Example: the part is a box, and a holder component next to it has a
+pocket that follows the width of the box. A far try of the width can make Fusion lose an edge in the holder. Then a
+fillet of the holder turns to a warning and stays so with the values back. Such a change does not touch the part. But a
+full stop would cut the tries of every size that was not tried yet, and those sizes would lose their measurements.
+
+Thus, when steps stay worse after the attempts of step 5 above, the job first asks `contain(worse, row)`. The try
+runner gives `ProbeRun._contain`. It uses `OutsideDamage.judge` (`lib/export_plan/pipeline/outside_damage.py`).
+
+The rule for "outside what the tries need". Every step that stays worse must agree with all of these points:
+
+1. The timeline read gives the position of the step (`index`), and the capture has an item with the same name at that
+   position. A read of only the steps in error (a store without `timeline_health`) gives no position, so the answer
+   is no.
+2. No capture of the export needs the item for its tries (`marker_roll.needed_items`, over every capture of a group
+   export). These items are: an item that may change a part, a sketch that the steps use, an item of another
+   component that a sketch link or a measured reference depends on, an assembly item that is not an occurrence, and an
+   item of an unknown type. When one capture cannot tell (`needed_items` gives None), the answer is no.
+3. No part is built from the item (`counts_warning`, `tried_ranges.part_step` over every part). The item has
+   `in_target_component` false.
+4. The item names its component (`component`, a token).
+
+The row must also have moved at least one size (`varied`). Then the try runner reads the whole design with the
+values back (`_read_now({})`) and asks `Probe.reads_as_start`. For each part, the answer is yes only when:
+
+- every followed sketch reads as at E0 (`left_start`);
+- the sketches, the points, the lines, the measured references and the box read as at E0 (`matches_start`);
+- the body reads as at the start of the tries (`body_start`, else E0): `states.body_difference` finds no
+  difference of the volume, the box, the number of solids or the other bodies of its component.
+
+When the read fails, or one of these points is not true, the answer is no, and the tries stop as before. When all
+points are true, `judge` gives `{ components, sizes, params }`:
+
+- `components`: the names of the components of the worse steps. The capture names a component only in some records
+  (the target, the sketch links, the measured references). Another component is "another component".
+- `sizes`: the sizes that the row moved, and the tried sizes among `params`.
+- `params`: every user parameter that drives a step or a sketch of those components (`geometry_links.acts`, the
+  components of its `Reach`). A ticked size among them can damage that component again. An unticked parameter among
+  them has discovery rows that can do the same.
+
+What the job and the try runner do then:
+
+1. `RowExport` keeps `{ after, items, steps }` with these keys in `ended`, not in `not_back`. It ends the run of this
+   batch there.
+2. It measures the baseline again (`apply.measure_baseline`) and reads the timeline steps again. Later rows compare
+   with the design as it is now. Thus the step that lost its edge does not stop every later row.
+3. `back_clean` stays false for the rest of the export. No undo data is dropped from now on, because the undo data
+   holds a change that the add-in does not undo itself. The undo data that "Lighter on memory" dropped before this row
+   is gone. Then the end of the export gives `undo_unavailable`.
+4. `ProbeRun._take_ended` adds the names of `sizes` and `params` to `ProbeRun.ended_names` and tells the probe
+   (`Probe.note_ended`).
+5. `ProbeRun.try_rows` runs the rest of the batch without the rows that move a name of `ended_names`
+   (`_without_ended`). This also removes a pair row, a check row, a far pair row, a discovery row or a row run again
+   that moves an ended size together with other sizes. The probe is told of the rows that did not run. A discovery
+   row among them is kept as "not tried: a try left a step of its component worse than before".
+6. Every later plan gets only the sizes whose tries did not end (`ProbeRun._live`): the pair rows, the nearer rows
+   (`_retry`), the far order and the far rows (`_far_by_size`), the far pair rows, the check rows and the time limit
+   marks (`_note_unplanned`). An ended size is left at its value in these rows.
+
+A size whose tries ended keeps only what was measured before. Its far end that did not run stays untried, so its range
+does not go past the values that were seen to build. `SizeProbe.note_ended` adds the ended sizes to the sizes whose
+rows did not run: `finish` lists a size that moves a sketch and has no try of its own as untried. `note_unfinished`
+marks the sides of an ended size whose nearer tries had not run (`ENDED_STOPPED`), as after a full stop. The other
+sizes are not marked.
+
+The design is changed. The end check (`settle_timeline`) finds the step changed, and `health.tries_ended` keeps the
+record. `health.back_as_it_was` is false when `tries_ended` is present, also when the end check finds the step back.
+Thus the export is always undone (`executeFailed`), or, after "Lighter on memory" dropped undo data, the result is
+`undo_unavailable` with the advice to reopen the saved version. The result window has one line for each such try
+(`health._ended_line`): "The tries of Width ended early: after trying Width at 80 mm, these steps of another
+component stayed changed even with your values back: Fillet1 (now a warning). The other sizes were tried in full.
+Since your design changed, the add-in undoes the export when it ends." Without undo data, the last sentence is not
+there.
+
+A try runner without captures (`ProbeRun` made without `captures`) has no `contain`: every lasting change stops the
+tries. Both pipelines give the captures of the parts that are probed.
+
+Tests: `tests/test_size_only_stop.py` (only the size behind the change ends and the other sizes get their far rows;
+a size that drives a step of that component ends too; a row planned before the end that moves an ended size does not
+run; "Lighter on memory" gives `undo_unavailable`; a worse step that the tries need stops all tries). Hand check OC1
+in `docs/hand-checks.md` tests this in Fusion.
 
 #### What a state holds
 
@@ -1057,7 +1142,9 @@ Hand check TL1 in `docs/hand-checks.md` tests this in Fusion.
 
 The tries can end early in two ways. A try can leave the design broken with the values back (`RowExport.not_back`,
 `probe.stopped`). Or the time limit can stop the tries (`RowExport.halted`). In both cases, no row runs after that
-point.
+point. A third way ends the tries of some sizes only: a try left steps outside what the tries need changed
+(`RowExport.ended`, `probe.ended`, see "A lasting change outside the part"). Then no row runs for those sizes, and the
+steps below apply to those sizes only.
 
 The rows run in phases (see "The rows, in order"). The far rows run one size at a time, and the nearer rows and the
 halving of a size come right after its far rows (see "The far rows, one size at a time"). An early end can still come
@@ -1072,7 +1159,8 @@ the values between were not tried.
 
 How the export finds these sides:
 
-1. At the end of `ProbeRun.measure`, when the tries stopped early or ran out of time, the runner calls
+1. At the end of `ProbeRun.measure`, the runner first runs the check that the last row asked for
+   (`ProbeRun.check_pending`). Then, when the tries stopped early, ended for some sizes or ran out of time, it calls
    `probe.note_unfinished(sizes)`. It calls it before `_note_unplanned`, because `_note_unplanned` plans nearer rows,
    and those rows count against `plan.MAX_NEARER_ROWS`.
 2. `SizeProbe.note_unfinished` asks `plan.nearer_left` which sides still have a nearer row or a halving row to come.
@@ -1080,8 +1168,8 @@ How the export finds these sides:
    not look for the last value that builds. When the nearer rows had already used all of `plan.MAX_NEARER_ROWS`, the
    search had ended anyway, and nothing is kept. `ProbeGroup.note_unfinished` judges over the shared rows of all parts,
    as `ProbeGroup.nearer_rows` does, and gives the result to each part.
-3. The probe keeps the cause: `ENDED_STOPPED` ("stopped") after a broken design, `ENDED_TIME` ("time") after the time
-   limit (`sketch_values/motion.py`).
+3. The probe keeps the cause: `ENDED_STOPPED` ("stopped") after a broken design and for a size whose tries ended,
+   `ENDED_TIME` ("time") after the time limit (`sketch_values/motion.py`).
 4. `SizeProbe.finish` writes the sides into `Motion.spans[size]["unfinished"]`, for example `{"high": "stopped"}`. The
    motion file goes into `report.json` (`probe.motion`). No saved format of the package changes.
 5. `tried_ranges.built_ranges` cuts the range as before. Then `_with_unfinished` copies the sides into
@@ -2047,7 +2135,8 @@ How it works (`lib/export_plan/undo_steps.py`):
    (`undo_steps.attach`).
 2. At points where every value is back, the tries call `UndoSteps.drop`: before each row (`ProbeRun._before_row`) and
    once after the tries (`ProbeRun.settle`). They call it only when every check of the steps so far found them as in
-   the baseline (`RowExport.back_clean`, false also when the steps could not be read), the check that the last row
+   the baseline (`RowExport.back_clean`, false also when the steps could not be read, and false for good after a
+   try that ended the tries of some sizes, see 1.8, "A lasting change outside the part"), the check that the last row
    asked for has run (`check_pending`), and the followed sketches read as at the start. `drop` calls Fusion's preview call
    `Command.beginStep(makeExistingStepNonUndoable=True)`. Fusion then ends the current step of the command without
    Undo data, and it starts a new step.
@@ -2201,6 +2290,8 @@ alphabetical order by module.
   - `parts.py` holds `run_parts_pipeline` and `PartsPipeline` for several bodies, `PartsPort` (its port, with the body
     index in each call) and `shared_cuts`.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
+  - `outside_damage.py` holds `OutsideDamage`: whether the steps that a try left worse are all outside what the tries
+    need, and which sizes end with that try (see 1.8, "A lasting change outside the part").
   - `walk_backs.py` holds `WalkBacks`, the part of `ProbeRun` that brings a followed sketch back the way the rows took
     it away (`_walk_rows` before a row, `_walk_back` after the tries, see 1.8, "Solver flips and put backs").
   - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and
@@ -5669,6 +5760,8 @@ nothing in the part changed.
 | `restore_unchecked` | Sketches the restore check could not compare, with why. |
 | `restore_changed` | Sketches the restore check found on another outline, with why. |
 | `restore_body` | What of the body differed from E0 at the end (`measure_body`). |
+| `stopped` | `{ after, items, steps? }` when a try left a step worse with the values back and the tries stopped there (1.8, "The check after a row, and the stop"). |
+| `ended` | One `{ after, items, steps, components, sizes }` for each try after which steps outside what the tries need stayed worse, so the tries of `sizes` ended there and the other sizes went on (1.8, "A lasting change outside the part"). |
 | `recovery` | `{ put_backs, again, walked_back?, attempts? }`: the extra rebuilds for solver flips, and the first 24 attempts to walk the design back (`{ row, kind, set, at, failed?, back? }`, see 1.8 "Solver flips and put backs"). |
 | `timeline` | `{ rolled, items, of, reason, suppressed, try_seconds }`: the marker roll (each try rebuilt `items` of the `of` items before the marker), why it did not roll, the "Faster tries" record (`asked`, `on`, `items`, `reason`, `left_off`) and the seconds the tries took. |
 | `time_limit` | `{ limit_seconds, hit, seconds?, left_out }`: the time limit of the tries (`null` for none), whether it stopped them, how long they had taken then, and the Fusion names of the sizes that got no try that built (1.8). |
@@ -5713,6 +5806,7 @@ that Fusion could not build that value.
 | `body_unconfirmed` | Small differences of the part with nothing else changed, or differences that only the end rebuild brought (at most 5). The design is not confirmed back. |
 | `body_unchecked` | True when the part could not be compared at the end. |
 | `tries_stopped` | `{ after, items, steps? }`: the try after which a step stayed worse with the values back, the names of those steps, and `steps`, `{ name, before, after }` of each. The design counts as back only when the end check also compared the sketches and the part. |
+| `tries_ended` | One `{ after, items, steps, components, sizes }` for each try after which steps outside what the tries need stayed worse, so the tries of `sizes` ended and the other sizes went on (1.8, "A lasting change outside the part"), at most 5. The design never counts as back. |
 | `probe` | `measured`, `not needed` (no sketch to follow) or `failed`. |
 | `probe_error` | The exception of a failed probe. |
 | `flipped` | Sketches that stayed on their other solution for a while during the tries. |
@@ -5865,6 +5959,8 @@ Tests that help most when you debug:
 - `tests/test_stop_at_damage.py` covers the check after a row and the stop, the attempts to bring the design back
   (`walk_back`), the comparison of sketches by their curves (`same_shape`), the put backs counted per sketch, the Undo
   drops, and the end check of the body.
+- `tests/test_size_only_stop.py` covers a lasting change of a step outside what the tries need: only the sizes behind
+  it end, their rows do not run, and the export is undone (see 1.8, "A lasting change outside the part").
 - `tests/test_pipeline.py`, `tests/test_pipeline_gaps.py` and `tests/test_parts_pipeline.py` run the whole pipeline
   against a fake Fusion (`FakePort`, `FakePartsPort` in `tests/fakes/port.py`).
 - `tests/test_local_captures.py` covers captures saved from real designs. They stay on one machine (git-ignored
@@ -6196,7 +6292,9 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    `probe.stopped` and `health.tries_stopped`: a try left a step worse (in error, or in a new warning) with the values
    back, and the attempts to bring the design back did not help, so the tries ended there. The step named is the one
    to fix in Fusion (often a Remove or a Combine that lost its body, or a sketch that projects an edge of a step built
-   on a sketch with two solutions).
+   on a sketch with two solutions). Look at `probe.ended` and `health.tries_ended`: a try left steps of another
+   component worse, and only the tries of the sizes named in `sizes` ended there. Untick that size, or fix the step
+   of the other component, and export again.
 5. Look at `probe.discovery`: up to 12 rows for parameters of other components.
 6. "Faster tries" is on by default; untick it once and compare `try_seconds` with and without it.
 7. In `timing.probe`, `read_parts` splits the state reads of the tries into sketches, points, params, refs, box, pieces and
@@ -6273,6 +6371,7 @@ When the design is not as the person left it, the cause is in the end of the exp
    | `left_off` | `PutBack.left_off` (`TryTimeline.left_off`) |
    | `deferred_left` | `PutBack.deferred_left` (`SketchKeeper.deferred_left`) |
    | `tries_stopped` | `ProbeRun.stopped`, kept by `PutBack.tries_ended` |
+   | `tries_ended` | `ProbeRun.ended`, kept by `PutBack.tries_ended` |
    | `undo_dropped` | `PutBack.undo_dropped` (`undo_steps.UndoSteps.record`) |
    | `body_changed`, `body_unconfirmed`, `body_unchecked` | `PutBack.settle` and `PutBack._body_after` (`SizeProbe.measure_body`), sorted in `make_health` |
    | `probe`, `probe_error`, `flipped`, `unchecked` | The probe. The pipeline hands them to `PutBack.health_inputs`. |

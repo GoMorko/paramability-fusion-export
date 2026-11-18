@@ -24,7 +24,8 @@ Several bodies follow the same sequence with one size table and one probe scan f
 
 The modules: `port` (`ExportPort`, `ExportRequest`, `PipelineResult`), `run` (`run_pipeline` and the stages of one
 export), `parts` (`run_parts_pipeline`, `PartsPort`: the same for several bodies), `probe_run` (`ProbeRun`, the try
-runner), `walk_backs` (how the try runner brings a sketch back the way the rows took it away), `far_phase` (the
+runner), `walk_backs` (how the try runner brings a sketch back the way the rows took it away), `outside_damage`
+(whether a lasting change of a try ends only the sizes behind it), `far_phase` (the
 order of the far rows and the share of the nearer rows), `try_summary` (the timing of the tries for the report) and `put_back` (`PutBack`: what the export changed, put back on every way out, and the health
 inputs). This package re-exports what the rest of the add-in reads as `pipeline.<name>`.
 """

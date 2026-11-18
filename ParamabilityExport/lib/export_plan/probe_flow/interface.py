@@ -23,6 +23,10 @@ class Probe(Protocol):
       as not built (a step a part is built from, `tried_ranges.part_step`).
     note_recovery(record), note_stop(record, unrun), note_time_limit(record, unrun): what the runner did, for the
       report (`note_time_limit`: the time limit of the tries, and the rows it kept from running).
+    note_ended(record, unrun): a try left steps of another component worse with the values back and the tries of the
+      sizes in `record` ended there while the others went on (`record` None when only `unrun` is new).
+    reads_as_start(read): True when a read with every value back shows the part as at the start of the tries (the
+      followed sketches, the references, the box and the body).
     note_unfinished(sizes): after the tries stopped early or ran out of time, keep the sides of the sizes whose search
       for the last value that builds was still to come (`Motion.spans` `unfinished`).
     time_left_out(): the sizes the time limit left without a try that built on its own.
@@ -74,6 +78,10 @@ class Probe(Protocol):
     def note_recovery(self, record): ...
 
     def note_stop(self, record, unrun=()): ...
+
+    def note_ended(self, record, unrun=()): ...
+
+    def reads_as_start(self, read): ...
 
     def note_time_limit(self, record, unrun=()): ...
 

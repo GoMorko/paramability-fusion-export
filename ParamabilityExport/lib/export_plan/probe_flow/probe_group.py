@@ -100,6 +100,16 @@ class ProbeGroup:
         for probe in self.probes:
             probe.note_stop(record, unrun)
 
+    def note_ended(self, record, unrun=()):
+        for probe in self.probes:
+            probe.note_ended(record, unrun)
+
+    def reads_as_start(self, reads):
+        """True when every part reads as at the start of the tries (`SizeProbe.reads_as_start`)."""
+        reads = reads or []
+        return len(reads) == len(self.probes) and all(
+            probe.reads_as_start(read) for probe, read in zip(self.probes, reads))
+
     def note_time_limit(self, record, unrun=()):
         for probe in self.probes:
             probe.note_time_limit(record, unrun)

@@ -16,8 +16,8 @@ from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
 from .differences import comparable, read_differences, sketch_names
-from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, UNREADABLE, UNTRIED,
-                      WARNED_TRY, not_built_try, watched_why)
+from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_ENDED, NOT_TRIED_STOPPED, NOT_TRIED_TIME,
+                      UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
 from .restore_check import restore_gap
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
@@ -63,6 +63,8 @@ class SizeProbe:
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
         self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
         self._unrun = []  # the sizes of the rows planned that did not run because the tries stopped
+        self.ended = []  # `{ after, items, steps, components, sizes }` of each try after which some sizes ended
+        self._ended = []  # the sizes whose tries ended so (`note_ended`)
         self.time_limit = None  # `{ limit_seconds, hit, seconds }` of the tries' time limit (`note_time_limit`)
         self._timed_out = []  # the sizes of the rows the time limit kept from running
         self._unfinished = {}  # size to `{side: why}` of the sides whose nearer tries never ran (`note_unfinished`)
@@ -231,6 +233,33 @@ class SizeProbe:
             self.stopped["steps"] = [dict(step) for step in record["steps"]]
         self._unrun.extend(p for row in unrun for p in row.get("varied") or [] if p not in self._unrun)
 
+    def note_ended(self, record, unrun=()):
+        """Keep a try after which steps of another component stayed worse with the values back, while the part read
+        as at the start: `record` is `{ after, items, steps, components, sizes }`, and the tries of `sizes` ended
+        there while the other sizes went on (`pipeline.ProbeRun`). `finish` lists such a size that moves a sketch and
+        has no try of its own as untried, and `note_unfinished` marks its sides whose nearer tries never ran. `unrun`
+        are rows that did not run because they move such a size or parameter; a discovery row among them is kept as
+        not tried. `record` is None when only `unrun` is new."""
+        if record is not None:
+            self.ended.append({k: v for k, v in record.items() if k in ("after", "items", "steps", "components",
+                                                                         "sizes")})
+            self._ended.extend(p for p in record.get("sizes") or [] if p not in self._ended)
+            self._unrun.extend(p for p in record.get("sizes") or [] if p not in self._unrun)
+        for row in unrun:
+            param = (row.get("varied") or [None])[0]
+            if str(row.get("key", "")).startswith(plan.DISCOVERY_KEY) and param is not None and all(
+                    d["param"] != param for d in self.discovery):
+                self.discovery.append({"param": param, "moved": None, "tried": False, "reason": NOT_TRIED_ENDED})
+
+    def reads_as_start(self, read):
+        """True when `read`, taken with every value back, shows the part as at the start of the tries: every followed
+        sketch as at E0 (`left_start`), the sketches, points, lines, references and box as at E0 (`matches_start`), and
+        the body as at the start of the tries (`body_start`, else E0; `body_difference` finds nothing)."""
+        if not isinstance(read, dict) or self.left_start(read) or not self.matches_start(read):
+            return False
+        found = body_difference(self.body_start if self.body_start is not None else self.e0, read)
+        return found is not None and not found.texts
+
     def note_time_limit(self, record, unrun=()):
         """Keep the time limit of the tries for `report`: `record` is `{ limit_seconds, hit, seconds }`, `hit` true once
         the tries stopped because the limit was reached. `unrun` are the rows planned that did not run for that
@@ -246,19 +275,23 @@ class SizeProbe:
                 self._timed_out.extend(p for p in row.get("varied") or [] if p not in self._timed_out)
 
     def note_unfinished(self, sizes, states=None, moving=None):
-        """After the tries stopped early (`note_stop`) or ran out of time (`note_time_limit`): keep the sides of the
-        sizes where the nearer tries were still to come (`plan.nearer_left`), so the values between the farthest value
-        that built and the nearest one that did not were never tried. `finish` writes them into `Motion.spans`
+        """After the tries stopped early (`note_stop`), ended for some sizes (`note_ended`, those sizes only) or ran
+        out of time (`note_time_limit`): keep the sides of the sizes where the nearer tries were still to come
+        (`plan.nearer_left`), so the values between the farthest value that built and the nearest one that did not
+        were never tried. `finish` writes them into `Motion.spans`
         (`unfinished`). When the nearer tries had used their rows (`plan.MAX_NEARER_ROWS`), the search had ended
         anyway and nothing is kept. `states` and `moving` are the marked states and the moving sizes to judge by, this
         probe's own by default (`ProbeGroup` passes those of all parts)."""
         why = ENDED_STOPPED if self.stopped else ENDED_TIME if self._hit_limit() else None
-        if why is None or (states is None and self.schedule.nearer_room(plan.MAX_NEARER_ROWS) <= 0):
+        if (why is None and not self._ended) or (
+                states is None and self.schedule.nearer_room(plan.MAX_NEARER_ROWS) <= 0):
             return
         states = self._marked() if states is None else states
         moving = self.moving_sizes() if moving is None else moving
         for param, sides in plan.nearer_left(sizes, states, moving).items():
-            self._unfinished.setdefault(param, {}).update((side, why) for side in sides)
+            cause = ENDED_STOPPED if param in self._ended else why
+            if cause is not None:
+                self._unfinished.setdefault(param, {}).update((side, cause) for side in sides)
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -616,6 +649,8 @@ class SizeProbe:
             out["recovery"] = dict(self.recovery)
         if self.stopped:
             out["stopped"] = dict(self.stopped)
+        if self.ended:
+            out["ended"] = [dict(record) for record in self.ended]
         if self.time_limit is not None:
             out["time_limit"] = dict(self.time_limit, left_out=self.time_left_out())
         return out
