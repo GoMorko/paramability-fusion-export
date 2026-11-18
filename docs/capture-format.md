@@ -940,7 +940,10 @@ against `samples`.
   of add-in 0.5.0 and older have none of these keys.
 - EDGE: `{ "token", "closed": bool, "points": [[..]] }`. `points` holds the middle point for an open edge and the
   points at 0.25 and 0.75 of the parameter range for a closed edge (`startVertex` equal to `endVertex`), from
-  `BRepEdge.evaluator`.
+  `BRepEdge.evaluator`. A fillet or chamfer EDGE also has `ends`: `[start, end]`, the points of `startVertex` and
+  `endVertex` (`BRepVertex.geometry`; the same point twice for a closed edge). The translator uses them to tell
+  whether two sets of one step meet at a corner (`docs/developer-guide.md`, "Sets of one step copied one after the
+  other"). It is absent when a vertex cannot be read, and in captures of add-in 0.14.3 and older.
 - An EDGE of a `variable` or `chordLength` set also has `curve`, the type of `BRepEdge.geometry` (`Line3D`, `Arc3D`,
   `NurbsCurve3D` and so on), and `samples`: one record per place along the edge, at 0, 0.25, 0.5, 0.75 and 1 of its
   parameter range (a closed edge leaves out 1):

@@ -12,8 +12,9 @@ def edge(token, x, closed=False):
     """A straight edge whose middle point is (x, 0, 0); a closed one starts and ends at the same vertex."""
     evaluator = Obj(getParameterExtents=lambda: (True, x - 1.0, x + 1.0),
                     getPointAtParameter=lambda t: (True, P(t, 0, 0)))
-    return Obj("fusion::BRepEdge", entityToken=token, evaluator=evaluator, startVertex=Obj(entityToken="v" + token),
-               endVertex=Obj(entityToken="v" + token if closed else "w" + token))
+    start = Obj("fusion::BRepVertex", entityToken="v" + token, geometry=P(x - 1.0, 0, 0))
+    end = start if closed else Obj("fusion::BRepVertex", entityToken="w" + token, geometry=P(x + 1.0, 0, 0))
+    return Obj("fusion::BRepEdge", entityToken=token, evaluator=evaluator, startVertex=start, endVertex=end)
 
 
 def face(token, x=0.0, edges=(), chain=(), geometry=None):
@@ -62,6 +63,16 @@ class FilletTest(unittest.TestCase):
         self.assertEqual(fillet_set["faces"], [{"token": "f1", "point": [0, 1, 2]}])
         self.assertTrue(fillet_set["tangent_chain"])
         self.assertEqual([e.get("seed", False) for e in fillet_set["edges"]], [True, False, False])
+        # The corners of each edge, so the copy can tell whether sets meet.
+        self.assertEqual([e["ends"] for e in fillet_set["edges"]],
+                         [[[0, 0, 0], [2, 0, 0]], [[1, 0, 0], [3, 0, 0]], [[2, 0, 0], [2, 0, 0]]])
+
+    def test_an_edge_whose_vertices_cannot_be_read_has_no_ends(self):
+        picked = edge("e1", 1)
+        picked.endVertex = Obj("fusion::BRepVertex", entityToken="we1")
+        edge_set = with_edges("ConstantRadiusFilletEdgeSet", [picked], radius=param(0.1), isTangentChain=False)
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set])))
+        self.assertNotIn("ends", data["sets"][0]["edges"][0])
 
     def test_chain_is_not_followed_when_the_set_says_so(self):
         e1, e2 = edge("e1", 1), edge("e2", 2)

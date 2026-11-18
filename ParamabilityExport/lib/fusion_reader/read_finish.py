@@ -4,7 +4,8 @@ All four read their inputs with the timeline marker just before the item, so the
 the shape the feature was applied to. Edge and face inputs are expanded here: a face gives its edges, and a tangent
 chain gives every tangentially connected edge or face, so the translator sees one flat list of picks. A fillet or
 chamfer set also keeps how its edges were picked: the faces it was given (`faces`), whether it follows tangent
-chains (`tangent_chain`), and on each picked edge of a chain `seed`, so the copy can pick the same way.
+chains (`tangent_chain`), and on each picked edge of a chain `seed`, so the copy can pick the same way. Each edge
+also has the points of its two vertices (`ends`), so the copy can tell whether two sets of one step meet at a corner.
 A required collection that cannot be read raises, and the walk records that as a read_error for the item.
 
 A chamfer with two distances, or a distance and an angle, also records at each edge point the outward normals of
@@ -105,11 +106,26 @@ def expand_edges(entities, tangent_chain):
     return kinds, _unique(edges), _unique(faces), seeds
 
 
+def _vertex_point(edge, member):
+    return geo.safe(lambda: geo.point(getattr(edge, member).geometry), None)
+
+
+def _ends(edge):
+    """[start, end]: the points (mm) of the two vertices of an edge (one vertex twice for a closed edge); None when
+    one cannot be read."""
+    found = [_vertex_point(edge, "startVertex"), _vertex_point(edge, "endVertex")]
+    return None if None in found else found
+
+
 def _edge_set(edge_set, ctx, tangent_default=True, measure=None):
     """The edges of a set as records. `measure(edge, record)` gives more keys for the record of each edge, or None."""
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
     kinds, edges, faces, seeds = expand_edges(strict_items(edge_set.edges), tangent_chain)
     records = [geo.edge_record(e, ctx) for e in edges]
+    for record, edge in zip(records, edges):
+        ends = geo.safe(lambda: _ends(geo.native_input(edge, ctx)), None)
+        if ends is not None:
+            record["ends"] = ends
     if measure is not None:
         for record, edge in zip(records, edges):
             found = geo.safe(lambda: measure(geo.native_input(edge, ctx), record), None)
