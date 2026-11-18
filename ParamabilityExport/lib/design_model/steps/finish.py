@@ -18,6 +18,9 @@ reason to give and how to name the edges.
 - `Part`, `merge`: the edges of a step grouped into parts of one size (and one side, one second measure), so a step
   with sets of different sizes is a list of steps of one size each.
 - `reach`: how far from its edge a set takes material along a face.
+- `FinishSet.pick`, `apart`, `all_apart`, `only_sets`: how Fusion picked the edges of a set (by faces, along tangent
+  chains, or edge by edge), whether sets lie far enough apart that Fusion gives the same part when it applies them one
+  after the other as when it applies them together, and an item cut down to some of its sets.
 
 A size that follows the sizes of the design is a `Quantity` (`design_model.values`). The destination makes it: each
 set gives `size(quantity)` the number and the path of its parameter, and `quantity(path, number, dim)` gives back the
@@ -35,6 +38,8 @@ EQUAL, TWO_DISTANCES, DISTANCE_ANGLE = "equal", "twoDistances", "distanceAngle"
 NO_SIZE, NO_ANGLE, UNKNOWN_KIND = "size", "angle", "kind"
 # The kinds of `Measure`: a second distance, or the angle of the cut.
 DISTANCE, ANGLE = "distance", "angle"
+# How Fusion picked the edges of a set (`FinishSet.pick`).
+FACES, CHAINS, EDGES = "faces", "chains", "edges"
 
 SIZE_TOL = 1e-9
 ANGLE_TOL = 1e-6
@@ -56,6 +61,10 @@ _UNMEASURED = object()
 
 def _positive(value):
     return is_number(value) and value > 0
+
+
+def _is_point(value):
+    return isinstance(value, list) and len(value) == 3 and all(is_number(c) for c in value)
 
 
 def _close(a, b, tol=SIZE_TOL):
@@ -99,6 +108,28 @@ class FinishSet:
     def foreign(self):
         """True when an edge is on another component."""
         return any(edge.get("foreign") for edge in self.edges)
+
+    @property
+    def pick(self):
+        """How Fusion picked the edges: `FACES` (only faces, each read), `CHAINS` (only edges, along tangent chains),
+        `EDGES` (only edges, one by one), or None (inputs of several kinds, or the edges of another step)."""
+        kinds = self.entry.get("input_kinds") or []
+        if kinds == ["face"] and self.entry.get("faces"):
+            return FACES
+        if kinds == ["edge"]:
+            return CHAINS if self.entry.get("tangent_chain") else EDGES
+        return None
+
+    @property
+    def ends(self):
+        """The vertex points of all edges, or None when the set has no edge or an edge has no readable `ends`."""
+        found = []
+        for edge in self.edges:
+            ends = edge.get("ends")
+            if not isinstance(ends, list) or len(ends) != 2 or not all(_is_point(p) for p in ends):
+                return None
+            found += ends
+        return found or None
 
 
 class RoundSet(FinishSet):
@@ -482,3 +513,69 @@ def _uneven_groups(edges, ratio):
                 return None
             groups.append({"direction": direction, "leans": leans, "edges": [edge]})
     return [(g["direction"], g["edges"]) for g in groups]
+
+
+# ---- sets far enough apart to apply one after the other -------------------------------------------------------
+
+# Fusion builds the sets of one step together: where two sets meet at a corner it makes one blend there, which two
+# steps one after the other do not make. Sets are apart when no corner of one lies nearer to a corner of the other than
+# CORNER_MARGIN times the two reaches together (plus CORNER_TOL, mm). The margin covers faces that meet at a sharper
+# angle than square, where a round reaches further along a face than its radius.
+CORNER_MARGIN = 2.0
+CORNER_TOL = 1e-3
+
+
+def _apart_reach(one):
+    """How far (mm) the set `one` reaches along a face, for `apart`: its `reach`, else for a changing radius the larger
+    end radius and for a round set by chord length the chord. None when it is not known."""
+    if one.reach is not None:
+        return one.reach
+    if isinstance(one, RoundSet) and one.continuity != "curvature":
+        if one.kind == VARIABLE and one.start is not None and one.end is not None:
+            return float(max(one.start, one.end))
+        if one.kind == CHORD_LENGTH and one.chord is not None:
+            return float(one.chord)
+    return None
+
+
+def apart(a, b):
+    """True when the sets `a` and `b` share no edge and no corner, and no corner of one lies near a corner of the other
+    (CORNER_MARGIN, see above): Fusion then gives the same part when it applies them one after the other, in either
+    order, as when it applies them together. False when the corners of an edge or the reach of a set are not known.
+    The test holds at the sizes the capture was read at."""
+    ends_a, ends_b = a.ends, b.ends
+    reach_a, reach_b = _apart_reach(a), _apart_reach(b)
+    if ends_a is None or ends_b is None or reach_a is None or reach_b is None:
+        return False
+    limit = CORNER_MARGIN * (reach_a + reach_b) + CORNER_TOL
+    return all(vec.length(vec.sub(p, q)) > limit for p in ends_a for q in ends_b)
+
+
+def all_apart(sets):
+    """True when every two of `sets` are `apart`."""
+    return all(apart(a, b) for n, a in enumerate(sets) for b in sets[n + 1:])
+
+
+def only_sets(item, indexes, renumber=False):
+    """A copy of the round or chamfer `item` whose data keeps only the sets at `indexes` (places in `data.sets`) and
+    their parameters (`data.params` keys `sets.<n>.<field>`); the other parameters of the item stay. With `renumber`
+    the kept sets are also the only ones in `data.sets`, numbered again from 0 in their order, and so are the keys of
+    their parameters; without it `data.sets` stays whole, so the keys of the kept parameters still name their sets."""
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    keep = sorted(set(indexes))
+    new_of = {old: (new if renumber else old) for new, old in enumerate(keep)}
+    params = {}
+    for path, value in (data.get("params") or {}).items():
+        parts = path.split(".", 2)
+        if len(parts) == 3 and parts[0] == "sets" and parts[1].isdigit():
+            if int(parts[1]) in new_of:
+                params["sets.%d.%s" % (new_of[int(parts[1])], parts[2])] = value
+        else:
+            params[path] = value
+    found = dict(data)
+    if "params" in data:
+        found["params"] = params
+    if renumber:
+        sets = data.get("sets") or []
+        found["sets"] = [sets[n] for n in keep if n < len(sets)]
+    return dict(item, data=found)

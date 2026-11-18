@@ -3,12 +3,12 @@ Pure: no Fusion imports.
 
 The list comes from one translation of the capture the dialog already read, with no size tries and no face read. It
 holds the steps the translation leaves out for their own reason (a step type the copy has no handler for, a step that
-reaches into another component, a refusal of a handler). For the recipe, a step that is a gap only because it picks
+reaches into another component, a refusal of a handler, a set of edges of a round or chamfer that the handler leaves
+out while it copies the others). For the recipe, a step that is a gap only because it picks
 faces of one of those waits for the face read of the export, so it is not listed; the preview says more may show
 instead (`find`). The Orca translation decides every step it leaves out by itself, so its list is whole (`find_orca`).
 Each line reads like the one in the result window after the export (`export_plan.messages.left_out_line`).
 """
-from ..results.verdicts import LEFT_OUT
 from ..export_plan.messages import left_out_line
 from ..package.text import clip
 
@@ -37,7 +37,8 @@ def _collect(verdicts, records, own, waiting):
     """Fill `own` (`{index: step}`) and `waiting` (a one item list) from the verdicts, tool steps at any depth.
     `records` are the gap records the recipe keeps, by gap id."""
     for verdict in verdicts:
-        record = records.get(verdict.get("gap")) if verdict.get("verdict") == LEFT_OUT else None
+        # A left out step has a `gap`, and so has a step written in part (for the part it leaves out).
+        record = records.get(verdict.get("gap"))
         if record is not None and verdict.get("cause") == "own":
             own.setdefault(verdict.get("index"), _step(verdict.get("index"), record))
         elif record is not None and verdict.get("cause") == "picks":

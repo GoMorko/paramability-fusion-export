@@ -6,6 +6,8 @@ A step that holds whole Fusion sets picked by faces picks the edges around those
 whole tangent chain sets picks one point per chain (`chain: tangent`), so edges that a size adds or splits are
 still picked; tangent chain sets of different radii in one round keep one point per chain with `edgeSizes`. Edges
 picked one point each, from sets that Fusion picked by faces or chains, mark the sizes that may change those picks.
+A step whose sets lie apart and were picked in different ways is copied as several steps, one per way, and a set
+that cannot be copied is then left out alone (finishes/set_split.py).
 A chamfer with two distances, or a distance and an angle, says which face takes the first distance (`sizeOn`); the
 reader measures it per edge (`sides`, `cut_normals`). Rounds set by chord length and rounds whose radius changes
 along the edge are worked out from what the reader measured along the edges (finishes/measured_rounds.py). What the
@@ -17,7 +19,7 @@ from ...capture_model import gap_hints
 from ...design_model.steps import finish as sets_of
 from ...design_model.steps.repeat import repeated_items
 from ...design_model.values import Sized, number, reads_in
-from ...design_model import reach, words as shared
+from ...design_model import design, reach, words as shared
 from ...package.numbers import is_number
 
 from .. import values
@@ -25,7 +27,7 @@ from ..faces import follow, picks
 from ..faces.placer_makers import ShellMaker
 from ..ranges import range_check
 from ..result import Entry, Refusal, StepResult
-from . import measured_rounds
+from . import measured_rounds, set_split
 
 _FILLET_SET_REFUSALS = {
     "asymmetric": "Rounds with two different radii are not copied yet.",
@@ -35,6 +37,7 @@ _ROUND_KINDS = (sets_of.CONSTANT, sets_of.CHORD_LENGTH, sets_of.VARIABLE)
 
 
 def _split_note(ctx, entries):
+    """A note when the edges of one size needed more steps than one, each pick holding at most MAX_NEAR_POINTS."""
     if len(entries) > 1:
         ctx.note("The edges are picked in %d steps, since one pick holds at most %d points."
                  % (len(entries), picks.MAX_NEAR_POINTS))
@@ -76,6 +79,7 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=(), own_pick=Tru
         if any(not s.same_as(own[0]) for s in own):
             step["edgeSizes"] = [s.json() for s in own]
         steps.append(_with_plain(step, group))
+    _split_note(ctx, steps)
     return steps
 
 
@@ -266,20 +270,39 @@ def _fold_into_slot(ctx, item, folded):
     return StepResult()
 
 
-def fillet(ctx, step):
-    item, data, sets = step.brought, step.brought_data, step.facts
-    if not sets:
-        return Refusal(shared.ROUND_NO_EDGES)
-    for one in sets:
-        if one.kind not in _ROUND_KINDS:
-            return Refusal(_FILLET_SET_REFUSALS.get(one.kind, "This kind of round is not copied yet."),
-                           cause=gap_hints.ROUND_KIND if one.kind in _FILLET_SET_REFUSALS else None)
-        if one.follows_step:
-            return Refusal("A round that follows another step's edges is not copied yet.")
-        if one.continuity == "curvature":
-            return Refusal("Rounds with curvature continuity are not copied yet.")
-        if one.kind == sets_of.CONSTANT and one.radius is None:
-            return Refusal(shared.ROUND_NO_RADIUS)
+def _round_set_refusal(one):
+    """The Refusal of a round set the copy cannot write, else None."""
+    if one.kind not in _ROUND_KINDS:
+        return Refusal(_FILLET_SET_REFUSALS.get(one.kind, "This kind of round is not copied yet."),
+                       cause=gap_hints.ROUND_KIND if one.kind in _FILLET_SET_REFUSALS else None)
+    if one.follows_step:
+        return Refusal("A round that follows another step's edges is not copied yet.")
+    if one.continuity == "curvature":
+        return Refusal("Rounds with curvature continuity are not copied yet.")
+    if one.kind == sets_of.CONSTANT and one.radius is None:
+        return Refusal(shared.ROUND_NO_RADIUS)
+    return None
+
+
+def _unlocated(one):
+    """The Refusal of a round set whose edges cannot be located, else None."""
+    if not one.edges or one.unlocated:
+        return Refusal("The edges of this round could not be located.")
+    return None
+
+
+def _round_notes(ctx, data, sets):
+    if any(one.continuity == "other" for one in sets):
+        ctx.note("The smoothness of this round could not be read; a tangent round was used.")
+    if data.get("rolling_ball") is False:
+        ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
+                 "three or more rounded edges meet can look different.")
+
+
+def _rounds(ctx, item, data, sets, alone=True):
+    """The `round` steps of `sets` as Entries, a StepResult when the round is drawn into a slot, or a Refusal.
+    `alone` False: the sets are one group of a step copied group by group (`set_split`), whose caller gives the notes
+    of the step once, and the round is not drawn into a slot."""
     edges = sets_of.edges_of(sets)
     if not edges or any(one.unlocated for one in sets):
         return Refusal("The edges of this round could not be located.")
@@ -301,21 +324,60 @@ def fillet(ctx, step):
             if isinstance(found, Refusal):
                 return found
             point_sizes += found
-    if any(one.continuity == "other" for one in sets):
-        ctx.note("The smoothness of this round could not be read; a tangent round was used.")
-    if data.get("rolling_ball") is False:
-        ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
-                 "three or more rounded edges meet can look different.")
-    if len(sets) == 1 and sets[0].kind == sets_of.CONSTANT:
+    if alone:
+        _round_notes(ctx, data, sets)
+    if alone and len(sets) == 1 and sets[0].kind == sets_of.CONSTANT:
         folded = _slot_outline(ctx, item, edges, point_sizes[0])
         if folded is not None:
             return _fold_into_slot(ctx, item, folded)
     # Fusion's own picks (faces, tangent chains) can take in edges at other sizes; only a round of one radius gives
     # them the same size as Fusion does.
     plain = all(one.kind == sets_of.CONSTANT for one in sets)
-    entries = _edge_steps(ctx, item, "round", edges, point_sizes, extra, sets=sets, own_pick=plain)
-    _split_note(ctx, entries)
-    return StepResult(entries)
+    return _edge_steps(ctx, item, "round", edges, point_sizes, extra, sets=sets, own_pick=plain)
+
+
+def _same_value(item, a, b, field):
+    """True when the sets `a` and `b` of `item` have the same Fusion expression (or none) for `field`."""
+    params = design.params_of(item)
+    first, second = params.get(a.path(field)) or {}, params.get(b.path(field)) or {}
+    return first.get("expression") == second.get("expression")
+
+
+def _round_joins(item):
+    """`joins(a, b)` of the round sets that one step can pick the way Fusion did: picked by faces with one radius,
+    picked along tangent chains (the radius may differ per chain), or picked edge by edge. A changing radius, and a
+    round by chord length picked by faces or chains, stay alone."""
+    def joins(a, b):
+        if a.pick is None or a.pick != b.pick:
+            return False
+        if a.pick == sets_of.EDGES:
+            return sets_of.VARIABLE not in (a.kind, b.kind)
+        if a.kind != sets_of.CONSTANT or b.kind != sets_of.CONSTANT:
+            return False
+        return a.pick != sets_of.FACES or (a.radius == b.radius and _same_value(item, a, b, "radius"))
+    return joins
+
+
+def fillet(ctx, step):
+    item, data, sets = step.brought, step.brought_data, step.facts
+    if not sets:
+        return Refusal(shared.ROUND_NO_EDGES)
+    if len(sets) > 1 and sets_of.all_apart(sets):
+        joins = _round_joins(item)
+        found = set_split.copy_apart(
+            ctx, item, sets, lambda one: _round_set_refusal(one) or _unlocated(one),
+            lambda kept: set_split.groups(kept, joins), lambda group: _rounds(ctx, item, data, group, alone=False),
+            lambda written: _round_notes(ctx, data, written))
+        if found is not None:
+            return found
+    for one in sets:
+        refusal = _round_set_refusal(one)
+        if refusal is not None:
+            return refusal
+    found = _rounds(ctx, item, data, sets)
+    if isinstance(found, (Refusal, StepResult)):
+        return found
+    return StepResult(found)
 
 
 def _quantity(ctx, item):
@@ -357,38 +419,75 @@ def _chamfer_parts(ctx, item, sets, sides):
     return sets_of.merge(parts)
 
 
+def _bevel_set_refusal(one):
+    """The Refusal of a chamfer set the copy cannot write, else None."""
+    if one.problem:
+        return Refusal(_CHAMFER_PROBLEMS[one.problem])
+    if one.follows_step:
+        return Refusal("A chamfer that follows another step's edges is not copied yet.")
+    if one.unlocated:
+        return Refusal("The edges of this chamfer could not be located.")
+    if one.sides() is None:
+        return Refusal("The chamfer has two different sizes, and the face each size is on could not be read.")
+    return None
+
+
+def _same_pick(a, b):
+    return a.pick is not None and a.pick == b.pick
+
+
+def _pick_groups(ctx, part):
+    """The edges of `part` (a `sets_of.Part`) as lists of edges for one step each: one list, or, when the part holds
+    sets that Fusion picked in different ways and that lie apart, one list per way (`set_split`)."""
+    owners = list({one.index: one for one in part.sets}.values())
+    found = set_split.groups(owners, _same_pick)
+    if len(found) < 2 or not sets_of.all_apart(owners):
+        return [part.edges]
+    ctx.note(set_split.SPLIT_NOTE)
+    out = []
+    for group in found:
+        held = {id(edge) for one in group for edge in one.edges}
+        out.append([edge for edge in part.edges if id(edge) in held])
+    return out
+
+
+def _bevels(ctx, item, sets):
+    """The `bevel` steps of the chamfer sets `sets` (each one the copy can write) as Entries, or a Refusal."""
+    parts = _chamfer_parts(ctx, item, sets, [one.sides() for one in sets])
+    if not parts:
+        return Refusal(shared.CHAMFER_NO_EDGES)
+    if len(parts) > 1:
+        ctx.note("Chamfers of different sizes are applied one after the other.")
+    entries = []
+    for part in parts:
+        extra = {_SECOND_KEYS[kind]: q.json() for kind, q in part.extra.items()}
+        if part.direction is not None:
+            extra["sizeOn"] = part.direction
+        for edges in _pick_groups(ctx, part):
+            sizes = [part.size] * sets_of.point_count(edges)
+            entries += _edge_steps(ctx, item, "bevel", edges, sizes, extra, sets)
+    return entries
+
+
 def chamfer(ctx, step):
     item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Refusal(shared.CHAMFER_NO_EDGES)
-    sides = []
-    for one in sets:
-        if one.problem:
-            return Refusal(_CHAMFER_PROBLEMS[one.problem])
-        if one.follows_step:
-            return Refusal("A chamfer that follows another step's edges is not copied yet.")
-        if one.unlocated:
-            return Refusal("The edges of this chamfer could not be located.")
-        split = one.sides()
-        if split is None:
-            return Refusal("The chamfer has two different sizes, and the face each size is on could not be read.")
-        sides.append(split)
-    groups = _chamfer_parts(ctx, item, sets, sides)
-    if not groups:
-        return Refusal(shared.CHAMFER_NO_EDGES)
-    if data.get("corner_type", "chamfer") != "chamfer":
+    refusals = [_bevel_set_refusal(one) for one in sets]
+    left = [one for one, refusal in zip(sets, refusals) if refusal is not None]
+    found = None
+    if left and all(sets_of.apart(a, b) for a in left for b in sets if b is not a):
+        found = set_split.copy_apart(ctx, item, sets, _bevel_set_refusal, lambda kept: [kept],
+                                     lambda group: _bevels(ctx, item, group))
+    elif not left:
+        found = _bevels(ctx, item, sets)
+        if not isinstance(found, Refusal):
+            found = StepResult(found)
+    if found is None:
+        return next(refusal for refusal in refusals if refusal is not None)
+    if isinstance(found, StepResult) and data.get("corner_type", "chamfer") != "chamfer":
         ctx.note("Fusion used another corner type for this chamfer; the copy uses the default one.")
-    if len(groups) > 1:
-        ctx.note("Chamfers of different sizes are applied one after the other.")
-    entries = []
-    for group in groups:
-        sizes = [group.size] * sets_of.point_count(group.edges)
-        extra = {_SECOND_KEYS[kind]: q.json() for kind, q in group.extra.items()}
-        if group.direction is not None:
-            extra["sizeOn"] = group.direction
-        entries += _edge_steps(ctx, item, "bevel", group.edges, sizes, extra, sets)
-    _split_note(ctx, entries)
-    return StepResult(entries)
+    return found
 
 
 # A smaller change of the part's volume (mm3) does not show that a shell hollowed or thickened it.
