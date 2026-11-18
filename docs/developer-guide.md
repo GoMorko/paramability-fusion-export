@@ -492,6 +492,40 @@ makes that later step a gap too, by the usual rules (see 1.9.3).
 Types without a reader (sketches, construction geometry, a thicken) get `"data": {}`. They still get `target_before`
 and `target_after`. So even a step the add-in does not know says where it changed the body and by how much.
 
+#### Sketch outlines and sketch text
+
+`lib/fusion_reader/read_sketch.py` reads the outlines of extrudes, revolves, sweeps, lofts and embosses. It writes each
+curve in the 2D frame of its sketch, in mm.
+
+Fusion can give the points of a curve in sketch space or in model space. The reference does not say which space it
+uses. Thus the reader decides the space for each profile (`_Space`), and writes the result in `space`:
+
+1. When a point is not at z = 0, the points are model points. A sketch point always has z = 0.
+2. When the sketch frame is the identity, the two spaces are the same. The reader uses sketch space.
+3. The reader reads the points as model points (`Sketch.modelToSketchSpace`, `_by_plane`). A model point of the
+   outline must lie on the sketch plane. When one point is then off the plane, the points are not model points. The
+   reader uses sketch space. This is the usual case: a sketch on the top face of a plate has a frame that is only
+   lifted, and a sketch point at z = 0 is below that face.
+4. When the two readings put the points at the same place in the sketch, the choice does not change the outline. The
+   reader uses sketch space. This rule needs at least three points that are not on one line. Two points, or points
+   on one line, can also agree when one reading is the mirror of the other.
+5. Else, the reader compares the curve with its sketch entity (`ProfileCurve.sketchEntity`). The geometry of the
+   entity is in sketch space. When the reader cannot decide, it writes `ambiguous`. The translator does not copy an
+   ambiguous outline.
+
+Sketch text has no profile. The step takes the `SketchText`, and the reader gets the letters from
+`SketchText.asCurves()` (`read_text_outlines`). This call does not change the text or the design. In Fusion 2706 the
+curves are in sketch space: a font such as Arial gives lines and NURBS curves of degree 2. The curves of a text have
+no sketch entity. Thus step 5 compares the points with `SketchText.boundingBox`, which is in sketch space, in place of
+the entity. In the usual case, step 3 decides before the box.
+
+`lib/geometry/text_outlines.py` puts the curves of a text into closed loops. A loop with an even count of loops around
+it is an outer outline. A loop with an odd count is a hole of the nearest loop around it. Each outer outline with its
+holes becomes one profile record. To count and to measure, each loop becomes a ring of points (`_ring`). The ring runs
+each curve in the direction of the chain: the start of a curve must touch the end of the curve before it. The area of
+the ring is the area of the outline. An extrude or an emboss of text compares the sum of these areas, times the depth,
+with the volume change that Fusion measured. Thus a wrong ring gives a wrong area, and the step is left out.
+
 #### The values behind parameters
 
 A value that Fusion keeps as a model parameter is listed in `data.params`, by its path in the data:

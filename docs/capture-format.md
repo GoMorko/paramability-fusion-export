@@ -546,8 +546,11 @@ curves are chained into closed loops, and each loop is an outer outline or a hol
 count: outer, odd: hole of the nearest loop around it). Each outer outline with its holes is one profile record like
 the one above, plus `"text": true` and no curve `entity`: a text of "OI" with a hole in the "O" is two records. The
 space of the points (sketch or model) is decided like for other profiles, except that the curves have no sketch entity:
-the points are compared with `SketchText.boundingBox` (sketch space) and the record is a marker when both readings
-fit or neither does. Every text record, outline or marker, carries `text_params` (the name of the text's height
+when the plane test below does not decide, the points are compared with `SketchText.boundingBox` (sketch space) and
+the record is a marker when both readings fit or neither does. In Fusion 2706 `asCurves` gives sketch space points
+(lines and degree 2 NURBS curves for a TrueType font such as Arial), so text on a face of the part reads as `sketch`
+by the plane test. The area of an outline is the area of its chained curves, each curve run in the direction of the
+chain. Every text record, outline or marker, carries `text_params` (the name of the text's height
 parameter, `SketchText.heightParameter`) or `text_params_unknown: true` when Fusion does not give the name; the sizes
 behind them are kept from following the copied letters. A text that cannot be turned into profiles is one record with
 `text`, `sketch`, `sketch_token` and a `problem`: `unread` (no curves), `open` (the curves do not close), `overlap`
@@ -557,10 +560,12 @@ behind them are kept from following the copied letters. A text that cannot be tu
 probe does not follow it.
 
 `space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
-2D) or `ambiguous`. A curve off the plane z = 0 proves model space. Points all at z = 0 that do not lie on one line
-prove sketch space when the sketch plane is not the plane z = 0 (model points on such a plane cannot all have
-z = 0). In the plane z = 0 with a sketch frame other than the identity, the reader compares the curve with
-`ProfileCurve.sketchEntity`; if that cannot decide it writes `ambiguous` and the translator refuses the profile. A
+2D) or `ambiguous`. A curve off the plane z = 0 proves model space. Points all at z = 0 with a sketch frame other
+than the identity are read as model points (`Sketch.modelToSketchSpace`): when one of them then lies off the sketch
+plane, they cannot be model points and the space is `sketch`. When both readings put the points (at least three, not
+on one line) at the same place in the sketch, the choice does not change the outline and the space is `sketch`. Else
+the reader compares the curve with `ProfileCurve.sketchEntity` (the box for text); if that cannot decide it writes
+`ambiguous` and the translator refuses the profile. A
 loop whose chained curves enclose no area is refused.
 
 A profile of another component's sketch is read from its native object, so `loops` are in that sketch's own 2D frame,
@@ -3064,7 +3069,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `OffsetFacesFeature.inputFaces` (or `faces` before the item), `distance`, `faces` after it; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `Plane.uDirection`; positive distance moves the face outwards | `faces_after` must show the face moved by `distance`; the Offset faces hand test |
 | A whole cylinder face has two loops of one `Circle3D` edge each (no seam edge); `Cylinder.origin`, `axis`, `radius`; `Circle3D.center`, `normal`, `radius`; `BRepEdge.faces` gives the face across an end circle; `feature.faces` after the item lists the moved cylinder | a face with a seam or part of a circle has other loops and is left out; `rounds_after` must hold the cylinder with the new radius, else the step is left out; hand check PF1 in `docs/hand-checks.md` |
 | `EmbossFeature.profiles` (`Profile` and `SketchText` items; the area of a text is computed from its outlines), `inputFaces`, `faces` after the item, `isTangentChain`, `depth`, `horizontalDistance`, `verticalDistance`, `rotationAngle`; `BRepFace.area`, `BRepFace.body`; a positive `depth` raises and a negative one sinks; the feature exists only in Fusion builds from September 2025 and is marked preview in the API reference | `volume_after` must differ from `volume_before` by `sum(areas) * abs(depth)` with the sign of `depth`, else the translator refuses; the Emboss hand tests (section 10 of `docs/hand-tests.md`) |
-| `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch or model space; `SketchText.boundingBox` is in sketch space | `space` is decided by the bounding box and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
+| `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch space (Fusion 2706, a live check on a face of a plate and on a side face; the reference does not say); `SketchText.boundingBox` is in sketch space | `space` is decided by the sketch plane and the bounding box, and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
 | Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
 | `SketchEntity.referencedEntity` of an entity projected from another component comes as a proxy whose `assemblyContext.component` is that component (confirmed by a real export: the pipe component was found); the `body` of such an edge and its `nativeObject` token equal the token `bodies_after` gives; `lineOne`, `lineTwo`, `line` and `curve` name the entities of the other line constraints; `ModelParameter.createdBy` of a parameter that `dependentParameters` gives names the same maker as when the parameter is listed from its component (`ModelParameter.component` answered the root for every one); `profile`, `path`, `guideRail`, `loftSections` and `holePositionDefinition` can be read with the marker before a step of another component | a wrong read only leaves a link out; the discovery tries still find a parameter that moves the part; the K10 hand test in `docs/hand-tests.md` |
