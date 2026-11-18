@@ -32,9 +32,8 @@ def calls(timer):
     """What the tries asked of Fusion through the counting store (`metered.MeteredStore`), each as `{ count, seconds }`:
     `computes` (full rebuilds, by the part of the export that asked), `param_sets` (values set for a try or a walk),
     `param_put_backs`, `health_passes` (passes over the timeline items for errors and warnings) and `timeline_reads`
-    (reads of the whole timeline); and two outcomes as counts: `rescued` (a try that built after a confirming rebuild
-    after new errors; counted once the try is finished and built, not in a walk back) and `check_cleared` (a rebuild of
-    a check after which a step that read worse was fine). These are the calls of the tries. The calls of the put back
+    (reads of the whole timeline); and one outcome as a count: `check_cleared` (a rebuild of a check after which a step
+    that read worse was fine). These are the calls of the tries. The calls of the put back
     after the tries are in `calls.after_tries` (`note_after_tries`)."""
     return {
         "computes": {name[len(metered.COMPUTE):]: timer.entry(name) for name in timer.names(metered.COMPUTE)},
@@ -42,7 +41,6 @@ def calls(timer):
         "param_put_backs": timer.entry(metered.PUT_BACKS),
         "health_passes": timer.entry(metered.HEALTH),
         "timeline_reads": timer.entry(metered.TIMELINE),
-        "rescued": timer.count(metered.OUTCOME + metered.RESCUED),
         "check_cleared": timer.count(metered.OUTCOME + metered.CHECK_CLEARED),
     }
 

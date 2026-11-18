@@ -835,13 +835,14 @@ net for it.
    (`format_expression`). All values go in as one change (`Design.modifyParameters`), so Fusion rebuilds once; a
    Fusion without that call gets them one at a time and a `design.computeAll`. The row
    fails when Fusion refuses the expression, when the rebuild raises or reports failure, or when an item before the
-   marker goes into error that was fine in the baseline. After one change, a step in error is judged after one full
-   recompute, since that change rebuilds only the steps it touches. The error of the row (`RowBuildError.detail`)
+   marker goes into error that was fine in the baseline. After one change, a step in error fails the row at once. No
+   confirming full recompute follows (see "No confirming recompute" below). The error of the row (`RowBuildError.detail`)
    lists the new items in error: `items` has their names and `at` has their timeline positions, in the same order.
    The job reads the health of the timeline items once for each try (`apply.Health`). One pass over the items gives the
    steps in error and the steps in warning together (the store control `health_entries`; a store without it gives them
    in one read each). The row, the warnings and the cleared steps below all use this one read. The read is made again
-   only after a full recompute, which can change it. A walk back reads only the steps in error.
+   only after the full recompute for a warning that counts (`computes.counting_warning`), which can change it. A walk
+   back reads only the steps in error.
    Then it takes the steps in warning from that read (`apply.new_warnings`). Each step in warning is a pair: its timeline position
    and its name. A new warning on a step the part is built from goes to the result (`warned`). A new warning on
    another step does not, but the job notes it, for the check before the next row. Then it reads the steps in error
@@ -859,11 +860,19 @@ for them, the sets of parameters, the passes over the timeline items for health 
 with the seconds of each. The counts go to `timing.probe.calls` (see 4.2). A part of the export gives its label to the
 rebuilds made inside it with `metered.caller`. When one part runs inside another, the rebuilds count under the label
 of the outer part: a walk back that meets a row error counts all its rebuilds as walk steps. The labels are `row` (the
-rebuild that gives a row its numbers), `confirm_new_errors`, `counting_warning`, `check_after_row`, `sketch_put_back`,
+rebuild that gives a row its numbers), `counting_warning`, `check_after_row`, `sketch_put_back`,
 `baseline`, `rebase`, `walk_step`, `put_back_values` and `other`; the put back after the tries has its own
 counting store (`PutBack`), with the label `end_check` for the end check (`timing.probe.calls.after_tries`). The outcome
-`rescued` is counted by `RowExport.run` once a try is finished and built: `apply.Health.rescued` says that the confirming
-rebuild cleared the new errors, and a walk back never counts it.
+`check_cleared` is counted when a check after a row reads the steps again after a full recompute and no step is worse.
+
+No confirming recompute. Earlier versions made one more full recompute when a row showed new errors, to see if the
+errors were only the result of the partial rebuild that one change of parameters makes. A row whose errors cleared
+after that recompute counted as built. Measured on 14 real exports, this recompute ran about 60 times and never made a
+row build after all. It cost 45 to 57 seconds on the larger exports. So the add-in no longer makes it, for a row and
+for a step of a walk back (both use `apply.apply_row`). A row whose errors show after the normal rebuild of the
+parameter change fails. This does not change the put back: the parameters of a failed row still go back in the
+`finally` block, and the check after a row (`check_after_row`) still reads the steps again after one full recompute,
+because that check guards the stop of the tries. The full recompute for a warning that counts stays too.
 
 So each row costs two rebuilds: one with the new values and one to put the values back. A row whose read includes an
 outline face leaves the marker before the face's step (`park`, `read_faces(stay=True)`); the change that puts the
@@ -6396,7 +6405,7 @@ seconds, rounded to 0.01. A failure of the timing code drops the block and chang
 | `total` | From the start of the pipeline to the moment `report.json` is made. The dialog's read before OK and the file write are not in it. |
 | `phases` | One time per stage of section 1.1. `after_stop` and `outline_check` (the check that written outlines do not cross themselves, 3.2) are already inside the translate phases. A stage that did not run is 0. |
 | `capture` | The timeline read: `cached: true` when the dialog read it before the OK click (then its time is not part of this export). `marker_moves` counts the marker moves and their time. `readers` is the time of all step readers. `placement` is the place of the picked body, read once before the walk. `tail` is the read after the walk, split in `tail_parts` (`target`, `parameters`, `links`, `graphs`). `by_type` and `by_component` add up the time per step type and per component. `slowest` lists the 10 slowest steps. A several-body export has `captures`, one per body. |
-| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `calls` (what the tries asked of Fusion: the full rebuilds by the part of the export that asked, the sets and put backs of parameters, the passes over the timeline items for health, the reads of the whole timeline, and the outcomes `rescued` and `check_cleared`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
+| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `calls` (what the tries asked of Fusion: the full rebuilds by the part of the export that asked, the sets and put backs of parameters, the passes over the timeline items for health, the reads of the whole timeline, and and the outcome `check_cleared`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
 | `undo` | The "Lighter on memory" record: `{ on: false }`, or `{ on, applied, steps, error }` (1.11). |
 
 The time of one step in the capture is mostly the marker move that builds it. So a step type that is slow in
@@ -6863,8 +6872,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    a large time means outline face reads, each of which moves the marker before the face's step. A large `refs` part
    points at the place of the body read at each state (`probe_refs._target_back`); it fetches only three vertices.
 8. Read `timing.probe.calls`. A try that builds costs about two rebuilds (set the values, put them back). A try that
-   fails can cost more: `computes.confirm_new_errors` is the extra rebuild after a row that showed new errors, and
-   `rescued` counts those after which the row built. `computes.counting_warning` is the extra rebuild after a warning
+   fails costs the same: a row with new errors makes no extra rebuild. `computes.counting_warning` is the extra rebuild after a warning
    that counts. `computes.check_after_row` is the rebuild of the check after a row, and `check_cleared` counts those
    after which a step that read worse was fine. `computes.walk_step` is every rebuild of the walks back.
    `health_passes` counts the passes over the timeline items (one per try, with `health_entries`) and

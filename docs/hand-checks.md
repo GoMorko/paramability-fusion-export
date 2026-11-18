@@ -1069,6 +1069,6 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     first and keep its `report.json`.
     The states, the ranges and the reasons for `Width` are the same as in the release build, and the warning that
     the step had at the start is not reported as a new one. `timing.probe.calls` is filled: `computes` has `baseline`
-    and, for the failing tries, `confirm_new_errors`; `health_passes` is about one per try; `timeline_reads` is small;
+    and no `confirm_new_errors` (a failing try makes no extra rebuild); `health_passes` is about one per try; `timeline_reads` is small;
     `calls.after_tries` has `end_check`. `timing.probe.tries_seconds` per failing try is lower than with the release
     build. Afterwards the design is as it was.

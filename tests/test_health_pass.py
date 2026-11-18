@@ -57,7 +57,7 @@ class OnePassStore(ViewStore):
 
 def view(value, rebuilt):
     """Value 6: a warning on a step that counts and one that does not. 7: the old error clears. 8: a new error that a
-    full recompute clears. 9: a new error that stays. 10: a warning that counts and turns into an error on the
+    full recompute would clear (the add-in makes none, so the row fails). 9: a new error that stays. 10: a warning that counts and turns into an error on the
     recompute. Other values: nothing."""
     errors = [OLD] if value != 7 else []
     warnings = []
@@ -101,10 +101,12 @@ class OnePassTest(unittest.TestCase):
         self.assertEqual(results[0]["cleared"], [(3, "Old")])
         self.assertEqual(calls["health_passes"]["count"], 2)
 
-    def test_a_confirming_rebuild_adds_one_pass_and_the_next_rows_start_again(self):
-        _, calls = run(OnePassStore(view), [8, 11])
-        self.assertEqual(calls["computes"]["confirm_new_errors"]["count"], 1)
-        self.assertEqual(calls["health_passes"]["count"], 1 + 2 + 1)
+    def test_a_try_with_new_errors_makes_no_confirming_rebuild_and_the_next_row_starts_again(self):
+        results, calls = run(OnePassStore(view), [8, 11])
+        self.assertIsNone(results[0]["values"])
+        self.assertEqual(results[1]["values"], {"w": 11.0})
+        self.assertEqual(set(calls["computes"]), {"baseline"})
+        self.assertEqual(calls["health_passes"]["count"], 1 + 2)
 
     def test_a_store_without_the_one_pass_read_gives_the_same_outcomes(self):
         for values in ([6], [7], [8], [9], [10], [11], [6, 7, 8, 9, 10]):
@@ -117,12 +119,12 @@ class OnePassTest(unittest.TestCase):
         found = {r["name"]: outcome(r) for r in results}
         self.assertEqual(found["r6"][2], {"warned": [(4, "Fillet1")], "others_warned": [(5, "Other")]})
         self.assertEqual(found["r7"][2], {"cleared": [(3, "Old")]})
-        self.assertEqual(found["r8"][1], {"w": 8.0})
+        self.assertEqual((found["r8"][1], found["r8"][3]["reason"], found["r8"][3]["items"]),
+                         (None, "new_errors", ["Extrude2"]))
         self.assertIsNone(found["r9"][1])
         self.assertEqual(found["r9"][3]["reason"], "new_errors")
         self.assertEqual((found["r10"][1], found["r10"][3]["reason"], found["r10"][3]["items"]),
                          (None, "new_errors", ["Fillet1"]))
-        self.assertEqual(calls["rescued"], 1)
         self.assertEqual(calls["computes"]["counting_warning"]["count"], 2)  # r6 and r10
 
     def test_an_unreadable_one_pass_read_fails_the_row_as_unreadable_errors_do(self):
