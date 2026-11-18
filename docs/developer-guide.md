@@ -2292,6 +2292,8 @@ alphabetical order by module.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
   - `outside_damage.py` holds `OutsideDamage`: whether the steps that a try left worse are all outside what the tries
     need, and which sizes end with that try (see 1.8, "A lasting change outside the part").
+  - `ended_sizes.py` holds `EndedSizes`, the part of `ProbeRun` that ends the tries of some sizes after a lasting
+    change outside the part (`_contain`, `_take_ended`, `_without_ended`, `_live`, see 1.8).
   - `walk_backs.py` holds `WalkBacks`, the part of `ProbeRun` that brings a followed sketch back the way the rows took
     it away (`_walk_rows` before a row, `_walk_back` after the tries, see 1.8, "Solver flips and put backs").
   - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and

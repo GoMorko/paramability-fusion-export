@@ -25,6 +25,8 @@ PROBE_FLOW = os.path.join(LIB, "export_plan", "probe_flow")
 PIPELINE = os.path.join(LIB, "export_plan", "pipeline")
 PROBE_RUNNER = os.path.join(PIPELINE, "probe_run.py")
 WALK_BACKS = os.path.join(PIPELINE, "walk_backs.py")  # the walks back of the try runner
+ENDED_SIZES = os.path.join(PIPELINE, "ended_sizes.py")  # the sizes whose tries ended, a part of the try runner
+RUNNER_PARTS = (PROBE_RUNNER, WALK_BACKS, ENDED_SIZES)
 DESIGN_MODEL = os.path.join(LIB, "design_model")
 CONTEXTS = (os.path.join(LIB, "translator", "context.py"), os.path.join(LIB, "orca_translate", "context.py"))
 
@@ -355,13 +357,16 @@ class DeclaredInterfaceTest(unittest.TestCase):
             self.assertEqual(missing, set(), probe.__name__)
 
     def test_the_try_runner_asks_the_probe_only_for_declared_members(self):
-        asked = _asked_in(WALK_BACKS, PROBE_NAMES, _asked_in(PROBE_RUNNER, PROBE_NAMES))
+        asked = {}
+        for path in RUNNER_PARTS:
+            _asked_in(path, PROBE_NAMES, asked)
         self.assertIn(("probe", "far_pair_rows"), asked)
         self.assertIn(("probe", "off_start"), _asked_in(WALK_BACKS, PROBE_NAMES))
+        self.assertIn(("probe", "reads_as_start"), _asked_in(ENDED_SIZES, PROBE_NAMES))
         self.assertEqual(_undeclared(asked), {})
 
     def test_every_declared_probe_member_is_asked_for_by_the_runner_or_both_pipelines(self):
-        runner = _asked_of(PROBE_RUNNER, {"probe"})
+        runner = set().union(*(_asked_of(path, {"probe"}) for path in RUNNER_PARTS))
         single = _asked_of(os.path.join(PIPELINE, "run.py"), {"probe"})
         parts = _asked_of(os.path.join(PIPELINE, "parts.py"), {"group"})
         self.assertEqual(PROBE_MEMBERS - runner - (single & parts), set())
