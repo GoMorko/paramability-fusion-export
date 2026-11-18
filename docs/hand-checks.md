@@ -1055,3 +1055,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     "More sizes" are folded and open when their title is clicked. A long list scrolls inside its box. Close and
     open the window again from a second export: it still opens. Afterwards the design is as it was; do not click the
     button unless you want to test the reopen.
+88. PW1, one progress window. Use a design with several sizes that move sketches, so that the tries run in many batches.
+    Export: tick all sizes.
+    One window "Measuring how your sketches follow each size ..." shows from the first try to the end. It does not
+    open again between tries, and the try number only goes up. It is gone before the result window or a message box
+    opens, also after Cancel. Click Cancel part way once: the export stops and no window stays open.

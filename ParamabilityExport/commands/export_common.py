@@ -17,7 +17,7 @@ from ..lib.export_plan import messages
 from ..lib.fusion_reader import design_info
 from ..lib.fusion_reader.capture import MarkerError
 from ..lib.fusion_ui.log import error_box, log, message_box
-from ..lib.fusion_ui.progress import ProgressDialog
+from ..lib.fusion_ui.progress import ProgressDialog, close_all
 from ..lib.package.caps import PackageCapError
 from ..lib.timing import trail
 
@@ -43,17 +43,19 @@ def _manifest_path():
 
 
 def progress_dialog(verb):
-    """The progress window of an export step. The sketch tries get an explanation that stays and a line per try."""
+    """The progress window of an export step. The sketch tries get an explanation that stays and a line per try. The
+    window stays open between the batches of one step; the end of the export hides it (`close_all`)."""
     if verb == messages.TRY_VERB:
         return ProgressDialog("Export for Paramability", intro=messages.TRY_INTRO, line=messages.try_line,
-                              shown="Try %v of %m")
-    return ProgressDialog("Export for Paramability", verb=verb)
+                              shown="Try %v of %m", keep_open=True)
+    return ProgressDialog("Export for Paramability", verb=verb, keep_open=True)
 
 
 def warn_unrestored(names):
     """Tell the person when parameters could not be put back. Parameters are the one thing never left changed."""
     if not names:
         return
+    close_all()
     names = ", ".join(names)
     log(f"could not restore: {names}")
     message_box(
@@ -66,6 +68,7 @@ def warn_left_off(names, undo_dropped=False):
     `undo_dropped` (Lighter on memory) Undo is not offered, as in the health lines."""
     if not names:
         return
+    close_all()
     log("could not turn back on: " + ", ".join(names))
     message_box(left_off_line(names, undo_dropped), error=True)
 
@@ -74,6 +77,7 @@ def warn_steps(lines):
     """Tell the person which timeline steps differ from before the export (`export_plan.health.steps_lines`)."""
     if not lines:
         return
+    close_all()
     log("timeline steps after the export: " + " ".join(lines))
     message_box("\n\n".join(lines), error=True)
 
@@ -100,7 +104,10 @@ def contained(outcome, run):
     try:
         run()
     except Exception:
+        close_all()
         error_box("The export stopped.")
+    finally:
+        close_all()
     return outcome
 
 
@@ -116,9 +123,16 @@ def run_guarded(design, marker, work, unrestored=lambda: (), settle=None, outcom
     put back, for an export that does not check this itself; `settle()`, when given, runs once the parameters are back
     (`settle_steps`). A marker that does not go back marks `outcome` (`rollback.ExportOutcome`) as not confirmed, so
     Fusion undoes the export (`rollback.decide`). The export trail (`timing.trail`) covers the whole run."""
+    def closing():
+        # The progress window goes before any message box of an end that is not a save.
+        try:
+            return work()
+        finally:
+            close_all()
+
     trail.start("export")
     try:
-        return work()
+        return closing()
     except ExportCancelled:
         message_box("Export cancelled. Your parameters are back to their values.")
     except (RowBuildError, StepExportError, PackageCapError, MarkerError) as exc:

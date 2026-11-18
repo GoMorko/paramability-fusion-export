@@ -785,6 +785,30 @@ warned outside the part and of a size that drives a step of another component; t
 the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py` (a later size that breaks
 the design after the halving of the first size, and a time limit between the far rows of two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
 
+#### The progress window of the tries
+
+The tries run in many batches: the far rows, the nearer rows and the walks back. Each batch asks the port for the
+progress window (`port.progress`). The export must show one window only, and the same window for every batch.
+
+The real ports keep one window for each verb (`DialogSet` in `lib/fusion_ui/progress.py`). The first batch makes the
+window and the first step shows it. Each later batch gets the same window. The end of a batch does not hide it. The
+step number is the number in the whole export, so the count goes on from batch to batch. When a batch has more tries
+than the window knew, the step window takes the new total.
+
+The cancel button belongs to this one window. The step returns false when the person pressed Cancel. A batch that
+starts after the press asks the same window, sees the press and stops.
+
+The window is hidden once, at the end of the export. `run_guarded` and `contained` in `commands/export_common.py` call
+`close_all` in a `finally`, so the window goes also when the export is cancelled, stops or fails. They hide it before
+any message box opens. The warnings that the pipeline gives before the end (`warn_unrestored`, `warn_left_off` and
+`warn_steps`) also hide it first. `close_all` is a safety net: `fusion_ui/progress.py` keeps a list of the windows that
+were shown and not hidden, and `close_all` hides each of them. The stop of the add-in calls it too. A hide that Fusion
+refuses is written to the log and never raised. A window that was hidden is not used again: the next step of that verb
+gets a new window.
+
+The progress window of "Export size choices" is one block. It hides when its `with` block ends, and `close_all` is the
+net for it.
+
 #### One row, in detail
 
 `RowExport.run` (`lib/design_edit/runner.py`) runs the rows. For one batch of rows:
