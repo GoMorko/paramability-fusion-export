@@ -42,7 +42,7 @@ class _Command(adsk.core.CommandEventHandler):
         _guarded(self._callback, args, self._what)
 
 
-class _Custom(adsk.core.CustomEventHandler):
+class _Terminated(adsk.core.ApplicationCommandEventHandler):
     def __init__(self, callback, what):
         super().__init__()
         self._callback = callback
@@ -97,8 +97,12 @@ def on_execute(event, callback, handlers):
     event.add(handlers.keep(_Command(callback, "exporting")))
 
 
-def on_custom_event(event, callback, handlers, what="showing a window"):
-    event.add(handlers.keep(_Custom(callback, what)))
+def on_command_terminated(event, callback, handlers, what="showing a window"):
+    """Add `callback` to `UserInterface.commandTerminated`. Returns the handler, so the caller can take it off again
+    with `event.remove(handler)` when the add-in stops."""
+    handler = handlers.keep(_Terminated(callback, what))
+    event.add(handler)
+    return handler
 
 
 def on_destroy(event, callback, handlers):

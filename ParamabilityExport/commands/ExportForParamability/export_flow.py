@@ -12,6 +12,7 @@ import tempfile
 import time
 
 from ...lib.export_plan import health as health_module
+from ... import config
 from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_parts_pipeline, run_pipeline
@@ -292,11 +293,11 @@ def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBA
         message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.says)
         status_notice(notice)
         if offer:
-            result_dialog.show(reopen_view())
+            result_dialog.show(reopen_view(), config.EXPORT_COMMAND_ID)
     else:
         if health_module.design_changed(health) or undo.says:
             message_box("\n\n".join(rollback.check_lines(health, undo)), error=True)
-        result_dialog.show(view)
+        result_dialog.show(view, config.EXPORT_COMMAND_ID)
 
 
 def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None, command=None,
@@ -365,4 +366,4 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
     elif undo.says:
         export_common.tell_undone(undo)
         if offer:
-            result_dialog.show(reopen_view())
+            result_dialog.show(reopen_view(), config.EXPORT_COMMAND_ID)

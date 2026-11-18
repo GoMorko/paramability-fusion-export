@@ -1764,12 +1764,12 @@ These were written from the API reference and never run:
       (36 characters); `minimumVisibleRows` 6, `maximumVisibleRows` 14 and `isFullWidth` with a dialog of
       700 x 700; whether 14 rows fit the dialog height. The result dialog uses ratio `8:3:3`.
 - The result dialog (`lib/fusion_ui/result_dialog.py`), none of it run yet:
-  - **Starting a command after the export command:** `Application.registerCustomEvent(id)` in `start()`,
-    `CustomEvent.add` with a `CustomEventHandler`, `Application.fireCustomEvent(id)` at the end of the export, and
-    `unregisterCustomEvent` in `stop()`. The handler runs `CommandDefinitions.addButtonDefinition(id, name, tooltip,
-    "")` (a definition that is in no panel), `commandCreated` and `CommandDefinition.execute()`. Check that the
-    window opens once the export command has ended. The fallback is the message box when firing or starting raises;
-    if nothing raises but nothing opens, look for the window at the end of the export and note it.
+  - **Starting a command after the export command:** `UserInterface.commandTerminated.add` with an
+    `ApplicationCommandEventHandler` in `start()` and `commandTerminated.remove` in `stop()`. When the handler gets
+    `commandId` of the export command, it runs `CommandDefinitions.addButtonDefinition(id, name, tooltip, "")` (a
+    definition that is in no panel), `commandCreated` and `CommandDefinition.execute()`. Check that the window opens
+    once the export command has ended. The fallback is the message box when starting raises; if nothing raises but
+    nothing opens, look for the window at the end of the export and note it.
   - `Command.isOKButtonVisible = False` and `Command.cancelButtonText = "Close"`; a group with a table whose cells
     come from the group's `children`; text boxes with `<br>` lines.
 - The early warning (`lib/fusion_ui/timeline_select.py`, `lib/fusion_ui/notice.py`, `commands/ExportForParamability/

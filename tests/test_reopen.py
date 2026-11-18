@@ -49,6 +49,26 @@ class FakeDocument:
         return True
 
 
+class FakeEvent:
+    """An `ApplicationCommandEvent`: handlers are added and removed, and a test fires it for a command id."""
+
+    def __init__(self):
+        self.handlers = []
+
+    def add(self, handler):
+        self.handlers.append(handler)
+        return True
+
+    def remove(self, handler):
+        self.handlers.remove(handler)
+        return True
+
+    def fire(self, command_id):
+        args = types.SimpleNamespace(commandId=command_id)
+        for handler in list(self.handlers):
+            handler.notify(args)
+
+
 class FakeApp:
     """`Application` with `data.findFileById`, `documents.open` and the `userInterface` the reopen reads."""
 
@@ -57,9 +77,10 @@ class FakeApp:
         self.data = types.SimpleNamespace(findFileById=lambda file_id: latest if file_id == FILE_ID else None)
         self.documents = types.SimpleNamespace(open=self._open)
         self._opens = opens
-        self.userInterface = types.SimpleNamespace(activeCommand=result_dialog.COMMAND_ID,
-                                                   terminateActiveCommand=self._terminate)
-        self.fired = []
+        self.ends = True
+        self.userInterface = types.SimpleNamespace(
+            activeCommand=result_dialog.COMMAND_ID, terminateActiveCommand=self._terminate,
+            commandTerminated=FakeEvent())
 
     def _open(self, data_file, visible):
         self.calls.append(("open", data_file.versionNumber, visible))
@@ -67,12 +88,9 @@ class FakeApp:
 
     def _terminate(self):
         self.calls.append(("end window",))
-        self.userInterface.activeCommand = ""
-        return True
-
-    def fireCustomEvent(self, event_id):
-        self.fired.append(event_id)
-        return True
+        if self.ends:
+            self.userInterface.activeCommand = ""
+        return self.ends
 
 
 def setup(latest=None, opens=True, closes=True, modified=False):
@@ -167,61 +185,63 @@ class WindowTest(unittest.TestCase):
         self.assertIsNone(plain.commandInputs.itemById(result_dialog.REOPEN_ID))
         self.assertTrue(reopen_view()["reopen"])
 
-    def test_the_click_reopens_only_after_its_event_and_ends_the_window_first(self):
+    def listen(self, app):
+        patch = mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True)
+        patch.start()
+        self.addCleanup(patch.stop)
+        result_dialog.start()
+        self.addCleanup(result_dialog.remove)
+
+    def test_the_click_marks_the_reopen_and_it_runs_only_when_the_result_window_has_ended(self):
         app, document, calls = setup()
-        with mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True):
-            reopen_ui.keep(document, SAVED)
-            result_dialog.on_input("pm_result_sizes")
-            self.assertEqual(app.fired, [])
-            result_dialog.on_input(result_dialog.REOPEN_ID)
-            self.assertEqual(app.fired, [reopen_ui.EVENT_ID])
-            self.assertEqual(calls, [])
-            reopen_ui.run_pending()
+        self.listen(app)
+        reopen_ui.keep(document, SAVED)
+        result_dialog.on_input("pm_result_sizes")
+        self.assertEqual(calls, [])
+        result_dialog.on_input(result_dialog.REOPEN_ID)
+        self.assertEqual(calls, [("end window",)])
+        app.userInterface.commandTerminated.fire("SomeOtherCommand")
+        self.assertEqual(calls, [("end window",)])
+        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
+        self.assertEqual(calls, [("end window",), ("close", False), ("open", 4, True)])
+        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
+        self.assertEqual(len(calls), 3)
+
+    def test_a_window_that_ends_without_the_click_reopens_nothing(self):
+        app, document, calls = setup()
+        self.listen(app)
+        reopen_ui.keep(document, SAVED)
+        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
+        self.assertEqual(calls, [])
+
+    def test_a_window_fusion_does_not_end_reopens_when_the_person_closes_it(self):
+        app, document, calls = setup()
+        app.ends = False
+        self.listen(app)
+        reopen_ui.keep(document, SAVED)
+        result_dialog.on_input(result_dialog.REOPEN_ID)
+        self.assertEqual(calls, [("end window",)])
+        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
         self.assertEqual(calls, [("end window",), ("close", False), ("open", 4, True)])
 
     def test_without_a_kept_design_the_click_does_nothing(self):
         app, _, calls = setup()
-        with mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True):
-            reopen_ui.forget()
-            result_dialog.on_input(result_dialog.REOPEN_ID)
-            reopen_ui.run_pending()
-        self.assertEqual((app.fired, calls), ([], []))
-
-
-class LostEvent:
-    """An `Application` whose custom events were removed by another copy of the add-in: an event fires only after
-    it is registered again."""
-
-    def __init__(self):
-        self.registered, self.fired = set(), []
-
-    def unregisterCustomEvent(self, event_id):
-        self.registered.discard(event_id)
-
-    def registerCustomEvent(self, event_id):
-        self.registered.add(event_id)
-        return types.SimpleNamespace(add=lambda handler: True)
-
-    def fireCustomEvent(self, event_id):
-        self.fired.append(event_id)
-        return event_id in self.registered
-
-
-class LostEventTest(unittest.TestCase):
-    def test_the_result_window_and_the_reopen_register_their_event_again_when_it_is_gone(self):
-        app = LostEvent()
-        boxes = []
-        with mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True), \
-                mock.patch.object(result_dialog, "message_box", boxes.append), \
-                mock.patch.object(reopen_ui, "message_box", lambda *a, **k: boxes.append(a)):
-            result_dialog.show(plain_view())
-            self.assertIn(result_dialog.EVENT_ID, app.registered)
-            reopen_ui.keep(FakeDocument(FakeDataFile(4)), SAVED)
-            app.registered.clear()
-            reopen_ui.request(result_dialog.COMMAND_ID)
-        self.assertEqual(boxes, [])
-        self.assertEqual(app.fired.count(reopen_ui.EVENT_ID), 2)
+        self.listen(app)
         reopen_ui.forget()
+        result_dialog.on_input(result_dialog.REOPEN_ID)
+        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
+        self.assertEqual(calls, [])
+
+    def test_the_click_shows_when_the_design_reopens(self):
+        app, document, _ = setup()
+        self.listen(app)
+        reopen_ui.keep(document, SAVED)
+        command = fakes.FakeCommand()
+        result_dialog.build(command, offered_view())
+        note = command.commandInputs.itemById(result_dialog.REOPEN_NOTE_ID)
+        self.assertFalse(note.isVisible)
+        result_dialog.on_input(result_dialog.REOPEN_ID)
+        self.assertTrue(note.isVisible)
 
 
 if __name__ == "__main__":

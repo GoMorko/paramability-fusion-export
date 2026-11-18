@@ -1,4 +1,4 @@
-"""The result window: its groups and their order, the short message, and the later fires of its event (fakes with the
+"""The result window: its groups and their order, the short message and when it opens (fakes with the
 names of the Fusion API)."""
 import types
 import unittest
@@ -6,12 +6,12 @@ from unittest import mock
 
 from tests import context  # noqa: F401
 from tests import fakes
-from tests.test_reopen import SAVED, offered_view, setup
+from tests.test_reopen import FakeEvent, offered_view
 from tests.test_result_rows import view as plain_view
-from lib.fusion_ui import reopen as reopen_ui
 
 core = fakes.install_adsk_core()
-from lib.fusion_ui import event_retry, result_dialog  # noqa: E402
+import config  # noqa: E402
+from lib.fusion_ui import result_dialog  # noqa: E402
 
 
 def group_ids(command):
@@ -83,178 +83,89 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("design may be changed", shown["summary"])
 
 
-class FakeTimer:
-    """A `threading.Timer` that runs only when the test says so."""
-    made = []
+class FakeUI:
+    """A `UserInterface` with the command end event, the running command and the command definitions the window needs."""
 
-    def __init__(self, delay, function, args=()):
-        self.delay, self.function, self.args = delay, function, args
-        self.cancelled = self.started = False
-        self.daemon = False
-        FakeTimer.made.append(self)
+    def __init__(self, running=""):
+        self.commandTerminated = FakeEvent()
+        self.activeCommand = running
+        self.opened = []
+        self.add_fails = False
+        self.commandDefinitions = types.SimpleNamespace(itemById=lambda i: None, addButtonDefinition=self._add)
 
-    def start(self):
-        self.started = True
-
-    def cancel(self):
-        self.cancelled = True
-
-
-def run_timers(limit=20):
-    """Run the pending timers one after the other, as the clock would; returns how many ran."""
-    ran = 0
-    while ran < limit:
-        pending = [t for t in FakeTimer.made if t.started and not t.cancelled and not getattr(t, "ran", False)]
-        if not pending:
-            break
-        pending[0].ran = True
-        pending[0].function(*pending[0].args)
-        ran += 1
-    return ran
+    def _add(self, command_id, name, tooltip, resources):
+        if self.add_fails:
+            raise RuntimeError("no command")
+        return types.SimpleNamespace(commandCreated=FakeEvent(), execute=lambda: self.opened.append(command_id))
 
 
-class RefusingApp:
-    """An `Application` whose fires answer from a script (True or False), then False. A True fire runs the handler."""
-
-    def __init__(self, answers, on_fire=None):
-        self.answers, self.fired, self.on_fire = list(answers), [], on_fire
-        self.userInterface = types.SimpleNamespace(
-            commandDefinitions=types.SimpleNamespace(itemById=lambda i: None), activeCommand="")
-        self.logged = []
-
-    def unregisterCustomEvent(self, event_id):
-        return True
-
-    def registerCustomEvent(self, event_id):
-        return types.SimpleNamespace(add=lambda handler: True)
-
-    def fireCustomEvent(self, event_id):
-        self.fired.append(event_id)
-        ok = self.answers.pop(0) if self.answers else False
-        if ok and self.on_fire:
-            self.on_fire()
-        return ok
-
-    def log(self, text):
-        self.logged.append(text)
-
-
-class RetryTest(unittest.TestCase):
+class ResultWindowTest(unittest.TestCase):
     def setUp(self):
-        FakeTimer.made.clear()
-        self.boxes, self.logs = [], []
-        self.patches = [
-            mock.patch.object(event_retry, "new_timer", FakeTimer),
+        self.boxes, self.logs, self.notices = [], [], []
+        self.ui = FakeUI(running=config.EXPORT_COMMAND_ID)
+        app = types.SimpleNamespace(userInterface=self.ui)
+        patches = [
+            mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True),
             mock.patch.object(result_dialog, "message_box", self.boxes.append),
             mock.patch.object(result_dialog, "log", self.logs.append),
-            mock.patch.object(event_retry, "log", self.logs.append),
-            mock.patch.object(reopen_ui, "message_box", lambda *a, **k: self.boxes.append(a)),
-            mock.patch.object(reopen_ui, "log", self.logs.append),
-            mock.patch.object(result_dialog, "status_notice", lambda text: self.logs.append("status: " + text)),
-            mock.patch.object(reopen_ui, "status_notice", lambda text: self.logs.append("status: " + text)),
+            mock.patch.object(result_dialog, "status_notice", self.notices.append),
         ]
-        for patch in self.patches:
+        for patch in patches:
             patch.start()
-        self.addCleanup(lambda: [patch.stop() for patch in self.patches])
-        self.addCleanup(event_retry.cancel)
+            self.addCleanup(patch.stop)
+        result_dialog.start()
+        self.addCleanup(result_dialog.remove)
 
-    def use(self, app):
-        patch = mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True)
-        patch.start()
-        self.addCleanup(patch.stop)
-
-    def test_a_fire_that_works_later_opens_the_window_once_and_shows_no_message_box(self):
-        opened = []
-        app = RefusingApp([False, False, False, True], on_fire=lambda: opened.append(True))
-        self.use(app)
-        result_dialog.show(big_view())
-        self.assertEqual(len(app.fired), 2)  # the fire and the one after registering the event again
-        self.assertEqual(len(FakeTimer.made), 1)
-        self.assertEqual(FakeTimer.made[0].delay, event_retry.DELAYS[0])
-        run_timers()
-        self.assertEqual(len(app.fired), 4)
-        self.assertEqual(len(opened), 1)
+    def test_the_window_opens_once_and_only_after_the_export_command_has_ended(self):
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [])
+        self.assertEqual(self.notices, [result_dialog.WAITING])
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [result_dialog.COMMAND_ID])
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [result_dialog.COMMAND_ID])
         self.assertEqual(self.boxes, [])
-        self.assertEqual(len(FakeTimer.made), 2)  # no try after the one that fired
-        self.assertTrue(any(line.startswith("status: ") for line in self.logs))
 
-    def test_a_fire_that_raises_is_tried_again_the_same_way(self):
-        app = RefusingApp([])
-        calls = []
+    def test_a_command_that_ends_is_ignored_unless_it_is_the_export_that_showed_the_result(self):
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        for other in (config.ORCA_COMMAND_ID, config.ROWS_COMMAND_ID, "SelectCommand", ""):
+            self.ui.commandTerminated.fire(other)
+        self.assertEqual(self.ui.opened, [])
 
-        def fire(event_id):
-            calls.append(event_id)
-            if len(calls) < 3:
-                raise RuntimeError("busy")
-            return True
-        app.fireCustomEvent = fire
-        self.use(app)
-        result_dialog.show(big_view())
-        run_timers()
+    def test_a_result_shown_while_no_command_of_the_caller_runs_opens_at_once(self):
+        self.ui.activeCommand = ""
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [result_dialog.COMMAND_ID])
+        self.assertEqual(self.notices, [])
+
+    def test_a_pending_result_is_dropped_when_the_next_export_starts(self):
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        result_dialog.drop_pending()
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [])
         self.assertEqual(self.boxes, [])
-        self.assertEqual(len(calls), 3)
-
-    def test_when_every_try_fails_the_summary_goes_to_the_log_once_and_no_box_opens(self):
-        app = RefusingApp([])
-        self.use(app)
-        result_dialog.show(big_view())
-        self.assertEqual(run_timers(), len(event_retry.DELAYS))
-        self.assertEqual(self.boxes, [])
-        self.assertEqual(sum(1 for line in self.logs if line == result_dialog.summary(big_view())), 1)
-        self.assertEqual(run_timers(), 0)
 
     def test_a_window_that_cannot_start_shows_the_short_message_once(self):
-        app = RefusingApp([True])
-        app.userInterface.commandDefinitions = types.SimpleNamespace(itemById=mock.Mock(side_effect=RuntimeError("x")))
-        self.use(app)
+        self.ui.add_fails = True
         shown = big_view()
-        result_dialog.show(shown)
-        result_dialog.on_event(None)
-        result_dialog.on_event(None)
+        result_dialog.show(shown, config.EXPORT_COMMAND_ID)
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
         self.assertEqual(self.boxes, [shown["summary"]])
+        self.assertEqual(self.ui.opened, [])
 
-    def test_removing_the_add_in_cancels_the_pending_tries(self):
-        app = RefusingApp([])
-        app.userInterface.commandDefinitions = types.SimpleNamespace(itemById=lambda i: None)
-        self.use(app)
-        result_dialog.show(big_view())
-        stale = FakeTimer.made[0]
+    def test_removing_the_add_in_takes_the_handler_off_and_drops_the_pending_result(self):
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        self.assertEqual(len(self.ui.commandTerminated.handlers), 1)
         result_dialog.remove()
-        self.assertTrue(stale.cancelled)
-        before = len(app.fired)
-        stale.function(*stale.args)  # a timer that had already started
-        self.assertEqual(len(app.fired), before)
-        self.assertEqual(run_timers(), 0)
+        self.assertEqual(self.ui.commandTerminated.handlers, [])
+        self.ui.commandTerminated.fire(config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [])
 
-    def test_the_reopen_is_tried_again_in_the_same_way(self):
-        app, document, calls = setup()
-        script = RefusingApp([False, False, True])
-        app.fireCustomEvent = script.fireCustomEvent
-        app.unregisterCustomEvent = script.unregisterCustomEvent
-        app.registerCustomEvent = script.registerCustomEvent
-        self.use(app)
-        reopen_ui.keep(document, SAVED)
-        reopen_ui.request(result_dialog.COMMAND_ID)
-        self.assertEqual(len(script.fired), 2)
-        run_timers()
-        self.assertEqual(len(script.fired), 3)
-        self.assertEqual(self.boxes, [])
-        reopen_ui.run_pending()
-        self.assertEqual(calls, [("end window",), ("close", False), ("open", 4, True)])
-
-    def test_a_reopen_that_never_fires_is_logged_and_the_pending_tries_end_with_the_add_in(self):
-        app, document, _ = setup()
-        script = RefusingApp([])
-        app.fireCustomEvent = script.fireCustomEvent
-        app.unregisterCustomEvent = script.unregisterCustomEvent
-        app.registerCustomEvent = script.registerCustomEvent
-        self.use(app)
-        reopen_ui.keep(document, SAVED)
-        reopen_ui.request(result_dialog.COMMAND_ID)
-        timer = FakeTimer.made[0]
-        reopen_ui.remove()
-        self.assertTrue(timer.cancelled)
-        self.assertEqual(self.boxes, [])
+    def test_when_the_end_of_commands_cannot_be_heard_the_window_opens_at_once(self):
+        result_dialog.remove()
+        result_dialog.show(big_view(), config.EXPORT_COMMAND_ID)
+        self.assertEqual(self.ui.opened, [result_dialog.COMMAND_ID])
 
 
 if __name__ == "__main__":
