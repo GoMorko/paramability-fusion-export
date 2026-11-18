@@ -18,7 +18,9 @@ The add-in adds three buttons to Fusion:
   holes in its outline and with several outlines. When the angle of a symmetric revolve follows a parameter, the
   copy makes two turns, one to each side, so the angle follows in OrcaSlicer too. A pattern on a path of one line,
   arc or circle copies too, and its count and distance follow. A pipe with a round section copies as a sweep of
-  its circle, solid or hollow, and its diameter and wall follow your parameters.
+  its circle, solid or hollow, and its diameter and wall follow your parameters. A coil is left out: Orca's sweep
+  along a helix keeps the wire square to its turns, so the ends and the thickness of the wire would not be as in
+  Fusion.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.

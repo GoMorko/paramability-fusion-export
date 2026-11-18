@@ -8,6 +8,7 @@ from tests.translator_helpers import load_capture
 from lib.capture_model import gap_hints
 from lib.design_model.words import ToolStop
 from lib import orca_translate
+from lib.orca_translate import causes
 from lib.translator import translate
 from lib.translator.combine import tool_walk
 from lib.translator.handlers import HANDLERS
@@ -86,7 +87,7 @@ class OrcaToolOfAToolTest(unittest.TestCase):
         gap = orca_translate.translate(capture, None).left_out[0]
         self.assertEqual(gap["reason"].count("Fillet1"), 1)
         self.assertNotIn("Combine1", gap["reason"])
-        self.assertEqual(gap["cause"], gap_hints.UNSUPPORTED)
+        self.assertEqual(gap["cause"], causes.COIL_SHAPE)
 
 
 if __name__ == "__main__":

@@ -36,12 +36,14 @@ from .lofts import HANDLERS as LOFT_HANDLERS
 from .emboss import HANDLERS as EMBOSS_HANDLERS
 from .holes import HANDLERS as HOLE_HANDLERS
 from .press_round import HANDLERS as PRESS_HANDLERS
+from .coils import HANDLERS as COIL_HANDLERS
 from .tools import Pass
 
 HANDLERS = dict(HANDLERS, **HOLE_HANDLERS, **FINISH_HANDLERS, **THREAD_HANDLERS)
 HANDLERS.update(REPEAT_HANDLERS, **COMBINE_HANDLERS, **BODY_HANDLERS, **REVOLVE_HANDLERS,
                 **SWEEP_HANDLERS, **PIPE_HANDLERS, **LOFT_HANDLERS, **EMBOSS_HANDLERS)
 HANDLERS.update(PRESS_HANDLERS)
+HANDLERS.update(COIL_HANDLERS)
 
 VARIABLE, PARTLY, FIXED, UNUSED = "variable", "partly", "fixed", "unused"
 _INTERNAL = ("The Orca copy stopped on an error it did not expect in this step, so the step is left out. The report "

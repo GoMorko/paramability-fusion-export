@@ -99,6 +99,8 @@ EMBOSS_FACE = "embossFace"
 # face, is left out.
 PRESS_PULL_FLAT = "pressPullFlat"
 PRESS_PULL_FACES = "pressPullFaces"
+# Coils (`coils`): Orca's sweep along its helix turns the wire otherwise than Fusion's coil, so every coil is left out.
+COIL_SHAPE = "coilShape"
 # A step that lists a body with the part's name under another token (`roles.lost`): the part may have a new token,
 # so the copy cannot tell whether the step changes it.
 BODY_LOST = "bodyLost"

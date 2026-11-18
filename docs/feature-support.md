@@ -93,7 +93,7 @@ can be.
 | Thread: cosmetic | Copied | - | Copied | - | It changes no shape. |
 | Thread: other forms, tapered | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Box, Cylinder, Sphere, Torus | Left out | Yes, add-in only | Left out | Yes, add-in only | The add-in does not read these step types yet. Extrudes and revolves can rebuild them. |
-| Coil | Partly | Yes, needs an app change | Left out | Yes, add-in only | Paramability: round, square or triangle section, no taper, at most 8 coils. A spiral, a taper and half turns are left out. Orca has a helix that follows variables; not tried. |
+| Coil | Partly | Yes, needs an app change | Left out | Needs Orca | Paramability: round, square or triangle section, no taper, at most 8 coils. A spiral, a taper and half turns are left out. Orca: left out. Its sweep along a helix keeps the wire square to the helix, but Fusion keeps it on a plane through the axis, so the ends and the thickness of the wire differ. A sweep that keeps the axis direction, as Orca's thread does, would copy it. |
 | Pipe | Partly | Yes, add-in only | Partly | Yes, add-in only | Paramability: a circle section, solid or hollow, along the whole path, as a sweep of the circle; sharp corners are mitred. A square or triangle section, and a closed path that starts on a sharp corner, are left out until a hand check shows how Fusion builds them. Orca: a circle section, solid or hollow, along the whole path, as a sweep of the circle; the path as for a sweep (in one plane, no sharp corners); the diameter and the wall follow variables, the path keeps its numbers. |
 | Rectangular pattern of features | Copied | - | Copied | - | Count and spacing follow. Orca: no rounds or chamfers among the copied steps. |
 | Circular pattern of features | Copied | - | Copied | - | Count and angle follow. Paramability: an even count may give unexpected results. |
@@ -230,6 +230,7 @@ These need a change in Orca's Design tab, so the Orca copy cannot do them while 
   or surface.
 - Lofts through more than two outlines, with holes, with rails, a centre line or shaped ends.
 - Left hand threads, other thread forms, tapered threads and drill points.
+- Coils: a sweep along a helix that keeps the wire on planes through the axis, as Fusion's coil does.
 - Through all for a join or new body that ends where the part ends.
 - Formula functions other than `sqrt`, `abs`, `min`, `max`, `sin`, `cos` and `tan`: no `if`, `round`, `ceil`,
   `floor`, `%` or comparisons.
