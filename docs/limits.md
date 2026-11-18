@@ -266,7 +266,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   sizes), and every
   step type not listed above. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
   helical edges read back as one plain helix; at most 8 coils, and 100 turns of coils and threads together in timeline order (later ones are left out), never as a tool
-  with other steps (a spiral, a taper and a half-turn count of revolutions are left out). A draft is copied when its faces all lie on one side of its plane, with one angle
+  with other steps (a spiral, a taper and a half-turn count of revolutions are left out). The Orca output leaves every coil out
+  (`docs/orca-output.md`, "Coils"). A draft is copied when its faces all lie on one side of its plane, with one angle
   under 30 degrees (or the same on both sides; it follows a size only when both sides use the same formula, and the
   size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean).
   A Symmetric draft with faces on both sides of its plane is copied the same way, as two equal angles (recipe version

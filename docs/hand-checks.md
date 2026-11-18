@@ -1179,3 +1179,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (9539.38 with `Grow` = 2), 15363.83 mm3 (15214.60 with `Fit` = 1) and 8502.65 mm3 (8282.74 with `Grow` = 2).
     The line of the parameter tells how far it may go (under 14.9, 15.9 and 4.99 mm). Afterwards each design is as
     before.
+
+98. CO4, a coil spring for Export for Orca. Add user parameters `Pitch` = 5 mm and `Wire` = 2 mm. Make a Coil with
+    Insert > Coil on the XY plane, centred on the origin: type "Revolutions and Pitch", diameter 20 mm, revolutions 4,
+    pitch `Pitch`, round section, section size `Wire`, section position "On center", right hand, new body. Make a
+    second design with a cylinder of radius 10.5 mm and 30 mm high on the XY plane, and the same coil on the XY plane
+    as a Cut (a groove round the cylinder).
+    Export: Export for Orca each design with both parameters ticked. The coil is left out with the reason that Orca
+    keeps the wire square to its turns, and `orca.left_out[]` has the cause `coilShape`; the cylinder of the second
+    design is copied. In `report.json` the coil's two `faces.flat` frames have a `z` (the face normal) square to the
+    Z axis, so Fusion's end faces lie on planes through the axis. Fusion gives the first body 789.57 mm3 (Inspect >
+    Properties; a round tube along the helix would be 792.06). Afterwards each design is as before.

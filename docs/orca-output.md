@@ -61,7 +61,8 @@ The modules of `lib/orca_translate/`:
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
   pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler) and
-  `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
+  `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"), and `coils.py`, which
+  leaves every coil out (see "Coils"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
   cause (`causes.py`).
@@ -142,7 +143,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 pasted body, scale (Orca has no step that scales a body)...), the Press Pulls in "Press Pull of a round
-face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", every coil (see "Coils"), the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
@@ -174,7 +175,8 @@ tip. The result window lists up to five steps in full lines ("name: reason Tip: 
 the rest.
 
 A pipe with a round section is copied as a sweep of its circle (see "Pipes"). A pipe with a square or triangle
-section is left out (cause `pipe`), with the tip to draw the section on a sketch and sweep it.
+section is left out (cause `pipe`), with the tip to draw the section on a sketch and sweep it. Every coil is left out
+(cause `coilShape`, no tip, see "Coils").
 
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
 the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that
@@ -769,6 +771,36 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   corner (`sharpCorner`).
 - The captures of `tests/orca_pipes.py` (see "Live check without Fusion") built in OrcaSlicer 2.5.1 with the volumes
   worked out, also the hollow pipe whose hole ends lie on the ends of the pipe.
+
+### Coils
+
+`orca_translate/coils.py` leaves every coil out (cause `coilShape`). This was decided from the source of Orca 2.5.1
+(`make_helix_spine`, `CadDocument::apply_feature` Sweep and Thread, `SketchEngine::make_sweep`):
+
+- Orca's Helix is a path only. Its axis is the normal of its plane through the plane's origin, it starts at the
+  origin plus `helix_radius` along the plane's x axis, and it rises `helix_height` along the normal by `helix_pitch`
+  per turn. It turns right hand about the normal, or left hand with `helix_left_handed`. A Sweep can name it as its
+  path (`sweep_path_ref`).
+- A Sweep along it is `BRepOffsetAPI_MakePipe` with the profile as a face. The Sweep has no setting for the frame
+  that carries the profile, and that frame turns about the path. Orca's own Thread does not use the Sweep for this
+  reason: it builds its groove with `BRepOffsetAPI_MakePipeShell` and the axis as a fixed binormal (`SetMode`), so
+  that its profile stays on planes through the axis.
+- Fusion's coil has its section on a plane through the axis and keeps it so (`translator/coil/coil_fit.py`): its
+  two flat end faces lie on planes through the axis.
+- A circle drawn square to the helix at its start stays square to it, so Orca makes a round tube. Its ends are square
+  to the helix, so each end leans against Fusion's by the helix angle. The rim of an end lies up to the wire radius
+  times the slope (the pitch over the length of one turn) away from Fusion's end: 0.08 mm for a wire of 2 mm on a
+  coil of 20 mm with a pitch of 5 mm, which is more than 0.02 mm. The wire is also thicker along the axis than
+  Fusion's by the wire radius times (1 / cos(helix angle) - 1), and the volume is larger by the factor
+  1 / cos(helix angle): 792.06 mm3 against 789.57 mm3 for that coil of 4 turns.
+- A circle drawn on the plane through the axis, as Fusion has it, does not stay on such planes, because the frame of
+  the sweep turns about the path. Orca's comment on its Thread says the same of a profile swept with `MakePipe`.
+
+Thus neither shape is Fusion's coil within 0.02 mm, and no coil is copied. The probes of `tests/orca_coils.py` (see
+"Live check without Fusion") show what Orca builds. Two ways can copy a coil later: a Sweep in Orca that keeps the
+axis as a fixed binormal, as its Thread does, with the circle on the plane through the axis (that is Fusion's coil,
+ends included); or a tube along a helix made a little longer, with its ends cut off on planes through the axis
+(Fusion's ends, but the wire stays thicker along the axis, so the pitch would need a limit on its line).
 
 ### Which parameters follow
 
@@ -1367,6 +1399,8 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   changes can put copies where the part has none; they then add material there or cut nothing.
 - A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its
   thickness as numbers in Orca.
+- A coil is left out: Orca's sweep along its helix gives the wire other ends and another thickness than Fusion's coil
+  (see "Coils").
 - One body per file. The recipe format is Orca's internal one (version 6) and may change.
 
 ## Live check without Fusion
@@ -1442,6 +1476,20 @@ of radius 20 through 90 degrees and a 30 mm line: 350 pi + 70 pi^2 = 1790.43 mm3
 through one face and out through another: 48000 - 405 pi - 67.5 pi^2 = 46061.46 mm3; with `--set pipe_d=8`
 44553.70). All three built with these volumes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set`
 changes.
+
+Coils: `tests/orca_coils.py` writes raw recipes (no capture: the copy leaves coils out) that sweep a circle of
+radius 1 along an Orca Helix on the XY plane through (128, 128, 2), right hand, as a new body. Write one with
+`python3 -m tests.orca_coils <name> <out.3mf>`, open it in the test Orca, then run `python3
+scripts/orca_live_check.py check`. The script prints the volume and the box of a round tube along the helix and of
+Fusion's coil of the same sizes (a circle of radius r on the plane through the axis, carried round with a screw
+motion: pi r^2 times 2 pi R times the turns). `spring_square` and `spring_upright` are a helix of radius 10, pitch 5
+and height 20 (4 turns): the tube is 4 pi sqrt(400 pi^2 + 25) = 792.06 mm3, box (117, 117, 1.003) to (139, 139,
+22.997), and Fusion's coil 80 pi^2 = 789.57 mm3, box (117, 117, 1) to (139, 139, 23). `quarter_square` and
+`quarter_upright` are a quarter turn of radius 10 and pitch 20 (height 5), where the ends show most: the tube is
+51.79 mm3, box (127.697, 127.697, 1.047) to (139, 139, 7.953), and Fusion's coil 5 pi^2 = 49.35 mm3, box (128, 128, 1)
+to (139, 139, 8), its ends on the planes x = 128 and y = 128. A `square` probe has the circle square to the helix at
+its start, an `upright` probe has it on the plane through the axis. An `upright` probe that builds Fusion's box and
+volume would show that Orca's sweep keeps the section on planes through the axis after all.
 
 A Press Pull of a whole round face has captures in `tests/orca_press_round.py`. Save one with `python3 -m
 tests.orca_press_round <name> <file>` and give the file to `write`. The volumes are exact. All three built with these

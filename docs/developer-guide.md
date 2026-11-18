@@ -5314,6 +5314,28 @@ them, every value is a number and its sizes are marked.
 A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
 and the `coil` kind has no repeat rule.
 
+#### Coils in the Orca output
+
+The Orca output leaves every coil out (`orca_translate/coils.py`, cause `coilShape`, see "Coils" in
+`docs/orca-output.md`). The reason is a fact of the source of Orca 2.5.1, not of the design:
+
+1. Orca has a Helix feature. A Sweep can use the helix as its path.
+2. The Sweep builds its shape with `BRepOffsetAPI_MakePipe`. The frame that carries the section turns about the path,
+   and the Sweep has no setting that changes this frame.
+3. The section of a Fusion coil is on a plane through the axis, and it stays on such planes along the helix. The two
+   end faces of the coil are on planes through the axis.
+4. When the copy draws the circle square to the helix, Orca makes a round tube. The ends of the tube are square to the
+   helix, so they lean against the ends of Fusion by the helix angle. The rim of an end can be 0.08 mm away from the
+   end of Fusion for a usual spring. The wire of the tube is also thicker along the axis.
+5. When the copy draws the circle on the plane through the axis, the frame of the sweep turns the circle off that plane.
+   Orca's own Thread uses `BRepOffsetAPI_MakePipeShell` with the axis as a fixed binormal for this reason.
+
+Thus neither drawing gives the coil of Fusion within 0.02 mm. A wrong coil that looks correct is worse than a coil
+that is left out, so the handler gives a `Skip` for each coil. The handler does not read the coil.
+
+`tests/orca_coils.py` writes raw Orca recipes of both drawings, with the volumes and the boxes of a tube and of the
+coil of Fusion. A live check with these probes shows what Orca builds.
+
 ### 3.14 How a revolve is translated
 
 `revolve.step.handle` (`lib/translator/revolve/step.py`) writes one recipe `revolve` step for each sketch outline of the
