@@ -166,7 +166,7 @@ class FromTest(unittest.TestCase):
         self.assertEqual((boss.extrude_end, boss.distance), (ExtrudeEnd.BLIND, 5.0))
         self.assertEqual(outcome(result, "h")["outcome"], PARTLY)
 
-    def test_a_start_at_a_distance_from_a_face_is_left_out(self):
+    def test_a_start_at_a_distance_from_a_face_with_no_measured_way_is_left_out(self):
         capture = ex.from_top_face()
         capture["items"][3]["data"]["params"]["start.offset"] = ex.param("d9", "2 mm", 2.0)
         self.assertEqual([g["cause"] for g in run(capture).left_out], [gap_hints.EXTRUDE_START_OFFSET])
