@@ -12,7 +12,7 @@ on the body and the rest of the timeline still reads right, is left out as a gap
 handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
 out item would have recorded (doubts, notes) is dropped with it. A handler can also write part of an item and leave
 the rest out (`StepResult.left_out`, one set of edges of a round): the steps are written and the rest is the item's
-gap, placed after them; its verdict is translatedWithNote with the `gap` id. Anything that leaves the body unknown
+gap, placed after them; its verdict has the `gap` id, and the gap's reason shows once, with the gap. Anything that leaves the body unknown
 still stops the copy. A step Fusion shows in error goes by what the reader measured around it: passed by with a note when the
 body stayed the same, a gap when it changed, a stop when it was not measured.
 """
@@ -314,7 +314,6 @@ def walk_items(ctx, result):
             # The body just before the part left out holds the steps written for the rest, so the body the reader
             # measured before the item does not describe it.
             gap.before = None
-            notes.append(gap.reason)
         if item.get("health") == "warning":
             notes.append(wording.health_warning_note(_label(item), item.get("message")))
         verdict = make_verdict(item, NOTED if notes else TRANSLATED, ids, " ".join(notes))
