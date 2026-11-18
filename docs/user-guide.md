@@ -149,7 +149,7 @@ design broken (a step stays in error even with your values back), the tries stop
 fail for that reason; the result window says so. When the broken step belongs to another component that the part
 does not need, and the part reads as before, only the tries of the sizes behind it end, and the other sizes are tried
 in full. A size that also changes steps of another component gets its range ends after the other sizes, since its
-tries are the most likely to break the design. When the tries stop early like this, or run out of time, before the
+tries are the most likely to break the design; your favourite sizes still come first. When the tries stop early like this, or run out of time, before the
 values between the last value that built and the first one that did not were tried, the range still stops at the last
 value that built, and its reason adds "no value between was tried", why, and a tip: untick the size that stopped the
 tries, or raise the time limit. The design may build at some of those values; a later export that tries them can give

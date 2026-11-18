@@ -76,6 +76,17 @@ class FarOrderTest(unittest.TestCase):
                 self.assertEqual(far, ["count (min)", "count (max)", "cube (min)", "cube (max)", "height (min)",
                                        "height (max)", "off (min)", "off (max)"])
 
+    def test_favourites_stay_first_and_risky_sizes_go_last_within_each_group(self):
+        def named(name, favorite=False):
+            return {"param": name, "size": name, "unit": "mm", "value": 5.0, "min": 1.0, "max": 9.0,
+                    "favorite": favorite}
+
+        sizes = [named("a", True), named("b", True), named("c"), named("d"), named("e")]
+        order = plan.far_order(sizes, {"a", "b", "c", "d", "e"}, late={"c"}, risky={"a", "c", "d"})
+        # A favourite that drives another component still comes before the other sizes; a size whose own tries showed
+        # trouble comes after one that only drives another component.
+        self.assertEqual(order, ["b", "a", "e", "d", "c"])
+
 
 class NearerShareTest(unittest.TestCase):
     def test_sizes_whose_far_tries_fail_each_get_nearer_rows_under_the_cap(self):

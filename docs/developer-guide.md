@@ -717,20 +717,25 @@ then the next size. A later far row that stops the tries cannot cut the range of
 The order of the sizes:
 
 1. `SizeProbe.far_order` gives the tried sizes in the order of the near rows (`plan.far_order`, `rows.tried_sizes`).
-2. A size goes last when its own rows so far showed trouble outside the part (`far_phase.late_sizes`):
+   The favourites of the design come first. The points below move a size to the end of its group: the favourites or
+   the other sizes. A favourite never goes after a size that is not a favourite. Thus a time limit or the row limit
+   cuts the tries of the other sizes first, as in the near rows.
+2. A size goes last in its group when its own rows so far showed trouble outside the part (`far_phase.late_sizes`):
    - a new warning on a step that the part is not built from (`others_warned` in the row result, which
      `RowExport.run` keeps from the same read as `warned`),
    - an error on a step that the part is not built from,
    - a check after the row that found a step worse and walked the design back (an attempt at `walk_back.AT_CHECK`
      in `RowExport.walks`; only the first 24 attempts are kept).
-3. A size also goes last when, set alone in a row that built, it moved a measured reference of another component
-   (`states.moves_others`; a reference without `own`).
-4. A size also goes last when it drives a step of another component (`geometry_links.outside_drivers`). This fact
+3. A size also goes last in its group when, set alone in a row that built, it moved a measured reference of another
+   component (`states.moves_others`; a reference without `own`).
+4. A size goes after the other sizes of its group, but before the sizes of points 2 and 3, when it drives a step of
+   another component (`geometry_links.outside_drivers`, `risky` in `plan.far_order`). Its own rows showed no trouble,
+   so the evidence is weaker than in points 2 and 3. This fact
    comes from the capture, before any try. `geometry_links.acts` gives the timeline items that a size drives, from the
    model parameters that read it (`parameters.user[].dependents`). When one of these items has `in_target_component`
    false, the item is outside the part. In a group export, the item must be outside every part
    (`ProbeGroup.far_order` gives the captures of all parts to `SizeProbe.far_order`).
-5. The sizes that go last keep their order. When no size shows these facts, the order is the order of the near rows.
+5. The sizes that move keep their order. When no size shows these facts, the order is the order of the near rows.
 
 The facts of points 2 and 3 come from the rows that ran before. The fact of point 4 comes from the capture. The
 add-in does not read Fusion again for them. A far try of such a size is the most likely to break the design, so the
@@ -773,9 +778,9 @@ read when its last row did not build or read another outline (`ProbeRun._tails`)
 be one such read per size. The number of rebuilds per row does not change.
 
 Tests: `tests/test_far_phase.py` (the same rows for a clean export, one part and a group; the order of a size that
-warned outside the part and of a size that drives a step of another component; the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py`
-(a later size that breaks the design after the halving of the first size, and a time limit between the far rows of
-two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
+warned outside the part and of a size that drives a step of another component; the favourites first in that order;
+the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py` (a later size that breaks
+the design after the halving of the first size, and a time limit between the far rows of two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
 
 #### One row, in detail
 
