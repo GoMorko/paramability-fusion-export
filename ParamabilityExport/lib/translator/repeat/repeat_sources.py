@@ -90,6 +90,10 @@ def split_sources(data, ctx, what):
     solids, finishes = [], []
     for index in indexes:
         ids = ctx.steps_of(index)
+        part_gap = ctx.gap_of(index) if ids else None
+        if part_gap is not None:
+            # A step written in part (a round with a set of edges left out): its copies would lack that part too.
+            return Refusal(wording.repeats_gap_reason([part_gap.name]), [part_gap.id])
         if not ids and index in ctx.folded and any(ctx.folded[index] in ctx.steps_of(i) for i in indexes):
             # A round drawn into the outline of a step this repeat copies too: the copies carry it.
             continue

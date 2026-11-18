@@ -9,15 +9,17 @@ The read also runs when the first translation stopped only because the part hold
 (`TranslateResult.over_gap_cap`): the later picking steps that the read clears may bring it under the cap. The cap
 applies to the translation that uses the answer.
 
-The read is asked about the steps left out for their own reason, also inside tool bodies. A step left out only because
-it may pick faces of another gap is not one of them: the read tests it as a picking step instead.
+The read is asked about the steps left out for their own reason, also inside tool bodies, and about the steps written
+only in part (a round with one set of edges left out). A step left out only because it may pick faces of another gap
+is not one of them: the read tests it as a picking step instead.
 """
 from ..results.verdicts import LEFT_OUT
 
 
 def _own_gaps(verdicts):
     for verdict in verdicts:
-        if verdict.get("verdict") == LEFT_OUT and verdict.get("cause") != "picks":
+        # A step written in part has its gap too (`gap`, cause `own`).
+        if (verdict.get("verdict") == LEFT_OUT or verdict.get("gap")) and verdict.get("cause") != "picks":
             yield verdict.get("index")
         yield from _own_gaps(verdict.get("tool_steps") or [])
 

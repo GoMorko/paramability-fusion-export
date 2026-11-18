@@ -193,8 +193,10 @@ class Context:
 
     def note(self, text):
         """Attach a plain sentence to the item being handled (it goes to the handler's StepResult, `recording`); its
-        verdict becomes translatedWithNote."""
-        self._recordings[-1].notes.append(text)
+        verdict becomes translatedWithNote. A sentence the item has already is not given twice."""
+        notes = self._recordings[-1].notes
+        if text not in notes:
+            notes.append(text)
 
     @contextmanager
     def recording(self):
@@ -215,7 +217,7 @@ class Context:
         if doubts:
             here.doubts.extend(recorded.doubts)
             if self._recordings:
-                here.notes.extend(recorded.notes)
+                here.notes.extend(note for note in recorded.notes if note not in here.notes)
 
     def commit(self, result):
         """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""

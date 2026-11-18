@@ -18,6 +18,10 @@ reason to give and how to name the edges.
 - `Part`, `merge`: the edges of a step grouped into parts of one size (and one side, one second measure), so a step
   with sets of different sizes is a list of steps of one size each.
 - `reach`: how far from its edge a set takes material along a face.
+- `FinishSet.pick`, `box_gap`, `reach_terms`, `only_sets`: how Fusion picked the edges of a set (by faces, along
+  tangent chains, or edge by edge), how near the edges of two sets can come and how far a set reaches (so a
+  destination can tell whether Fusion gives the same part when it applies them one after the other as when it
+  applies them together), and an item cut down to some of its sets.
 
 A size that follows the sizes of the design is a `Quantity` (`design_model.values`). The destination makes it: each
 set gives `size(quantity)` the number and the path of its parameter, and `quantity(path, number, dim)` gives back the
@@ -35,6 +39,8 @@ EQUAL, TWO_DISTANCES, DISTANCE_ANGLE = "equal", "twoDistances", "distanceAngle"
 NO_SIZE, NO_ANGLE, UNKNOWN_KIND = "size", "angle", "kind"
 # The kinds of `Measure`: a second distance, or the angle of the cut.
 DISTANCE, ANGLE = "distance", "angle"
+# How Fusion picked the edges of a set (`FinishSet.pick`).
+FACES, CHAINS, EDGES = "faces", "chains", "edges"
 
 SIZE_TOL = 1e-9
 ANGLE_TOL = 1e-6
@@ -56,6 +62,14 @@ _UNMEASURED = object()
 
 def _positive(value):
     return is_number(value) and value > 0
+
+
+def _is_point(value):
+    return isinstance(value, list) and len(value) == 3 and all(is_number(c) for c in value)
+
+
+def _is_box(value):
+    return isinstance(value, dict) and _is_point(value.get("min")) and _is_point(value.get("max"))
 
 
 def _close(a, b, tol=SIZE_TOL):
@@ -99,6 +113,26 @@ class FinishSet:
     def foreign(self):
         """True when an edge is on another component."""
         return any(edge.get("foreign") for edge in self.edges)
+
+    @property
+    def pick(self):
+        """How Fusion picked the edges: `FACES` (only faces, each read), `CHAINS` (only edges, along tangent chains),
+        `EDGES` (only edges, one by one), or None (inputs of several kinds, or the edges of another step)."""
+        kinds = self.entry.get("input_kinds") or []
+        if kinds == ["face"] and self.entry.get("faces"):
+            return FACES
+        if kinds == ["edge"]:
+            return CHAINS if self.entry.get("tangent_chain") else EDGES
+        return None
+
+    @property
+    def boxes(self):
+        """The boxes of all edges (`box` of the edge records), or None when the set has no edge or an edge has no
+        readable box."""
+        found = [edge.get("box") for edge in self.edges]
+        if not found or not all(_is_box(box) for box in found):
+            return None
+        return found
 
 
 class RoundSet(FinishSet):
@@ -482,3 +516,106 @@ def _uneven_groups(edges, ratio):
                 return None
             groups.append({"direction": direction, "leans": leans, "edges": [edge]})
     return [(g["direction"], g["edges"]) for g in groups]
+
+
+# ---- sets far enough apart to apply one after the other -------------------------------------------------------
+
+# Fusion builds the sets of one step together: where two sets meet or come near, it makes one blend there, which two
+# steps one after the other do not make. A destination may copy the sets one after the other only when the edges of
+# two sets lie further apart than CORNER_MARGIN times the two reaches together (plus CORNER_TOL, mm), at every size
+# setting. `box_gap` gives a distance the edges cannot be nearer than, and `reach_terms` how far each set reaches. The
+# margin gives room for what the reader did not measure: the angle between the faces between its measured places,
+# and how sizes turn the faces.
+CORNER_MARGIN = 2.0
+CORNER_TOL = 1e-3
+# A round on faces that turn more than this (degrees) reaches too far along them to tell.
+MAX_TURN_DEG = 170.0
+
+
+def _box_distance(a, b):
+    gaps = [max(0.0, a["min"][k] - b["max"][k], b["min"][k] - a["max"][k]) for k in range(3)]
+    return math.sqrt(sum(g * g for g in gaps))
+
+
+def box_gap(a, b):
+    """A distance (mm) that no edge of set `a` comes nearer than to an edge of set `b`: the least distance between the
+    box of an edge of one and the box of an edge of the other (each box holds its whole edge). 0 for sets that share
+    an edge or a corner. None when a box is not known."""
+    boxes_a, boxes_b = a.boxes, b.boxes
+    if boxes_a is None or boxes_b is None:
+        return None
+    return min(_box_distance(p, q) for p in boxes_a for q in boxes_b)
+
+
+def _turn(one):
+    """The largest angle (degrees) between the face normals of the edges of `one`, or None when an edge lacks it."""
+    found = [edge.get("turn_deg") for edge in one.edges]
+    if not found or not all(is_number(t) and 0 <= t <= 180 for t in found):
+        return None
+    return max(found)
+
+
+class ReachTerms:
+    """How far a set reaches along a face from its edges, at most: the sum of `factor * value` over `terms`, each
+    `(field, number, factor, dim)` with `field` the set's value (its parameter `path`). The factors hold only while the
+    values in `held`, each `(field, number, dim)`, stay as they are now."""
+
+    def __init__(self, terms, held=()):
+        self.terms, self.held = list(terms), tuple(held)
+
+
+def reach_terms(one):
+    """The `ReachTerms` of the set `one`, or None when how far it reaches is not known.
+
+    A round of radius r between faces whose normals are `t` degrees apart touches each face r * tan(t / 2) from the
+    edge (r on a square edge); a round by chord length c touches it c / (2 cos(t / 2)) from the edge. `t` is the
+    largest angle the reader measured on the edges (`turn_deg`); past MAX_TURN_DEG the reach is not known. A changing
+    radius counts both end radii, and is not known with radii between the ends. A chamfer reaches its distances along
+    the faces; one by distance and angle reaches distance * tan(angle), which holds while the angle stays."""
+    if isinstance(one, RoundSet):
+        turn = _turn(one)
+        if one.continuity == "curvature" or turn is None or turn > MAX_TURN_DEG:
+            return None
+        half = math.radians(turn) / 2.0
+        factor = max(1.0, math.tan(half))
+        if one.kind == CONSTANT and one.radius is not None:
+            return ReachTerms([("radius", one.radius, factor, "length")])
+        if one.kind == VARIABLE and one.start is not None and one.end is not None and one.mid_count == 0:
+            return ReachTerms([("start_radius", one.start, factor, "length"), ("end_radius", one.end, factor, "length")])
+        if one.kind == CHORD_LENGTH and one.chord is not None:
+            return ReachTerms([("chord_length", one.chord, max(1.0, 1.0 / (2.0 * math.cos(half))), "length")])
+        return None
+    if isinstance(one, ChamferSet) and not one.problem:
+        if one.kind == EQUAL:
+            return ReachTerms([("distance", one.distance, 1.0, "length")])
+        if one.kind == TWO_DISTANCES:
+            return ReachTerms([("distance", one.distance, 1.0, "length"), ("distance_two", one.other, 1.0, "length")])
+        if one.kind == DISTANCE_ANGLE and one.angle < REACH_ANGLE_DEG:
+            factor = max(1.0, math.tan(math.radians(one.angle)))
+            return ReachTerms([("distance", one.distance, factor, "length")], held=[("angle_deg", one.angle, "angle")])
+    return None
+
+
+def only_sets(item, indexes, renumber=False):
+    """A copy of the round or chamfer `item` whose data keeps only the sets at `indexes` (places in `data.sets`) and
+    their parameters (`data.params` keys `sets.<n>.<field>`); the other parameters of the item stay. With `renumber`
+    the kept sets are also the only ones in `data.sets`, numbered again from 0 in their order, and so are the keys of
+    their parameters; without it `data.sets` stays whole, so the keys of the kept parameters still name their sets."""
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    keep = sorted(set(indexes))
+    new_of = {old: (new if renumber else old) for new, old in enumerate(keep)}
+    params = {}
+    for path, value in (data.get("params") or {}).items():
+        parts = path.split(".", 2)
+        if len(parts) == 3 and parts[0] == "sets" and parts[1].isdigit():
+            if int(parts[1]) in new_of:
+                params["sets.%d.%s" % (new_of[int(parts[1])], parts[2])] = value
+        else:
+            params[path] = value
+    found = dict(data)
+    if "params" in data:
+        found["params"] = params
+    if renumber:
+        sets = data.get("sets") or []
+        found["sets"] = [sets[n] for n in keep if n < len(sets)]
+    return dict(item, data=found)

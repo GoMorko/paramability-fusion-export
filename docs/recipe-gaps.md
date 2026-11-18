@@ -59,6 +59,13 @@ intersect with the tool as written would give a wrong part: the Combine becomes 
 names the tool body and that step, and it takes that step's cause (`tool_walk.unfinished`). The same holds when the
 tool cannot be built (its first step is a gap, for example). In both cases the gaps inside the tool are dropped.
 
+A round or chamfer can also be written in part: when its sets of edges lie apart and one set alone cannot be copied,
+the other sets are written and that set is the step's gap (`finishes/set_split.py`). The gap comes after the written
+steps of the step. Its `data` holds only the sets left out, numbered from 0, and only their values in `params`, so
+`values` and `sizes` are those of the missing sets. It has no `bodyBefore`: the body measured before the step lacks
+the sets that the copy wrote. The step's verdict holds its steps and the gap's id; the reason shows once, with the
+gap. A pattern or mirror of such a step is left out, with `dependsOn` naming the gap.
+
 What a left out step would have recorded (doubts about sizes, notes) is dropped with it, so a step that is not
 written never fixes a size.
 

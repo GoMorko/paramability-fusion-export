@@ -84,6 +84,10 @@ across. The add-in marks each size that may move such a place "may give unexpect
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).
 The same holds when Fusion picked the edges of a round or chamfer from faces or chains of edges and the copy has to
 pick the edges one by one: at other sizes those faces or chains may hold other edges.
+One fillet or chamfer can hold several sets of edges, each picked in its own way and with its own size. When the sets
+lie apart from each other, the copy makes one step for each way of picking, one after the other. Then each set keeps
+the pick that Fusion used. When one set cannot be copied, only that set is left out, and the copy keeps the others.
+The sizes used before such a step are still marked, since the add-in cannot see whether they move the sets nearer.
 Paramability then shows the original shape and a list of the missing steps.
 
 ## Install

@@ -12,8 +12,11 @@ def edge(token, x, closed=False):
     """A straight edge whose middle point is (x, 0, 0); a closed one starts and ends at the same vertex."""
     evaluator = Obj(getParameterExtents=lambda: (True, x - 1.0, x + 1.0),
                     getPointAtParameter=lambda t: (True, P(t, 0, 0)))
-    return Obj("fusion::BRepEdge", entityToken=token, evaluator=evaluator, startVertex=Obj(entityToken="v" + token),
-               endVertex=Obj(entityToken="v" + token if closed else "w" + token))
+    start = Obj("fusion::BRepVertex", entityToken="v" + token)
+    end = start if closed else Obj("fusion::BRepVertex", entityToken="w" + token)
+    box = Obj("core::BoundingBox3D", minPoint=P(x - 1.0, 0, 0), maxPoint=P(x + 1.0, 0, 0))
+    return Obj("fusion::BRepEdge", entityToken=token, evaluator=evaluator, startVertex=start, endVertex=end,
+               boundingBox=box)
 
 
 def face(token, x=0.0, edges=(), chain=(), geometry=None):
@@ -46,7 +49,7 @@ class FilletTest(unittest.TestCase):
     def test_constant_set_with_edge_and_face_inputs_expanded_and_unique(self):
         e1, e2, e3 = edge("e1", 1), edge("e2", 2), edge("e3", 3, closed=True)
         chain_edge = Obj("fusion::BRepEdge", entityToken="e1", evaluator=e1.evaluator,
-                         startVertex=e1.startVertex, endVertex=e1.endVertex,
+                         startVertex=e1.startVertex, endVertex=e1.endVertex, boundingBox=e1.boundingBox,
                          tangentiallyConnectedEdges=Coll([e1, e2]))
         edge_set = with_edges("ConstantRadiusFilletEdgeSet", [chain_edge, face("f1", edges=[e2, e3])],
                               radius=param(0.2), isTangentChain=True, continuity="TangentSurfaceContinuityType")
@@ -62,6 +65,22 @@ class FilletTest(unittest.TestCase):
         self.assertEqual(fillet_set["faces"], [{"token": "f1", "point": [0, 1, 2]}])
         self.assertTrue(fillet_set["tangent_chain"])
         self.assertEqual([e.get("seed", False) for e in fillet_set["edges"]], [True, False, False])
+        # The box of each edge, so the copy can tell whether sets lie apart.
+        self.assertEqual([e["box"] for e in fillet_set["edges"]],
+                         [{"min": [0, 0, 0], "max": [2, 0, 0]}, {"min": [1, 0, 0], "max": [3, 0, 0]},
+                          {"min": [2, 0, 0], "max": [4, 0, 0]}])
+
+    def test_the_turn_of_a_fillet_edge_is_the_largest_angle_between_its_face_normals(self):
+        picked = edge("e1", 1)
+        picked.faces = Coll([normal_face([0, 0, 1]), normal_face([0, 1, 0])])
+        bare = edge("e2", 5)
+        bare.boundingBox = None
+        edge_set = with_edges("ConstantRadiusFilletEdgeSet", [picked, bare], radius=param(0.1),
+                              isTangentChain=False)
+        first, second = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set])))["sets"][0]["edges"]
+        self.assertEqual(first["turn_deg"], 90.0)
+        # An edge whose faces or box cannot be read has neither key.
+        self.assertFalse({"turn_deg", "box"} & set(second))
 
     def test_chain_is_not_followed_when_the_set_says_so(self):
         e1, e2 = edge("e1", 1), edge("e2", 2)

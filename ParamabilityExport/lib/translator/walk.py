@@ -10,8 +10,10 @@ in. The walk decides from these facts. A handler gets the resolved step (`handle
 through it (`brought`, `brought_data`). An item the copy cannot hold either stops the copy or, when its effect stays
 on the body and the rest of the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
 handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
-out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
-the copy. A step Fusion shows in error goes by what the reader measured around it: passed by with a note when the
+out item would have recorded (doubts, notes) is dropped with it. A handler can also write part of an item and leave
+the rest out (`StepResult.left_out`, one set of edges of a round): the steps are written and the rest is the item's
+gap, placed after them; its verdict has the `gap` id, and the gap's reason shows once, with the gap. Anything that leaves the body unknown
+still stops the copy. A step Fusion shows in error goes by what the reader measured around it: passed by with a note when the
 body stayed the same, a gap when it changed, a stop when it was not measured.
 """
 import traceback
@@ -287,6 +289,13 @@ def walk_items(ctx, result):
             if not leave_out(item, wording.floats_reason(), floating.sat_on(ctx, outcome), cause=gap_hints.AFTER_GAP):
                 return False
             return None
+        part = outcome.left_out
+        if part is not None:
+            # The handler writes part of the item and leaves the rest out: a gap that cannot be kept stops the copy.
+            stop = stops.stop_reason(ctx, part.reason)
+            if stop is not None:
+                result.over_gap_cap = stops.at_cap(ctx)
+                return refuse(item, stop, cause=part.cause if stop == part.reason else None)
         ctx.doubts.extend(brought.doubts + construction.doubts)
         ctx.follows |= brought.follows
         ctx.commit(outcome)
@@ -298,10 +307,18 @@ def walk_items(ctx, result):
         if not ctx.steps and outcome.steps[0].get("combine") != "new":
             return refuse(item, "The body starts in a way that cannot be copied.")
         ids = ctx.add_steps(item, outcome)
-        ctx.copied_items.append(item)
+        ctx.copied_items.append(item if part is None else part.copied_item)
+        gap = None
+        if part is not None:
+            gap = ctx.leave_out(part.gap_item, part.reason, cause=part.cause)
+            # The body just before the part left out holds the steps written for the rest, so the body the reader
+            # measured before the item does not describe it.
+            gap.before = None
         if item.get("health") == "warning":
             notes.append(wording.health_warning_note(_label(item), item.get("message")))
         verdict = make_verdict(item, NOTED if notes else TRANSLATED, ids, " ".join(notes))
+        if gap is not None:
+            verdict.update(gap=gap.id, cause="own")
         if outcome.tool_steps:
             verdict["tool_steps"] = outcome.tool_steps
         result.items.append(verdict)

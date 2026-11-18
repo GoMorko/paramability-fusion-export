@@ -84,6 +84,20 @@ class Entry:
         self.step_id = step_id
 
 
+class LeftOut:
+    """A part of an item that its handler leaves out while it writes the rest (one set of edges of a round, say): the
+    walk records the part as the item's gap, after the steps written for the rest.
+
+    gap_item: the item as the gap keeps it, with only the part left out in its data. copied_item: the item as the
+    audit reads it, with only the values of the part written. reason, cause: as a `Refusal`'s."""
+
+    def __init__(self, gap_item, copied_item, reason, cause=None):
+        self.gap_item = gap_item
+        self.copied_item = copied_item
+        self.reason = reason
+        self.cause = cause
+
+
 class StepResult:
     """What a handler hands back for its item: the recipe steps it writes (`entries`, in order).
 
@@ -97,6 +111,7 @@ class StepResult:
     `Entry`: the walk writes it first (a pattern can then repeat the finished body). `gaps` are the steps of other
     bodies left out of these steps (`gaps.stops.Gap`); they count once these steps are written. `follows` holds the
     `(token, name)` of each other component whose sizes these steps follow (`Context.follow_component`).
+    `left_out`, when set, is the `LeftOut` part of the item that these steps do not hold.
     """
 
     def __init__(self, entries=()):
@@ -109,6 +124,7 @@ class StepResult:
         self.wraps_body = None
         self.gaps = []
         self.follows = set()
+        self.left_out = None
 
     @classmethod
     def of(cls, steps):
