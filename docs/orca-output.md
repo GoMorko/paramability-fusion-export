@@ -57,7 +57,7 @@ The modules of `lib/orca_translate/`:
 - `other_components.py`: geometry of other components (see "Other components" below).
 - `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
   parameters follow").
-- Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
+- Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py`, `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer) and `threads.py`. `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
@@ -98,6 +98,9 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Extrude: one side, symmetric, two sides; new body, join, cut, intersect; a distance, or through all for a cut or intersect; a start offset | Extrude | `distance`, `distance2` |
 | Extrude side "To" a flat face or plane square to the extrude, with an offset | the measured distance (Blind, or a side of Two sides) | `distance` when the plane follows: an offset plane, or an end face of a copied extrude (see "Extents") |
 | Extrude "From" a flat face or plane square to the extrude | the sketch plane moved to that plane | no |
+| Thin extrude of one rectangle or one circle, one way or symmetric, no taper (see "Thin extrudes") | the outer outline as a new body less the inner outline cut through all; on a part, as a tool body and a Boolean with the step's operation | `width`, `height`, `radius` (the drawn size plus or minus the thickness), `distance` |
+| Thin extrude of one straight line, the wall centred on it | simple rectangle centred on the line | `width` (the length of the line), `height` (the thickness), `distance` |
+| Thin extrude of any other open line of straight lines | the outline of the wall as sketch lines | `distance`; the line and the thickness keep their numbers |
 | Extrude of a flat face of the body (the face as the outline) | sketch entities of the face where it is now | no |
 | Tapered extrude: one side, symmetric or two sides, of an outline that Orca tapers the same way (see "Extents") | Extrude with `taper_deg` (Blind; two Blind halves for symmetric and two sides) | `taper_deg` for a smooth outline |
 | Hole: simple, counterbore, countersink; a depth or through all; one Orca hole per point | Hole | diameter, depth, counterbore and countersink sizes |
@@ -127,7 +130,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
@@ -924,6 +927,72 @@ Transform, Hole and Boolean) and live.
   with the volumes Pappus gives; the told lower limit of `fr` (3.12) follows the copy's room rule, which is safer
   than Orca needs here.
 
+### Thin extrudes
+
+Orca has no thin extrude, so the copy builds the wall of a thin extrude from plain extrudes (`thin.py`).
+`steps.extrude` sends each thin extrude to `thin.extrude`. The sides of the extrude come from `steps.extrude_sides`,
+as for any extrude.
+
+The side of the wall comes only from what Fusion measured. The shared layer (`design_model/steps/thin.py`) decides
+it, with the same rules as the Paramability output:
+
+- For a closed outline, the area of the end face is the cross section of the wall (`closed_side`). The copy also
+  needs the area of a wall with sharp corners (`area_fits` with sharp corners): Fusion keeps the corners of the wall
+  sharp, and the rectangle that Orca draws has sharp corners. A wall whose area fits only rounded corners is left
+  out.
+- For an open line, each face that Fusion made must lie on the wall of one side and one direction (`line_side`). A
+  face that Fusion merged with a face of the part counts only while the copy builds the part, not a tool body.
+
+When the side is not certain, the step is left out with the reason.
+
+What the copy writes:
+
+- One rectangle or one circle, one way or symmetric, no taper: two plain sketches on the sketch plane. The outer
+  outline is extruded as a new body. The inner outline is cut through all of it. On a part that has a body already,
+  the two extrudes make a tool body, and a Boolean adds it to the part, cuts it away or keeps what both share. On the
+  first body of the part, the two extrudes go into the part. For a wall inside the outline, the outer outline is the
+  drawn one, and the inner one is smaller by the thickness on each side. For a wall outside the outline, the outer
+  one is larger by the thickness on each side, and the inner one is the drawn one. A centred wall takes half of the
+  thickness to each side. So the width, the height and the radius are the drawn size plus or minus the thickness
+  (`width + 2 * wall`, `0.5 * dia - wall`), and the length follows too. A rectangle or circle that Fusion moves when
+  a size changes keeps its numbers, and the sizes that move it are marked. `limits.guard` tells how far a variable
+  may go while the inner outline stays inside the outer one and above zero.
+- One straight line with the wall centred on it: a rectangle centred on the middle of the line, along the line. Its
+  width is the length of the line and its height is the thickness. The thickness follows its variable. The length
+  follows when the line keeps its middle and its direction as the sizes change; else it keeps its number, and the
+  sizes that move the line are marked.
+- Any other open line of straight lines (an L, a U, a wall on one side of one line): the outline of the wall
+  (`thin.band`, sharp corners as in Fusion) as sketch lines with numbers, extruded with the step's operation. The
+  line and the thickness keep their numbers, and the sizes that move them are marked.
+
+A cut or intersect that does not meet the part is left out (cause `missesPart`). A pattern or mirror cannot repeat a
+thin wall, since its first extrude starts a new body (cause `notRepeatable`).
+
+Left out:
+
+- several outlines, an outline with holes, an open line with arcs, lines that do not run one after the other or
+  against the line, a wall that folds, and a side that the faces do not show (cause `thinOutline`);
+- a closed outline that is not one rectangle or one circle, and a face of the part as the outline (cause
+  `thinShape`);
+- two ways, To a face, through all, a taper, a wall setting that could not be read, a side that the end face does
+  not show, and a wall with rounded corners (cause `refused`).
+
+Live check: `tests/orca_thin.py` writes the captures as JSON files, and the volumes are worked out there (the
+volumes of the divider, the L and the ring also agree with `scripts/fixture_geometry.py`):
+
+```
+python3 -m tests.orca_thin /tmp/thin
+python3 scripts/orca_live_check.py write /tmp/thin/orca_thin_divider.json /tmp/divider.3mf
+python3 scripts/orca_live_check.py check /tmp/thin/orca_thin_divider.json --set len=36 wall=3
+```
+
+| Capture | What it is | Volume (mm3) | After `--set` |
+| --- | --- | --- | --- |
+| `orca_thin_divider` | a 40 x 40 x 2 plate and a divider 30 long, 1.6 thick, 20 above the plate, centred on its line, joined | 4160 (3200 + 960) | `len=36 wall=3`: 3200 + 36 * 3 * 20 = 5360 |
+| `orca_thin_ell` | an L shaped line (0, 0) to (30, 0) to (30, 20), the wall 2 thick inside the corner, 20 high | 1920 (96 mm2 x 20) | none: the line and the thickness keep their numbers |
+| `orca_thin_frame` | a wall 2 thick outside a centred 80 x 50 rectangle, 30 high | 16080 | `wall=3`: 24480 |
+| `orca_thin_ring` | a wall 2 thick inside a centred circle 40 across, 10 high | 2387.61 (760 pi) | `wall=3`: 3487.17 (1110 pi) |
+
 ### Other components
 
 A step can use geometry of another component: a plane, face, axis or direction, a point a hole sits on, or an outline
@@ -1057,6 +1126,8 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   not follow it.
 - A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
   changes can put copies where the part has none; they then add material there or cut nothing.
+- A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its
+  thickness as numbers in Orca.
 - One body per file. The recipe format is Orca's internal one (version 6) and may change.
 
 ## Live check without Fusion

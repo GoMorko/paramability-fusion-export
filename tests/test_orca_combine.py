@@ -110,7 +110,7 @@ class CombineTest(unittest.TestCase):
         def edit(capture):
             capture["items"][3]["data"]["thin"] = True
         result = run("combine_join", edit)
-        self.assertEqual([(g["index"], g["cause"]) for g in result.left_out], [(4, gap_hints.THIN_OUTLINE)])
+        self.assertEqual([(g["index"], g["cause"]) for g in result.left_out], [(4, gap_hints.REFUSED)])
         self.assertEqual(len(result.recipe.features), 2)
         self.assertEqual(verdict_of(result, 3)["verdict"], "skipped")
 

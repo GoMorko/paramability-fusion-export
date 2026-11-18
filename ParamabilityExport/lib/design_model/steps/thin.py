@@ -172,6 +172,13 @@ def _close(measured, expected):
     return abs(measured - expected) <= AREA_RELATIVE_TOL * expected + AREA_ABSOLUTE_TOL
 
 
+def area_fits(curves, side, thickness, corners, end_area):
+    """True when the measured `end_area` is the area of a wall of `thickness` on `side` of the closed outline, its
+    corners round or sharp (`corners`)."""
+    shape = shape_of(curves)
+    return shape is not None and is_number(end_area) and _close(end_area, band_area(shape, side, thickness, corners))
+
+
 def closed_side(curves, wall, end_area):
     """`(side, rounded)` for a wall along a closed outline: the side of the outline it sits on (inside, outside or
     middle), and whether only the reading with sharp corners fits, so a copy with rounded corners differs. A Problem

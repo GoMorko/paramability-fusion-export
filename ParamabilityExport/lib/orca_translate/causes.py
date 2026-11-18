@@ -26,6 +26,9 @@ SWEEP_PATH = "sweepPath"
 # planes that are not parallel.
 LOFT_SHAPE = "loftShape"
 
+# Thin extrudes: a closed outline that is not one rectangle or one circle, whose wall Orca has no plain shape for.
+THIN_SHAPE = "thinShape"
+
 # Revolves.
 REVOLVE_AXIS = "revolveAxisOffPlane"
 REVOLVE_ACROSS_AXIS = "revolveAcrossAxis"

@@ -14,7 +14,8 @@ rebuild on a cut that removes nothing. A one way cut through all whose end Fusio
 where its outline meets that part when Fusion's stored direction meets none (`toward_material`).
 
 An outline of straight lines whose corners follow sizes is built from plane cuts (`outline_cuts`, `_cut_built`)
-instead of drawn, when the extrude has one side without taper.
+instead of drawn, when the extrude has one side without taper. A thin extrude goes to `thin`, which builds its wall
+from plain extrudes.
 
 The other handlers that write outlines or cuts share these helpers: `misses_reason` (a cut that meets nothing), and
 for holes `toward_material`, `behind`, `LONG` and `SIDE_TOL`. The sizes an outline sketch follows or keeps are
@@ -140,7 +141,7 @@ def _end_gap(ctx, data, frame, shift, read, operation):
     return Skip(shared.END_DIFFERS)
 
 
-def _sides(ctx, item, data, frame, shift):
+def extrude_sides(ctx, item, data, frame, shift):
     """The `_Side`s of an extrude (one, or two blind ones for a tapered extrude to both sides), or a Skip. The shared
     reader (`dm.read_sides`) gives how each side ends, its direction and its length; this function keeps to what Orca
     can build. A one way cut or intersect through all whose end Fusion did not measure goes to the side where its
@@ -326,7 +327,8 @@ def extrude(ctx, step):
     if data.get("thin") is None and "thin" in data:
         return Skip(shared.EXTRUDE_UNREADABLE)
     if data.get("thin"):
-        return Skip("Thin extrudes are not copied to Orca yet.", gap_hints.THIN_OUTLINE)
+        from . import thin  # it reads the sides and the misses of this module
+        return thin.extrude(ctx, step)
     profiles = data.get("profiles") or []
     if not profiles:
         return Skip("This extrude has no outline that could be read.")
@@ -351,7 +353,7 @@ def extrude(ctx, step):
     shift = extents.start(ctx, item, data, frame)
     if isinstance(shift, Skip):
         return shift
-    sides = _sides(ctx, item, data, frame, shift)
+    sides = extrude_sides(ctx, item, data, frame, shift)
     if isinstance(sides, Skip):
         return sides
     if operation == "intersect" and len(sides) > 1:

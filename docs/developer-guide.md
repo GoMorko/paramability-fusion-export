@@ -3181,7 +3181,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
 - `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
-  (`orca_translate/steps._sides`) read the same sides. Each output then applies its own limits.
+  (`orca_translate/steps.extrude_sides`) read the same sides. Each output then applies its own limits.
   - `start_of(data, frame, offsets)` gives a `Start`. The kind is the sketch plane, an offset, or a flat face or
     plane (`Target`). `shift` is the signed distance along the sketch normal from the sketch plane to the start. A
     start on a face that is not flat, on a tilted face, or on a curved face of another component gives a `Problem`.
@@ -5636,7 +5636,8 @@ The translator writes the step in `translator/extrude/thin_line.py`. `extrude/st
 the extrude is thin and its outline is a `Path`. The decisions that do not write the recipe are in the shared layer,
 `design_model/steps/thin.py`: `line_of`, `line_problem`, `band`, `fits` and `line_side` (the side of the wall). They
 give a `Problem` when they cannot read the wall. The translator changes the `Problem` to a refusal. The Orca output
-uses the same decisions. Then:
+uses the same decisions (`orca_translate/thin.py`, see "Thin extrudes" in `docs/orca-output.md`). It uses
+`closed_side` and `area_fits` for a closed outline too. Then:
 
 1. `line_of` reads the line. The path must be one open chain of sketch lines of one sketch. Each line must start
    where the line before it ends. No line can be `opposed`. The add-in leaves out a line with an arc or a free

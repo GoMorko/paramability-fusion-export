@@ -167,7 +167,7 @@ class ExtrudeTest(unittest.TestCase):
             self.assertTrue(any(abs(point[0] - x) < 1e-9 and abs(point[1]) < 1e-9 for x in (-5.0, 25.0)), point)
 
     def test_steps_orca_cannot_follow_are_left_out_with_a_cause(self):
-        for name, cause in (("extrude_taper", causes.TAPER_SHAPE), ("extrude_thin", gap_hints.THIN_OUTLINE),
+        for name, cause in (("extrude_taper", causes.TAPER_SHAPE), ("extrude_thin", gap_hints.REFUSED),
                             ("extrude_to_tilted", gap_hints.EXTRUDE_END_FACE),
                             ("extrude_cut_splits_target", gap_hints.REFUSED),
                             ("extrude_taper_unreadable", gap_hints.REFUSED)):
