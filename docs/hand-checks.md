@@ -1165,3 +1165,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     4 mm). In OrcaSlicer the Design body has the volume of Fusion (Inspect > Properties) within 0.5 percent: 1790.43
     mm3, 46061.46 mm3 and 1579.14 mm3. The ends of the first pipe are flat and square to the path, as in Fusion. With
     `PipeD` set to 10 in OrcaSlicer, the first body is 2301.98 mm3. Afterwards each design is as before.
+
+96. OR28, a Press Pull of a whole round face, for Export for Orca. Add user parameters `Grow` = 1 mm and `Fit` =
+    0.5 mm. Model a 40 x 40 x 5 mm plate centred on the origin with its base on the XY plane, and on its top face a
+    circle of radius 5 at the origin extruded 10 mm up as a join (a pin). Press Pull (Offset Faces) the round face of
+    the pin by `Grow`. Make a second design with a 40 x 40 x 10 mm block and a circle of radius 4 at the origin cut
+    through it (a bore), then Press Pull the wall of the bore by `-Fit`. Make a third design as the first with the
+    pin Press Pulled by `-Grow`.
+    Export: Export for Orca each design with its parameter ticked. In `report.json` the Press Pull has one face of
+    `kind` `round` with two `ends` of kind `circle`, each with its flat end face, and `rounds_after` holds the
+    cylinder of the new radius. Each Press Pull is copied with nothing left out, as 5 features (two sketches, two
+    extrudes and a Boolean: Add for the first design, Cut for the others). The volume in Orca is 9130.97 mm3
+    (9539.38 with `Grow` = 2), 15363.83 mm3 (15214.60 with `Fit` = 1) and 8502.65 mm3 (8282.74 with `Grow` = 2).
+    The line of the parameter tells how far it may go (under 14.9, 15.9 and 4.99 mm). Afterwards each design is as
+    before.

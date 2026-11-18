@@ -8,11 +8,11 @@ The side walls around a moved face grow or shrink with it. A point on such a wal
 above the outline of the face before the move, so it is placed on that outline and follows the same share of the
 distance.
 
-A whole round face (a pin or a bore, `Ring`) moves along its outward normal too: its radius changes by the distance,
-up for a pin and down for a bore. Its ends lie on flat faces square to its axis that do not move.
+A whole round face (a pin or a bore, `design_model/steps/offset_round.Ring`) moves along its outward normal too: its
+radius changes by the distance, up for a pin and down for a bore. Its ends lie on flat faces square to its axis that do
+not move.
 """
-import math
-
+from ...design_model.steps.offset_round import Ring, is_ring
 from ...geometry import vec
 from ...geometry.footprint import Footprint
 from .placer import ADD, CUT, Placer
@@ -34,65 +34,6 @@ class _RingPlace(InnerPlace):
     @property
     def single(self):
         return None
-
-
-def is_ring(face):
-    """True for a round face record with an axis, a radius, a known side and two circle ends."""
-    ends = face.get("ends") if isinstance(face, dict) and face.get("kind") == "round" else None
-    return (isinstance(ends, list) and len(ends) == 2
-            and all(isinstance(e, dict) and e.get("kind") == "circle" for e in ends)
-            and all(face.get(k) is not None for k in ("axis", "radius", "outward")))
-
-
-class Ring:
-    """A whole round face (`is_ring`): the axis through the centre of its first end circle, its radius before the move,
-    `sign` 1 when it faces away from the axis (a pin or a boss) and -1 when it faces the axis (a bore), and `span`, the
-    places of its two end circles along the axis."""
-
-    def __init__(self, face):
-        self.axis = vec.unit(face["axis"])
-        self.base = list(face["ends"][0]["center"])
-        self.span = sorted(vec.dot(vec.sub(end["center"], self.base), self.axis) for end in face["ends"])
-        self.radius = face["radius"]
-        self.sign = 1.0 if face["outward"] else -1.0
-
-    def moved_radius(self, distance):
-        """The radius after a move of `distance` along the outward normal."""
-        return self.radius + self.sign * distance
-
-    def local(self, p):
-        """(place along the axis, the vector from the axis out to `p`) of a point."""
-        rel = vec.sub(p, self.base)
-        along = vec.dot(rel, self.axis)
-        return along, vec.sub(rel, vec.scale(self.axis, along))
-
-    def middle(self):
-        """The point of the axis halfway between the two ends."""
-        return vec.add(self.base, vec.scale(self.axis, (self.span[0] + self.span[1]) / 2.0))
-
-    def box(self, radius):
-        """The box (low corner, high corner) of the cylinder of `radius` between the two ends."""
-        ends = [vec.add(self.base, vec.scale(self.axis, h)) for h in self.span]
-        reach = [radius * math.sqrt(max(0.0, 1.0 - a * a)) for a in self.axis]
-        return ([min(e[i] for e in ends) - reach[i] for i in range(3)],
-                [max(e[i] for e in ends) + reach[i] for i in range(3)])
-
-    def crossings(self, q, n, radii):
-        """Parameters t where q + t * n crosses the cylinder of one of `radii` or the plane of an end."""
-        out = []
-        dz = vec.dot(n, self.axis)
-        along, w = self.local(q)
-        if abs(dz) > 1e-9:
-            out += [(h - along) / dz for h in self.span]
-        m = vec.sub(n, vec.scale(self.axis, dz))
-        a, b = vec.dot(m, m), 2.0 * vec.dot(w, m)
-        if a <= 1e-12:
-            return out
-        for radius in radii:
-            root = b * b - 4.0 * a * (vec.dot(w, w) - radius * radius)
-            if root >= 0:
-                out += [(-b - math.sqrt(root)) / (2.0 * a), (-b + math.sqrt(root)) / (2.0 * a)]
-        return out
 
 
 class MovedFaces(Placer):

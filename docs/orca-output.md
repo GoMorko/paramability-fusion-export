@@ -60,7 +60,8 @@ The modules of `lib/orca_translate/`:
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
   pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
-  and chamfer), `threads.py` and `emboss.py` (an emboss on a flat face, written by the extrude handler). `holes.py` and `threads.py` read the hole and the thread through the shared readers
+  and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler) and
+  `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
   cause (`causes.py`).
@@ -114,6 +115,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Tapped hole with a modeled thread (metric or Unified, right hand), simple or counterbore | Hole at the minor diameter, then an inside Thread per point from the counterbore floor or the top, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth (the thread start under a counterbore keeps its number) |
 | Thread, modeled, on one cylinder (a rod or a hole wall) | Thread, half a pitch inside each end, and a lead-in at each open end (a Hole in a hole, a ring cut on a rod) | `thread_height` (a set length) |
 | Thread, cosmetic | nothing (it changes no shape) | |
+| Press Pull (Offset Faces) of one whole round face: a pin, a boss or a bore whose face goes all the way round between two flat ends square to its axis (see "Press Pull of a round face") | a tool body of two circles on the axis, the outer one extruded between the end planes and the inner one cut through it, then a Boolean: Add for a pin or boss that grows or a bore that shrinks, Cut for a bore that grows or a pin that shrinks | `radius` of the circle of the new radius (the distance) |
 | Fillet or chamfer (an even chamfer) whose edges are exactly one of Orca's edge groups of the copied part, or, with sets of different sizes, a top group and a bottom group | Fillet or Chamfer of that face group: all, top, bottom or side edges; one for each size | `dressup_size` |
 | Fillet or even chamfer whose edges all run along copied straight extrudes, at corners of two lines of their outlines (each set may have its own size) | the extrude's sketch drawn again: an arc tangent to both lines, or a line across the corner | no: the round keeps its number |
 | The same, on an outline whose sizes follow variables (built from plane cuts, or a rectangle whose width or height follows) | a corner tool per corner, cut from the outline's body before it goes into the part: a through all block cut by four planes (three for a chamfer), between two Transforms for a line that turns, less an Orca Hole at the arc centre, and a Boolean (see "Corner tools") | every corner and the round's size: `cut_offset`, `xf_angle_deg`, `hole_x`, `hole_y`, `hole_diameter` |
@@ -139,7 +141,8 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+pasted body, scale (Orca has no step that scales a body)...), the Press Pulls in "Press Pull of a round
+face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
@@ -1125,6 +1128,49 @@ python3 scripts/orca_live_check.py check /tmp/thin/orca_thin_divider.json --set 
 | `orca_thin_frame` | a wall 2 thick outside a centred 80 x 50 rectangle, 30 high | 16080 | `wall=3`: 24480 |
 | `orca_thin_ring` | a wall 2 thick inside a centred circle 40 across, 10 high | 2387.61 (760 pi) | `wall=3`: 3487.17 (1110 pi) |
 
+### Press Pull of a round face
+
+Orca has no Press Pull. The copy builds a Press Pull (Offset Faces) of one whole round face as a ring between the old
+and the new radius (`press_round.py`). Fusion moves the face along its outward normal: the radius of a pin or a boss
+becomes the radius plus the distance, and the radius of a bore the radius less the distance. The shared layer decides
+whether the face can be moved (`design_model/steps/offset_round.py`), with the same rules as the Paramability output
+(see 3.20 in `docs/developer-guide.md`):
+
+- the face goes all the way round, and both its ends are flat faces square to its axis;
+- no face next to it moves in the same step;
+- the new radius stays above zero and clear of the other edges of the end faces, by 0.01 mm;
+- Fusion left a cylinder of the new radius on the same axis (`rounds_after`).
+
+When one of these is false, the step is left out with the sentence of the shared layer and the cause `offsetCurved`.
+
+The copy writes a tool body and a Boolean:
+
+1. A sketch with a circle on the plane of one end, on the axis, extruded as a new body to the plane of the other end.
+2. A sketch with a smaller circle on the same plane, cut through all of the tool body.
+3. A Boolean with the part: Add when the distance moves the face out of the material (a pin or a boss that grows, a
+   bore that shrinks), Cut when it moves the face into the material (a bore that grows, a pin that shrinks).
+
+One circle has the new radius, and its `radius` follows the distance. The other circle has the face's own radius,
+moved by 0.005 mm (`OVERLAP_MM`) into the side the Boolean already fills: into the material for an Add, into the air
+for a Cut. So the tool body never shares a round face with the part, which a Boolean of a geometry kernel handles badly.
+0.005 mm is half the clearance the shared layer keeps from the other edges, so this move never reaches one.
+
+The checks of the copy:
+
+- The face must be on the part as the copy builds it. For an Add, the copy must hold material in a ring of up to 1 mm
+  on the material side of the face. For a Cut, the ring that the cut removes must meet material. Otherwise the step
+  is left out (cause `missesPart`, or `afterGap` after a step that is left out).
+- The radius of the face and the planes of its ends keep their numbers in Orca. Every size that a step of the part's
+  component reads before the Press Pull is marked (`reach.any_face_sizes`), since such a size may change the face's
+  radius or move its ends.
+- The parameter's line tells how far the variable of the distance may go (`limits.guard`): the new radius stays on the
+  same side of the old radius (cause "the round face moves the other way"), above zero, and clear of the other edges
+  of the end faces (cause "the round face reaches another edge of the faces at its ends"). Past these limits Orca adds
+  or cuts the wrong ring, or the tool body is empty.
+
+Left out, each with its reason: a Press Pull of a flat face (cause `pressPullFlat`), a Press Pull of more than one
+face (cause `pressPullFaces`), a Press Pull of another curved face, and a round face of another component.
+
 ### Other components
 
 A step can use geometry of another component: a plane, face, axis or direction, a point a hole sits on, or an outline
@@ -1314,6 +1360,9 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   distance as a number.
 - A pattern or mirror plane, a turning axis and a split plane keep their place: one on a face that a size moves does
   not follow it.
+- A Press Pull of a round face keeps the face's radius and its end planes as numbers. A variable that changes the
+  radius of the pin or the bore in Orca, or moves its ends, leaves the ring where it was: Orca then adds or cuts a
+  ring next to the face, without an error. The sizes that may do this are marked.
 - A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
   changes can put copies where the part has none; they then add material there or cut nothing.
 - A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its
@@ -1393,6 +1442,20 @@ of radius 20 through 90 degrees and a 30 mm line: 350 pi + 70 pi^2 = 1790.43 mm3
 through one face and out through another: 48000 - 405 pi - 67.5 pi^2 = 46061.46 mm3; with `--set pipe_d=8`
 44553.70). All three built with these volumes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set`
 changes.
+
+A Press Pull of a whole round face has captures in `tests/orca_press_round.py`. Save one with `python3 -m
+tests.orca_press_round <name> <file>` and give the file to `write`. The volumes are exact. All three built with these
+volumes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set` changes:
+
+- `pin_grown`: a 40 x 40 x 5 plate (box -20 to 20 in x and y, 0 to 15 in z with the pin) and a pin of radius 5, 10
+  high on its top, grown by `grow_mm` (1) to radius 6: 8000 + 360 pi = 9130.97 mm3. `--set grow_mm=2` gives
+  9539.38 mm3, `--set grow_mm=0.5` 8950.33 mm3.
+- `bore_grown`: a 40 x 40 x 10 block (box -20 to 20 in x and y, 0 to 10 in z) with a bore of radius 4 through it,
+  grown by `grow_mm` (0.5, the distance `-grow_mm`) to radius 4.5: 16000 - 202.5 pi = 15363.83 mm3. `--set grow_mm=1`
+  gives 15214.60 mm3, `--set grow_mm=2` 14869.03 mm3.
+- `pin_shrunk`: the plate and pin of `pin_grown`, the pin shrunk by `shrink_mm` (1, the distance `-shrink_mm`) to
+  radius 4: 8000 + 160 pi = 8502.65 mm3, the same box. `--set shrink_mm=2` gives 8282.74 mm3, `--set shrink_mm=0.5`
+  8636.17 mm3.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and

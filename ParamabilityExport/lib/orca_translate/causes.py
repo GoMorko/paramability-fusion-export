@@ -95,6 +95,10 @@ TEXT_OUTLINE = "textOutline"
 TEXT_EXTENT = "textExtent"
 EMBOSS_TRIMMED = "embossTrimmed"
 EMBOSS_FACE = "embossFace"
+# Press Pull (`press_round`): only one whole round face is copied, so a Press Pull of a flat face, or of more than one
+# face, is left out.
+PRESS_PULL_FLAT = "pressPullFlat"
+PRESS_PULL_FACES = "pressPullFaces"
 # A step that lists a body with the part's name under another token (`roles.lost`): the part may have a new token,
 # so the copy cannot tell whether the step changes it.
 BODY_LOST = "bodyLost"
