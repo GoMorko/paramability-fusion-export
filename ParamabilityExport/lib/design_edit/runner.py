@@ -199,7 +199,7 @@ class RowExport:
     def _worse_now(self):
         """The changes of the steps now against the baseline (`timeline_health.changes`) that are worse. None when the
         steps cannot be read."""
-        now = read_timeline(self.store)
+        now = read_timeline(self.store, self._steps)
         if now is None or self._steps is None:
             return None
         return [c for c in changes(self._steps, now) if is_worse(c)]

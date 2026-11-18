@@ -36,7 +36,7 @@ class HealthStore(FakeStore):
         super().__init__(START, **options)
         self.steps = steps
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         return [step(0, "Sketch1")] + [step(at, name, health)
                                        for at, (name, health) in enumerate(self.steps(self).items(), start=1)]
 
@@ -126,7 +126,7 @@ class StopAtDamageTest(unittest.TestCase):
         class Counted(HealthStore):
             reads = 0
 
-            def timeline_health(self):
+            def timeline_health(self, known=None):
                 self.reads += 1
                 return super().timeline_health()
 

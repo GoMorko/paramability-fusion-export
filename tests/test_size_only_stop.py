@@ -66,7 +66,7 @@ class HolderStore(FakeStore):
     def _index(self, item):
         return self.at if self.at is not False and item["name"] == self.lost else item["index"]
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         return [{"index": self._index(i), "name": i["name"], "type": i["type"], "health": self._health(i),
                  "message": "", "suppressed": False} for i in self.items]
 

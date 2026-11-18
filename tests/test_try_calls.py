@@ -40,7 +40,7 @@ class BatchStore(FakeStore):
             self.errors = []
         return True
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         self.reads += 1
         return [dict(step) for step in self.steps]
 

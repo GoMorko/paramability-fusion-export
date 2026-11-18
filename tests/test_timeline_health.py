@@ -58,7 +58,7 @@ class StepStore(FakeStore):
             if cause == how and self.exprs == self.saved:
                 self.health[name] = self.START_STEPS[name]
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         return [{"index": i, "name": name, "type": "FilletFeature" if name == "Fillet1" else "Feature",
                  "health": health, "message": "" if health == "ok" else "The fillet could not be made.",
                  "suppressed": name in self.off}

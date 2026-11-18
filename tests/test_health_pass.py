@@ -37,7 +37,7 @@ class ViewStore(FakeStore):
         self.rebuilt = True
         return super().recompute()
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         return [{"index": 0, "name": "Sketch1", "type": "Sketch", "health": "ok", "message": "", "suppressed": False}]
 
     def error_entries(self):

@@ -259,7 +259,7 @@ class PipelineTrimTest(unittest.TestCase):
                 self.trimmed = True
                 return super().suppress_items(items)
 
-            def timeline_health(self):
+            def timeline_health(self, known=None):
                 off = self.trimmed and "Lid sketch" in self.stays_off
                 return [{"index": 6, "name": "Lid sketch", "type": "Sketch", "health": "ok", "suppressed": off}]
 

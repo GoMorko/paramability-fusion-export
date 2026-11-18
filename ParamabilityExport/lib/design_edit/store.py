@@ -27,8 +27,10 @@ class ParameterStore(Protocol):
     marker_holds(): False when the marker sits before the position the tries need (a read would miss items).
 
     The timeline controls (`TIMELINE_CONTROLS`) are optional, so a fake without a timeline stays small:
-    timeline_health(): `{ index, name, type, health, message, suppressed }` of each step before the marker; raises
-      when the timeline cannot be read. Without it the end check lists only the steps in error.
+    timeline_health(known=None): `{ index, name, type, health, message, suppressed }` of each step before the marker;
+      raises when the timeline cannot be read. Without it the end check lists only the steps in error. `known` is
+      `{(index, name): (health, suppressed)}` of the start read: the store may then give `type` and `message` as None
+      for a step that is fine and as in `known` (`timeline_health.read_timeline` fills them in from the start read).
     turn_on(steps): turn back on the (index, name) steps that read suppressed; the names that stayed off.
     keep_marker(): move the marker back where the store holds it after a read left it earlier; True when it is there.
       Without it a row read cannot leave the marker before an outline face's step (`ProbeRun`).

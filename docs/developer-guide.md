@@ -815,8 +815,9 @@ net for it.
 
 1. Before the first row ever, it saves every parameter expression and measures a baseline: one rebuild with nothing
    changed, and the list of items already in error (`apply.measure_baseline`). It also reads every timeline step: its
-   health (fine, warning or error), Fusion's message and whether it is turned off (`timeline_health.read_timeline`).
-   A design with an old error or warning elsewhere can still be probed.
+   health (fine, warning or error), its type, Fusion's message and whether it is turned off
+   (`timeline_health.read_timeline`). The later checks compare with this read. A design with an old error or warning
+   elsewhere can still be probed.
 2. Per row, it first asks `stop_when` whether the time limit is reached (see "The time limit of the tries" below).
    Then it asks the progress window if the person cancelled. The window shows "Try 5 of 31: Width at 32 mm" and, under
    it, a line about the time that the tries took.
@@ -910,7 +911,13 @@ The check, step by step:
 1. `before_check` (`ProbeRun._home`) brings the timeline marker back where the tries hold it. A face read can leave
    it earlier, and the steps after the marker would read as gone.
 2. It reads the timeline steps (`timeline_health.read_timeline`) and compares them, step by step, with the read of
-   the baseline (`timeline_health.changes`). Only a step that is worse counts (`timeline_health.is_worse`): a higher
+   the baseline (`timeline_health.changes`). The read of the baseline reads everything about each step. The read of a
+   check is lighter: it reads the name, the health and whether the step is turned off for every step, and it reads
+   the type of the step (`item.entity`) and Fusion's message only for a step that is not fine or whose health or
+   suppression is not as in the baseline. For all other steps the check takes the type and the message from the
+   baseline, so these steps compare as equal, as in a full read. The store gets the health and the suppression of the
+   baseline as the argument `known` of `timeline_health`. When the light read fails, a full read follows. The end
+   check always reads in full. Only a step that is worse counts (`timeline_health.is_worse`): a higher
    health level, turned off, or gone. A warning or an error that the baseline had already does not count, also when
    its message changes.
 3. When a step is worse, it rebuilds the whole design once and reads again. A rebuild of only the changed steps can
@@ -6852,7 +6859,9 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    `rescued` counts those after which the row built. `computes.counting_warning` is the extra rebuild after a warning
    that counts. `computes.check_after_row` is the rebuild of the check after a row, and `check_cleared` counts those
    after which a step that read worse was fine. `computes.walk_step` is every rebuild of the walks back.
-   `health_passes` counts the passes over the timeline items (one per try, with `health_entries`) and `timeline_reads` counts the reads of the whole timeline. The end check adds `computes.end_check`.
+   `health_passes` counts the passes over the timeline items (one per try, with `health_entries`) and
+   `timeline_reads` counts the reads of the whole timeline (a read after the baseline is a light read, see 1.8, "The
+   check after a row, and the stop"). The end check adds `computes.end_check`.
 9. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
    sizes that got no try (1.8).
 10. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and

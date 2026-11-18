@@ -347,9 +347,11 @@ class DesignParameterStore:
         except Exception:
             return []
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         """`{ index, name, type, health, message, suppressed }` of each item before the marker where the store found
-        it (groups left out), for `design_edit.timeline_health`. Raises when the timeline cannot be read."""
+        it (groups left out), for `design_edit.timeline_health`. Raises when the timeline cannot be read. `known` is
+        `{(index, name): (health, suppressed)}` of an earlier read: an item that is fine and has that health and
+        suppression is given with `type` and `message` None, and its entity and message are not read."""
         timeline = self.design.timeline
         home = self._home or self.marker
         end = timeline.count if home is None else min(home["position"], timeline.count)
@@ -358,13 +360,20 @@ class DesignParameterStore:
             item = timeline.item(i)
             if geo.safe(lambda: item.isGroup, False):
                 continue
+            name = geo.safe(lambda: item.name, "")
+            health = geo.safe(lambda: geo.health_name(item.healthState), "ok")
+            suppressed = bool(geo.safe(lambda: item.isSuppressed, False))
+            if known is not None and health == "ok" and known.get((i, name)) == (health, suppressed):
+                steps.append({"index": i, "name": name, "type": None, "health": health, "message": None,
+                              "suppressed": suppressed})
+                continue
             steps.append({
                 "index": i,
-                "name": geo.safe(lambda: item.name, ""),
+                "name": name,
                 "type": geo.type_name(geo.safe(lambda: item.entity, None)),
-                "health": geo.safe(lambda: geo.health_name(item.healthState), "ok"),
+                "health": health,
                 "message": geo.safe(lambda: item.errorOrWarningMessage or "", ""),
-                "suppressed": bool(geo.safe(lambda: item.isSuppressed, False)),
+                "suppressed": suppressed,
             })
         return steps
 
