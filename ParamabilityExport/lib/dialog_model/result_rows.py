@@ -8,7 +8,7 @@ import re
 
 from .dialog_rows import range_text
 from ..export_plan.health import FAILED
-from ..export_plan.rollback import NO_ROLLBACK, REOPEN_LINE, REOPEN_TITLE, check_lines
+from ..export_plan.rollback import NO_ROLLBACK, REOPEN_TITLE, check_lines, reopen_lines
 from ..export_plan.messages import (
     ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, also_changes_line, also_changes_parts_line, left_out_lines,
     not_tried_line, time_stop_line)
@@ -256,17 +256,18 @@ def short_message(saved_line, left_out_count, check):
 
 
 def _reopen_section(reopen):
-    """The section above the reopen button, or None when the reopen is not offered. `reopen` is True or the line to
-    show (`rollback.reopen_line`)."""
+    """The section with the steps to get the design back as it was saved, or None when they are not offered.
+    `reopen` is the list of lines (`rollback.reopen_lines`), or False."""
     if not reopen:
         return None
-    return _section("reopen", REOPEN_TITLE, [reopen if isinstance(reopen, str) else REOPEN_LINE])
+    return _section("reopen", REOPEN_TITLE, list(reopen))
 
 
-def reopen_view(reopen=True):
+def reopen_view(reopen=None):
     """A view with only the reopen section, for an export that showed its story in a message box (no file saved, or
-    a file without a recipe) but still offers the reopen (`rollback.reopen_offered`). `reopen` as in `_reopen_section`."""
-    sections = [_reopen_section(reopen or True)]
+    a file without a recipe) but still gives the steps (`rollback.reopen_offered`). `reopen` as in `_reopen_section`;
+    without lines the steps for a design with unknown saved state are used."""
+    sections = [_reopen_section(reopen or reopen_lines(None))]
     return {"title": REOPEN_TITLE, "sections": sections, "message": view_message(sections),
             "summary": view_message(sections), "rolled_back": False,
             "undo_unavailable": True, "reopen": True}
@@ -299,9 +300,9 @@ def result_view(file_name, manifest, report, table, ticked, rollback=NO_ROLLBACK
     `rolled_back` (Fusion was told to undo the
     export, `export_plan.rollback`; the `check` section then says so), `undo_unavailable` (the design is not
     confirmed back and the export could not be undone, because Lighter on memory was on; the `check` section says so)
-    and `reopen` (the window offers to reopen the design from its last save, `rollback.reopen_offered`; the caller
-    passes it as `reopen`). Each section is `{key, title, lines, rows}`;
-    the keys, in this order, are `reopen` (what the reopen button does, only with `reopen`),
+    and `reopen` (the window gives the steps to get the design back as it was saved, `rollback.reopen_offered`;
+    the caller passes their lines, `rollback.reopen_lines`, as `reopen`). Each section is `{key, title, lines, rows}`;
+    the keys, in this order, are `reopen` (the steps to get the design back as it was saved, only with `reopen`),
     `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
     with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the

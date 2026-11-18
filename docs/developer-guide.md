@@ -1012,7 +1012,7 @@ sizes are not marked.
 The design is changed. The end check (`settle_timeline`) finds the step changed, and `health.tries_ended` keeps the
 record. `health.back_as_it_was` is false when `tries_ended` is present, also when the end check finds the step back.
 Thus the export is always undone (`executeFailed`), or, after "Lighter on memory" dropped undo data, the result is
-`undo_unavailable` with the advice to reopen the saved version. The result window has one line for each such try
+`undo_unavailable` with the advice to use the saved version. The result window has one line for each such try
 (`health._ended_line`): "The tries of Width ended early: after trying Width at 80 mm, these steps of another
 component stayed changed even with your values back: Fillet1 (now a warning). The other sizes were tried in full.
 Since your design changed, the add-in undoes the export when it ends." The sentence "The other sizes were tried in
@@ -2064,8 +2064,8 @@ When the file is written, `_show_result` in `export_flow.py` shows a result wind
 The texts come from `lib/dialog_model/result_rows.py`. The window has sections. A section with nothing to say is
 left out. The sections are in this order:
 
-- `# Reopen the design` (first, and only when `rollback.reopen_offered` is true): one line that says what the reopen
-  does, and the button "Reopen the design from its last save" under it (see "Reopen from the last save" below);
+- `# Reopen the design` (first, and only when `rollback.reopen_offered` is true): the steps to get the design back as
+  it was saved. The section has no button (see "Get the design back as it was saved" below);
 - `# Check your design` (only when something went wrong): a parameter that did not go back, timeline
   steps whose health differs from the start, sketches that came back on another outline, a part whose volume, size or
   pieces differ from the start, sketches that did not come back to their first shape, sketches that could not be
@@ -2264,95 +2264,83 @@ The hand check RB1 in `docs/hand-checks.md` covers the first four.
 
 The tests are in `tests/test_rollback.py`.
 
-#### Reopen from the last save
+#### Get the design back as it was saved
 
 When "Lighter on memory" dropped Undo data, the add-in cannot undo the export (`Rollback.undo_unavailable`, see point
 2 above). Then the design may stay changed. The person can close the design without saving and open the saved
-version again. The result window can do this for the person, with a button. The code is in these modules:
+version again. The result window tells the person how to do this, in three steps. The add-in does not do it. The code
+is in these modules:
 
-- `lib/design_edit/saved_start.py`: the record `SavedStart` and the function `reopen`. Both are pure Python.
-- `lib/fusion_reader/saved_design.py`: `read_saved_start` (the read of the start state) and `FusionReopen` (the
-  calls to Fusion that close and open the design). `reopen_saved` connects the two.
-- `lib/export_plan/rollback.py`: `reopen_offered` (the decision) and the texts of the window.
+- `lib/design_edit/saved_start.py`: the record `SavedStart`. It is pure Python.
+- `lib/fusion_reader/saved_design.py`: `read_saved_start`, the read of the start state. It only reads.
+- `lib/export_plan/rollback.py`: `reopen_offered` (the decision) and `reopen_lines` (the lines of the steps).
 - `lib/dialog_model/result_rows.py`: the section `reopen` of the view, and `reopen_view` (a view with only this
   section).
-- `lib/fusion_ui/result_dialog.py`: the button and the handler of `commandTerminated`. `lib/fusion_ui/reopen.py`: the
-  mark of the click and the reopen that runs when the result window has ended.
+- `lib/fusion_ui/result_dialog.py`: draws the section as text, like the other sections.
 
-The start read. A reopen is safe only when the saved version is the same as the design before the export. If the
-design had unsaved changes, a reopen deletes the work of the person. Thus `_on_created` in `entry.py` reads
-`read_saved_start(design.parentDocument)` first, before any other read. Other reads can move the timeline marker,
-and a marker move can make the document modified. The record keeps these values:
+Why the add-in does not close the design itself. Two live facts and one line of the documentation are the reason:
+
+- On Fusion 2706, a button in the result window closed the design from inside the `UserInterface.commandTerminated`
+  handler of the result window. Fusion crashed a few seconds later.
+- The documentation of `Document.close` says: "Closing a document is not supported within any of the Command related
+  events. When a command is running, a transaction is open, and creating and closing documents cannot be transacted."
+  The `commandTerminated` event is such an event.
+- Custom events (`fireCustomEvent`) do not reach their handler in this Fusion (see 1.11), and background threads do
+  not run between events. Thus the add-in has no safe moment to close and to open a design.
+
+So the add-in never calls `Document.close`, `Documents.open` or `UserInterface.terminateActiveCommand`. A test checks
+that no source file contains these calls (`tests/test_reopen.py`). The person does the steps in Fusion, where Fusion
+runs them outside a command.
+
+The start read. The steps are safe only when the saved version is the same as the design before the export. If the
+design had unsaved changes, closing without saving deletes the work of the person. Thus `_on_created` in `entry.py`
+reads `read_saved_start(design.parentDocument)` first, before any other read. Other reads can move the timeline
+marker, and a marker move can make the document modified. The record keeps these values:
 
 1. `in_cloud`: `Document.dataFile` is not null.
 2. `modified`: the value of `Document.isModified`. When the value cannot be read, it is None.
 3. `file_id`: the value of `DataFile.id`.
 4. `version`: the value of `DataFile.versionNumber`. This is the version that is open.
-5. `name` and `project`: the name of the file and the name of its project (`DataFile.parentProject`), for the
-   messages.
+5. `name` and `project`: the name of the file and the name of its project (`DataFile.parentProject`). The third step
+   shows them, so the person finds the design in the Data Panel.
 
 `SavedStart.can_reopen` is true only when `in_cloud` is true and the file id and the version are known. A value that
-the add-in cannot read never gives a reopen. `SavedStart.unsaved_at_start` is true when `modified` is not False (True,
+the add-in cannot read never gives the steps. `SavedStart.unsaved_at_start` is true when `modified` is not False (True,
 or not read). Fusion sets `Document.isModified` also when the add-in moves the timeline marker and puts it back (this
 was measured on Fusion 2706: a marker move to step 100 and back set it). The export dialog and every export move the
 marker. Thus the add-in cannot tell its own moves from the changes of the person. The add-in does not decide for the
-person: when `unsaved_at_start` is true, the line above the button (`rollback.reopen_line`, `REOPEN_LINE_UNSAVED`)
-says that the reopen loses every change since the last save.
+person: when `unsaved_at_start` is true, `rollback.reopen_lines` adds one line before the steps (`REOPEN_UNSAVED`). It
+says that closing without saving loses every change since the last save.
 
 The decision. `rollback.reopen_offered(start, rollback)` is true only when both of these conditions are true:
 
 - The rollback is `undo_unavailable`. The export could not be undone, and the design is changed or not confirmed back.
 - `start.can_reopen` is true.
 
-The add-in does not offer the reopen after an abort (`Rollback.abort`). Fusion then undoes the export itself, and the
-design comes back with its Undo history. The add-in does not offer the reopen when the design is back, or when the
-design is not in the cloud. In these cases the window gives the advice
-of today (`health.NO_UNDO_ADVICE` or `health.UNDO_ADVICE`).
+The add-in does not give the steps after an abort (`Rollback.abort`). Fusion then undoes the export itself, and the
+design comes back with its Undo history. The add-in does not give them when the design is back, or when the design is
+not in the cloud. In these cases the window gives the advice of today (`health.NO_UNDO_ADVICE` or
+`health.UNDO_ADVICE`).
 
-The window. `_offer_reopen` in `export_flow.py` makes the decision after `rollback.decide`. When the decision is
-true, it keeps the document and the `SavedStart` in `fusion_ui/reopen.py` (`keep`). Else it removes what was kept
-(`forget`). The view gets `reopen=True`. Then:
+The window. `_reopen_lines` in `export_flow.py` makes the decision after `rollback.decide`. When the decision is
+true, it returns `rollback.reopen_lines(saved_start)`. Else it returns False. The view gets these lines as `reopen`.
+Then:
 
-- The result window shows the section `reopen` first, open, and the button under that section
-  (`result_dialog.REOPEN_ID`).
+- The result window shows the section `reopen` first and open. The lines are: the warning line (only when
+  `unsaved_at_start` is true), a line that says that Fusion could not undo the export, and the three steps. Step 1:
+  choose File > Close, or close the tab of the design. Step 2: when Fusion asks to save, click Don't Save. Step 3: open
+  the design again from the Data Panel, with the project, the file name and the version of `SavedStart` (a value that
+  is not known is left out).
 - When the file holds no recipe, the story goes to a message box. After the message box, a small window with only the
-  section and the button opens (`reopen_view`).
+  section opens (`reopen_view`).
 - When the export saved no file, the message of `export_common.tell_undone` shows first. Then the same small window
   opens.
 
-The click. The reopen must not run inside an event of a command. Thus the button does not close the design. The
-click calls `reopen.request`. `request` does two things. It marks the reopen as asked for. Then it tries to end the
-result window: when `UserInterface.activeCommand` is the command of the result window, it calls
-`terminateActiveCommand`. Fusion may refuse this call inside the event of the click, so a failure is only logged.
-The window also shows a line, "The design reopens when you close this window". The person can then close the window by
-hand.
+The window has no button and no input, so the dialog never starts anything. `result_dialog.on_terminated` only opens
+the result window after the export command has ended (see 1.11).
 
-The reopen runs when Fusion reports that the result window's command has ended. `result_dialog.on_terminated` gets
-`commandTerminated` for the id `result_dialog.COMMAND_ID` and calls `reopen.window_ended`. `window_ended` does nothing
-when the person did not click the button: a window that ends without the click reopens nothing. When the click was
-made, it takes what `keep` kept (so it runs once) and calls `saved_start.reopen` with a `FusionReopen` door. The reopen
-needs no custom event and no background thread. The reasons are in 1.11 ("After the export, in Fusion").
-
-The reopen (`saved_start.reopen`) does these steps in this order. Each step that fails stops the reopen and gives a
-plain message:
-
-1. It finds the kept version. `Data.findFileById(file_id)` gives the latest version. When the version number of the
-   latest version is not the kept number, the add-in finds the kept number in `DataFile.versions`. When the add-in
-   cannot find the version, it does not close the design.
-2. It checks that the document is still open (`isValid`) and that it is still the same file (`DataFile.id`).
-3. It closes the document with `Document.close(False)`. Fusion does not save, and it does not ask. When the close
-   answers false and the document is still open, the reopen stops: the design stays as the export left it.
-4. It opens the kept version with `Documents.open(dataFile, True)`. When the open fails, the message gives the name
-   of the design and its project, so the person can open it from the Data Panel.
-
-The add-in never saves the design and never deletes a file. Only the click of the person starts the reopen.
-
-What only a live check can prove (hand check RO1 in `docs/hand-checks.md`): that the button shows and the click
-closes the result window, or that the line "The design reopens when you close this window" shows when Fusion refuses
-`terminateActiveCommand` inside the click event; that the reopen runs after the result window has ended; that the close
-asks nothing and the open gives the design with `isModified` false and the start state back. A live test on Fusion
-2706, outside the add-in, showed that the close and the open of the same version take about 2 s and give the start
-state back.
+What only a live check can prove (hand check RO1 in `docs/hand-checks.md`): that the section shows first and open with
+the three steps and no button, and that Fusion stays stable when the person follows the steps.
 
 The tests are in `tests/test_reopen.py`. The groups, the summary and the moment the window opens (fakes with a
 `commandTerminated` event that the test fires) are in `tests/test_result_window.py`.
@@ -2581,10 +2569,10 @@ alphabetical order by module.
 #### commands
 
 - `commands/ExportForParamability/entry.py`: the dialog life cycle (`_on_created`, `on_changed`, execute). The
-  first read in `_on_created` is the saved state of the design (`read_saved_start`, see 1.11, "Reopen from the last
+  first read in `_on_created` is the saved state of the design (`read_saved_start`, see 1.11, "Get the design back as it was
   save").
 - `commands/ExportForParamability/export_flow.py`: `run_export`, the ports `FusionPort` and `FusionPartsPort`, the
-  `CaptureCache`, `_show_result`, `_offer_reopen`.
+  `CaptureCache`, `_show_result`, `_reopen_lines`.
 - `commands/export_common.py`: `run_guarded` (every way an export stops becomes one message, and the marker goes
   back), the writer text, the progress window.
 
@@ -2638,8 +2626,8 @@ alphabetical order by module.
   `left_off_line`). `messages.py`: the package notes and the "Tip: " lines of the left-out steps.
 - `undo_steps.py`: the "Lighter on memory" experiment (`UndoSteps`, `attach`, `drop_after`).
 - `rollback.py`: the undo of an export that did not put the design back (`ExportOutcome`, `decide`, `Rollback`,
-  `ExecuteGate`, the lines for the window), and the decision to offer the reopen from the last save
-  (`reopen_offered`, see 1.11).
+  `ExecuteGate`, the lines for the window), and the decision to give the steps to get the design back as it was saved
+  (`reopen_offered`, `reopen_lines`, see 1.11).
 - `time_limit.py`: the choices, the default and the words of the time limit of the size tries (see 1.8).
   `fixed_parts.py`: the sizes that also move a part that stays a fixed shape in a parts file (`marked`, `joined`, see
   1.10).
@@ -2652,7 +2640,7 @@ alphabetical order by module.
   `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`). When two
   reasons of a parameter have the same text, the line of the parameter shows that text one time only.
 - `dialog_rows.py`: the texts and the checks of the rows of the parameter table. `result_rows.py`: what the result
-  window shows, with the section `reopen` and `reopen_view` (see 1.11, "Reopen from the last save"). `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
+  window shows, with the section `reopen` and `reopen_view` (see 1.11, "Get the design back as it was saved"). `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
   text.
 
 #### translator
@@ -3399,8 +3387,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `timeline_health.py` (`settle_timeline`), `walk_back.py` (the values set to bring the design back the way a try took
   it away, the rows and the single sizes to walk back, and the report entry of each attempt), `temp_copy.py`,
   `errors.py`.
-- `saved_start.py`: `SavedStart` (the saved state of the design at the start of an export) and `reopen` (the order of
-  the steps of a reopen from the last save, through a door to Fusion, see 1.11).
+- `saved_start.py`: `SavedStart` (the saved state of the design at the start of an export, see 1.11).
 
 #### fusion_reader
 
@@ -3418,7 +3405,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `ParameterStore` and of the timeline controls.
 - `sketch_keep.py`: `SketchKeeper`. `step_export.py`: the STEP file.
 - `parameters.py`: the parameter lists.
-- `saved_design.py`: `read_saved_start` and `FusionReopen`, the door of the reopen from the last save (see 1.11).
+- `saved_design.py`: `read_saved_start`, the read of the saved state of the design (see 1.11).
 
 ### 2.3 How data flows
 
@@ -6607,7 +6594,8 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `TimelineObject.isSuppressed` (set) | `rows.py` (`suppress_items`) | An item may stay off. Only with "Faster tries" (on to start with). `left_off` names it, and the end check turns it on again. |
 | `TimelineObject.index` (get) | `rows.py` (`_on_with_marker_rolled`) | Read to find the lowest item to turn on. A value that is not a number gives no second try for that item. |
 | `Command.beginStep(makeExistingStepNonUndoable=True)` | `undo_steps.py` (through the port) | A preview call. Only with "Lighter on memory". Undo may not step back through the export. On a failed call no further call is made. |
-| `Document.dataFile`, `Document.isModified`, `Document.close(False)`, `Documents.open`, `Data.findFileById`, `DataFile.id`, `versionNumber`, `versions`, `parentProject`; `UserInterface.activeCommand`, `terminateActiveCommand`, `UserInterface.commandTerminated` (`ApplicationCommandEventHandler`, `ApplicationCommandEventArgs.commandId`) | `saved_design.py`, `fusion_ui/reopen.py`, `fusion_ui/result_dialog.py` | Only after the person clicks "Reopen the design from its last save". The close loses every change since the last save, so the add-in offers it only for a cloud design, and the window warns when Fusion showed unsaved changes at the start. The version is found before the close; a close that fails leaves the design open. Checked against the installed stubs. Hand check RO1. |
+| `Document.dataFile`, `Document.isModified`, `DataFile.id`, `versionNumber`, `name`, `parentProject` (`DataProject.name`) | `saved_design.py` | Read once when the export dialog opens, before any read moves the marker. They decide whether the result window gives the steps to get the design back as it was saved. A member that cannot be read gives an unknown value and no steps. Checked against the installed stubs. The add-in does not use `Document.close`, `Documents.open` or `terminateActiveCommand`: Fusion does not support closing a document inside a command event. Hand check RO1. |
+| `UserInterface.activeCommand`, `UserInterface.commandTerminated` (`ApplicationCommandEventHandler`, `ApplicationCommandEventArgs.commandId`) | `fusion_ui/result_dialog.py` | Opens the result window when the export command has ended. Hand check RW1. |
 | `SketchPoint.move`, `Sketch.isComputeDeferred` | `sketch_keep.py` | Moves sketch points back after a solver flip. The flag goes back to its start value, read back. |
 | `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again, with the marker held at the first such step when a plain set fails. |
 | `Occurrences.addNewComponent`, `BRepBody.copyToComponent`, `Occurrence.deleteMe` | `step_export.py`, `temp_copy.py` | The temporary copy adds timeline items; they must all go. |

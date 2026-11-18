@@ -21,12 +21,13 @@ could not be undone and gives the advice for a design that may be changed.
 The texts say what the add-in asked Fusion to do, not that the design is back: the windows of the export show before
 Fusion aborts the command. They say whether the file was saved (`ExportOutcome.saved`).
 
-`reopen_offered` says when the result window offers to reopen the design from its last save: only for
+`reopen_offered` says when the result window tells the person how to get the design back as it was saved: only for
 `undo_unavailable`, and only when the design has a saved cloud version (`design_edit.saved_start.SavedStart.can_reopen`).
-When Fusion showed unsaved changes at the start (`SavedStart.unsaved_at_start`), the line above the button says that a
-reopen loses every change since the last save: Fusion also counts the add-in's own marker moves as unsaved changes, so
-the add-in cannot tell them from the person's own, and the person decides (`reopen_line`). After an abort Fusion undoes
-the export itself, so no reopen is offered.
+`reopen_lines` are the steps: close the design without saving, then open it again from the Data Panel. The add-in does
+not close or open the design itself (see `docs/developer-guide.md`). When Fusion showed unsaved changes at the start
+(`SavedStart.unsaved_at_start`), a line before the steps says that every change since the last save is lost: Fusion
+also counts the add-in's own marker moves as unsaved changes, so the add-in cannot tell them from the person's own, and
+the person decides. After an abort Fusion undoes the export itself, so no steps are given.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -39,18 +40,17 @@ ABORT_MESSAGE = (
     "everything the export did.")
 SAVED = "The file is saved. Check its sizes before you use it."
 NOT_SAVED = "No file was saved."
-# The result window's offer to reopen the design (`reopen_offered`): the title, the line above the button, the button.
+# The title of the result window's steps to get the design back (`reopen_offered`).
 REOPEN_TITLE = "Reopen the design"
-REOPEN_LINE = (
-    "Your design had no unsaved changes when the export started. To get it back as it was, reopen it from its last "
-    "save: Fusion closes the design without saving and opens that saved version again. The view and the Undo history "
-    "of this design are lost.")
-REOPEN_LINE_UNSAVED = (
+REOPEN_INTRO = (
+    "Fusion could not undo the export. To get your design back as it was saved, close it without saving and open it "
+    "again:")
+REOPEN_UNSAVED = (
     "Fusion showed unsaved changes in your design when the export started. They can come from an earlier export or "
-    "from opening the export dialog, or be your own changes. Reopening the design from its last save loses every "
-    "change since that save: Fusion closes the design without saving and opens that saved version again. The view "
-    "and the Undo history of this design are lost.")
-REOPEN_BUTTON = "Reopen the design from its last save"
+    "from opening the export dialog, or be your own changes. Closing without saving loses every change since the last "
+    "save.")
+REOPEN_CLOSE = "1. In Fusion choose File > Close (or close the design's tab)."
+REOPEN_DISCARD = "2. When Fusion asks to save, click Don't Save."
 
 
 @dataclass
@@ -119,15 +119,29 @@ def decide(outcome):
 
 
 def reopen_offered(start, rollback):
-    """True when the result window offers to reopen the design from its last save: the export could not be undone
-    (`undo_unavailable`) and `start` (a `SavedStart`, or None when not read) shows the open design was that save."""
+    """True when the result window gives the steps to get the design back as it was saved: the export could not be
+    undone (`undo_unavailable`) and `start` (a `SavedStart`, or None when not read) shows the open design has a saved
+    cloud version."""
     return bool(rollback.undo_unavailable and start is not None and start.can_reopen)
 
 
-def reopen_line(start):
-    """The line above the reopen button for `start` (a `SavedStart`): the plain one, or the one that warns that
-    changes since the last save are lost too when Fusion showed unsaved changes at the start."""
-    return REOPEN_LINE_UNSAVED if start is None or start.unsaved_at_start else REOPEN_LINE
+def _open_again(start):
+    """The third step: where to find the saved version, from what `start` knows (project, file name, version)."""
+    parts = []
+    if start is not None and start.project:
+        parts.append("project \"%s\"" % start.project)
+    if start is not None and start.name:
+        parts.append("file \"%s\"" % start.name)
+    if start is not None and start.version is not None:
+        parts.append("version %d" % start.version)
+    return "3. Open the design again from the Data Panel" + (" (%s)." % ", ".join(parts) if parts else ".")
+
+
+def reopen_lines(start):
+    """The lines of the result window's steps for `start` (a `SavedStart`): the warning that changes since the last
+    save are lost when Fusion showed unsaved changes at the start (or `start` is None), the intro, then the steps."""
+    warning = [REOPEN_UNSAVED] if start is None or start.unsaved_at_start else []
+    return warning + [REOPEN_INTRO, REOPEN_CLOSE, REOPEN_DISCARD, _open_again(start)]
 
 
 def abort_message(rollback):

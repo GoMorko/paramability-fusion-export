@@ -1,25 +1,25 @@
-"""The reopen of the design from its last save: when the result offers it, what the start read keeps, and what the
-click does in Fusion (fakes with the names of the Fusion API)."""
+"""The steps to get the design back as it was saved: when the result gives them, what the start read keeps, what the
+lines say, and that the add-in never closes or opens a design itself (fakes with the names of the Fusion API)."""
+import pathlib
 import types
 import unittest
-from unittest import mock
 
 from tests import context  # noqa: F401
 from tests import fakes
 from tests.test_result_rows import view as plain_view
-from lib.design_edit.saved_start import SavedStart, reopen
+from lib.design_edit.saved_start import SavedStart
 from lib.dialog_model.result_rows import reopen_view, result_view, section
 from lib.export_plan.health import HealthInputs, make_health
-from lib.export_plan.rollback import (REOPEN_BUTTON, REOPEN_LINE, REOPEN_LINE_UNSAVED, ExportOutcome, decide,
-                                      reopen_line, reopen_offered)
-from lib.fusion_reader.saved_design import FusionReopen, read_saved_start
+from lib.export_plan.rollback import (REOPEN_UNSAVED, ExportOutcome, decide, reopen_lines, reopen_offered)
+from lib.fusion_reader.saved_design import read_saved_start
 from lib.params import size_table
 
 core = fakes.install_adsk_core()
-from lib.fusion_ui import reopen as reopen_ui, result_dialog  # noqa: E402
+from lib.fusion_ui import result_dialog  # noqa: E402
 
 FILE_ID = "urn:adsk.wipprod:dm.lineage:abc"
 SAVED = SavedStart(in_cloud=True, modified=False, file_id=FILE_ID, version=4, name="Box", project="Prints")
+UNSAVED = SavedStart(in_cloud=True, modified=True, file_id=FILE_ID, version=4, name="Box", project="Prints")
 CHANGED = make_health(HealthInputs(unrestored=["wall"]))
 NO_UNDO = decide(ExportOutcome(CHANGED, touched=True, undo_dropped=True))
 UNDONE = decide(ExportOutcome(CHANGED, touched=True))
@@ -27,27 +27,14 @@ BACK = decide(ExportOutcome(make_health(HealthInputs()), touched=True))
 
 
 class FakeDataFile:
-    def __init__(self, version, versions=(), name="Box", project="Prints", file_id=FILE_ID):
+    def __init__(self, version, name="Box", project="Prints", file_id=FILE_ID):
         self.id, self.versionNumber, self.name = file_id, version, name
         self.parentProject = types.SimpleNamespace(name=project)
-        self.versions = types.SimpleNamespace(count=len(versions), item=lambda i: versions[i])
 
 
 class FakeDocument:
-    def __init__(self, data_file, modified=False, closes=True, calls=None):
-        self.dataFile, self.isModified, self.isValid = data_file, modified, True
-        self._closes = closes
-        self.calls = calls if calls is not None else []
-
-    def close(self, save_changes):
-        self.calls.append(("close", save_changes))
-        if self._closes:
-            self.isValid = False
-        return self._closes
-
-    def save(self, description):
-        self.calls.append(("save", description))
-        return True
+    def __init__(self, data_file, modified=False):
+        self.dataFile, self.isModified = data_file, modified
 
 
 class FakeEvent:
@@ -70,54 +57,19 @@ class FakeEvent:
             handler.notify(args)
 
 
-class FakeApp:
-    """`Application` with `data.findFileById`, `documents.open` and the `userInterface` the reopen reads."""
-
-    def __init__(self, latest, opens=True, calls=None):
-        self.calls = calls if calls is not None else []
-        self.data = types.SimpleNamespace(findFileById=lambda file_id: latest if file_id == FILE_ID else None)
-        self.documents = types.SimpleNamespace(open=self._open)
-        self._opens = opens
-        self.ends = True
-        self.userInterface = types.SimpleNamespace(
-            activeCommand=result_dialog.COMMAND_ID, terminateActiveCommand=self._terminate,
-            commandTerminated=FakeEvent())
-
-    def _open(self, data_file, visible):
-        self.calls.append(("open", data_file.versionNumber, visible))
-        return object() if self._opens else None
-
-    def _terminate(self):
-        self.calls.append(("end window",))
-        if self.ends:
-            self.userInterface.activeCommand = ""
-        return self.ends
-
-
-def setup(latest=None, opens=True, closes=True, modified=False):
-    calls = []
-    latest = latest or FakeDataFile(4)
-    return FakeApp(latest, opens, calls), FakeDocument(latest, modified, closes, calls), calls
-
-
 class OfferTest(unittest.TestCase):
-    def test_a_saved_unchanged_design_the_export_could_not_undo_is_offered_the_reopen(self):
+    def test_a_saved_design_the_export_could_not_undo_gets_the_steps(self):
         self.assertTrue(NO_UNDO.undo_unavailable)
         self.assertTrue(reopen_offered(SAVED, NO_UNDO))
+        self.assertTrue(reopen_offered(UNSAVED, NO_UNDO))
+        self.assertTrue(reopen_offered(SavedStart(True, None, FILE_ID, 4), NO_UNDO))
 
-    def test_unsaved_changes_at_the_start_still_offer_it_with_the_line_that_changes_since_the_save_are_lost(self):
-        # Fusion counts the add-in's own marker moves as unsaved changes, so the person decides.
-        for start in (SavedStart(True, True, FILE_ID, 4), SavedStart(True, None, FILE_ID, 4)):
-            self.assertTrue(reopen_offered(start, NO_UNDO), start)
-            self.assertEqual(reopen_line(start), REOPEN_LINE_UNSAVED)
-        self.assertEqual(reopen_line(SAVED), REOPEN_LINE)
-
-    def test_a_design_without_a_saved_cloud_version_is_never_offered_it(self):
+    def test_a_design_without_a_saved_cloud_version_gets_no_steps(self):
         for start in (SavedStart(False, False), SavedStart(True, False, "", 4), SavedStart(True, False, FILE_ID),
                       None):
             self.assertFalse(reopen_offered(start, NO_UNDO), start)
 
-    def test_a_design_that_is_back_or_that_fusion_undoes_is_not_offered_it(self):
+    def test_a_design_that_is_back_or_that_fusion_undoes_gets_no_steps(self):
         self.assertFalse(reopen_offered(SAVED, BACK))
         self.assertFalse(reopen_offered(SAVED, UNDONE))
 
@@ -128,7 +80,7 @@ class StartReadTest(unittest.TestCase):
         self.assertEqual(start, SavedStart(True, False, FILE_ID, 7, "Box", "Prints"))
         self.assertTrue(start.can_reopen)
 
-    def test_a_design_not_in_the_cloud_cannot_be_reopened_and_unsaved_changes_are_kept(self):
+    def test_a_design_not_in_the_cloud_has_no_saved_version_and_unsaved_changes_are_kept(self):
         for document in (FakeDocument(None), None):
             self.assertFalse(read_saved_start(document).can_reopen)
         unreadable = read_saved_start(types.SimpleNamespace(dataFile=FakeDataFile(7)))
@@ -137,125 +89,104 @@ class StartReadTest(unittest.TestCase):
         self.assertFalse(read_saved_start(FakeDocument(FakeDataFile(7))).unsaved_at_start)
 
 
-class ReopenTest(unittest.TestCase):
-    def test_the_reopen_closes_without_saving_then_opens_the_kept_version(self):
-        app, document, calls = setup()
-        self.assertEqual(reopen(SAVED, FusionReopen(app, document)), "")
-        self.assertEqual(calls, [("close", False), ("open", 4, True)])
+class LinesTest(unittest.TestCase):
+    def test_the_steps_close_without_saving_then_open_the_saved_version_by_project_file_and_version(self):
+        lines = reopen_lines(SAVED)
+        self.assertNotIn(REOPEN_UNSAVED, lines)
+        self.assertEqual([line[:2] for line in lines[1:]], ["1.", "2.", "3."])
+        self.assertIn("Close", lines[1])
+        self.assertIn("Don't Save", lines[2])
+        for known in ("Prints", "Box", "version 4"):
+            self.assertIn(known, lines[3])
 
-    def test_a_newer_version_in_the_cloud_opens_the_kept_version(self):
-        app, document, calls = setup(FakeDataFile(6, versions=[FakeDataFile(6), FakeDataFile(5), FakeDataFile(4)]))
-        document.dataFile = FakeDataFile(4)
-        self.assertEqual(reopen(SAVED, FusionReopen(app, document)), "")
-        self.assertEqual(calls, [("close", False), ("open", 4, True)])
+    def test_the_warning_comes_first_only_when_fusion_showed_unsaved_changes(self):
+        self.assertEqual(reopen_lines(UNSAVED)[0], REOPEN_UNSAVED)
+        self.assertEqual(reopen_lines(SavedStart(True, None, FILE_ID, 4))[0], REOPEN_UNSAVED)
+        self.assertEqual(reopen_lines(None)[0], REOPEN_UNSAVED)
+        self.assertEqual(len(reopen_lines(UNSAVED)), len(reopen_lines(SAVED)) + 1)
 
-    def test_a_kept_version_that_cannot_be_found_closes_nothing(self):
-        app, document, calls = setup(FakeDataFile(6, versions=[FakeDataFile(6)]))
-        self.assertTrue(reopen(SAVED, FusionReopen(app, document)))
-        app.data.findFileById = lambda file_id: None
-        self.assertTrue(reopen(SAVED, FusionReopen(app, document)))
-        self.assertEqual(calls, [])
-
-    def test_a_design_that_is_no_longer_that_file_is_not_closed(self):
-        app, document, calls = setup()
-        document.dataFile = FakeDataFile(4, file_id="urn:other")
-        self.assertTrue(reopen(SAVED, FusionReopen(app, document)))
-        self.assertEqual(calls, [])
-
-    def test_a_close_that_fails_opens_nothing_and_saves_nothing(self):
-        app, document, calls = setup(closes=False)
-        self.assertTrue(reopen(SAVED, FusionReopen(app, document)))
-        self.assertEqual(calls, [("close", False)])
-
-    def test_an_open_that_fails_after_the_close_says_where_the_design_is(self):
-        app, document, calls = setup(opens=False)
-        message = reopen(SAVED, FusionReopen(app, document))
-        self.assertIn("Box", message)
-        self.assertIn("Prints", message)
-        self.assertEqual(calls, [("close", False), ("open", 4, True)])
+    def test_a_name_that_is_not_known_is_left_out_of_the_last_step(self):
+        last = reopen_lines(SavedStart(True, False, FILE_ID, 4))[-1]
+        self.assertIn("version 4", last)
+        self.assertNotIn("project", last)
+        self.assertNotIn("file", last)
+        self.assertEqual(reopen_lines(None)[-1], "3. Open the design again from the Data Panel.")
 
 
-def offered_view():
+def offered_view(start=SAVED, rollback=NO_UNDO):
     params = [dict(name="wall", expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")]
     report = {"sizes": {"free": ["wall"], "fixed": [], "dropped": []}, "health": CHANGED}
     manifest = {"kind": "recipe", "notes": [], "parameters": [{}]}
-    return result_view("box.paramability", manifest, report, size_table.build(params, ["wall"]), ["wall"], NO_UNDO,
-                       reopen=True)
+    return result_view("box.paramability", manifest, report, size_table.build(params, ["wall"]), ["wall"], rollback,
+                       reopen=reopen_lines(start) if reopen_offered(start, rollback) else False)
 
 
 class WindowTest(unittest.TestCase):
-    def test_only_an_offered_view_has_the_reopen_section_and_its_button(self):
+    def test_only_an_offered_view_has_the_steps_section_first_and_open(self):
         shown = offered_view()
         self.assertEqual([s["key"] for s in shown["sections"]][:3], ["reopen", "check", "result"])
+        text = " ".join(section(shown, "reopen")["lines"])
+        for known in ("Box", "Prints", "version 4"):
+            self.assertIn(known, text)
         command = fakes.FakeCommand()
         result_dialog.build(command, shown)
-        button = command.commandInputs.itemById(result_dialog.REOPEN_ID)
-        self.assertIsNotNone(button)
-        # A Fusion button without an icon shows its text; without it the button is an empty space.
-        self.assertEqual(button.text, REOPEN_BUTTON)
+        box = command.commandInputs.itemById("pm_result_reopen")
+        self.assertIn("Save", box.formattedText)
         plain = fakes.FakeCommand()
         result_dialog.build(plain, plain_view())
         self.assertIsNone(section(plain_view(), "reopen"))
-        self.assertIsNone(plain.commandInputs.itemById(result_dialog.REOPEN_ID))
-        self.assertTrue(reopen_view()["reopen"])
+        self.assertIsNone(plain.commandInputs.itemById("pm_result_reopen"))
 
-    def listen(self, app):
-        patch = mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True)
-        patch.start()
-        self.addCleanup(patch.stop)
-        result_dialog.start()
-        self.addCleanup(result_dialog.remove)
+    def test_an_abort_or_a_design_that_is_back_has_no_steps_section(self):
+        for rollback in (UNDONE, BACK):
+            shown = offered_view(rollback=rollback)
+            self.assertIsNone(section(shown, "reopen"))
+            self.assertFalse(shown["reopen"])
 
-    def test_the_click_marks_the_reopen_and_it_runs_only_when_the_result_window_has_ended(self):
-        app, document, calls = setup()
-        self.listen(app)
-        reopen_ui.keep(document, SAVED)
-        result_dialog.on_input("pm_result_sizes")
-        self.assertEqual(calls, [])
-        result_dialog.on_input(result_dialog.REOPEN_ID)
-        self.assertEqual(calls, [("end window",)])
-        app.userInterface.commandTerminated.fire("SomeOtherCommand")
-        self.assertEqual(calls, [("end window",)])
-        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
-        self.assertEqual(calls, [("end window",), ("close", False), ("open", 4, True)])
-        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
-        self.assertEqual(len(calls), 3)
+    def test_the_view_without_a_result_has_only_the_steps(self):
+        shown = reopen_view(reopen_lines(UNSAVED))
+        self.assertEqual([s["key"] for s in shown["sections"]], ["reopen"])
+        self.assertEqual(shown["sections"][0]["lines"][0], REOPEN_UNSAVED)
+        self.assertTrue(shown["reopen"])
 
-    def test_a_window_that_ends_without_the_click_reopens_nothing(self):
-        app, document, calls = setup()
-        self.listen(app)
-        reopen_ui.keep(document, SAVED)
-        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
-        self.assertEqual(calls, [])
-
-    def test_a_window_fusion_does_not_end_reopens_when_the_person_closes_it(self):
-        app, document, calls = setup()
-        app.ends = False
-        self.listen(app)
-        reopen_ui.keep(document, SAVED)
-        result_dialog.on_input(result_dialog.REOPEN_ID)
-        self.assertEqual(calls, [("end window",)])
-        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
-        self.assertEqual(calls, [("end window",), ("close", False), ("open", 4, True)])
-
-    def test_without_a_kept_design_the_click_does_nothing(self):
-        app, _, calls = setup()
-        self.listen(app)
-        reopen_ui.forget()
-        result_dialog.on_input(result_dialog.REOPEN_ID)
-        app.userInterface.commandTerminated.fire(result_dialog.COMMAND_ID)
-        self.assertEqual(calls, [])
-
-    def test_the_click_shows_when_the_design_reopens(self):
-        app, document, _ = setup()
-        self.listen(app)
-        reopen_ui.keep(document, SAVED)
+    def test_the_window_has_no_input_to_click_and_no_input_hook(self):
         command = fakes.FakeCommand()
         result_dialog.build(command, offered_view())
-        note = command.commandInputs.itemById(result_dialog.REOPEN_NOTE_ID)
-        self.assertFalse(note.isVisible)
-        result_dialog.on_input(result_dialog.REOPEN_ID)
-        self.assertTrue(note.isVisible)
+        self.assertFalse(any("button" in key for key in command.commandInputs.items))
+        self.assertFalse(hasattr(command, "inputChanged"))
+
+
+class NoCloseOrOpenTest(unittest.TestCase):
+    def test_showing_the_window_and_ending_commands_never_closes_or_opens_a_design(self):
+        """Fusion does not support closing or opening a document inside a command event: a fake that fails the test
+        when the add-in touches it must stay untouched through the whole life of the window."""
+        def fail(*args):
+            raise AssertionError("the add-in closed or opened a design")
+
+        document = types.SimpleNamespace(close=fail, save=fail, dataFile=FakeDataFile(4), isModified=False)
+        ui = types.SimpleNamespace(
+            commandTerminated=FakeEvent(), activeCommand="", terminateActiveCommand=fail,
+            commandDefinitions=types.SimpleNamespace(
+                itemById=lambda i: None,
+                addButtonDefinition=lambda *a: types.SimpleNamespace(commandCreated=FakeEvent(), execute=lambda: None)))
+        app = types.SimpleNamespace(userInterface=ui, documents=types.SimpleNamespace(open=fail),
+                                    activeDocument=document)
+        previous = getattr(core, "Application", None)
+        core.Application = types.SimpleNamespace(get=lambda: app)
+        self.addCleanup(lambda: setattr(core, "Application", previous))
+        result_dialog.start()
+        self.addCleanup(result_dialog.remove)
+        result_dialog.show(offered_view(), "SomeCommand")
+        ui.commandTerminated.fire("SomeCommand")
+        ui.commandTerminated.fire(result_dialog.COMMAND_ID)
+        result_dialog.build(fakes.FakeCommand(), offered_view())
+
+    def test_no_source_file_closes_or_opens_a_document(self):
+        root = pathlib.Path(__file__).resolve().parent.parent / "ParamabilityExport"
+        for path in root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for banned in ("documents.open", ".close(False", "terminateActiveCommand"):
+                self.assertNotIn(banned, text, str(path))
 
 
 if __name__ == "__main__":

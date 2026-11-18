@@ -36,7 +36,7 @@ Nothing is typed in Fusion.
 5. Pick the design up direction, click OK and choose where to save the file. The file name offered is the name of the
    component that holds the body, or the name of the design for a body that is not in a component.
 6. A window then shows short sections. Each section is a group with its title. Sections with nothing to say are left
-   out. The first sections are open: `Reopen the design` (when it is offered), `Check your design` (when something is
+   out. The first sections are open: `Reopen the design` (when it applies), `Check your design` (when something is
    wrong) and `Result`. The other sections (`Sizes`, `Left out`, `More sizes`) are folded: click a title to open
    it. A long list scrolls inside its box. The window opens a few seconds after the export ends when Fusion is slow to
    start it; the status area says so meanwhile:
@@ -57,13 +57,14 @@ Nothing is typed in Fusion.
      sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
      on. The add-in then asks Fusion to undo the export. With "Lighter on memory" ticked, once Fusion forgot Undo data,
      all tries stop there instead. Use Undo in Fusion when this section says your design is changed.
-   - `# Reopen the design`: shown first, with its button, only when the export could not be undone ("Lighter on
-     memory" was ticked) and your design was saved in the cloud. The button "Reopen the design from its last save" closes the design without saving and opens that saved
-     version again. Nothing happens until you click it. The view and the Undo history of this design are lost, and a
-     file that the export saved stays saved. When Fusion showed unsaved changes when you opened the export dialog, the
-     line above the button says that the reopen loses every change since the last save. Fusion counts the add-in's own
-     marker moves (of an earlier export, or of opening the export dialog) as unsaved changes too, so the add-in cannot
-     tell them from your own: click only when you have no changes of your own to keep.
+   - `# Reopen the design`: shown first, only when the export could not be undone ("Lighter on memory" was ticked)
+     and your design was saved in the cloud. It gives three steps to get the design back as it was saved, with the
+     project, the file name and the version to open (see "Get the design back as it was saved" below). The add-in
+     does not close or open the design: you do it. When Fusion showed unsaved changes when you opened the export
+     dialog, a line before the steps says that closing without saving loses every change since the last save. Fusion
+     counts the add-in's own marker moves (of an earlier export, or of opening the export dialog) as unsaved changes
+     too, so the add-in cannot tell them from your own: follow the steps only when you have no changes of your own to
+     keep.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, a message box shows a short summary:
    the file name, how many sizes, how many steps were left out, and what to check in your design.
@@ -217,8 +218,8 @@ The Undo data of the last part of the export is dropped only when the check at t
 was: every value back, no sketch moved, no step worse or left turned off, and every check could be made. On any doubt
 it is kept. When a step still looks changed after Undo data was dropped, the result window and the message box do not
 send you to Undo: they say to close the design without saving and open the version you saved. When the design had no
-unsaved changes before the export, the result window has a button that does this for you (see "Reopen from the last
-save" below). If your Fusion does
+unsaved changes before the export, the result window gives the steps for this (see "Get the design back as it was
+saved" below). If your Fusion does
 not have the call or refuses it, the export runs as with the box off. `report.json` says what happened in
 `timing.undo` (`on`, `applied`, `steps`) and `health.undo_dropped`.
 
@@ -234,29 +235,26 @@ is not undone. With "Lighter on memory" ticked the add-in never asks Fusion to u
 last part of the export and that could make the design worse. The window then says that the export could not be undone:
 close the design without saving and open the version you saved.
 
-### Reopen from the last save
+### Get the design back as it was saved
 
-When the export could not be undone, the result window can reopen the design for you. It shows the button "Reopen the
-design from its last save" when the design was saved in the cloud (it has a version in the Data Panel).
+When the export could not be undone, the result window gives the steps to get the design back as it was saved. It
+does this when the design was saved in the cloud (it has a version in the Data Panel). The window shows these steps
+under "Reopen the design", with the project, the file name and the version of your design:
+
+1. In Fusion choose File > Close (or close the design's tab).
+2. When Fusion asks to save, click Don't Save.
+3. Open the design again from the Data Panel (the window names the project, the file and the version).
+
+You do these steps yourself. The add-in does not close or open the design for you, because Fusion does not support
+that while a command runs, and Fusion closed suddenly when the add-in tried it.
 
 When the design had no unsaved changes when you opened the export dialog, the saved version is exactly the design as it
-was before the export, so the reopen loses only the changes of the export. When Fusion showed unsaved changes, the
-window says that the reopen loses every change since the last save. These can be your own changes, or the add-in's own
-marker moves of an earlier export or of opening the export dialog, which Fusion also counts: decide before you click. When you click the button, the add-in asks Fusion to close the result window. When the window stays open, the
-window says "The design reopens when you close this window": close it. Then Fusion closes the design without saving
-and opens the same saved version again, in about 2 seconds. When someone saved a newer version in the meantime, the add-in opens the
-version that you had open. The view and the Undo history of this design are lost. The add-in never saves the design and
-never deletes anything. Nothing happens until you click.
+was before the export, so you lose only the changes of the export. When Fusion showed unsaved changes, a line before the
+steps says that closing without saving loses every change since the last save. These can be your own changes, or the
+add-in's own marker moves of an earlier export or of opening the export dialog, which Fusion also counts: decide before
+you close the design. The view and the Undo history of this design are lost. A file that the export saved stays saved.
 
-When something goes wrong, a message says what happened:
-
-- The saved version was not found (for example, no connection): the design is not closed. It stays as the export left
-  it.
-- Fusion did not close the design: it stays open as the export left it, and nothing was saved.
-- The design closed but did not open again: the message gives its name and its project, so you can open it from the
-  Data Panel.
-
-When the export stopped and saved no file, a small window with only this button opens after the message.
+When the export stopped and saved no file, a small window with only these steps opens after the message.
 
 The check at the end also measures the part itself: its volume, its size and place, the number of its pieces and the
 other bodies of its component. A clear difference means your design is changed. A very small difference with nothing
