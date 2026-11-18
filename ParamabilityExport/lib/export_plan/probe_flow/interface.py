@@ -13,7 +13,11 @@ class Probe(Protocol):
     left_start(read), off_start(read), off_outline(read), matches_start(read): what a read shows about the followed
       sketches (`off_start` gives the tokens of those that read otherwise than at the start).
     probe_rows(sizes, extra), pair_rows, far_rows, far_pair_rows, nearer_rows, check_rows (sizes, room): the rows of
-      each phase, in the order `ProbeRun.measure` asks for them.
+      each phase, in the order `ProbeRun.measure` asks for them. `far_rows` and `nearer_rows` take `only`, the Fusion
+      names of the sizes to plan (all when None); `far_rows` without it plans the far rows of every size not planned
+      yet and ends the far phase.
+    far_order(sizes, late): the Fusion names of the tried sizes in the order their far rows run, the sizes in `late`
+      (trouble outside the part in their tries so far) last.
     add_states(entries): the states of the rows run (`ProbeRun.probe_states`).
     counts_warning(step): True when a new warning on the timeline item `step` (`(position, name)`) makes a row count
       as not built (a step a part is built from, `tried_ranges.part_step`).
@@ -53,11 +57,13 @@ class Probe(Protocol):
 
     def pair_rows(self, sizes, room): ...
 
-    def far_rows(self, sizes, room): ...
+    def far_order(self, sizes, late=()): ...
+
+    def far_rows(self, sizes, room, only=None): ...
 
     def far_pair_rows(self, sizes, room): ...
 
-    def nearer_rows(self, sizes, room): ...
+    def nearer_rows(self, sizes, room, only=None): ...
 
     def check_rows(self, sizes, room): ...
 

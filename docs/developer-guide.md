@@ -685,9 +685,12 @@ share (`ProbeGroup.schedule`).
    the lower near value, one at the higher. A size whose own near row on that side failed stays at its value.
 3. Nearer rows (`plan.nearer_rows`) for the rows that did not build. See below.
 4. Far rows (`plan.far_rows`): the range ends of each tried size, when they differ from the value and the near values.
-   An end past a value of that size that failed alone is not tried.
-5. Nearer rows again, for far rows that did not build. Then, with two or more sizes, all sizes at their minimum and all
-   at their maximum (`plan.far_pair_rows`), each tried size only as far as it built alone.
+   An end past a value of that size that failed alone is not tried. The far rows run one size at a time
+   (`ProbeRun._far_by_size`). Right after the far rows of a size, the nearer rows and the halving of that size run
+   (`ProbeRun._retry` with `only`). Then the next size gets its far rows. See "The far rows, one size at a time" below.
+5. Nearer rows again, for all sizes, in the rows and nearer rows that are left. Then, with two or more sizes, all
+   sizes at their minimum and all at their maximum (`plan.far_pair_rows`), each tried size only as far as it built
+   alone.
 6. Check rows (`plan.check_rows`), once per export: for a value that one size moves along a curve (see 3.1), more
    rows that let the add-in fit and check a formula with sine, cosine or products. Some of these rows are pair rows.
    A pair row sets a curved size together with one other size. The other size is one of the sizes of the curved
@@ -702,6 +705,67 @@ quarter, then a tenth (`NEARER_STEPS`). When one value built and a farther one d
 per export (`MAX_NEARER_ROWS`). A row where the size alone made a followed sketch take another outline counts like a
 row that did not build. A row where the part came apart into separate pieces counts the same way. Section 3.2 shows a
 full example.
+
+#### The far rows, one size at a time
+
+A far row can leave the design broken with the values back. Then the tries stop (`RowExport.not_back`), and no row
+runs after it. If the far rows of all sizes ran in one batch, a stop in that batch came before the halving of every
+size. A size whose far end failed then kept its range at its near value, although the design builds much farther.
+Thus `ProbeRun._far_by_size` runs the far rows of one size, then the nearer rows and the halving of that size, and
+then the next size. A later far row that stops the tries cannot cut the range of a size that came before it.
+
+The order of the sizes:
+
+1. `SizeProbe.far_order` gives the tried sizes in the order of the near rows (`plan.far_order`, `rows.tried_sizes`).
+2. A size goes last when its own rows so far showed trouble outside the part (`far_phase.late_sizes`):
+   - a new warning on a step that the part is not built from (`others_warned` in the row result, which
+     `RowExport.run` keeps from the same read as `warned`),
+   - an error on a step that the part is not built from,
+   - a check after the row that found a step worse and walked the design back (an attempt at `walk_back.AT_CHECK`
+     in `RowExport.walks`; only the first 24 attempts are kept).
+3. A size also goes last when, set alone in a row that built, it moved a measured reference of another component
+   (`states.moves_others`; a reference without `own`).
+4. The sizes that go last keep their order. When no size shows these facts, the order is the order of the near rows.
+
+These facts come from the rows that ran before. The add-in does not read Fusion again for them. A far try of such a
+size is the most likely to break the design, so the other sizes get their far rows and their halving first.
+
+The share of the nearer rows (`far_phase.nearer_share`). The nearer rows have one cap for the export (24,
+`MAX_NEARER_ROWS`). Without a share, the first two or three sizes whose far rows fail could use all of them, and the
+sizes after them would get no halving. Thus:
+
+1. When the far rows of a size have run, the add-in counts the nearer rows that are left under the cap
+   (`ProbeRun._nearer` counts the nearer rows that `_retry` planned).
+2. It divides them by the number of sizes that still have their far phase to come, this size included. It rounds the
+   result up. That is the most nearer rows this size can get. Example: 24 rows and 3 sizes give 8 rows to the first
+   size.
+3. A size that uses fewer rows leaves them to the sizes after it. Example: the first size uses 2 rows. The second size
+   then gets 22 divided by 2, that is 11 rows.
+4. The size also leaves 2 rows of the row limit (`MAX_PROBE_ROWS`) for each size after it (`FAR_ENDS`, one row per
+   range end). Thus the far rows of the later sizes still fit, as when the far rows of all sizes came first.
+5. After the last size, the nearer rows of all sizes run again in the rows that are left (step 5 above). A size that
+   its share cut short can then continue.
+
+`RowSchedule` keeps the far phase open while the sizes get their far rows one at a time. `SizeProbe.far_rows` with
+`only` plans the far rows of the sizes in `only` and notes them as planned (`RowSchedule.far_sizes`). The phase stays
+`NEAR`. A call without `only` plans the far rows of all sizes that do not have them yet, and moves the phase to `FAR`.
+`ProbeRun` makes this call after the last size, so the far pair rows can follow. `ProbeGroup` does the same for each
+part. `plan.far_rows` and `plan.nearer_rows` take a filter of sizes (`only`) and not a shorter list of sizes, because
+each row sets the values of all sizes.
+
+When the tries end in the far phase (a broken design or the time limit), the add-in plans the far rows of the sizes
+that did not get them yet. It gives them to the probe as rows that did not run (`note_stop`, `note_time_limit`), as
+when the far rows of all sizes were in one batch.
+
+A clean export (no row fails) runs the same rows in the same order as with one batch: the far rows come in the order
+of the near rows, and no nearer rows come between them. Each size has its own batch. A batch ends with an outline
+read when its last row did not build or read another outline (`ProbeRun._tails`). With one batch per size there can
+be one such read per size. The number of rebuilds per row does not change.
+
+Tests: `tests/test_far_phase.py` (the same rows for a clean export, one part and a group; the order of a size that
+warned outside the part; the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py`
+(a later size that breaks the design after the halving of the first size, and a time limit between the far rows of
+two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
 
 #### One row, in detail
 
@@ -985,11 +1049,12 @@ The tries can end early in two ways. A try can leave the design broken with the 
 `probe.stopped`). Or the time limit can stop the tries (`RowExport.halted`). In both cases, no row runs after that
 point.
 
-The rows run in phases (see "The rows, in order"). The far rows of all sizes run in one batch. The nearer rows and the
-halving of each size come after that batch (`ProbeRun._retry`). Thus an early end can come after the far row of a size
-failed, but before the halving between its farthest value that built and that failed value. Example: `Pipe` is 12
-now, with a range of 6 to 24. Its near rows at 9 and 15 build. Its far row at 24 fails. Then a far row of another size
-leaves the design broken, and the tries stop. No value between 15 and 24 was tried.
+The rows run in phases (see "The rows, in order"). The far rows run one size at a time, and the nearer rows and the
+halving of a size come right after its far rows (see "The far rows, one size at a time"). An early end can still come
+after the far row of a size failed, but before the halving between its farthest value that built and that failed
+value. This occurs when the far row of that size itself leaves the design broken, or when the time limit comes during
+its halving. Example: `Pipe` is 12 now, with a range of 6 to 24. Its near rows at 9 and 15 build. Its far row at 24
+fails and also leaves the design broken, so the tries stop. No value between 15 and 24 was tried.
 
 The range then stops at 15. That is correct: 15 is the farthest value that built, and the copy never offers a
 value that was not seen to build. But the range can be much shorter than the design allows. So the reason must say that
@@ -1019,8 +1084,9 @@ How the export finds these sides:
    between 15 and 24 was tried". After the time limit, the end of the cause is "as the tries ran out of time.
    Tip: raise the time limit". A reason has at most 200 characters (`notes.MAX_NOTE`), so the cause is short.
 
-Tests: `UnfinishedRangeTest` in `tests/test_geometry_links.py` runs the whole export for a stop, for a time limit, and
-for a time limit that comes after the halving ended.
+Tests: `UnfinishedRangeTest` in `tests/test_geometry_links.py` runs the whole export for a stop, for a time limit, for
+a time limit that comes after the halving ended, for a later size that stops the tries, and for a time limit between
+the far rows of two sizes.
 
 The cut end does not move. The cause only tells the person why the range can be short and what to do.
 
@@ -2125,6 +2191,10 @@ alphabetical order by module.
   - `parts.py` holds `run_parts_pipeline` and `PartsPipeline` for several bodies, `PartsPort` (its port, with the body
     index in each call) and `shared_cuts`.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
+  - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and
+    `with_try_seconds`.
+  - `far_phase.py` holds the rules of the far phase: which sizes get their far rows last (`late_sizes`) and how many
+    nearer rows a size may take (`nearer_share`, see 1.8, "The far rows, one size at a time").
   - `put_back.py` holds `PutBack`: what the export changed, put back in one order on every way out, the end check, the
     last Undo drop and the health inputs (see 1.11).
   - The package re-exports what the rest of the add-in reads as `pipeline.<name>`.
@@ -2136,6 +2206,8 @@ alphabetical order by module.
   - `interface.py` holds `Probe`, the interface that `ProbeRun` and both pipelines call. `SizeProbe` and `ProbeGroup`
     both have every member.
   - `row_schedule.py` holds `RowSchedule` (the row phases, see 1.8).
+  - `restore_check.py` holds `restore_gap`: how far the followed sketches and the measured references read after the
+    tries are from E0 (`SizeProbe.measure_restore`).
   - `sizes.py` holds `kept_sizes`, `extra_sizes` and `sizes_to_try`, the one place that decides which sizes get tries.
   - `borrowed_view.py` (`probe_view`, `borrowed_sketches`, `covers_a_sketch`, `with_borrowed`), `shared_reads.py`,
     `states.py` (compare states), `reasons.py` (the texts of untried sizes) and `shadow.py` (`shadow_of`).
@@ -3015,6 +3087,7 @@ Tests of the layout and of the order:
 | `test_interfaces.py` | That the real classes, the shared fakes and both probes have every declared member, and that the pure code asks a store, a port or a probe only for a declared member. |
 | `test_put_back_order.py` | The order of the calls an export makes to put the design back, on every way it ends. |
 | `test_probe_row_schedule.py` | The row phases and the nearer and check rows of a probe or a group. |
+| `test_far_phase.py` | The far rows one size at a time: the same rows for a clean export, the sizes that go last, the share of the nearer rows. |
 | `test_probe_state_record.py` | The `ProbeState` record and its `report.json` form. |
 | `test_step_kinds.py` | The step kind table, its handlers and the readers. |
 

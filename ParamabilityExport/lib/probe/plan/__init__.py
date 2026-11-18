@@ -23,7 +23,8 @@ Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64):
    value: the pair would fail for it alone.
 3. Far rows (`far_rows`, run after the nearer tries of step 1 and 2): the range ends that differ from the value and
    from the near values, so the measured span grows. An end past a value of the size that did not build on its own is
-   not tried: the range stops before that value anyway.
+   not tried: the range stops before that value anyway. The export runs them one size at a time (`far_order`), each
+   size's nearer tries right after its far rows.
 4. Far pair rows (`far_pair_rows`, after the nearer tries of step 3): when two or more sizes are tried, all sizes at
    their minimum, then all at their maximum, a tried size at the farthest value it built at on its own on that side.
 A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
@@ -41,7 +42,7 @@ re-exports what the rest of the add-in reads as `plan.<name>`.
 """
 from .covered import FACE, SCANNERS, Scan, outline_face, scan
 from .extra_rows import DISCOVERY_KEY, MAX_DISCOVERY, check_rows, discovery_left, discovery_rows
-from .near_far import far_pair_rows, far_rows, near_values, pair_rows, probe_rows
+from .near_far import far_order, far_pair_rows, far_rows, near_values, pair_rows, probe_rows
 from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_left, nearer_rows
 from .references import NO_PLACE, NO_TOKEN, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_PLANE, SHAPE_POINT, is_vector, refs
 from .request import request, symmetric_patterns
@@ -50,6 +51,6 @@ from .rows import MAX_PROBE_ROWS, RETRY_NOTE, state_values
 __all__ = [
     "BISECT_STEPS", "DISCOVERY_KEY", "FACE", "MAX_DISCOVERY", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS",
     "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS",
-    "Scan", "check_rows", "discovery_left", "discovery_rows", "far_pair_rows", "far_rows", "is_vector", "near_values",
-    "nearer_left", "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan", "state_values",
-    "symmetric_patterns"]
+    "Scan", "check_rows", "discovery_left", "discovery_rows", "far_order", "far_pair_rows", "far_rows", "is_vector",
+    "near_values", "nearer_left", "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan",
+    "state_values", "symmetric_patterns"]

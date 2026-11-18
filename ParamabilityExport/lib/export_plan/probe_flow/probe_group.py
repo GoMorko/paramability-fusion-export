@@ -5,7 +5,7 @@ from ...probe import plan
 from ..part_names import tagged
 from .row_schedule import RowSchedule
 from .shadow import shadow_of
-from .states import BodyCheck, marked_states
+from .states import BodyCheck, marked_states, moves_others
 
 
 class ProbeGroup:
@@ -44,10 +44,18 @@ class ProbeGroup:
         states = self._marked()
         return [probe.pair_rows(sizes, room, states) for probe in self.probes][0]
 
-    def far_rows(self, sizes, room):
-        """The far rows: every probe plans them (that clears what it holds); they are the same for all."""
+    def far_order(self, sizes, late=()):
+        """The order of the far rows (`SizeProbe.far_order`): a size that moved a reference of another component in any
+        part comes last for all, since the rows are shared."""
+        current = {e.name: e.value for e in self.table.entries}
+        late = set(late) | {name for probe in self.probes for name in moves_others(probe.states, probe.refs, current)}
+        return self.probes[0].far_order(sizes, late)
+
+    def far_rows(self, sizes, room, only=None):
+        """The far rows of the sizes in `only`, or of every size not planned yet (`SizeProbe.far_rows`): every probe
+        plans them (that clears what it holds); they are the same for all."""
         states = self._marked()
-        return [probe.far_rows(sizes, room, states) for probe in self.probes][0]
+        return [probe.far_rows(sizes, room, states, only) for probe in self.probes][0]
 
     def far_pair_rows(self, sizes, room):
         """The far pair rows: every probe plans them (that clears what it holds); they are the same for all."""
@@ -119,13 +127,14 @@ class ProbeGroup:
         """True when a part's followed sketch reads as another outline in its read of `reads`."""
         return any(probe.off_outline(read) for probe, read in zip(self.probes, reads or []))
 
-    def nearer_rows(self, sizes, room):
-        """The nearer rows for all parts (`SizeProbe.nearer_rows`): the rows and their failures are shared, and a size
-        that moved a part counts as moving for all."""
+    def nearer_rows(self, sizes, room, only=None):
+        """The nearer rows for all parts (`SizeProbe.nearer_rows`; only the sizes in `only` when given): the rows and
+        their failures are shared, and a size that moved a part counts as moving for all."""
         moving = list(dict.fromkeys(n for probe in self.probes for n in probe.moving_sizes()))
         first = self.probes[0]
         changed = set().union(*(probe.outline_changes() for probe in self.probes))
-        rows = plan.nearer_rows(sizes, marked_states(first.states, changed), moving, self.schedule.nearer_room(room))
+        rows = plan.nearer_rows(sizes, marked_states(first.states, changed), moving, self.schedule.nearer_room(room),
+                                only)
         self.schedule.count_nearer(rows)
         return rows
 

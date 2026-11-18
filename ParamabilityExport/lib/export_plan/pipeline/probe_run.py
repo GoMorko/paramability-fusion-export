@@ -6,15 +6,14 @@ from ...design_edit.marker import MARKER_LOST
 from ...design_edit import walk_back
 from ...design_edit.runner import ExportCancelled, RowExport, row_key
 from ...design_edit.store import timeline_control
-from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
+from ...probe.plan.nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
 from ...timing import trail
 from ...timing.timer import Timer, rounded
 from .. import messages
 from ..time_limit import limit_text
-
-# The parts of a probe read the Fusion reader times (`fusion_reader.probe_state.read_state`).
-READ_PARTS = ("sketches", "points", "params", "refs", "box", "pieces", "faces")
+from . import try_summary
+from .far_phase import late_sizes, nearer_share
 
 
 def plan_rows_left(rows):
@@ -25,14 +24,6 @@ def plan_rows_left(rows):
 class MarkerNotHeld(Exception):
     """A probe read was asked for while the timeline marker sat before the position the tries need, or a read moved
     the marker and could not put it back."""
-
-
-def with_try_seconds(summary, roll):
-    """The probe's timing summary with the time the tries took as `TryTimeline` counted it (`probe.timeline`)."""
-    try:
-        return dict(summary, try_seconds=roll.seconds) if summary is not None and roll is not None else summary
-    except Exception:
-        return summary
 
 
 def _marker_lost(read):
@@ -136,6 +127,7 @@ class ProbeRun:
         self._clean_at = {}  # token of a sketch to the number of rows run when it last read as at E0, values back
         self._flipped = set()  # tokens of the sketches the last start read showed off their start (`_note_off`)
         self._previous = None  # key of the row run last
+        self._nearer = 0  # nearer rows planned for the tries (`_retry`), against `MAX_NEARER_ROWS`
         self.keeper = self._keeper()
         self.end = None  # `EndRead` of the put back after the tries (`settle`)
         self.undo = port.undo_steps
@@ -423,32 +415,9 @@ class ProbeRun:
         self.probe.note_time_limit(self.timed_out, unrun)
 
     def summary(self):
-        """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
-        without the reads made inside them: setting the sizes, rebuilding the design, putting them back), the state
-        `read`s with the time of their parts (`read_parts`: sketches, points and lines, params, refs, box, the pieces of
-        the part, faces) and the `put_back` of sketches. Never raises."""
-        try:
-            timer = self.timer
-            return {
-                "tries": len(self.rows),
-                "tries_seconds": rounded(timer.seconds("rows")),
-                "rebuild": rounded(max(0.0, timer.seconds("rows") - timer.seconds("read_in_rows"))),
-                "read": timer.entry("read"),
-                "read_parts": {name: timer.entry("read_" + name) for name in READ_PARTS
-                               if timer.count("read_" + name)},
-                "put_back": timer.entry("put_back"),
-                "time_limit": self._time_limit_record(),
-            }
-        except Exception:
-            return None
-
-    def _time_limit_record(self):
-        """`{ limit_seconds, hit, left_out }` for `timing.probe`: the limit (None for no limit), whether it stopped the
-        tries, and the sizes it left without a try (`Probe.time_left_out`)."""
-        record = {"limit_seconds": self.time_limit, "hit": self.timed_out is not None}
-        if self.timed_out is not None:
-            record["left_out"] = list(self.probe.time_left_out())
-        return record
+        """How the time of the tries went, for `report.json` (`timing.probe`, `try_summary.summary`). Never raises."""
+        return try_summary.summary(self.timer, len(self.rows), self.time_limit, self.timed_out,
+                                   self.probe.time_left_out)
 
     def probe_states(self, since=0):
         """(values, result, read, start, more) of the rows run from number `since` on, for `SizeProbe.add_states`;
@@ -615,33 +584,71 @@ class ProbeRun:
             self.job.walks[-1]["back"] = not set(tokens) & set(self.probe.off_start(read))
         return read
 
-    def _retry(self, sizes):
-        """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`), one step per
-        batch, while rows and steps are left (the steps toward the value, then the halving between a value that built
-        and one that did not)."""
+    def _retry(self, sizes, only=None, most=None):
+        """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`; only the Fusion
+        names in `only` when given), one step per batch, while rows and steps are left (the steps toward the value,
+        then the halving between a value that built and one that did not). With `most`, at most that many rows in all."""
+        used = 0
         for _ in range(len(NEARER_STEPS) + BISECT_STEPS + 1):
-            nearer = self.probe.nearer_rows(sizes, self._left())
+            room = self._left() if most is None else max(0, min(self._left(), most - used))
+            nearer = self.probe.nearer_rows(sizes, room, only=only)
             if not nearer:
                 break
+            used += len(nearer)
+            self._nearer += len(nearer)
             self.run_rows(nearer)
+
+    def _ended(self):
+        """True once a row left the design broken (`RowExport.not_back`) or the time limit stopped the tries."""
+        return self.job.not_back is not None or self.job.halted
+
+    def _far_by_size(self, sizes):
+        """The far rows one size at a time (`SizeProbe.far_order`), each size's nearer rows right after its far rows,
+        so a far try that leaves the design broken later still finds the sizes before it narrowed. The sizes whose
+        tries so far showed trouble outside the part go last (`far_phase.late_sizes`), and each size takes at most its
+        share of the nearer rows (`far_phase.nearer_share`). Then the nearer rows of every size in the room left, one
+        step per size and side in turn.
+
+        When the tries end on the way (`_ended`), the far rows of the sizes still to come are planned and noted as
+        rows that did not run, as when they were left in one batch."""
+        if self._ended():
+            return
+        order = self.probe.far_order(sizes, late_sizes(self.rows, self.job.walks, self.probe.counts_warning))
+        for at, name in enumerate(order):
+            far = self.probe.far_rows(sizes, self._left(), only=[name])
+            if far:
+                self.run_rows(far)
+            most = nearer_share(MAX_NEARER_ROWS - self._nearer, len(order) - at, self._left())
+            self._retry(sizes, only=[name], most=most)
+            if self._ended():
+                self._note_unrun(self.probe.far_rows(sizes, plan_rows_left(self.rows)))
+                return
+        rest = self.probe.far_rows(sizes, self._left())
+        if rest:
+            self.run_rows(rest)
+        self._retry(sizes)
+
+    def _note_unrun(self, rows):
+        """Tell the probe that `rows`, planned once the tries had ended, did not run (`note_stop`, `_note_halt`)."""
+        if rows and self.job.not_back is not None:
+            self.probe.note_stop(self.job.not_back, rows)
+        if rows and self.job.halted:
+            self._note_halt(rows)
 
     def measure(self, rows, sizes):
         """The near rows, then the near pair rows, rows nearer still for the sizes whose rows did not build, then the
-        far range ends while rows are left (and nearer rows for those that did not build) and the far pair rows, then
-        the rows that check the other sizes of a value that one size moves along a curve (`SizeProbe.check_rows`).
-        Each batch is planned once the batch before it has run, so no row repeats a value known not to build. When the
-        tries stopped early or ran out of time, the probe keeps the sides whose nearer tries never ran
-        (`SizeProbe.note_unfinished`)."""
+        far range ends one size at a time while rows are left, each size followed by its nearer rows (`_far_by_size`),
+        and the far pair rows, then the rows that check the other sizes of a value that one size moves along a curve
+        (`SizeProbe.check_rows`). Each batch is planned once the batch before it has run, so no row repeats a value
+        known not to build. When the tries stopped early or ran out of time, the probe keeps the sides whose nearer
+        tries never ran (`SizeProbe.note_unfinished`)."""
         if rows:
             self.run_rows(rows)
         pairs = self.probe.pair_rows(sizes, self._left())
         if pairs:
             self.run_rows(pairs)
         self._retry(sizes)
-        far = self.probe.far_rows(sizes, self._left())
-        if far:
-            self.run_rows(far)
-            self._retry(sizes)
+        self._far_by_size(sizes)
         far_pairs = self.probe.far_pair_rows(sizes, self._left())
         if far_pairs:
             self.run_rows(far_pairs)

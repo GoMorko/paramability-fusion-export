@@ -9,16 +9,18 @@ from ...probe.state import ProbeState
 from ...timing import trail
 from ...design_edit.apply import as_step, detail_steps
 from ...design_model.tried_ranges import part_step
-from ...sketch_values.motion import ENDED_STOPPED, ENDED_TIME, SHAPE, UNREAD
+from ...sketch_values.motion import ENDED_STOPPED, ENDED_TIME, SHAPE
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
-from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
-                      UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
+from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, UNREADABLE, UNTRIED,
+                      WARNED_TRY, not_built_try, watched_why)
+from .restore_check import restore_gap
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
-from .states import BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, same_numbers
+from .states import (BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, moves_others,
+                     same_numbers)
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
 OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
@@ -351,14 +353,25 @@ class SizeProbe:
         moved, extra = planned
         return plan.pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
-    def far_rows(self, sizes, room, states=None):
-        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`), and
-        then the far pair rows (`far_pair_rows`) once."""
-        planned = self.schedule.take(NEAR, then=FAR)
+    def far_order(self, sizes, late=()):
+        """The Fusion names of the sizes `probe_rows` tried, in the order their far rows run (`plan.far_order`): the
+        sizes in `late` and those whose tries so far moved a reference of another component (`moves_others`) last."""
+        planned = self.schedule.take(NEAR)
+        if planned is None:
+            return []
+        late = set(late) | set(moves_others(self.states, self.refs, {e.name: e.value for e in self.table.entries}))
+        return plan.far_order(sizes, *planned, late=late)
+
+    def far_rows(self, sizes, room, states=None, only=None):
+        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`): of the
+        sizes in `only` (Fusion names), or of every size whose far rows were not planned yet, and then the far pair rows
+        (`far_pair_rows`) once (`RowSchedule.far_sizes`)."""
+        planned = self.schedule.take(NEAR)
         if planned is None:
             return []
         moved, extra = planned
-        return plan.far_rows(sizes, moved, room, extra=extra, states=self._marked() if states is None else states)
+        names = self.schedule.far_sizes(plan.far_order(sizes, moved, extra), only)
+        return plan.far_rows(sizes, moved, room, extra, self._marked() if states is None else states, only=names)
 
     def far_pair_rows(self, sizes, room, states=None):
         """Once, after the far rows: all sizes at their minimum, then at their maximum (`plan.far_pair_rows`)."""
@@ -368,11 +381,12 @@ class SizeProbe:
         moved, extra = planned
         return plan.far_pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
-    def nearer_rows(self, sizes, room):
+    def nearer_rows(self, sizes, room, only=None):
         """The next rows that try the sizes nearer to their value now where rows did not build or changed a followed
-        outline (`plan.nearer_rows`), within `room` rows and the export's `plan.MAX_NEARER_ROWS`."""
+        outline (`plan.nearer_rows`; only the sizes in `only` when given), within `room` rows and the export's
+        `plan.MAX_NEARER_ROWS`."""
         rows = plan.nearer_rows(sizes, marked_states(self.states, self.outline_changes()), self.moving_sizes(),
-                                self.schedule.nearer_room(room))
+                                self.schedule.nearer_room(room), only)
         self.schedule.count_nearer(rows)
         return rows
 
@@ -578,42 +592,11 @@ class SizeProbe:
 
     @trail.staged("compare sketches with the start")
     def _gap(self, after):
-        """Largest difference in mm between E0 and a read after the restore, over the covered values and the places of
-        the measured references (one that cannot be read again is left out). A followed sketch whose outline does not
-        pair with E0 by its tokens is compared by its curves (`_same_shape`): the same curves give their gap, other
-        curves or a turned plane are a real change, listed in `restore_changed` ("Sketch2 reads another outline").
-        None when a sketch cannot be compared; `restore_unchecked` then says which and why."""
-        self.restore_unchecked, self.restore_changed = [], []
-        if not isinstance(after, dict):
-            self.restore_unchecked = ["the design could not be read after the tries"]
-            return None
-        found = plan.scan(self.capture)
-        gap = 0.0
-        for ref in self.refs:
-            before, _ = ref_fit.state_values(ref, self.e0)
-            now, _ = ref_fit.state_values(ref, after)
-            if before is not None and now is not None:
-                gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])
-        for target in found.targets:
-            if target["sketch_token"] not in self.request["sketches"] or (
-                    target["kind"] == "path" and not match.matches_capture(target, self.e0)):
-                continue
-            before, _ = match.state_values(target, self.e0, self.e0)
-            now, cause = match.state_values(target, after, self.e0)
-            if before is not None and now is not None and before.keys() == now.keys():
-                gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])
-                continue
-            shape = self._same_shape(target["sketch_token"], after, FLIP_TOLERANCE) \
-                if target["kind"] == "profile" else None
-            if shape is not None:
-                gap = max(gap, shape)
-                continue
-            text = "%s %s" % (target["sketch"] or "a sketch", RESTORE_WHY.get(cause, RESTORE_WHY[SHAPE]))
-            real = before is not None and cause != UNREAD
-            (self.restore_changed if real else self.restore_unchecked).append(text)
-        self.restore_unchecked = list(dict.fromkeys(self.restore_unchecked))
-        self.restore_changed = list(dict.fromkeys(self.restore_changed))
-        return None if self.restore_unchecked else gap
+        """Largest difference in mm between E0 and a read after the restore (`restore_check.restore_gap`), or None when
+        a sketch cannot be compared; keeps `restore_unchecked` and `restore_changed`."""
+        gap, self.restore_unchecked, self.restore_changed = restore_gap(self._followed_targets(), self.refs, self.e0,
+                                                                         after)
+        return gap
 
     @trail.staged("read body start")
     def keep_body_start(self):

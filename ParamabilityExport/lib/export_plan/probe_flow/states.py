@@ -1,11 +1,12 @@
 """Comparing probe states: the body (`probe.state`), the numbers of a read and the states a try marked."""
 from dataclasses import dataclass, field, replace
 
-from ...geometry.tolerances import BODY_TOLERANCE_MM, END_BODY_BOX_MM, END_BODY_VOLUME_SHARE, FIT_TOLERANCE
+from ...geometry.tolerances import BODY_TOLERANCE_MM, END_BODY_BOX_MM, END_BODY_VOLUME_SHARE, FIT_TOLERANCE, SAME_SIZE
+from ...probe import ref_fit
 from ...probe.state import body_changed, body_compared, box_numbers
 
 __all__ = ["BODY_REQUEST", "BodyCheck", "body_changed", "body_compared", "body_difference", "box_numbers", "marked_states",
-           "same_numbers"]
+           "moves_others", "same_numbers"]
 
 # A probe read of the target body alone: its box, volume and pieces (`fusion_reader.probe_state.read_state`).
 BODY_REQUEST = {"sketches": [], "points": [], "lines": [], "params": [], "target": True}
@@ -32,6 +33,20 @@ def same_numbers(a, b):
 def marked_states(states, changed):
     """The states after E0, each one whose number is in `changed` marked `changed` for `plan.nearer_rows`."""
     return [replace(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]
+
+
+def moves_others(states, refs, current):
+    """Fusion names of the sizes that, set alone in a state that built, moved a measured reference of another component
+    (`refs`, the probe's usable `plan.refs`; a face or plane of the part itself has `own`). `current` holds the value
+    of every size now."""
+    others = [ref for ref in refs if not (ref.get("ref") or {}).get("own")]
+    found = []
+    for state in states[1:] if others else ():
+        varied = [n for n, v in state.values.items() if abs(v - current.get(n, v)) > SAME_SIZE]
+        if (len(varied) == 1 and varied[0] not in found and state.built and isinstance(state.read, dict)
+                and any(ref_fit.moved_in(ref, state.read) for ref in others)):
+            found.append(varied[0])
+    return found
 
 
 def _volume(read):

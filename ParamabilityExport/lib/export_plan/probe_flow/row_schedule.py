@@ -2,7 +2,8 @@
 from ...probe import plan
 
 # The row phases, in order. The near rows (`SizeProbe.probe_rows`) start the schedule; the near pair rows and the far
-# rows come in the near phase, the far rows end it, and the far pair rows come once after them.
+# rows come in the near phase, the far rows end it (planned one size at a time, the last call for all sizes left), and
+# the far pair rows come once after them.
 NOT_PLANNED = "not planned"
 NEAR = "near"
 FAR = "far"
@@ -10,13 +11,15 @@ DONE = "done"
 
 
 class RowSchedule:
-    """The row phase of one probe, the sizes its near rows tried, how many nearer rows it planned and whether it
-    planned its check rows. `ProbeGroup` keeps one for the nearer and check rows its parts share."""
+    """The row phase of one probe, the sizes its near rows tried, the sizes whose far rows it planned, how many nearer
+    rows it planned and whether it planned its check rows. `ProbeGroup` keeps one for the nearer and check rows its
+    parts share."""
 
     def __init__(self):
         self.phase = NOT_PLANNED
         self.moved = set()  # the sizes the near rows tried because they move a sketch or a measured place
         self.extra = set()  # the sizes the near rows tried on a guess
+        self.far_done = set()  # the sizes whose far rows were planned (`far_sizes`)
         self.nearer_count = 0
         self.checked = False
 
@@ -31,6 +34,19 @@ class RowSchedule:
         if then is not None:
             self.phase = then
         return self.moved, self.extra
+
+    def far_sizes(self, order, only=None):
+        """The Fusion names in `order` (`plan.far_order`) whose far rows are planned now, noted as planned: those in
+        `only` not planned yet, and the schedule stays at the near phase so the next size can have its far rows; or,
+        without `only`, every one not planned yet, and the phase moves on to FAR. None when the schedule is not at the
+        near phase."""
+        if self.phase != NEAR:
+            return None
+        names = [name for name in order if name not in self.far_done and (only is None or name in only)]
+        self.far_done.update(names)
+        if only is None:
+            self.phase = FAR
+        return names
 
     def nearer_room(self, room):
         """How many nearer rows fit in `room` rows and what `plan.MAX_NEARER_ROWS` leaves."""

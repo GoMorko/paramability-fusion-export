@@ -29,9 +29,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   shape. Where a try of a size makes a red step of the part build, the range of that size stops before that value; a
   size that may make it build and that was not tried stays fixed. A red step of another component changes no range.
 - A range stops at the last value that built. The add-in halves toward the first value that did not, up to four
-  times. When the tries stop early (a try left the design broken with your values back) or run out of time before
-  that halving, the values between were never tried, and the range can be much shorter than the design allows. Its
-  reason says so, with a tip: untick the size that stopped the tries, or raise the time limit, and export again.
+  times. Each size gets this halving right after the try of its range ends, before the next size. When the tries stop
+  early (a try left the design broken with your values back) or run out of time before that halving, the values
+  between were never tried, and the range can be much shorter than the design allows. This can only occur for the
+  size whose try stopped the tries, or the size tried when the time ran out. Its reason says so, with a tip: untick
+  the size that stopped the tries, or raise the time limit, and export again.
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.
 - The rounds and chamfers on the copies of a rectangular pattern follow its count: the copy writes them for every
