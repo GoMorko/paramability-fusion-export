@@ -30,6 +30,12 @@ LOFT_SHAPE = "loftShape"
 REVOLVE_AXIS = "revolveAxisOffPlane"
 REVOLVE_ACROSS_AXIS = "revolveAcrossAxis"
 OUTLINE_HOLES = "outlineHoles"
+# A revolve of several outlines that do not all turn the same way at the sketch (they lie on different sides of the
+# axis, or on different planes through it), so the one measured start face cannot tell how each one turned.
+REVOLVE_OUTLINE_SIDES = "revolveOutlineSides"
+# A round or chamfer of a face group on a body that Orca builds from several revolves joined together: the faces
+# where they meet are not merged, so Orca's group holds edges Fusion does not have (`solid.seamed`).
+REVOLVE_SEAM = "revolveSeam"
 
 # Patterns and mirrors.
 COPIES_SUPPRESSED = "copiesSuppressed"

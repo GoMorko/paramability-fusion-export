@@ -6,7 +6,8 @@ its picked edges are exactly one group of the part as the copy builds it, with o
 variables). A step whose sets have different sizes is made as one feature for each size, when each is such a group
 (a top and a bottom one). The sets are read by `design_model.steps.finish`. Orca stops the whole rebuild on a round
 it cannot make, so a step is also left out when the copy cannot tell the part's edges (`finish_body.body_of`), or
-when the size leaves too little of a face (`finish_body.room`).
+when the size leaves too little of a face (`finish_body.room`). A part built from revolves joined together has faces
+split where they meet (`solid.seamed`), so its face groups hold edges Fusion does not have: such a step is left out.
 After a round or chamfer the edges change: a later one is copied only on the other end of the same part (top after
 bottom, or bottom after top), with the two sizes counted together.
 A step whose edges are all side edges of copied straight extrudes (the corners of their outlines) is drawn into those
@@ -26,6 +27,7 @@ from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, corner_hosts, finish_body, limits, outline_rounds
 from .skip import Skip
+from .solid import seamed
 
 _ROUND_KINDS = {
     "variable": "Rounds with a changing radius are not copied to Orca.",
@@ -196,6 +198,10 @@ def _finish(ctx, item, kind, records, value, notes):
     if any(done["pieces"] != len(ctx.solid.pieces) for done in earlier):
         return Skip("%s changed after an earlier round or chamfer, and the Orca copy cannot tell its edges "
                     "any more, so this %s is left out." % (named, kind.noun), causes.EDGES_CHANGED)
+    if seamed(ctx.solid):
+        return Skip("Orca builds %s from revolves joined together, and the faces where they meet stay split, so "
+                    "Orca's groups of edges hold edges Fusion does not have, and this %s is left out."
+                    % (body_words, kind.noun), causes.REVOLVE_SEAM)
     body = finish_body.body_of(ctx.solid)
     if isinstance(body, str):
         return Skip("Orca can %s only whole groups of edges, and the Orca copy cannot tell the edges of %s "

@@ -1,41 +1,47 @@
 """Revolve steps as Orca Revolve features.
 
-Each outline becomes a sketch of its lines and arcs, plus a construction line along the turning axis that the
-Revolve names (`revolve_axis_entity`), so the axis may sit anywhere in the sketch plane. Orca turns by the right hand
-rule about that line; Fusion does not say which way it turned, so the measured caps decide (`steps.revolve.sense`).
-`revolve_angle` follows the angle's parameter. Fusion's angle of a symmetric revolve is the turn to each side: the copy
-turns twice the angle from the angle back, the sketch plane is turned there, so its angle keeps its number, and the
-measured caps must sit where that puts them. A symmetric turn of 180 degrees or more to each side closes the ring. A
-turn to two sides by two angles starts the angle of one side back (the start face tells which,
-`design_model.steps.revolve.back_sides`) and turns by the sum of the two; both angles keep their numbers.
+Each loop of an outline becomes a sketch of its lines and arcs, plus a construction line along the turning axis that
+the Revolve names (`revolve_axis_entity`), so the axis may sit anywhere in the sketch plane. Orca turns by the right
+hand rule about that line; Fusion does not say which way it turned, so the measured caps decide
+(`steps.revolve.sense`). `revolve_angle` follows the angle's parameter. How the sketches, revolves and tool bodies
+are written is in `revolve_parts`: a hole of the outline is turned the same way and cut away, and several outlines are
+turned one by one. Outlines that a turn of less than a full circle moves different ways at the sketch (on different
+sides of the axis) are left out: the one measured start face cannot tell how each turned.
 
-Orca needs the axis in the sketch plane, an outline on one side of it and no holes in the outline; anything else is
-left out with the reason. A cut that removes nothing stops Orca's rebuild, so a cut that misses the copied part is
-left out (`solid.Turned` is the shape the check uses).
+Fusion's angle of a symmetric revolve is the turn to each side. When that angle follows sizes (and the step is not an
+intersect), the copy writes two revolves from the sketch plane, one each way (Orca's `flip`), each by
+`min(angle, 180)`, so the angle follows and 180 degrees or more to each side closes the ring. A cut is written so only
+when each half meets the part. Otherwise the copy turns twice the angle from the angle back, the sketch plane is
+turned there, so its angle keeps its number; a symmetric turn of 180 degrees or more to each side closes the ring.
+Either way the measured caps must sit where the turn puts them. A turn to two sides by two angles starts the angle of
+one side back (the start face tells which, `design_model.steps.revolve.back_sides`) and turns by the sum of the two;
+both angles keep their numbers.
+
+Orca needs the axis in the sketch plane and each outline on one side of it; anything else is left out with the
+reason. A cut that removes nothing stops Orca's rebuild, so a cut that misses the copied part is left out
+(`solid.Turned` is the shape the check uses); of several cut outlines, those that miss are left out with a note.
 """
 from ..capture_model import gap_hints
-from ..design_model import reach
+from ..design_model import reach, roles
 from ..design_model.steps import revolve as revolve_facts
 from ..geometry import vec
 from ..geometry.footprint import polyline
-from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
-from ..orca_recipe.sketch import SketchEntity
-from . import causes, kept_refs
+from . import causes, kept_refs, revolve_parts
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from .sketches import entities_of, outlines_of
-from .solid import ADD, CUT, INTERSECT, Turned
+from .solid import Turned
 from .sketch_sizes import profile_sizes, projection_doubts
 from .steps import Skip
-from .tools import OPERATIONS, feature, label
+from .tools import label
 
 FULL_TURN_DEG = 360.0
+HALF_TURN_DEG = 180.0
 # How far (mm) the axis may sit off the sketch plane, and how far it may lean out of it, and still count as in it.
 AXIS_PLANE_TOL = 1e-4
 AXIS_TILT_TOL = 1e-6
 # How far (mm) an outline may reach across the axis.
 SIDE_TOL = 1e-6
-_SOLID_MODES = {"newBody": ADD, "join": ADD, "cut": CUT, "intersect": INTERSECT}
 
 
 def _profile_problem(profile):
@@ -65,12 +71,21 @@ def _two_angles(ctx, item, extent):
     return Quantity(float(sum(pair))), (float(pair[0]), float(pair[1]))
 
 
+class _Angle:
+    """The angle of a revolve: `total` (a `Quantity` of the whole turn), `sides` (None for a turn from the sketch,
+    "symmetric" for a turn to both sides by one angle, or the two angles of a turn to two sides) and `per_side`: for a
+    symmetric turn whose angle follows sizes, the `Quantity` of the angle to each side, else None."""
+
+    def __init__(self, total, sides=None, per_side=None):
+        self.total, self.sides, self.per_side = total, sides, per_side
+
+
 def _angle(ctx, item, extent):
-    """`(Quantity of the angle, sides)` or a Skip. `sides` is None for a turn from the sketch, "symmetric" for a turn
-    to both sides by one angle, or the two angles of a turn to two sides."""
+    """The `_Angle` of a revolve, or a Skip."""
     kind = (extent or {}).get("kind")
     if kind == "twoSidesAngle":
-        return _two_angles(ctx, item, extent)
+        found = _two_angles(ctx, item, extent)
+        return found if isinstance(found, Skip) else _Angle(*found)
     if kind != "angle" or not isinstance(extent.get("angle_deg"), (int, float)):
         return Skip(shared.REVOLVE_ANGLE_KIND)
     angle = abs(float(extent["angle_deg"]))
@@ -79,17 +94,32 @@ def _angle(ctx, item, extent):
     symmetric = bool(extent.get("symmetric"))
     total, full = revolve_facts.total_turn(angle, symmetric)
     value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
+    per_side = value if symmetric and value.text is not None else None
     if full:
-        if value.text is not None:
-            ctx.doubt(value.reads, "%s turns a full circle only while its angle is %s" % (
-                label(item), "180 or more" if symmetric else "360"))
-        return Quantity(FULL_TURN_DEG), None
-    if symmetric and value.text is not None:
-        ctx.doubt(value.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
-                  % label(item))
+        if value.text is not None and not symmetric:
+            ctx.doubt(value.reads, "%s turns a full circle only while its angle is 360" % label(item))
+        return _Angle(Quantity(FULL_TURN_DEG), None, per_side)
     if symmetric:
-        value = Quantity(total)
-    return value, ("symmetric" if symmetric else None)
+        return _Angle(Quantity(total), "symmetric", per_side)
+    return _Angle(value)
+
+
+def _fixed_symmetric(ctx, item, angle):
+    """A symmetric turn whose angle follows sizes is written with its angle as a number: the sizes get the reason."""
+    if angle.per_side is None:
+        return
+    if angle.total.n >= FULL_TURN_DEG:
+        ctx.doubt(angle.per_side.reads, "%s turns a full circle only while its angle is 180 or more" % label(item))
+    else:
+        ctx.doubt(angle.per_side.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
+                  % label(item))
+
+
+def _half(per_side):
+    """The angle of each half of a symmetric turn that follows sizes: at most half a circle, so the two halves close
+    the ring at 180 degrees or more to each side, as Fusion does."""
+    return Quantity(min(per_side.n, HALF_TURN_DEG), "min(%s, %s)" % (per_side.text, int(HALF_TURN_DEG)),
+                    per_side.reads)
 
 
 def _points(curves):
@@ -149,51 +179,11 @@ def _back(data, operation, frame, outer, point, direction, angles):
     return angles[sides[0] - 1]
 
 
-def _turned_frame(frame, point, direction, degrees):
-    if not degrees:
-        return frame
-    return {"origin": vec.rotate(frame["origin"], direction, degrees, point),
-            "x": vec.rotate(frame["x"], direction, degrees), "y": vec.rotate(frame["y"], direction, degrees),
-            "z": vec.rotate(frame["z"], direction, degrees)}
-
-
-def revolve(ctx, step):
-    item, data = step.brought, step.brought_data
-    operation = data.get("operation")
-    if operation == "newComponent":
-        return Skip("This revolve makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
-    if operation not in _SOLID_MODES:
-        return Skip("This kind of revolve is not copied.")
-    if not ctx.has_body and operation in ("cut", "intersect"):
-        return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
-                    gap_hints.AFTER_GAP)
-    profiles = data.get("profiles") or []
-    if not profiles:
-        return Skip("This revolve has no outline that could be read.")
-    if len(profiles) > 1:
-        return Skip("A revolve of several outlines is not copied to Orca yet.")
-    profile = profiles[0]
-    problem = _profile_problem(profile)
-    if problem:
-        return Skip(problem)
-    axis = data.get("axis") or {}
-    if axis.get("foreign"):
-        return Skip("The revolve axis belongs to another component and could not be brought into the part's place, "
-                    "which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
-    if not isinstance(axis.get("point"), (list, tuple)) or not isinstance(axis.get("dir"), (list, tuple)):
-        return Skip("The revolve axis could not be read as a line.")
-    found = _angle(ctx, item, data.get("extent"))
-    if isinstance(found, Skip):
-        return found
-    angle, sides = found
-    outline = outlines_of(profile)
-    if outline is None:
-        return Skip("The outline of this revolve could not be read.")
-    if outline.holes:
-        return Skip("A revolve of an outline with holes is not copied to Orca yet.", causes.OUTLINE_HOLES)
+def _outline_part(profile, outline, point, direction):
+    """`(revolve_parts.Part, its way of turning at the sketch plane)` of one outline, or a Skip. The shape is set
+    once the plan is known."""
     frame = profile["frame"]
     normal = vec.unit(frame["z"])
-    point, direction = [float(c) for c in axis["point"]], vec.unit(axis["dir"])
     if abs(vec.dot(vec.sub(point, frame["origin"]), normal)) > AXIS_PLANE_TOL \
             or abs(vec.dot(direction, normal)) > AXIS_TILT_TOL:
         return Skip("The revolve axis does not lie in the plane of the sketch, which Orca needs.", causes.REVOLVE_AXIS)
@@ -202,59 +192,129 @@ def revolve(ctx, step):
     if min(across) < -SIDE_TOL and max(across) > SIDE_TOL:
         return Skip("The outline of this revolve reaches across its axis, which Orca does not turn.",
                     causes.REVOLVE_ACROSS_AXIS)
-    entities = entities_of([outline.outer])
-    if entities is None:
+    loops = [entities_of([loop]) for loop in [outline.outer] + outline.holes]
+    if any(found is None for found in loops):
         return Skip("The outline of this revolve has a curve the Orca copy cannot draw yet (it draws lines, arcs, "
-                        "circles and splines Fusion gives exactly).")
+                    "circles and splines Fusion gives exactly).")
+    turn = _turn(frame, outline.outer, point, direction)
+    if isinstance(turn, Skip):
+        return turn
+    return revolve_parts.Part(frame, loops[0], loops[1:], None), turn
+
+
+def _turned(part, outline, plan, sweep, start):
+    return Turned(part.frame, [outline.outer] + outline.holes, plan.point, plan.axis, sweep, start)
+
+
+def _halves_meet(ctx, parts, outlines, plan):
+    """True when each half of each outline's symmetric turn meets the part: Orca stops on a cut that removes
+    nothing."""
+    half = plan.angle.n
+    return all(ctx.solid.meets(_turned(part, outline, plan, half, start))
+               for part, outline in zip(parts, outlines) for start in (0.0, -half))
+
+
+def revolve(ctx, step):
+    item, data = step.brought, step.brought_data
+    operation = data.get("operation")
+    if operation == "newComponent":
+        return Skip("This revolve makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
+    if operation not in revolve_parts.SOLID_MODES:
+        return Skip("This kind of revolve is not copied.")
+    if not ctx.has_body and operation in ("cut", "intersect"):
+        return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
+                    gap_hints.AFTER_GAP)
+    profiles = data.get("profiles") or []
+    if not profiles:
+        return Skip("This revolve has no outline that could be read.")
+    for profile in profiles:
+        problem = _profile_problem(profile)
+        if problem:
+            return Skip(problem)
+    others = roles.new_bodies(item, [ctx.target])
+    if operation == "newBody" and len(profiles) > 1 and others:
+        return Skip("This revolve makes several bodies, and the Orca copy cannot tell which outline is the part.")
+    if operation == "cut" and others:
+        return Skip("This cut splits the part into pieces, which is not copied to Orca yet.")
+    axis = data.get("axis") or {}
+    if axis.get("foreign"):
+        return Skip("The revolve axis belongs to another component and could not be brought into the part's place, "
+                    "which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
+    if not isinstance(axis.get("point"), (list, tuple)) or not isinstance(axis.get("dir"), (list, tuple)):
+        return Skip("The revolve axis could not be read as a line.")
+    angle = _angle(ctx, item, data.get("extent"))
+    if isinstance(angle, Skip):
+        return angle
+    point, direction = [float(c) for c in axis["point"]], vec.unit(axis["dir"])
+    outlines, parts, turns = [], [], []
+    for profile in profiles:
+        outline = outlines_of(profile)
+        if outline is None:
+            return Skip("The outline of this revolve could not be read.")
+        found = _outline_part(profile, outline, point, direction)
+        if isinstance(found, Skip):
+            return found
+        outlines.append(outline)
+        parts.append(found[0])
+        turns.append(found[1])
+    first, frame = outlines[0], profiles[0]["frame"]
+    total, sides = angle.total, angle.sides
+    if total.n < FULL_TURN_DEG and any(vec.length(vec.sub(t, turns[0])) > 1e-6 for t in turns[1:]):
+        return Skip("The outlines of this revolve do not all turn the same way at its sketch (they lie on different "
+                    "sides of the axis), and the Orca copy cannot tell how each one turned.",
+                    causes.REVOLVE_OUTLINE_SIDES)
     sense, start = 1.0, 0.0
     if isinstance(sides, tuple):
-        back = _back(data, operation, frame, outline.outer, point, direction, sides)
+        back = _back(data, operation, frame, first.outer, point, direction, sides)
         if isinstance(back, Skip):
             return back
         start = -back
-    elif angle.n < FULL_TURN_DEG:
-        sense = _sense(data, operation, frame, outline.outer, point, direction, angle.n, sides == "symmetric",
+    elif total.n < FULL_TURN_DEG:
+        sense = _sense(data, operation, frame, first.outer, point, direction, total.n, sides == "symmetric",
                        revolve_facts.body_boxes(item))
         if isinstance(sense, Skip):
             return sense
         if sides == "symmetric":
-            start = -angle.n / 2.0
+            start = -total.n / 2.0
     turn_axis = vec.scale(direction, sense)
-    tool = Turned(frame, [outline.outer], point, turn_axis, angle.n, start)
-    if operation in ("cut", "intersect") and not ctx.solid.meets(tool):
-        gap = bool(ctx.left_out)
-        what = "cut" if operation == "cut" else "intersect"
-        return Skip("This %s does not meet the part as the Orca copy builds it%s, and Orca stops the whole rebuild on "
-                    "a %s that removes nothing, so it is left out." % (
-                        what, " (a step before it is left out)" if gap else "", what),
-                    gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
+    plan = revolve_parts.Plan(point, turn_axis, total, start)
+    sweep, begin = total.n, start
+    if angle.per_side is not None and operation != "intersect":
+        # A symmetric angle that follows sizes: two revolves from the sketch plane, one each way.
+        halves = revolve_parts.Plan(point, turn_axis, _half(angle.per_side), 0.0, (False, True))
+        if operation != "cut" or _halves_meet(ctx, parts, outlines, halves):
+            plan, sweep, begin = halves, 2.0 * halves.angle.n, -halves.angle.n
+    if len(plan.flips) == 1:
+        _fixed_symmetric(ctx, item, angle)
+    for part, outline in zip(parts, outlines):
+        part.shape = _turned(part, outline, plan, sweep, begin)
+    if operation in ("cut", "intersect"):
+        kept = [n for n, part in enumerate(parts) if ctx.solid.meets(part.shape)]
+        if not kept:
+            gap = bool(ctx.left_out)
+            what = "cut" if operation == "cut" else "intersect"
+            return Skip("This %s does not meet the part as the Orca copy builds it%s, and Orca stops the whole "
+                        "rebuild on a %s that removes nothing, so it is left out." % (
+                            what, " (a step before it is left out)" if gap else "", what),
+                        gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
+        if operation == "cut" and len(kept) < len(parts):
+            ctx.notes.append("%s: %d of its outlines do not meet the part as the Orca copy builds it and are left "
+                             "out." % (label(item), len(parts) - len(kept)))
+            parts = [parts[n] for n in kept]
 
     name = label(item)
     kept_refs.mark(ctx, item, axis, "turns about")
-    on = _turned_frame(frame, point, turn_axis, start)
-    local = vec.frame_to_local(frame, point)
-    along = [vec.dot(turn_axis, frame["x"]), vec.dot(turn_axis, frame["y"])]
-    line = SketchEntity(type=EntityType.LINE, p0=(local[0], local[1]),
-                        p1=(local[0] + 10.0 * along[0], local[1] + 10.0 * along[1]), construction=True)
-    sketch = feature(FeatureType.SKETCH, "%s sketch" % name, plane=ctx.place.plane(on["origin"], on["x"], on["y"],
-                                                                                   on["z"]),
-                     entities=entities + [line])
-    at = ctx.add(sketch)
-    made = feature(FeatureType.REVOLVE, name, sketch_ref=at, revolve_axis_entity=len(entities),
-                   mode=OPERATIONS.get(operation, BooleanMode.ADD) if ctx.has_body else BooleanMode.NEW)
-    ctx.bind(made, "revolve_angle", angle, "%s angle" % name)
-    ctx.add(made)
-    ctx.has_body = True
-    ctx.solid.add(_SOLID_MODES[operation], tool)
-    projection_doubts(ctx, item, profile, outlines_of(profile))
-    loose = profile_sizes(ctx, profile)
-    if loose:
-        ctx.doubt(loose, "%s: the outline from %s keeps its drawn numbers: Orca can tie only the size of a plain "
-                  "rectangle or circle to a variable" % (name, profile.get("sketch") or "the sketch"))
-    moving = reach.sketch_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, profile)
-    ctx.doubt(moving, "%s: its sketch sits on a plane or face that moves with it, and Orca cannot move a sketch plane "
-              "with a variable" % name)
-    return [sketch, made]
+    written = revolve_parts.write(ctx, name, parts, plan, operation)
+    for profile in profiles:
+        projection_doubts(ctx, item, profile, outlines_of(profile))
+        loose = profile_sizes(ctx, profile)
+        if loose:
+            ctx.doubt(loose, "%s: the outline from %s keeps its drawn numbers: Orca can tie only the size of a plain "
+                      "rectangle or circle to a variable" % (name, profile.get("sketch") or "the sketch"))
+        moving = reach.sketch_plane_sizes(ctx.table, ctx.capture.get("items") or [], item, profile)
+        ctx.doubt(moving, "%s: its sketch sits on a plane or face that moves with it, and Orca cannot move a sketch "
+                  "plane with a variable" % name)
+    return written
 
 
 HANDLERS = {"RevolveFeature": revolve}

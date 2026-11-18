@@ -472,9 +472,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: Export for Orca and for Paramability each body. In `report.json` the first revolve has `start_face_normal`
     null and `end_face_normal` [0, 0, 1]. Its `made_box` can be x 0 to 40, y -8 to 20, z 2 to 10, because Fusion
     merged the start cap with the front face of the box. It is copied in both outputs, turned toward -Y (the body
-    boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). The second is copied as a
-    turn of 120 degrees (Fusion's angle is the turn to each side) with `Sweep` a fixed number; the volume equals
-    Fusion's (7853.98 mm3). The third is a closed ring (23561.94 mm3).
+    boxes before and after the step decide), and the volume equals Fusion's (8251.3 mm3). In the Paramability copy the
+    second is a turn of 120 degrees (Fusion's angle is the turn to each side); the volume equals Fusion's (7853.98
+    mm3). In the Orca copy it is two revolves of `min(Sweep, 180)` from the sketch, one flipped, and `Sweep` is a
+    variable; set it to 90 in Orca and expect 11780.97 mm3. The third is a closed ring (23561.94 mm3).
     Then measure how loose Fusion's boxes are: in the text commands window run a script that prints
     `boundingBox` of the body and of each face of the first revolve, and compare it with the shape (the body is 0 to
     40, -8 to 20, 0 to 10; the quarter round face is x 10 to 15, y -8 to 0, z 2 to 10). Expect each side to be within
@@ -1095,3 +1096,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     same faces as in Fusion at other `Radius` and `Height` values. Checked in Fusion 2706 with 0.14.4 plus this
     change: in both designs the chamfer points were on the chamfered faces of Fusion at four other sets of sizes. Afterwards each design is as
     before.
+91. RV12, a revolve with a hole and several outlines (Export for Orca). On the XZ plane sketch a rectangle from x = 10
+    to 20, z = 0 to 10, with a circle of radius 2 at (15, 5) inside it, and revolve the rectangle (its region with the
+    hole) a full turn about the Z axis as a new body. In a second design, first extrude a circle of radius 12 on the XY
+    plane by 30 mm, then sketch on the XZ plane two separate rectangles, x = 10 to 20, z = 0 to 5 and x = 10 to 16,
+    z = 20 to 25, and revolve both in one Revolve, a full turn about the Z axis, Join.
+    Export: Export for Orca each body. In `report.json` the first revolve has one profile with two loops (the circle
+    with `outer` false), and the second has two profiles with one loop each and lists one body after it. Both are
+    copied with nothing left out: the first as a revolve of the rectangle and a revolve cut of the circle (8240.43
+    mm3), the second as two revolves joined to the rod (19352.21 mm3). Afterwards each design is as before.

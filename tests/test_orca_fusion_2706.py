@@ -24,9 +24,10 @@ class Fusion2706Test(unittest.TestCase):
     def test_a_symmetric_revolve_of_270_degrees_to_each_side_is_a_closed_ring(self):
         capture = fixture("p7_revolve_symmetric_ring")
         result = translate(capture, table_of(capture))
-        (made,) = [f for f in result.recipe.features if f.type == FeatureType.REVOLVE]
-        self.assertEqual((made.revolve_angle, result.left_out), (360.0, []))
-        self.assertEqual(outcomes(result)["Sweep"], "fixed")
+        # Two halves of min(Sweep, 180) each way: the ring stays closed and opens when Sweep goes under 180.
+        made = [f for f in result.recipe.features if f.type == FeatureType.REVOLVE]
+        self.assertEqual(([f.revolve_angle for f in made], result.left_out), ([180.0, 180.0], []))
+        self.assertEqual(outcomes(result)["Sweep"], "variable")
 
     def test_the_height_under_a_boss_on_a_face_without_a_reference_is_marked(self):
         capture = fixture("p7_boss_on_face_mirror")

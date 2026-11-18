@@ -204,9 +204,14 @@ class HalfSpace:
 
 class Turned:
     """An outline (loops of capture curves in the plane of `frame`) turned about an axis that lies in that plane, by
-    `sweep` degrees (0 to 360) by the right hand rule about `axis_dir`, starting `start` degrees from the outline."""
+    `sweep` degrees (0 to 360) by the right hand rule about `axis_dir`, starting `start` degrees from the outline.
+
+    `seam` is True when Orca builds the shape from several revolves joined together (the two halves of a symmetric
+    turn, or outlines turned one by one): Orca does not merge the faces where they meet, so its groups of edges hold
+    edges that Fusion does not have (`seamed`)."""
 
     def __init__(self, frame, loops, axis_point, axis_dir, sweep, start=0.0):
+        self.seam = False
         self.point = [float(c) for c in axis_point]
         self.axis = _unit(axis_dir)
         self.sweep = min(abs(float(sweep)), 360.0)
@@ -287,6 +292,15 @@ class Turned:
         reach = [self.r_high * math.sqrt(max(0.0, 1.0 - self.axis[i] ** 2)) for i in range(3)]
         return {"min": [min(e[i] for e in ends) - reach[i] for i in range(3)],
                 "max": [max(e[i] for e in ends) + reach[i] for i in range(3)]}
+
+
+def seamed(shape):
+    """True when `shape` (a body, a moved copy or a simple shape) holds a `Turned` with a seam."""
+    if getattr(shape, "seam", False):
+        return True
+    if isinstance(shape, Moved):
+        return seamed(shape.shape)
+    return any(seamed(inner) for _, inner in getattr(shape, "pieces", ()))
 
 
 def sampled(inside, lo, hi, samples, halvings):
