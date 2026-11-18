@@ -101,7 +101,9 @@ class ProbeRun(EndedSizes, WalkBacks):
     the rows of a batch end.
 
     `before_discovery()`, when given, runs before the discovery rows read their base: the pipeline turns the
-    suppressed items back on there, so those rows see every component.
+    suppressed items back on there, so those rows see every component. The baseline of the rows is measured again
+    after it (`RowExport.rebase`), unless it answers False: it turned no item on, so the design reads as when the
+    baseline was measured.
 
     A row whose start was not read, and after which the sketch was found on another solution (it read another outline
     or did not build, and the next read with the values back shows it), may itself have started there. It runs once
@@ -654,9 +656,10 @@ class ProbeRun(EndedSizes, WalkBacks):
             self.probe.discovery_rows(list(tries), 0)
             return []
         if tries and self._left() and self.before_discovery is not None:
-            self.before_discovery()
-            # Items that were off for the tries are back on, with any warning or error they had all along.
-            self.job.rebase()
+            # Items that were off for the tries are back on, with any warning or error they had all along: the baseline
+            # is measured again. A `before_discovery` that answers False turned nothing on, so the baseline holds.
+            if self.before_discovery() is not False:
+                self.job.rebase()
         base = self._mark(self._read_now({}))
         off = self.probe.off_start(base)
         back = self._put_back(full=True, off=off) if off else None

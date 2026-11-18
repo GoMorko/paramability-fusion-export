@@ -2175,7 +2175,8 @@ fixed points. The order is the same for one body and for several bodies:
    the dialog read the design, else one read now).
 2. `hold_timeline`: before the tries, hold the marker early and turn off the items the tries do not use
    (`TryTimeline.begin`). The try runner calls `end_trim` before the discovery rows, since those rows look for links
-   to other components.
+   to other components. `end_trim` answers True when it turned items on, and then the runner measures the baseline
+   again (`RowExport.rebase`). It answers False when nothing was turned off, and the baseline is kept.
 3. `tries_done(run)` after the tries, and `tries_ended(run)` on every way out of them: the values go back, the check of
    the steps that the last try asked for runs (`ProbeRun.check_pending`, see "The check after a row, and the stop"),
    the items go back, and a sketch left on another solution is put back (`ProbeRun.settle`), before the probe's last
@@ -3717,6 +3718,10 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   `warned`, the position and the name of each of those steps. The trim turns some timeline items off for the tries, and these items show no
   warning while they are off. Thus, when the items come back on before the discovery rows, the runner measures the
   baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count.
+  When the trim turned no item off (the box "Faster tries" is off, or nothing could be turned off), no item comes back
+  on, the design reads as when the baseline was measured, and the baseline is kept: the discovery rows save one rebuild
+  and one read of the timeline. `before_discovery` (`PutBack.end_trim`) answers whether it turned items on
+  (`TimelineTrim.end`), and the runner measures the baseline again unless the answer is False.
   `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first of those steps that
   the part is built from, `failed_at` its position, and `warned` true. Thus the rows nearer to the value now and the
   halving run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps

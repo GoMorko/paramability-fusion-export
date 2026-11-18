@@ -76,9 +76,9 @@ class PutBack:
         self.roll.begin(captures, unchanged)
 
     def end_trim(self):
-        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
-        if self.roll is not None:
-            self.roll.end_trim()
+        """Turn back on the timeline items suppressed for the tries (a no-op when none were). True when items were
+        turned on."""
+        return self.roll.end_trim() if self.roll is not None else False
 
     def _end_roll(self):
         """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
