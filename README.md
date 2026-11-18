@@ -71,6 +71,8 @@ tells the way from where the body grew. When that does not show it, the add-in l
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
 Scale of a body is copied only when the body measured after it has the size and volume that its factors give. A Press
 Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
+Export for Orca copies such a Press Pull of one round face as a ring that it adds to the part or cuts from it, and
+the distance follows its parameter.
 A Pipe with a round section is copied as a sweep of a circle. A pipe with a square or triangle section is left out.
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.

@@ -78,6 +78,8 @@ TAPER_CLOSES = "taperCloses"
 ROUND_NO_ROOM = "roundNoRoom"
 THREAD_NO_FIT = "threadNoFit"
 REVOLVE_MISSES = "revolveMisses"
+RING_TURNS = "ringTurns"
+RING_MEETS = "ringMeets"
 CAUSES = {
     SHAPE_ZERO: "a size of the shape reaches zero",
     OUTLINE_MEETS: "two sides of the outline meet or cross",
@@ -97,6 +99,8 @@ CAUSES = {
     ROUND_NO_ROOM: "the rounds or chamfers no longer fit on the part",
     THREAD_NO_FIT: "the thread no longer fits",
     REVOLVE_MISSES: "a cut or intersect of the revolve no longer meets the part",
+    RING_TURNS: "the round face moves the other way",
+    RING_MEETS: "the round face reaches another edge of the faces at its ends",
 }
 
 

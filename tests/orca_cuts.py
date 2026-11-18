@@ -352,8 +352,8 @@ class Section:
     formulas): `bodies` is Orca's list of bodies, each a test `inside(point)` of a world point. An extrude covers its
     outline between the heights along its sketch plane's normal that its end gives (as `steps._Side.ends` writes
     them: one side from the plane, `flip` the other way; symmetric about the plane; two sides; through all).
-    Reads the features the outline cuts and corner tools write: sketches, extrudes, cuts, transforms, Booleans,
-    patterns along a line, holes through all, and sketches of imported regions (text)."""
+    Reads the features the outline cuts and corner tools write: sketches (rectangles, circles, lines), extrudes,
+    cuts, transforms, Booleans, patterns along a line, holes through all, and sketches of imported regions (text)."""
 
     def __init__(self, recipe, changed=None):
         variables = dict(recipe.variables)
@@ -402,8 +402,15 @@ class Section:
                 d = _sub(p, origin)
                 return halfplanes.in_polygon(loop, (_dot(d, x), _dot(d, y)))
             return inside
+        if f.shape == SketchShape.CIRCLE:
+            radius = self._number(f, "radius")
+
+            def in_circle(p):
+                d = _sub(p, origin)
+                return _dot(d, x) ** 2 + _dot(d, y) ** 2 < radius * radius
+            return in_circle
         if f.shape != SketchShape.RECTANGLE:
-            raise ValueError("Section reads rectangles and lines only")
+            raise ValueError("Section reads rectangles, circles and lines only")
         hw, hh = self._number(f, "width") / 2.0, self._number(f, "height") / 2.0
 
         def inside(p):

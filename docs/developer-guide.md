@@ -6361,6 +6361,40 @@ the distance `-Fit`, with `Fit` = 0.2 mm. Fusion leaves a cylinder of radius 2.7
 default range of `Fit` is 0.1 to 0.4 mm. The new radius stays between 2.6 and 2.9 mm, far from the plate edges, so the
 distance follows `Fit`.
 
+The Orca output (`orca_translate/press_round.py`, `press_pull`) copies a Press Pull of one round face. It uses the same
+shared checks (`offset_round.problem`). A `Problem` becomes a step that is left out, with the same sentence and the
+cause `offsetCurved`. Orca has no Press Pull. Thus the Orca output writes the ring between the old radius and the new
+radius as a tool body:
+
+1. The frame of the tool is on the plane of the low end of the face (`Ring.end_point(0)`). Its z axis is the axis of
+   the face.
+2. A sketch with the outer circle on that plane. An extrude makes a new body from it, as long as the face
+   (`Ring.span`).
+3. A sketch with the inner circle on the same plane. An extrude cuts it through all of the tool body.
+4. A Boolean joins the tool to the part (Add) when the distance is more than zero. A Boolean cuts the tool from the
+   part (Cut) when the distance is less than zero.
+
+One circle has the new radius. The radius of this circle follows the distance (`Context.quantity` of the path
+`distance`, as a formula). The other circle has the radius of the face, moved by `OVERLAP_MM` (0.005 mm). The move
+goes into the side that the Boolean fills already: into the material for an Add, and into the air for a Cut. Thus the
+tool and the part do not have the same round face. This move is half of the clearance of the shared layer
+(`CLEAR_MM`). Thus it does not touch another edge of an end face.
+
+Before the Orca output writes the tool, it does these checks:
+
+- The part that the copy builds must have the face (`_missing`). For an Add, the copy must have material in a ring of
+  up to 1 mm on the material side of the face. For a Cut, the ring that the cut removes must touch material
+  (`Solid.meets`). If not, the step is left out with the cause `missesPart`, or `afterGap` when a step before it is
+  left out.
+- The radius of the face and the planes of its ends keep their numbers. The Orca output marks every size that a step
+  of the component reads before the Press Pull (`reach.any_face_sizes`).
+
+After it writes the tool, the Orca output finds how far the variable of the distance can go (`_guard`, with
+`limits.guard`). The new radius must stay on the same side of the old radius (`limits.RING_TURNS`). The new radius
+must also have no problem in `radius_problem`: above zero (`limits.SHAPE_ZERO`) and clear of the other edges
+(`limits.RING_MEETS`). The limits go on the line of the parameter. A Press Pull of a flat face (`pressPullFlat`), of
+more than one face (`pressPullFaces`) or of another curved face is left out.
+
 ### 3.21 Where the copies of a pattern sit
 
 Each pattern element has a transform (`PatternElement.transform`). The transform is the move from the original to
