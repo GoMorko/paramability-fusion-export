@@ -150,9 +150,10 @@ class TimelineTrim:
             self.record.update(on=True, items=count)
 
     def end(self):
-        """Turn the suppressed items back on. Safe to call at any time and more than once."""
+        """Turn the suppressed items back on. Safe to call at any time and more than once. True when there were
+        items to turn on (turned off for the tries and not yet back on), else False."""
         if not self._off:
-            return
+            return False
         self._off = False
         try:
             self.left_off = list(self.store.unsuppress_items())
@@ -162,6 +163,7 @@ class TimelineTrim:
         if self.left_off:
             self.log("steps still turned off: " + ", ".join(self.left_off))
             self.record["left_off"] = list(self.left_off)
+        return True
 
     def back_on(self, names):
         """Drop from `left_off` the items a later step turned back on (`names`, the end check's recovered steps)."""
@@ -196,8 +198,8 @@ class TryTimeline:
             self.seconds = round(time.monotonic() - self._started, 1)
 
     def end_trim(self):
-        """Turn the suppressed items back on, before any read that checks the design."""
-        self.trim.end()
+        """Turn the suppressed items back on, before any read that checks the design. True when items were turned on."""
+        return self.trim.end()
 
     def end(self):
         """Turn the items back on, then put the marker back. Safe to call at any time and more than once."""

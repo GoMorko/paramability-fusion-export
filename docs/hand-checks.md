@@ -1060,3 +1060,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     One window "Measuring how your sketches follow each size ..." shows from the first try to the end. It does not
     open again between tries, and the try number only goes up. It is gone before the result window or a message box
     opens, also after Cancel. Click Cancel part way once: the export stops and no window stays open.
+89. TS1, the lighter checks after a try. Add user parameters `Width` = 40 mm and `Wall` = 3 mm. On the XY plane sketch a
+    centre rectangle `Width` x 30 mm and extrude it 20 mm up as a new body. Shell the top face inward by `Wall`. Fillet
+    the four vertical outside edges, radius 8 mm, so that a small `Width` makes the fillet fail. Add a second
+    component with a sketch and an extrude that Fusion shows in a warning before any change (for example an extrude
+    that cuts nothing), and leave it unrelated to the first body.
+    Export: tick `Width` (12 to 80 mm) and leave `Faster tries` on. Export the same design with the release build
+    first and keep its `report.json`.
+    The states, the ranges and the reasons for `Width` are the same as in the release build, and the warning that
+    the step had at the start is not reported as a new one. `timing.probe.calls` is filled: `computes` has `baseline`
+    and, for the failing tries, `confirm_new_errors`; `health_passes` is about one per try; `timeline_reads` is small;
+    `calls.after_tries` has `end_check`. `timing.probe.tries_seconds` per failing try is lower than with the release
+    build. Afterwards the design is as it was.

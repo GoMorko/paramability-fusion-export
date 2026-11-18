@@ -11,6 +11,12 @@ What is left is recorded for `report.json` (`health`) and told to the person.
 A store gives the steps through its `timeline_health()` control (`DesignParameterStore`): a list of
 `{ index, name, type, health, message, suppressed }` for the steps before the marker. A store without it gives only
 the steps in error (`apply.error_entries`); the other steps then count as fine.
+
+The checks after a try read the timeline many times, and the type and the message of a step cost most of a read. So
+a check reads a step's type and message only when the step is not fine or its health or suppression differs from the
+start read (`read_timeline` with `against`): the control then gets `known` (`{(index, name): (health, suppressed)}`)
+and gives `type` and `message` as None for a step it did not read. The check takes both from the start read for such
+a step, so a read of that kind and a full read of the same design compare as equal.
 """
 from .apply import error_entries, set_all
 from .restore import restore_parameters
@@ -41,24 +47,53 @@ class TimelineRead:
         self.complete = complete
 
 
-def _step(entry):
+def _step(entry, before=None):
+    """The record of a step from a store's entry. An entry without a type and a message (a step the store did not read
+    in full) takes both from `before`, the record of the same step in the start read, when there is one."""
+    unread = entry.get("type") is None and entry.get("message") is None and before is not None
     return {
         "index": entry.get("index"),
         "name": str(entry.get("name") or ""),
-        "type": str(entry.get("type") or ""),
+        "type": before["type"] if unread else str(entry.get("type") or ""),
         "health": entry.get("health") if entry.get("health") in _RANK else OK,
-        "message": str(entry.get("message") or "")[:MAX_MESSAGE],
+        "message": before["message"] if unread else str(entry.get("message") or "")[:MAX_MESSAGE],
         "suppressed": bool(entry.get("suppressed")),
     }
 
 
+def _known(against):
+    """`{(index, name): (health, suppressed)}` of the steps of a complete start read, for the store's light read; None
+    when there is none or it holds only the steps in error."""
+    if against is None or not against.complete:
+        return None
+    return {key: (step["health"], step["suppressed"]) for key, step in against.steps.items()}
+
+
+def _entries(full, known):
+    """The store's entries: the light read with `known` when there is one, and a full read when the light one fails."""
+    if known is None:
+        return full()
+    try:
+        return full(known)
+    except Exception:
+        return full()
+
+
 @trail.staged("read timeline")
-def read_timeline(store):
-    """The steps as they are now (`TimelineRead`), or None when they cannot be read. Never raises."""
+def read_timeline(store, against=None):
+    """The steps as they are now (`TimelineRead`), or None when they cannot be read. Never raises.
+
+    With `against`, the read of the start (`TimelineRead`), the store reads the type and the message of a step only
+    when the step is not fine or its health or suppression differs from `against`; the others take them from
+    `against` (see the top of this module). The result has the same shape as a full read."""
     full = timeline_control(store, "timeline_health")
     try:
         if full is not None:
-            found = [_step(entry) for entry in full() or []]
+            known = _known(against)
+            found = []
+            for entry in _entries(full, known) or []:
+                before = against.steps.get((entry.get("index"), str(entry.get("name") or ""))) if known else None
+                found.append(_step(entry, before))
             return TimelineRead({(s["index"], s["name"]): s for s in found})
         steps = {}
         for key, name in error_entries(store).items():

@@ -62,7 +62,8 @@ class Recorded:
             return value
 
         def call(*args, **kw):
-            self._log.note("%s.%s%s" % (self._prefix, name, _shown(args)))
+            # The steps already read (`known`) are an argument of the read, not part of what it asks for.
+            self._log.note("%s.%s%s" % (self._prefix, name, "" if name == "timeline_health" else _shown(args)))
             return value(*args, **kw)
         return call
 
@@ -95,7 +96,7 @@ class OrderStore(TrimStore):
             self.warning = False
         return super().recompute()
 
-    def timeline_health(self):
+    def timeline_health(self, known=None):
         steps = [{"index": 0, "name": "Sketch1", "type": "Sketch", "health": "ok", "message": "", "suppressed": False},
                  {"index": 1, "name": self.changed or "Fillet1", "type": "FilletFeature",
                   "health": "warning" if self.warning else "ok", "message": "", "suppressed": False}]

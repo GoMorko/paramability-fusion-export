@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from ...design_edit import metered
 from ...design_edit.marker import MARKER_LOST
 from ...design_edit.runner import ExportCancelled, RowExport, row_key
 from ...design_edit.store import timeline_control
@@ -100,7 +101,9 @@ class ProbeRun(EndedSizes, WalkBacks):
     the rows of a batch end.
 
     `before_discovery()`, when given, runs before the discovery rows read their base: the pipeline turns the
-    suppressed items back on there, so those rows see every component.
+    suppressed items back on there, so those rows see every component. The baseline of the rows is measured again
+    after it (`RowExport.rebase`), unless it answers False: it turned no item on, so the design reads as when the
+    baseline was measured.
 
     A row whose start was not read, and after which the sketch was found on another solution (it read another outline
     or did not build, and the next read with the values back shows it), may itself have started there. It runs once
@@ -144,7 +147,9 @@ class ProbeRun(EndedSizes, WalkBacks):
         self.ended = []  # the records of the tries after which the tries of some sizes ended (`_take_ended`)
         self.ended_names = []  # Fusion names of the sizes and parameters whose tries ended, in order
         self._tried = set()  # Fusion names of the sizes `measure` was given
-        self.job = RowExport(port.store, port.units, self._export, self._before_row, self._out_of_time,
+        # The job and the sketch put back go through a store that counts their calls (`summary`, `calls`).
+        self.metered = metered.MeteredStore(port.store, self.timer)
+        self.job = RowExport(self.metered, port.units, self._export, self._before_row, self._out_of_time,
                              counts_warning=self.probe.counts_warning, before_check=self._home,
                              at_start=self._at_start, contain=self._contain if self.damage is not None else None)
         self.probe.note_time_limit({"limit_seconds": time_limit, "hit": False})
@@ -335,7 +340,8 @@ class ProbeRun(EndedSizes, WalkBacks):
         try:
             with self.timer.span("put_back"):
                 self.keeper.put_back()
-                self.port.store.recompute()
+                with metered.caller(self.metered, metered.SKETCH_PUT_BACK):
+                    self.metered.recompute()
         except Exception as exc:
             self.port.log(f"putting a sketch back failed: {exc!r}")
         read = self._try_read(outline=not full)
@@ -650,9 +656,10 @@ class ProbeRun(EndedSizes, WalkBacks):
             self.probe.discovery_rows(list(tries), 0)
             return []
         if tries and self._left() and self.before_discovery is not None:
-            self.before_discovery()
-            # Items that were off for the tries are back on, with any warning or error they had all along.
-            self.job.rebase()
+            # Items that were off for the tries are back on, with any warning or error they had all along: the baseline
+            # is measured again. A `before_discovery` that answers False turned nothing on, so the baseline holds.
+            if self.before_discovery() is not False:
+                self.job.rebase()
         base = self._mark(self._read_now({}))
         off = self.probe.off_start(base)
         back = self._put_back(full=True, off=off) if off else None

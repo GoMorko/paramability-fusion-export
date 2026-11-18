@@ -815,8 +815,9 @@ net for it.
 
 1. Before the first row ever, it saves every parameter expression and measures a baseline: one rebuild with nothing
    changed, and the list of items already in error (`apply.measure_baseline`). It also reads every timeline step: its
-   health (fine, warning or error), Fusion's message and whether it is turned off (`timeline_health.read_timeline`).
-   A design with an old error or warning elsewhere can still be probed.
+   health (fine, warning or error), its type, Fusion's message and whether it is turned off
+   (`timeline_health.read_timeline`). The later checks compare with this read. A design with an old error or warning
+   elsewhere can still be probed.
 2. Per row, it first asks `stop_when` whether the time limit is reached (see "The time limit of the tries" below).
    Then it asks the progress window if the person cancelled. The window shows "Try 5 of 31: Width at 32 mm" and, under
    it, a line about the time that the tries took.
@@ -837,16 +838,32 @@ net for it.
    marker goes into error that was fine in the baseline. After one change, a step in error is judged after one full
    recompute, since that change rebuilds only the steps it touches. The error of the row (`RowBuildError.detail`)
    lists the new items in error: `items` has their names and `at` has their timeline positions, in the same order.
-   Then it reads the steps in warning (`apply.new_warnings`). Each step in warning is a pair: its timeline position
+   The job reads the health of the timeline items once for each try (`apply.Health`). One pass over the items gives the
+   steps in error and the steps in warning together (the store control `health_entries`; a store without it gives them
+   in one read each). The row, the warnings and the cleared steps below all use this one read. The read is made again
+   only after a full recompute, which can change it. A walk back reads only the steps in error.
+   Then it takes the steps in warning from that read (`apply.new_warnings`). Each step in warning is a pair: its timeline position
    and its name. A new warning on a step the part is built from goes to the result (`warned`). A new warning on
    another step does not, but the job notes it, for the check before the next row. Then it reads the steps in error
-   again and compares them with the baseline (`apply.cleared_errors`). A step that was in error in the baseline and
-   is not in error now built at this row. Each such step goes to the result (`cleared`), as a pair of its timeline
-   position and its name. The job reads the steps in error for this only when the baseline has a step in error.
+   from the same read and compares them with the baseline (`apply.cleared_errors`). A step that was in error in the
+   baseline and is not in error now built at this row. Each such step goes to the result (`cleared`), as a pair of its
+   timeline position and its name.
 7. For a probe row there is no STEP file (`"step": False`). The step callback reads the probe state instead
    (`ProbeRun._export`). A row with a STEP file (Export size choices) is recomputed in full after the change, and
    judged by that recompute, before its STEP is written.
 8. In a `finally` block, the parameters go back.
+
+The try runner gives the job a store that counts its calls (`design_edit/metered.py`, `MeteredStore`). The store
+passes every call to the real store without a change. It counts the full rebuilds by the part of the export that asked
+for them, the sets of parameters, the passes over the timeline items for health and the reads of the whole timeline,
+with the seconds of each. The counts go to `timing.probe.calls` (see 4.2). A part of the export gives its label to the
+rebuilds made inside it with `metered.caller`. When one part runs inside another, the rebuilds count under the label
+of the outer part: a walk back that meets a row error counts all its rebuilds as walk steps. The labels are `row` (the
+rebuild that gives a row its numbers), `confirm_new_errors`, `counting_warning`, `check_after_row`, `sketch_put_back`,
+`baseline`, `rebase`, `walk_step`, `put_back_values` and `other`; the put back after the tries has its own
+counting store (`PutBack`), with the label `end_check` for the end check (`timing.probe.calls.after_tries`). The outcome
+`rescued` is counted by `RowExport.run` once a try is finished and built: `apply.Health.rescued` says that the confirming
+rebuild cleared the new errors, and a walk back never counts it.
 
 So each row costs two rebuilds: one with the new values and one to put the values back. A row whose read includes an
 outline face leaves the marker before the face's step (`park`, `read_faces(stay=True)`); the change that puts the
@@ -873,7 +890,7 @@ timeline read. These rows ask for the check:
 
 A row with a new warning only on a step that does not count (`apply.new_warnings` with `others`) asks for a smaller
 check first (`RowExport._others_left`). With the values back, the job reads only the health of the timeline items
-(`apply.warning_entries` and `apply.error_entries`, the `healthState` of each item). When no item has a warning or an
+(`apply.Health`, one pass: the `healthState` of each item). When no item has a warning or an
 error that the baseline did not have, the full check does not run. When one item has, or the read fails, the full
 check runs as for the rows above. This keeps a warning that only the row values cause from costing a full timeline
 read, and a lasting change is still found.
@@ -897,7 +914,13 @@ The check, step by step:
 1. `before_check` (`ProbeRun._home`) brings the timeline marker back where the tries hold it. A face read can leave
    it earlier, and the steps after the marker would read as gone.
 2. It reads the timeline steps (`timeline_health.read_timeline`) and compares them, step by step, with the read of
-   the baseline (`timeline_health.changes`). Only a step that is worse counts (`timeline_health.is_worse`): a higher
+   the baseline (`timeline_health.changes`). The read of the baseline reads everything about each step. The read of a
+   check is lighter: it reads the name, the health and whether the step is turned off for every step, and it reads
+   the type of the step (`item.entity`) and Fusion's message only for a step that is not fine or whose health or
+   suppression is not as in the baseline. For all other steps the check takes the type and the message from the
+   baseline, so these steps compare as equal, as in a full read. The store gets the health and the suppression of the
+   baseline as the argument `known` of `timeline_health`. When the light read fails, a full read follows. The end
+   check always reads in full. Only a step that is worse counts (`timeline_health.is_worse`): a higher
    health level, turned off, or gone. A warning or an error that the baseline had already does not count, also when
    its message changes.
 3. When a step is worse, it rebuilds the whole design once and reads again. A rebuild of only the changed steps can
@@ -2155,7 +2178,8 @@ fixed points. The order is the same for one body and for several bodies:
    the dialog read the design, else one read now).
 2. `hold_timeline`: before the tries, hold the marker early and turn off the items the tries do not use
    (`TryTimeline.begin`). The try runner calls `end_trim` before the discovery rows, since those rows look for links
-   to other components.
+   to other components. `end_trim` answers True when it turned items on, and then the runner measures the baseline
+   again (`RowExport.rebase`). It answers False when nothing was turned off, and the baseline is kept.
 3. `tries_done(run)` after the tries, and `tries_ended(run)` on every way out of them: the values go back, the check of
    the steps that the last try asked for runs (`ProbeRun.check_pending`, see "The check after a row, and the stop"),
    the items go back, and a sketch left on another solution is put back (`ProbeRun.settle`), before the probe's last
@@ -3387,6 +3411,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `timeline_health.py` (`settle_timeline`), `walk_back.py` (the values set to bring the design back the way a try took
   it away, the rows and the single sizes to walk back, and the report entry of each attempt), `temp_copy.py`,
   `errors.py`.
+- `metered.py`: `MeteredStore` (a store that counts its calls for `timing.probe.calls`), `caller` (the label of the
+  rebuilds made inside a block) and `note` (an outcome count). Both functions do nothing for a store that is not a
+  `MeteredStore`.
 - `saved_start.py`: `SavedStart` (the saved state of the design at the start of an export, see 1.11).
 
 #### fusion_reader
@@ -3464,7 +3491,7 @@ The border is the port and the parameter store. Both are declared once, as proto
 - `ParameterStore` (`lib/design_edit/store.py`) lists the store members (`saved_expressions`, `set_expression`,
   `set_expressions`, `recompute`, `read_value`, `error_items`, `error_entries`, `return_marker`, `marker_holds` and so
   on) and `TIMELINE_CONTROLS` lists the optional ones (`timeline_health`, `turn_on`, `keep_marker`, `roll_marker`,
-  `unroll_marker`, `suppress_items`, `unsuppress_items`). The real store is `DesignParameterStore`
+  `unroll_marker`, `suppress_items`, `unsuppress_items`, `warning_entries`, `health_entries`). The real store is `DesignParameterStore`
   (`lib/fusion_reader/rows.py`).
 - `Probe` (`lib/export_plan/probe_flow/interface.py`) is the interface between the try runner and the probe. It is not
   a border to Fusion, but it follows the same rule: one declaration, and a test that checks every class has it.
@@ -3684,8 +3711,9 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 - The names stay in all records, for the text that the person reads.
 - A row that Fusion builds can still be wrong. A step can show a warning: for example, a revolve whose outline crosses
   its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
-  counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
-  `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
+  counts as a failure. The runner takes the steps in warning after each try from the one read of the health of the items
+  (`apply.new_warnings`, through the store's `health_entries`, or `warning_entries` for a store without it; both read
+  `TimelineObject.healthState`). A step that was in warning or in error before the
   first try (the baseline) does not count. Only a step that the part is built from counts (`counts_warning` of the
   probe, which the runner gets). When such a step reads in warning after a rebuild of only the changed steps, the
   design is recomputed in full once and read again, as for errors. A step that is in error after that recompute makes
@@ -3693,6 +3721,10 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
   `warned`, the position and the name of each of those steps. The trim turns some timeline items off for the tries, and these items show no
   warning while they are off. Thus, when the items come back on before the discovery rows, the runner measures the
   baseline again (`RowExport.rebase`). A warning that such an item has in the person's design then does not count.
+  When the trim turned no item off (the box "Faster tries" is off, or nothing could be turned off), no item comes back
+  on, the design reads as when the baseline was measured, and the baseline is kept: the discovery rows save one rebuild
+  and one read of the timeline. `before_discovery` (`PutBack.end_trim`) answers whether it turned items on
+  (`TimelineTrim.end`), and the runner measures the baseline again unless the answer is False.
   `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first of those steps that
   the part is built from, `failed_at` its position, and `warned` true. Thus the rows nearer to the value now and the
   halving run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
@@ -6364,7 +6396,7 @@ seconds, rounded to 0.01. A failure of the timing code drops the block and chang
 | `total` | From the start of the pipeline to the moment `report.json` is made. The dialog's read before OK and the file write are not in it. |
 | `phases` | One time per stage of section 1.1. `after_stop` and `outline_check` (the check that written outlines do not cross themselves, 3.2) are already inside the translate phases. A stage that did not run is 0. |
 | `capture` | The timeline read: `cached: true` when the dialog read it before the OK click (then its time is not part of this export). `marker_moves` counts the marker moves and their time. `readers` is the time of all step readers. `placement` is the place of the picked body, read once before the walk. `tail` is the read after the walk, split in `tail_parts` (`target`, `parameters`, `links`, `graphs`). `by_type` and `by_component` add up the time per step type and per component. `slowest` lists the 10 slowest steps. A several-body export has `captures`, one per body. |
-| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
+| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `calls` (what the tries asked of Fusion: the full rebuilds by the part of the export that asked, the sets and put backs of parameters, the passes over the timeline items for health, the reads of the whole timeline, and the outcomes `rescued` and `check_cleared`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
 | `undo` | The "Lighter on memory" record: `{ on: false }`, or `{ on, applied, steps, error }` (1.11). |
 
 The time of one step in the capture is mostly the marker move that builds it. So a step type that is slow in
@@ -6830,9 +6862,19 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    faces (the marker roll check and the read after the tries are not counted). A `faces` part with
    a large time means outline face reads, each of which moves the marker before the face's step. A large `refs` part
    points at the place of the body read at each state (`probe_refs._target_back`); it fetches only three vertices.
-8. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
+8. Read `timing.probe.calls`. A try that builds costs about two rebuilds (set the values, put them back). A try that
+   fails can cost more: `computes.confirm_new_errors` is the extra rebuild after a row that showed new errors, and
+   `rescued` counts those after which the row built. `computes.counting_warning` is the extra rebuild after a warning
+   that counts. `computes.check_after_row` is the rebuild of the check after a row, and `check_cleared` counts those
+   after which a step that read worse was fine. `computes.walk_step` is every rebuild of the walks back.
+   `health_passes` counts the passes over the timeline items (one per try, with `health_entries`) and
+   `timeline_reads` counts the reads of the whole timeline (a read after the baseline is a light read, see 1.8, "The
+   check after a row, and the stop"). `calls.after_tries` has the same keys for the put back after the tries: the values
+   put back and the end check (`computes.end_check`). The totals leave out the rebuilds that Fusion makes inside the
+   calls that turn items on or off and move the marker, and everything else that does not use the counting store.
+9. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
    sizes that got no try (1.8).
-9. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and
+10. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and
    `by_type` name the steps Fusion rebuilds slowly. When `probe` is large, compare `rebuild` with `read`: a large
    `read` time points to many outline face reads or borrowed sketches.
 

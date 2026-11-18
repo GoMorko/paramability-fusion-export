@@ -3,9 +3,8 @@ import os
 
 from ..package.caps import check_step_size, check_total_size
 from ..timing import trail
-from . import walk_back
-from .apply import (RowBuildError, apply_row_values, cleared_errors, error_entries, measure_baseline, new_warnings,
-                    warning_entries)
+from . import metered, walk_back
+from .apply import Health, RowBuildError, apply_row, cleared_errors, measure_baseline, new_warnings
 from .errors import StepExportError
 from .restore import restore_parameters
 from .timeline_health import changes, is_worse, read_timeline
@@ -96,6 +95,7 @@ class RowExport:
         self.walks = []  # the first `walk_back.KEPT` of those attempts, for the report (`walk_back`)
         self._saved = None
         self._baseline = None
+        self._rebased = False  # the baseline is measured again because `rebase` was asked
         self._steps = None  # the timeline steps read with the baseline (`timeline_health.read_timeline`)
         self._total = 0
 
@@ -103,6 +103,16 @@ class RowExport:
         """Measure the baseline again before the next row: timeline items were turned back on since it was measured,
         and the errors and warnings they already had are not the rows' doing."""
         self._baseline = None
+        self._rebased = True
+
+    def _measure(self):
+        """Measure the baseline and read the steps with it, counted as the baseline, or as a `rebase` when that was
+        asked since the last measure."""
+        label = metered.REBASE if self._rebased else metered.BASELINE
+        self._rebased = False
+        with metered.caller(self.store, label):
+            self._baseline = measure_baseline(self.store)
+            self._steps = read_timeline(self.store)
 
     def check_pending(self):
         """Run the check of the steps that the row run last asked for (`_stopped`), with the parameters back; nothing
@@ -131,11 +141,14 @@ class RowExport:
     def _others_left(self):
         """For a row that showed only new warnings that do not count: True when, with the parameters back, a timeline
         item is still in a warning or an error it did not have in the baseline. Reads only the health of the items
-        (`apply.warning_entries`, `apply.error_entries`), not the whole timeline; True when that read fails."""
+        (`apply.Health`, one pass), not the whole timeline; True when that read fails."""
         base = self._baseline
         try:
-            warned = [k for k in warning_entries(self.store) if k not in base.warnings and k not in base.errors]
-            return bool(warned or [k for k in error_entries(self.store) if k not in base.errors])
+            health = Health(self.store)
+            if health.warnings is None:
+                return True
+            warned = [k for k in health.warnings if k not in base.warnings and k not in base.errors]
+            return bool(warned or [k for k in health.errors if k not in base.errors])
         except Exception:
             return True
 
@@ -180,14 +193,13 @@ class RowExport:
             return False
         self.ended.append(dict(record, **more))
         self._ended_now = True
-        self._baseline = measure_baseline(self.store)
-        self._steps = read_timeline(self.store)
+        self._measure()
         return True
 
     def _worse_now(self):
         """The changes of the steps now against the baseline (`timeline_health.changes`) that are worse. None when the
         steps cannot be read."""
-        now = read_timeline(self.store)
+        now = read_timeline(self.store, self._steps)
         if now is None or self._steps is None:
             return None
         return [c for c in changes(self._steps, now) if is_worse(c)]
@@ -200,11 +212,15 @@ class RowExport:
         worse = self._worse_now()
         if not worse:
             return worse
-        try:
-            self.store.recompute()
-        except Exception:
-            pass
-        return self._worse_now()
+        with metered.caller(self.store, metered.CHECK_AFTER_ROW):
+            try:
+                self.store.recompute()
+            except Exception:
+                pass
+        worse = self._worse_now()
+        if worse == []:
+            metered.note(self.store, metered.CHECK_CLEARED)
+        return worse
 
     @trail.staged("walk back")
     def walk_back(self, row, attempt, at=None):
@@ -225,7 +241,8 @@ class RowExport:
             self.walks.append(entry)
         trail.line("bringing the design back after %r, attempt %d" % (row.get("label") or row.get("name"), attempt + 1))
         try:
-            failed = walk_back.walk(self.store, self.units, steps, self._baseline)
+            with metered.caller(self.store, metered.WALK_STEP):
+                failed = walk_back.walk(self.store, self.units, steps, self._baseline)
         finally:
             self._back_to_current()
         if failed:
@@ -275,8 +292,7 @@ class RowExport:
             self._saved = self.store.saved_expressions()
         try:
             if self._baseline is None:
-                self._baseline = measure_baseline(self.store)
-                self._steps = read_timeline(self.store)
+                self._measure()
                 if self._steps is None:
                     self.back_clean = False  # no check can confirm the steps against this baseline
             results = []
@@ -297,11 +313,13 @@ class RowExport:
                 trail.line("try %d of %d %r: %s" % (index, count, self._last, row["values"]))
                 others = []
                 try:
-                    values = apply_row_values(self.store, self.units, row["values"], self._baseline,
-                                              full=row.get("step") is not False)
-                    warned = new_warnings(self.store, self._baseline, self.counts_warning, others) \
+                    values, health = apply_row(self.store, self.units, row["values"], self._baseline,
+                                               full=row.get("step") is not False)
+                    warned = new_warnings(self.store, self._baseline, self.counts_warning, others, health) \
                         if tolerate_build_errors else []
-                    cleared = cleared_errors(self.store, self._baseline) if tolerate_build_errors else []
+                    cleared = cleared_errors(self.store, self._baseline, health) if tolerate_build_errors else []
+                    if health.rescued:
+                        metered.note(self.store, metered.RESCUED)
                     self._check_next, self._check_others = bool(warned), bool(others)
                 except RowBuildError as exc:
                     if tolerate_build_errors:

@@ -2812,6 +2812,19 @@ export, the recipe and the notes do not depend on it.
                               "seconds": 1.9 } ] },
   "probe": { "tries": 9, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 14, "seconds": 3.1 },
              "read_parts": { "sketches": { "count": 14, "seconds": 2.2 }, "params": { "count": 9, "seconds": 0.4 } },
+             "calls": { "computes": { "baseline": { "count": 1, "seconds": 0.8 }, "row": { "count": 0, "seconds": 0.0 },
+                                      "confirm_new_errors": { "count": 2, "seconds": 1.6 },
+                                      "walk_step": { "count": 3, "seconds": 2.4 } },
+                        "param_sets": { "count": 9, "seconds": 7.1 }, "param_put_backs": { "count": 9, "seconds": 7.0 },
+                        "health_passes": { "count": 27, "seconds": 0.4 }, "timeline_reads": { "count": 3, "seconds": 0.6 },
+                        "rescued": 1, "check_cleared": 0,
+                        "after_tries": { "computes": { "put_back_values": { "count": 1, "seconds": 0.8 },
+                                                       "end_check": { "count": 1, "seconds": 0.8 } },
+                                         "param_sets": { "count": 0, "seconds": 0.0 },
+                                         "param_put_backs": { "count": 1, "seconds": 0.9 },
+                                         "health_passes": { "count": 2, "seconds": 0.1 },
+                                         "timeline_reads": { "count": 2, "seconds": 0.4 },
+                                         "rescued": 0, "check_cleared": 0 } },
              "put_back": { "count": 0, "seconds": 0.0 }, "time_limit": { "limit_seconds": 600, "hit": false },
              "try_seconds": 13.2 } }
 ```
@@ -2846,7 +2859,21 @@ export, the recipe and the notes do not depend on it.
   `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
   `pieces`, `faces`; a part no read held is left out; a face read that parks the marker does not count the move back, which
   happens in the change that puts the values back and so counts in `rebuild`), and `put_back` the sketch put backs
-  (`probe.recovery`). `time_limit` is the time limit of the tries (`limit_seconds`, `null` for no limit), `hit` whether
+  (`probe.recovery`). `calls` is what the tries asked of Fusion, counted by the store the try runner gives the job
+  (`lib/design_edit/metered.py`): `computes` has one `{ count, seconds }` per part of the export that asked for a
+  full rebuild (`row`, `confirm_new_errors`, `counting_warning`, `check_after_row`, `sketch_put_back`, `baseline`,
+  `rebase`, `walk_step`, `put_back_values`, `other`; a part that asked never is left out), `param_sets` the sets of
+  parameters for a try or a walk, `param_put_backs` the sets that put them back, `health_passes` the passes over the
+  timeline items for errors and warnings, `timeline_reads` the reads of the whole timeline, `rescued` the tries that
+  built after a confirming rebuild after new errors (counted once the try is finished and built, never in a walk back),
+  and `check_cleared` the rebuilds of a check after which a step that read worse was fine. A rebuild made while one part
+  runs inside another counts under the outer part. `after_tries` holds the same keys for the calls the put back makes
+  once the tries are done (the values put back, and `end_check`, the rebuilds, sets and reads of the end check); it is
+  set again at each point of the end, so it holds all calls so far. The totals leave out everything that does not go
+  through the store the add-in gives the tries: the rebuilds made inside Fusion calls that turn items on or off or move
+  the timeline marker, the capture, the state reads of the tries (`read`) and the marker moves of the reads. A try
+  that builds costs about two counted rebuilds, so the counts can be compared between versions but do not sum to the
+  time of the tries. `time_limit` is the time limit of the tries (`limit_seconds`, `null` for no limit), `hit` whether
   it stopped the tries and, when it did, `left_out` the sizes it left without a try (see "Time limit of the tries" under
   "Probe states"). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).

@@ -130,6 +130,15 @@ class FusionDesignBaselineTest(unittest.TestCase):
         self.assertEqual(DesignParameterStore(FakeDesign(self.PARAMS, timeline)).warning_entries(),
                          [(0, "Revolve1")])
 
+    def test_health_entries_give_the_errors_and_the_warnings_of_the_items_that_are_on_in_one_read(self):
+        timeline = [dict(name="Revolve1", isSuppressed=False, healthState=1),
+                    dict(name="Fillet1", isSuppressed=False, healthState=0),
+                    dict(name="Extrude1", isSuppressed=False, healthState=2),
+                    dict(name="Hidden", isSuppressed=True, healthState=2)]
+        store = DesignParameterStore(FakeDesign(self.PARAMS, timeline))
+        self.assertEqual(store.health_entries(), ([(2, "Extrude1")], [(0, "Revolve1")]))
+        self.assertEqual(store.health_entries(), (store.error_entries(), store.warning_entries()))
+
     def test_computeall_false_with_nothing_new_in_error_passes_through_the_design_wrapper(self):
         class Warned(FakeDesign):
             def computeAll(self):
