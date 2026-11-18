@@ -1043,3 +1043,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     extrudes, the chamfer and the cut are copied, and the export writes a recipe. The copy differs from Fusion only
     by the round on the front edge. Afterwards each design is as before. Checked in Fusion 2706 with 0.14.3 plus
     this change, through the API, except the views in Paramability.
+87. RW1, the result window after an export with "Lighter on memory". Save a design in the cloud with no unsaved
+    changes. Add user parameters `Width` = 40 mm and `Wall` = 3 mm. On the XY plane sketch a centre rectangle `Width`
+    x 30 mm and extrude it 20 mm up as a new body. Shell the top face inward by `Wall`. Fillet the four vertical
+    outside edges, radius 8 mm, so that a small `Width` makes the fillet fail.
+    Export: tick `Width` (12 to 80 mm) and `Lighter on memory`.
+    The export ends. The Text Commands window may say that the result event did not fire at first. A line in the
+    status area says the result window opens in a moment, and within about 8 seconds the window "Saved for
+    Paramability" opens once, with no long message box after it. The first section "Reopen the design" is open and
+    its button is visible without scrolling. "Check your design" and "Result" are open too; "Sizes", "Left out" and
+    "More sizes" are folded and open when their title is clicked. A long list scrolls inside its box. Close and
+    open the window again from a second export: it still opens. Afterwards the design is as it was; do not click the
+    button unless you want to test the reopen.

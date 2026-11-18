@@ -157,7 +157,7 @@ def offered_view():
 class WindowTest(unittest.TestCase):
     def test_only_an_offered_view_has_the_reopen_section_and_its_button(self):
         shown = offered_view()
-        self.assertEqual([s["key"] for s in shown["sections"]][:2], ["check", "reopen"])
+        self.assertEqual([s["key"] for s in shown["sections"]][:3], ["reopen", "check", "result"])
         command = fakes.FakeCommand()
         result_dialog.build(command, shown)
         self.assertIsNotNone(command.commandInputs.itemById(result_dialog.REOPEN_ID))

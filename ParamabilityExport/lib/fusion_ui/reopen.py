@@ -5,17 +5,20 @@ The export keeps the document and its `SavedStart` (`keep`) when it offers the r
 the button's own event has returned: it ends the result window (`UserInterface.terminateActiveCommand`, only when that
 window is the active command), then closes the design without saving and opens the kept version
 (`fusion_reader.saved_design.reopen_saved`). A failure shows a plain message and leaves Fusion as it is. Nothing is
-ever saved.
+ever saved. When Fusion refuses to fire the event, `event_retry` fires it again from a background thread.
 """
 import adsk.core
 
 from ..fusion_reader.saved_design import reopen_saved
+from . import event_retry
 from .handlers import HandlerList, on_custom_event
 from .log import log, message_box
+from .notice import status_notice
 
 EVENT_ID = "ParamabilityExportReopenEvent"
 BY_HAND = "To get the design back, close it without saving and open it again from the Data Panel."
 NOT_STARTED = "The add-in could not start the reopen. " + BY_HAND
+WAITING = "The reopen starts in a moment."
 WINDOW_LEFT = "The add-in could not close the result window, so it did not reopen the design. " + BY_HAND
 
 _event_handlers = HandlerList()
@@ -24,7 +27,7 @@ _kept = {}
 
 def start():
     """Register the custom event of the reopen. Call once when the add-in starts. A failure is logged only: the
-    button then shows `NOT_STARTED`."""
+    button then starts nothing and the log says so (`request`)."""
     try:
         app = adsk.core.Application.get()
         app.unregisterCustomEvent(EVENT_ID)  # left over from an add-in that did not stop cleanly
@@ -35,7 +38,8 @@ def start():
 
 
 def remove():
-    """Drop the custom event and what was kept when the add-in stops."""
+    """Drop the custom event and what was kept when the add-in stops, and end the pending fires."""
+    event_retry.cancel(EVENT_ID)
     try:
         adsk.core.Application.get().unregisterCustomEvent(EVENT_ID)
     except Exception as error:
@@ -57,16 +61,22 @@ def forget():
 
 def request(window_command_id):
     """Ask for the reopen; it runs after the event that calls this has returned. `window_command_id` is the id of the
-    result window's command, which the reopen ends first."""
+    result window's command, which the reopen ends first. When Fusion refuses the fire, it is tried again from a
+    background thread (`event_retry`); a background thread cannot show a message box, so a reopen that never starts
+    is only logged."""
     if "start" not in _kept:
         return
     _kept["window"] = window_command_id
+    event_retry.cancel(EVENT_ID)
     try:
-        if not _fire():
-            raise RuntimeError("The reopen event did not fire.")
+        fired = _fire()
     except Exception as error:
         log("reopen failed to start: %s" % error)
-        message_box(NOT_STARTED, error=True)
+        fired = False
+    if not fired:
+        log("the reopen event did not fire; trying again later")
+        status_notice(WAITING)
+        event_retry.fire_later(EVENT_ID, "reopening the design", lambda: log("reopen failed to start: " + NOT_STARTED))
 
 
 def _fire():

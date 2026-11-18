@@ -8,7 +8,7 @@ from ..export_plan.rollback import NO_ROLLBACK, check_lines
 from ..export_plan.messages import left_out_lines
 from ..export_plan.orca_export import translate_for_orca
 from . import left_out_preview
-from .result_rows import view_message
+from .result_rows import short_message, view_message
 from .stop_warning import LEFT_OUT_HEADING
 
 TITLE = "Saved for OrcaSlicer"
@@ -80,20 +80,22 @@ def _section(key, title, lines):
 
 def orca_view(file_name, report, ticked=(), rollback=NO_ROLLBACK):
     """Plain data for the result dialog: `title`, `sections` (`check`, `result`, `variables`, `left_out`, `next`)
-    `message`, the same text for a message box, `rolled_back` and `undo_unavailable` (as in
-    `result_rows.result_view`). A section
-    without content is absent."""
+    `message`, the same text for a message box, `summary` (a short text for it), `rolled_back` and `undo_unavailable`
+    (as in `result_rows.result_view`). A section without content is absent."""
     orca = report.get("orca") or {}
     parameters = [parameter_line(p) for p in orca.get("parameters") or []]
+    check = check_lines(report.get("health"), rollback)
+    result = _result_lines(file_name, report)
     sections = [
-        _section("check", "Check your design", check_lines(report.get("health"), rollback)),
-        _section("result", "Result", _result_lines(file_name, report)),
+        _section("check", "Check your design", check),
+        _section("result", "Result", result),
         _section("variables", "Variables", parameters + _formula_lines(orca, set(ticked))),
         _section("left_out", "Left out", _left_out_lines(report)),
         _section("next", "Next in OrcaSlicer", NEXT_LINES + [NOT_USED_LINE]),
     ]
     sections = [s for s in sections if s]
-    return {"title": TITLE, "sections": sections, "message": view_message(sections),
+    summary = short_message(result[0], len((orca.get("left_out")) or []), check)
+    return {"title": TITLE, "sections": sections, "message": view_message(sections), "summary": summary,
             "rolled_back": rollback.abort, "undo_unavailable": rollback.undo_unavailable}
 
 

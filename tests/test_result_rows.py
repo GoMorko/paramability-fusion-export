@@ -120,7 +120,7 @@ class ResultViewTest(unittest.TestCase):
 
 
 class ResultDialogTest(unittest.TestCase):
-    def test_every_section_gets_a_title_line_and_the_dialog_has_only_a_close_button(self):
+    def test_every_section_is_a_group_with_its_title_and_the_dialog_has_only_a_close_button(self):
         command = fakes.FakeCommand()
         shown = view(fixed=[{"name": "gap", "reason": "why"}], dropped=[unused("pipe")])
         result_dialog.build(command, shown)
@@ -128,7 +128,8 @@ class ResultDialogTest(unittest.TestCase):
         self.assertFalse(command.isOKButtonVisible)
         self.assertEqual(command.cancelButtonText, "Close")
         for found in shown["sections"]:
-            self.assertIn("# " + found["title"], inputs.itemById("pm_result_" + found["key"]).formattedText)
+            self.assertEqual(inputs.itemById("pm_group_" + found["key"]).name, found["title"])
+            self.assertIsNotNone(inputs.itemById("pm_result_" + found["key"]))
         self.assertIn("gap: kept fixed (why)", inputs.itemById("pm_result_sizes").formattedText)
 
     def test_a_section_the_view_does_not_have_is_not_added(self):

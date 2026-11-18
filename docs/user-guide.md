@@ -35,7 +35,11 @@ Nothing is typed in Fusion.
    shows how long it took.
 5. Pick the design up direction, click OK and choose where to save the file. The file name offered is the name of the
    component that holds the body, or the name of the design for a body that is not in a component.
-6. A window then shows short sections, each starting with a `# Title` line. Sections with nothing to say are left out:
+6. A window then shows short sections. Each section is a group with its title. Sections with nothing to say are left
+   out. The first sections are open: `Reopen the design` (when it is offered), `Check your design` (when something is
+   wrong) and `Result`. The other sections (`Sizes`, `Left out`, `More sizes`) are folded: click a title to open
+   it. A long list scrolls inside its box. The window opens a few seconds after the export ends when Fusion is slow to
+   start it; the status area says so meanwhile:
    - `# Result`: the file, what to do next, whether it is an editable copy (or one with steps left out) and how many
      parameters come along as variables. A file with several bodies has one line per body.
    - `# Sizes`: one line per size, with its range, then "may be unexpected" (and from where) or "kept fixed" or "not
@@ -45,7 +49,7 @@ Nothing is typed in Fusion.
    - `# Left out`: each step the copy left out, with the reason.
    - `# More sizes`: parameters you did not tick that also change the part, or that could not be tried. Tick them and
      export again to get them as sizes.
-   - `# Check your design`: shown first, and only when something is wrong: a parameter that did not go back, sketches
+   - `# Check your design`: shown only when something is wrong: a parameter that did not go back, sketches
      that did not come back to their first shape or came back on another outline, a part whose volume or size is not
      as before, timeline steps with a new warning or error, or sketches that could not be measured. When a try left
      a step changed and the add-in could not bring it back, it says that the tries stopped early, after which try,
@@ -53,15 +57,15 @@ Nothing is typed in Fusion.
      sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
      on. The add-in then asks Fusion to undo the export. With "Lighter on memory" ticked, once Fusion forgot Undo data,
      all tries stop there instead. Use Undo in Fusion when this section says your design is changed.
-   - `# Reopen the design`: shown under `# Check your design` only when the export could not be undone ("Lighter on
+   - `# Reopen the design`: shown first, with its button, only when the export could not be undone ("Lighter on
      memory" was ticked) and your design was saved in the cloud with no unsaved changes when you opened the export
      dialog. The button "Reopen the design from its last save" closes the design without saving and opens that saved
      version again. Nothing happens until you click it. The view and the Undo history of this design are lost, and a
      file that the export saved stays saved. When the design had unsaved changes at the start, the button is not shown,
      because a reopen would lose your own work: close the design yourself when you are sure.
 
-   Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
-   box.
+   Fuller detail for debugging is in `report.json`. If this window cannot open, a message box shows a short summary:
+   the file name, how many sizes, how many steps were left out, and what to check in your design.
 7. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
 ## What the export does

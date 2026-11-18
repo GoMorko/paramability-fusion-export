@@ -2037,16 +2037,16 @@ It has its own port interface (`PartsPort`, in the same file): the calls take th
 ### 1.11 After the export, in Fusion
 
 When the file is written, `_show_result` in `export_flow.py` shows a result window (`lib/fusion_ui/result_dialog.py`).
-The texts come from `lib/dialog_model/result_rows.py`. The window has sections, each with a `# Title` line. A section
-with nothing to say is left out:
+The texts come from `lib/dialog_model/result_rows.py`. The window has sections. A section with nothing to say is
+left out. The sections are in this order:
 
-- `# Check your design` (first, and only when something went wrong): a parameter that did not go back, timeline
+- `# Reopen the design` (first, and only when `rollback.reopen_offered` is true): one line that says what the reopen
+  does, and the button "Reopen the design from its last save" under it (see "Reopen from the last save" below);
+- `# Check your design` (only when something went wrong): a parameter that did not go back, timeline
   steps whose health differs from the start, sketches that came back on another outline, a part whose volume, size or
   pieces differ from the start, sketches that did not come back to their first shape, sketches that could not be
   checked or measured, sketches left with their compute deferred (`health_lines`). When the add-in asked Fusion to undo
   the export, the lines say so (`rollback.check_lines`);
-- `# Reopen the design` (only when `rollback.reopen_offered` is true): one line that says what the reopen does, and
-  the button "Reopen the design from its last save" under it (see "Reopen from the last save" below);
 - `# Result`: the file, whether it is an editable copy (or one with steps left out) and how many parameters come along.
   When the size tries stopped at the time limit, a line says so and how many sizes were not tried (`time_stop_lines`);
 - `# Sizes`: one line per size with its range and its state ("may be unexpected", "range cut", "kept fixed",
@@ -2054,6 +2054,29 @@ with nothing to say is left out:
 - `# Left out`: each step left out, with its reason and, when the gap has one, "Tip: " and its hint (see 1.9.3);
 - `# More sizes`: unticked parameters that also change the part (from the discovery rows), and parameters that could
   not be tried.
+
+`result_dialog.build` makes each section a `GroupCommandInput` (`commandInputs.addGroupCommandInput(id, title)`) with
+one read only text box in its `children`. The text box has at most `MAX_ROWS` rows: a longer text scrolls inside the
+box, so the window stays short. `isExpanded` is true only for the sections in `result_dialog.OPEN_SECTIONS` (reopen,
+check, result, and the "next" section of the Orca window). The other groups start folded. When `addGroupCommandInput`
+fails, the sections are text boxes in the command itself, each with a `# Title` line, as before groups. The window
+asks for an initial size with `Command.setDialogInitialSize` (`result_dialog.DIALOG_SIZE`).
+
+The view also has `summary`: a short text with the file name, the number of sizes, the number of steps left out and
+the first line of the check section. When the window cannot start, the message box shows the summary, not the whole
+text.
+
+The window opens in a custom event, after the export command has ended. Fusion can refuse `fireCustomEvent` while the
+export command still runs. This happens when "Lighter on memory" ticked, because the tries call `Command.beginStep`.
+Then `result_dialog.show` writes a line in Fusion's status area and starts `event_retry.fire_later`. This function
+makes a `threading.Timer` that fires the event again after 0.5, 1, 2 and 4 seconds. The Fusion API documents
+`fireCustomEvent` as safe to call from another thread. The thread does nothing else in Fusion: a message box or a
+window from a background thread is not allowed. The view stays in `result_dialog._pending` until the event handler
+`on_event` runs. The handler cancels the pending fires first, and does nothing when no view is pending, so the window
+opens only once. When the event fires but the window cannot start, `on_event` shows the summary in a message box (this
+is on the main thread). When every fire fails, the thread writes the summary to the log, and the status line stays.
+`result_dialog.remove` and `reopen.remove` call `event_retry.cancel`, so no timer outlives the add-in. `reopen.request`
+uses the same retry for the reopen event; a reopen that never starts is logged only.
 
 A part saved as a fixed shape gets a message box instead. Its first line names the stopping step. Fusion's status line
 (bottom right) shows a short form of the same (`lib/fusion_ui/notice.py`). When the design may be changed (a parameter
@@ -2238,7 +2261,7 @@ The window. `_offer_reopen` in `export_flow.py` makes the decision after `rollba
 true, it keeps the document and the `SavedStart` in `fusion_ui/reopen.py` (`keep`). Else it removes what was kept
 (`forget`). The view gets `reopen=True`. Then:
 
-- The result window shows the section `reopen` under `# Check your design`, and the button under that section
+- The result window shows the section `reopen` first, open, and the button under that section
   (`result_dialog.REOPEN_ID`).
 - When the file holds no recipe, the story goes to a message box. After the message box, a small window with only the
   section and the button opens (`reopen_view`).
@@ -2251,7 +2274,8 @@ handler of the event (`reopen.run_pending`) after the click event has returned. 
 window itself (`result_dialog.show`). Two copies of the add-in can be loaded at the same time (for example an older
 version and a new one), and they use the same event names. When one copy stops, it removes the events of both. Thus,
 when an event does not fire, `result_dialog.show` and `reopen.request` register the event again and fire it one more
-time (`_fire`). Only when the second fire also fails, the person sees the message box. The handler does these steps:
+time (`_fire`). When the second fire also fails, `event_retry` fires again later from a background thread (see 1.11,
+"After the export, in Fusion"). The handler does these steps:
 
 1. It ends the result window: when `UserInterface.activeCommand` is the command of the result window, it calls
    `terminateActiveCommand`. When this fails, it shows a message and does nothing more.
@@ -2277,7 +2301,8 @@ asks nothing and the open gives the design with `isModified` false and the start
 2706, outside the add-in, showed that the close and the open of the same version take about 2 s and give the start
 state back.
 
-The tests are in `tests/test_reopen.py`.
+The tests are in `tests/test_reopen.py`. The groups, the summary and the later fires are in
+`tests/test_result_window.py`.
 
 #### The end check of the timeline
 

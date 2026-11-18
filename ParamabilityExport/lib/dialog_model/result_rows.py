@@ -246,6 +246,15 @@ def view_message(sections):
     return "\n\n".join("\n".join(["# " + found["title"]] + found["lines"]) for found in sections)
 
 
+def short_message(saved_line, left_out_count, check):
+    """A short text for a message box when the result window cannot open: the line that says what was saved (with the
+    file name and the number of sizes), the number of steps left out, and the first line about the design to check."""
+    parts = [saved_line]
+    if left_out_count:
+        parts.append("%s left out of the copy." % _count(left_out_count, "step is", "steps are"))
+    return "\n\n".join(parts + list(check[:1]))
+
+
 def _reopen_section(reopen):
     """The section above the reopen button, or None when the reopen is not offered."""
     return _section("reopen", REOPEN_TITLE, [REOPEN_LINE]) if reopen else None
@@ -255,36 +264,42 @@ def reopen_view():
     """A view with only the reopen section, for an export that showed its story in a message box (no file saved, or
     a file without a recipe) but still offers the reopen (`rollback.reopen_offered`)."""
     sections = [_reopen_section(True)]
-    return {"title": REOPEN_TITLE, "sections": sections, "message": view_message(sections), "rolled_back": False,
+    return {"title": REOPEN_TITLE, "sections": sections, "message": view_message(sections),
+            "summary": view_message(sections), "rolled_back": False,
             "undo_unavailable": True, "reopen": True}
 
 
 def _build(file_name, manifest, report, table, ticked, result_extra=(), rollback=NO_ROLLBACK, reopen=False):
     rows = _size_rows(table, report, ticked) + _probe_rows(report)
     size_count = len(report["sizes"].get("free") or [])
+    check = check_lines(report.get("health"), rollback)
+    result = _result_lines(file_name, manifest, report, size_count, result_extra)
     sections = [
-        _section("check", "Check your design", check_lines(report.get("health"), rollback)),
         _reopen_section(reopen),
-        _section("result", "Result", _result_lines(file_name, manifest, report, size_count, result_extra)),
+        _section("check", "Check your design", check),
+        _section("result", "Result", result),
         _section("sizes", "Sizes", [size_line(r) for r in rows] + kept_number_lines(manifest), rows),
         _section("left_out", "Left out", _left_out_lines(report)),
         _section("more", "More sizes", also_lines(report) + not_tried_lines(report)),
     ]
     sections = [found for found in sections if found]
-    return {"sections": sections, "message": view_message(sections), "rolled_back": rollback.abort,
+    summary = short_message(result[0], len(_left_out_entries(report)), check)
+    return {"sections": sections, "message": view_message(sections), "summary": summary, "rolled_back": rollback.abort,
             "undo_unavailable": rollback.undo_unavailable, "reopen": bool(reopen)}
 
 
 def result_view(file_name, manifest, report, table, ticked, rollback=NO_ROLLBACK, reopen=False):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
-    Keys: `sections` and `message` (the same text for a message box), `rolled_back` (Fusion was told to undo the
+    Keys: `sections` and `message` (the same text for a message box), `summary` (a short text for the message box
+    that stands in for a window that cannot open: what was saved, the steps left out, the first line to check),
+    `rolled_back` (Fusion was told to undo the
     export, `export_plan.rollback`; the `check` section then says so), `undo_unavailable` (the design is not
     confirmed back and the export could not be undone, because Lighter on memory was on; the `check` section says so)
     and `reopen` (the window offers to reopen the design from its last save, `rollback.reopen_offered`; the caller
     passes it as `reopen`). Each section is `{key, title, lines, rows}`;
-    the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
-    `reopen` (what the reopen button does, only with `reopen`),
+    the keys, in this order, are `reopen` (what the reopen button does, only with `reopen`),
+    `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
     with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the
     same as data; then a "kept as a number: name = Fusion formula (reason)" line for each formula parameter that was
