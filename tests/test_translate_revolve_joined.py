@@ -11,6 +11,10 @@ from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion
 from lib.translator import translate
 from lib.translator.sketch.curved import combine
+from lib.design_model.values import Quantity
+from lib.translator.faces.revolve_joined import joined_revolves
+from lib.translator.faces.revolve_placer import RevolvePlacer, Turn
+from lib.translator.faces.shells import Shell
 from lib.translator.sketch.loops import profile_loops
 
 # A cap turned about the z axis: a body from the axis to Radius (20) and from 0 to Height (10), and below it a flange
@@ -29,6 +33,14 @@ def _item(index, name, kind, data=None):
 
 def _lines(points):
     return [{"kind": "line", "start": a, "end": b} for a, b in zip(points, points[1:] + points[:1])]
+
+
+def _profile(outline):
+    """A profile of the outline `outline`: a list of points, or a list of loops (outer first) of points or of
+    curves."""
+    loops = outline if isinstance(outline[0][0], (list, dict)) else [outline]
+    return {"sketch": "Sketch1", "frame": XZ, "loops": [
+        {"outer": n == 0, "curves": loop if isinstance(loop[0], dict) else _lines(loop)} for n, loop in enumerate(loops)]}
 
 
 def _place(uv, moved):
@@ -63,8 +75,7 @@ def _motion(profiles, moved):
 def cap(outlines, rim):
     """The revolve of `outlines` (point lists), its shell and a chamfer: 0.5 mm on the inner ceiling picked as a face
     (one of its edges is the inner top corner), and 0.3 mm on the inner rim at the point `rim`."""
-    profiles = [{"sketch": "Sketch1", "frame": XZ, "loops": [{"outer": True, "curves": _lines(points)}]}
-                for points in outlines]
+    profiles = [_profile(points) for points in outlines]
     revolve = {"operation": "newBody", "profiles": profiles,
                "axis": {"point": [0, 0, 0], "dir": [0, 0, 1], "entity_type": "SketchLine", "sketch": "Sketch1"},
                "project_axis": False, "extent": {"kind": "angle", "angle_deg": 360.0, "symmetric": False},
@@ -90,8 +101,8 @@ def cap(outlines, rim):
 RIM = turned_point(20.5 - 1.5 * SLANT, -1, 30)
 
 
-def run(outlines, sizes=SIZES, ranges=None, moved=None):
-    capture, profiles = cap(outlines, RIM)
+def run(outlines, sizes=SIZES, ranges=None, moved=None, rim=RIM):
+    capture, profiles = cap(outlines, rim)
     params = capture["parameters"]
     table = size_table.build(params["user"], sizes, params["model"], "mm", ranges=ranges)
     return table, translate(capture, size_table=table, motion=_motion(profiles, moved or {}))
@@ -116,7 +127,9 @@ class JoinedOutlineTest(unittest.TestCase):
         self.assertAlmostEqual(at_sizes(table, ceiling, Radius=25, Height=12, Wall=2)[2], 10.0, places=6)
         for got, want in zip(at_sizes(table, rim, Radius=25, Height=12, Wall=2), turned_point(25.5 - 2 * SLANT, -1, 30)):
             self.assertAlmostEqual(got, want, places=6)
-        # The inner wall of the flange's edge is gone once the wall is 1 / 0.5 * SLANT mm thick.
+        # The rule keeps the inner wall of the leaning edge longer than its set back at the open bottom: SLANT less
+        # 0.5 mm per mm of Wall stays above 0, so Wall stays below 2 * SLANT. The wall also runs on past the concave
+        # corner at the body side; that length is not counted, so the range stops early, on the safe side.
         self.assertLess(result.recipe["sizes"]["Wall"]["max"], 2 * SLANT)
         self.assertGreater(result.recipe["sizes"]["Wall"]["max"], 2 * SLANT - 0.05)
 
@@ -151,6 +164,86 @@ class JoinedOutlineTest(unittest.TestCase):
         _, past = run(outlines, sizes=SIZES + ["Lip"], ranges={"Lip": slides}, moved=moved)
         self.assertFalse(follows(picks(past.recipe)[1]))
         self.assertIn("Wall", marked(past))
+
+    def test_three_outlines_with_one_leaning_line_across_two_of_them_follow_the_sizes(self):
+        # The leaning edge is one sketch line from (21, -1) to (20, 1): the flange holds its lower piece and a small
+        # lip on the body side its upper piece.
+        lean = [{"kind": "line", "start": [21, -1], "end": [20.5, 0], "entity": "lean"},
+                {"kind": "line", "start": [20.5, 0], "end": [20, 1], "entity": "lean"}]
+        line = lambda a, b: {"kind": "line", "start": a, "end": b}
+        flange = [[line([0, -1], [21, -1]), lean[0], line([20.5, 0], [20, 0]), line([20, 0], [0, 0]),
+                   line([0, 0], [0, -1])]]
+        lip = [[line([20, 0], [20.5, 0]), lean[1], line([20, 1], [20, 0])]]
+        body = [[0, 0], [20, 0], [20, 1], [20, 10], [0, 10]]
+        rim = turned_point(21 - 1.5 * math.hypot(1, 2) / 2, -1, 30)
+        table, result = run([body, flange, lip], rim=rim)
+        self.assertIsNone(result.refusal)
+        self.assertEqual(marked(result), set())
+        got = at_sizes(table, picks(result.recipe)[1], Radius=25, Height=12, Wall=2)
+        for value, want in zip(got, turned_point(26 - 2 * math.hypot(1, 2) / 2, -1, 30)):
+            self.assertAlmostEqual(value, want, places=6)
+
+    def test_an_outline_with_a_hole_leaves_the_rim_marked(self):
+        body = [[[0, 0], [20, 0], [20, 10], [0, 10]], [[5, 3], [8, 3], [8, 6], [5, 6]]]
+        _, result = run([body, FLANGE])
+        self.assertIsNone(result.refusal)
+        self.assertFalse(follows(picks(result.recipe)[1]))
+        self.assertIn("Wall", marked(result))
+
+    def test_a_crossing_between_the_size_settings_of_the_ranges_leaves_the_pick_marked(self):
+        # A body with a post on its top and a thin arm out of the post. A spike on the body has its tip at
+        # (14, Lip): its edge from (3, 10) passes through the arm while Lip is between 15 and 21, and clears it
+        # below and above. The ends and the middle of the range 12 to 46 all clear the arm.
+        body = [[0, 0], [30, 0], [30, 10], [22, 10], [20, 10], [3, 10], [2, 10], [0, 10]]
+        post = [[20, 10], [22, 10], [22, 25], [20, 25], [20, 15.3], [20, 15]]
+        arm = [[8, 15], [20, 15], [20, 15.3], [8, 15.3]]
+        spike = [[2, 10], [3, 10], [14, 12]]
+        tip = {(14, 12): (Affine(14.0), Affine(0.0, {"Lip": 1.0}, "Sketch1"))}
+        _, clear = spike_run([body, post, arm, spike], tip, (12.0, 14.5))
+        self.assertEqual(marked(clear), set())
+        _, through = spike_run([body, post, arm, spike], tip, (12.0, 46.0))
+        self.assertIn("Lip", marked(through))
+
+
+def spike_run(outlines, moved, lip_range):
+    """The revolve of `outlines` and a round on the edge where the spike meets the top of the body, with Lip ticked
+    in the range `lip_range`."""
+    capture, profiles = cap(outlines, RIM)
+    fillet = {"rolling_ball": True, "sets": [{"kind": "constant", "radius": 0.5, "continuity": "tangent",
+                                              "input_kinds": ["edge"], "edges": [
+                                                  {"token": "e0", "closed": True, "points": [turned_point(3, 10, 30)]}]}]}
+    capture["items"] = capture["items"][:2] + [_item(2, "Fillet1", "FilletFeature", fillet)]
+    capture["parameters"]["user"][3] = size_param("Lip", 12)
+    params = capture["parameters"]
+    table = size_table.build(params["user"], ["Lip"], params["model"], "mm", ranges={"Lip": lip_range})
+    return table, translate(capture, size_table=table, motion=_motion(profiles, moved))
+
+
+def _static(points, total=None):
+    """The placer of `points` turned a full circle about the z axis, with the axis taken to move with sizes."""
+    turn = Turn(_profile(points), None, None, [0, 0], [Affine(0.0), Affine(0.0)], [0, 1], 0.0, total)
+    return RevolvePlacer("revolve_1", "Revolve1", turn, [])
+
+
+class JoinedPartsTest(unittest.TestCase):
+    def test_outlines_on_both_sides_of_the_axis_are_not_joined(self):
+        ctx = type("Ctx", (), {"table": None})()
+        side = [[0, 0], [20, 0], [20, 10], [0, 10]]
+        for other, joined in (([[-15, 0], [0, 0], [0, 10], [-15, 10]], False), ([[0, 10], [20, 10], [20, 14],
+                                                                                [0, 14]], True)):
+            profiles = [_profile(side), _profile(other)]
+            turns = [Turn(p, None, None, [0, 0], None, [0, 1]) for p in profiles]
+            self.assertEqual(bool(joined_revolves(ctx, profiles, turns)), joined)
+
+    def test_a_face_opened_on_the_joined_outline_is_open_for_its_outlines_too(self):
+        # A flange 4 mm thick under the body, open at its bottom: 1.5 mm above the opening there is no floor inside.
+        body, flange = _static([[0, 0], [20, 0], [20, 10], [0, 10]]), _static([[0, -4], [20, -4], [20, 0], [0, 0]])
+        joined = _static([[0, -4], [20, -4], [20, 0], [20, 10], [0, 10], [0, 0]])
+        joined.joins = (body, flange)
+        opened = joined.place(turned_point(5, -4, 45), False)
+        shell = Shell(Quantity(1.5), [], [opened], [body, flange, joined], before=[body, flange, joined])
+        self.assertIsNone(shell.place(turned_point(10, -2.5, 30), False))
+        self.assertIsNotNone(shell.place(turned_point(10, 8.5, 30), False))
 
 
 if __name__ == "__main__":

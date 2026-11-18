@@ -90,8 +90,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   on an end face whose angle changes with a size, a pick on the inside of a shelled revolve that does not turn a full
   circle, a pick on the inside where a line of the outline turns with a size, where the inside wall meets a curved
   wall at an angle, or where another step lies against the outside wall, a pick where outlines of one revolve meet
-  when they overlap or when a size in its range moves one so that they meet in another way (the tip of one outline
-  passes the end of the line it stands on), a pick where the revolve meets a step made before it, and a pick that
+  when they overlap, when they lie on both sides of the axis, or when a size in its range moves one so that they meet
+  in another way (the tip of one outline passes the end of the line it stands on), a pick where the revolve meets a step made before it, and a pick that
   lies on two sides of the outline at once. When sizes
   move the face under such a pick, the pick keeps its place and the sizes the steps before it use are marked "may give
   unexpected results". Picks on an intersect revolve, and on a revolve to two sides whose angle before the sketch

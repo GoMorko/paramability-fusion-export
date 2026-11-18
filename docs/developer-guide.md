@@ -3987,8 +3987,10 @@ of the leaning edge meets the open bottom.
   leaning edge meets the body side at (`Radius`, 0). The inner rim is placed on this outline, as for one outline
   (3.19): its point at 30 degrees is `[0.866025404 * Radius + 0.433012702 + (-0.968245837 * Wall), 0.5 * Radius +
   0.25 + (-0.559016994 * Wall), -1]`.
-- The inner wall of the leaning edge has no length left when `Wall` is 2.24 mm. Thus the range of `Wall` stops at
-  2.23.
+- The rule of 3.19 keeps the inner wall of the leaning edge longer than its set back at the open bottom. The set
+  back is 0.5 mm for each millimetre of `Wall`, and the edge is 1.118 mm long. Thus the range of `Wall` stops at
+  2.23. This cut is on the safe side. At the concave corner where the leaning edge meets the body side, the inner
+  wall runs on past the corner, but the rule counts that run as 0 (3.19).
 
 `faces/revolve_joined.py` makes the joined outline:
 
@@ -4003,6 +4005,18 @@ of the leaning edge meets the open bottom.
    ranges (`range_check.corners` and `middles`, inside the ranges cut for the outlines). At each setting, no outline
    and not the joined outline may cross or touch itself. Each outline and the joined outline must also run round the
    same way as now.
+4. A crossing can start and stop between two of these settings. Thus `_between` adds more settings. It moves one
+   size at a time, and keeps the other sizes at their values now. For each corner of a loop and each edge of the same
+   loop, it calculates on which side of the line of the edge the corner is. With one size, this value is a quadratic
+   (a corner moves along a line, or along a curve when its formula holds a product of sizes). `_between` finds the
+   places in the range where the value is 0, and adds a setting halfway between each two neighbouring places. Thus
+   each interval where the corners keep their sides has one setting. When one size has more than 256 such places
+   (`MAX_BETWEEN`), there is no joined outline. The check does not look at the middle points of arcs. It also does not
+   find a crossing that needs two sizes to change together and that the settings of `range_check` do not reach.
+
+The joined outline must stay on one side of the axis. Outlines on the two sides of the axis turn into the same solid,
+and the placer reads only one side (`RevolvePlacer._normal`). Thus there is no joined outline when the joined outline
+reaches both sides of the axis, or when two outlines share a line on the axis (`_across_axis`).
 
 The check finds these problems:
 
@@ -4017,11 +4031,18 @@ When the check fails, or an outline has holes, there is no joined outline. The h
 of the outlines, and a pick where they meet is marked, as before.
 
 The joined outline has a placer of its own, a `RevolvePlacer` with the parts in `joins`. The handler gives the maker
-of each step the same `JoinedRevolve`. The last maker adds the joined placer. Thus it is the latest placer of the
+of each step the same `JoinedRevolve` and the place of the step among the parts. When each place has its placer in
+one walk, the joined placer is added. Thus it is the latest placer of the
 revolve, and `follow.locate` asks it first. Its `before` holds only the placers made before the first outline, so
 the outlines are not "a step before it". The shell does not count the joined placer and its outlines as other steps
 of each other (`revolve_placer.kin`). A point that the joined placer does not place, and does not claim, goes to the
 placers of the outlines, as before.
+
+A shell opens faces by points, and `follow.locate` places these points on the joined placer first. The shell then
+also opens the curves of each outline that lie along an opened curve of the joined outline
+(`RevolvePlacer.curves_along`). Thus an outline does not see an opened face as a closed face. Example: a flange 4 mm
+thick is open at its bottom. Without this rule, the flange placer would read a point 1.5 mm above the opening as a
+point on the inner floor, but the shell leaves no floor there.
 
 #### A face of another body
 

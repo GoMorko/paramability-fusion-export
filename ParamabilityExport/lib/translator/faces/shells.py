@@ -68,8 +68,15 @@ class Shell(Placer):
         self.before = list(before)
 
     def _opened_on(self, revolve):
-        """The outline curves of `revolve` whose faces this shell opens."""
-        return {place.curve for place in self.opened if place.slab is revolve}
+        """The outline curves of `revolve` whose faces this shell opens. A face placed on the joined outline of a
+        revolve opens the curves of its outlines that lie along it, and the other way round (`revolve_placer.kin`)."""
+        found = set()
+        for place in self.opened:
+            if place.slab is revolve:
+                found.add(place.curve)
+            elif kin(place.slab, revolve) and place.curve is not None:
+                found |= revolve.curves_along(place.slab, place.curve)
+        return found
 
     def claims(self, p):
         """True when `p` lies on an inner wall of a revolve, or on a face of one that this shell opens."""

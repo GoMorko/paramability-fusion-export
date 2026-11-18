@@ -90,6 +90,14 @@ def kin(a, b):
     return any(p is b for p in getattr(a, "joins", ())) or any(p is a for p in getattr(b, "joins", ()))
 
 
+def _lies_on(a, b):
+    """True when the ends and the middle of the line or arc `a` lie on the curve `b`."""
+    if a["kind"] not in ("line", "arc"):
+        return False
+    middle = a.get("mid") or [(a["start"][0] + a["end"][0]) / 2.0, (a["start"][1] + a["end"][1]) / 2.0]
+    return all(curve_distance(b, q) <= LATERAL_TOL for q in (a["start"], middle, a["end"]))
+
+
 class _Spot:
     """Where a point sits about the axis: `uv` the sketch point it turns from, `radius` its distance from the axis,
     `angle` its angle about the axis from the sketch plane (degrees), `span` IN, CAP or OUT of the turn, `curves` the
@@ -167,6 +175,17 @@ class RevolvePlacer(Placer):
         if curve["kind"] != "line":
             return False
         return all(abs(self._across(curve[end])) <= LATERAL_TOL for end in ("start", "end"))
+
+    def curves_along(self, other, k):
+        """The face curves of this placer that lie along curve `k` of `other`, a placer of the same sketch (the joined
+        outline of a revolve, or one of its outlines): the ends and the middle of one curve lie on the other one."""
+        theirs = other.turn.footprint.curves[k]
+        found = set()
+        for n in self.face_curves:
+            mine = self.turn.footprint.curves[n]
+            if _lies_on(mine, theirs) or _lies_on(theirs, mine):
+                found.add(n)
+        return found
 
     def _axes(self):
         """(A, W, N, B) in model space: the axis point, the axis direction, the direction from the axis toward the
