@@ -4,7 +4,8 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.orca_revolves import caps, ring_on_rod, ring_with_hole, rect, symmetric_ring, two_rings_on_rod
+from tests.orca_revolves import (caps, groove_both_sides, ring_on_rod, ring_with_hole, rect, symmetric_ring,
+                                 two_rings_on_rod)
 from tests.orca_sized import fixture, revolve_sized, table_of
 from tests.test_orca_finishes import finish_item
 from tests.probe_helpers import user
@@ -217,7 +218,7 @@ class HolesAndOutlinesTest(unittest.TestCase):
         capture = ring_with_hole()
         item = capture["items"][-1]
         item["data"]["profiles"].append(dict(item["data"]["profiles"][0], loops=[
-            {"outer": True, "curves": rect(-20, 0, -10, 10)}]))
+            {"outer": True, "curves": rect(-30, 0, -25, 10)}]))
         self.assertEqual(translate(capture).left_out, [])
         item["data"].update(extent={"kind": "angle", "angle_deg": 90, "symmetric": False},
                             start_face_normal=[0, -1, 0])
@@ -278,6 +279,59 @@ class SymmetricSizedTest(unittest.TestCase):
         self.assertFalse(seamed(body))
         shape.seam = True
         self.assertTrue(seamed(body))
+
+
+class OverlapAndLimitTest(unittest.TestCase):
+    def test_a_cut_outline_whose_turn_lies_inside_an_earlier_one_is_dropped(self):
+        result = translate(groove_both_sides())
+        self.assertEqual((result.left_out, modes(result)), ([], [(FeatureType.REVOLVE, BooleanMode.CUT)]))
+        self.assertEqual(len(result.notes), 1)
+
+    def test_a_cut_outline_that_would_remove_nothing_after_an_earlier_one_leaves_the_step_out(self):
+        # The mirror reaches past the rod: not inside the first turn, and it would cut nothing after it.
+        self.assertEqual([g["cause"] for g in translate(groove_both_sides(reach=14.0)).left_out],
+                         [causes.REVOLVE_OVERLAP])
+
+    def test_a_join_of_outlines_whose_turns_overlap_is_left_out(self):
+        capture = two_rings_on_rod()
+        data = capture["items"][-1]["data"]
+        data["profiles"][1]["loops"] = [{"outer": True, "curves": rect(-20, 0, -10, 5)}]
+        self.assertEqual([g["cause"] for g in translate(capture).left_out], [causes.REVOLVE_OVERLAP])
+
+    def test_halves_that_would_cut_the_same_ring_keep_the_angle_as_a_number(self):
+        capture = groove_both_sides()
+        capture["items"][-1]["data"]["extent"] = {"kind": "angle", "angle_deg": 180.0, "symmetric": True}
+        capture["parameters"] = symmetric_ring()["parameters"]
+        capture["items"][-1]["data"]["params"] = symmetric_ring()["items"][1]["data"]["params"]
+        result = sized_result(capture)
+        self.assertEqual([(f.revolve_angle, f.flip, f.expr) for f in revolves(result)], [(360.0, False, {})])
+        self.assertEqual((result.left_out, result.parameters[0]["outcome"]), ([], FIXED))
+
+    def test_a_turned_angle_has_its_limits_on_the_parameter_line(self):
+        result = sized_result(revolve_sized())
+        (limit,) = [w for w in result.parameters[0]["follows"] if getattr(w, "high", None) is not None]
+        self.assertEqual((limit.low, limit.high), (0.01, 360.0))
+
+    def test_cut_halves_tell_how_far_the_angle_may_shrink_before_a_half_misses(self):
+        # A block on each side of the sketch plane, 5 mm from it: the halves of the outline (out to radius 14) meet it
+        # only past asin(5 / 14) = 20.9 degrees.
+        capture = ring_on_rod()
+        block = capture["items"][1]["data"]["profiles"][0]
+        block["loops"] = [{"outer": True, "curves": rect(0, 5, 30, 30)}]
+        capture["items"][1]["data"]["profiles"].append(dict(block, loops=[
+            {"outer": True, "curves": rect(0, -30, 30, -5)}]))
+        cut = symmetric_ring()["items"][1]
+        cut.update(index=3)
+        start, end = caps(45.0, cut=True)
+        cut["data"].update(operation="cut", start_face_normal=start, end_face_normal=end)
+        cut["data"]["profiles"][0]["loops"] = [{"outer": True, "curves": rect(10, 5, 14, 9)}]
+        capture["items"][-1] = cut
+        capture["parameters"] = symmetric_ring()["parameters"]
+        result = sized_result(capture)
+        self.assertEqual([f.flip for f in revolves(result)], [False, True])
+        lows = [w.low for w in result.parameters[0]["follows"] if getattr(w, "low", None) is not None]
+        self.assertEqual(len(lows), 1)
+        self.assertTrue(20.9 <= lows[0] < 23.0, lows)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,9 @@ REVOLVE_OUTLINE_SIDES = "revolveOutlineSides"
 # A round or chamfer of a face group on a body that Orca builds from several revolves joined together: the faces
 # where they meet are not merged, so Orca's group holds edges Fusion does not have (`solid.seamed`).
 REVOLVE_SEAM = "revolveSeam"
+# Outlines of one revolve whose turns overlap: a join Orca may not make as Fusion does, or a cut whose later revolve
+# would remove nothing after the earlier ones (`revolve_checks`).
+REVOLVE_OVERLAP = "revolveOverlap"
 
 # Patterns and mirrors.
 COPIES_SUPPRESSED = "copiesSuppressed"

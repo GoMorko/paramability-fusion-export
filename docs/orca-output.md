@@ -563,18 +563,33 @@ not judged to meet material where Orca removes nothing.
   intersects with it, so a hole cuts nothing else of the part. Several outlines are turned one by one, each with its
   own sketches. An intersect of several outlines first joins them in a tool body, then one Boolean Intersect keeps
   what the part and the tool share. Of several cut outlines, those that do not meet the copied part are left out with
-  a note. Left out: a new body made of separate outlines (Fusion lists more than one new body, `roles.new_bodies`, as
-  for extrudes), a cut that splits the part, and outlines that a turn of less than a full circle moves different
-  ways at the sketch (on two sides of the axis, or on two planes through it; cause `revolveOutlineSides`): the one
-  measured start face cannot tell how each one turned.
+  a note. Orca writes the cuts of one step one after the other and stops on one that removes nothing, so each cut
+  (each half of a symmetric cut too) must meet the part as the cuts before it left it (`revolve_checks.cut_order`).
+  Outlines on the two sides of the axis turned a full circle make the same ring: an outline whose whole turn lies
+  inside what the outlines before it cut is left out of the step with a note, when the angle is a number (at another
+  angle its turn could reach elsewhere). Any other cut that would remove nothing after the ones before it leaves the
+  step out (cause `revolveOverlap`). A join, new body or intersect of outlines whose turns share material is left out
+  too (`revolveOverlap`): the copy cannot tell that Orca joins such turns as Fusion does. Also left out: a new body
+  made of separate outlines (Fusion lists more than one new body, `roles.new_bodies`, as for extrudes), a cut that
+  splits the part, and outlines that a turn of less than a full circle moves different ways at the sketch (on two
+  sides of the axis, or on two planes through it; cause `revolveOutlineSides`): the one measured start face cannot
+  tell how each one turned.
 - Symmetric: Fusion's angle of a symmetric revolve is the turn to each side. When that angle follows sizes, the copy
   writes two revolves from the sketch plane: one by the right hand rule, one with `flip` (Orca turns by the negative
   angle, `CadDocument::apply_feature`, Revolve). Each has `revolve_angle = min(angle, 180)`, bound to the variable, so
   the ring closes at 180 degrees or more to each side, as in Fusion. A cut is written so only when each half meets
-  the copied part (Orca stops on a cut that removes nothing). Otherwise, and for an intersect (two intersects would
+  the copied part after the cuts before it (Orca stops on a cut that removes nothing), and when the copy can tell how
+  far the angle may shrink before a half misses (below). Otherwise, and for an intersect (two intersects would
   keep only what both halves share), the copy turns the sketch plane the angle back and turns twice the angle, so the
   angle keeps its number and its sizes are marked; 180 degrees or more to each side is then a full turn. Either way
   the measured caps must sit where the turn puts them.
+- The angle's limits: Orca's revolve fails at an angle of 0 or below, and a cut or intersect that a smaller angle
+  moves off the part stops the rebuild too. So the parameter's line of a variable that turns a revolve says how far it
+  may go (`revolve_checks.tell_angle`, `limits.tell`): above 0 and at most a full circle for any revolve, and for a
+  cut or intersect above the smallest angle at which every cut still removes material, one after the other, and an
+  intersect still meets the part (`angle_floor`: ten halvings down from the current angle, then eight angles tested
+  above it). When an angle tested above that floor fails, the halves are not used, and an angle of one turn keeps its
+  number with the reason.
 - A seam: Orca does not merge the faces of revolves that it joins (the two halves, or outlines turned one by one), so
   the faces stay split where they meet and Orca's groups of edges hold edges that Fusion does not have. The copy's
   shape marks such a revolve (`solid.Turned.seam`), and a later round or chamfer of a face group on that body is left
@@ -1203,6 +1218,9 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   into itself; the parameter's line says how far it may grow, also when that is far from the current size.
 - The shape the copy keeps to check cuts (`solid.py`) does not know threads, and knows rounds and chamfers only as
   material a later cut may not count on (on the simple parts rounds are copied on).
+- A revolve angle that follows a variable is checked at the current sizes and walked down for the limit on the
+  parameter's line. That walk takes about 18 tests of the angle, so a band of angles where a cut misses the part, between
+  the tested angles, can be missed.
 - A pattern or mirror plane, a turning axis and a split plane keep their place: one on a face that a size moves does
   not follow it.
 - A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
@@ -1238,7 +1256,9 @@ Revolves with holes, several outlines and symmetric angles that follow sizes hav
 The volumes are exact (a loop of area A whose centre lies at radius R makes 2 pi R A per full turn):
 `ring_with_hole` (radius 10 to 20, 10 high, a hole of radius 2 at radius 15, a full turn: 3000 pi - 120 pi^2 =
 8240.43), `ring_on_rod` (that ring joined onto a rod of radius 12, 30 high: 6880 pi - 120 pi^2 = 20429.80),
-`two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21) and
+`two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21),
+`groove_both_sides` (one Revolve Cut of a full turn with a groove from radius 9 to 12, z 10 to 14, drawn on both
+sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi = 12780.0; not yet built in Orca) and
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.

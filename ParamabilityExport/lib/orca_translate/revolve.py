@@ -26,11 +26,10 @@ from ..design_model import reach, roles
 from ..design_model.steps import revolve as revolve_facts
 from ..geometry import vec
 from ..geometry.footprint import polyline
-from . import causes, kept_refs, revolve_parts
+from . import causes, kept_refs, revolve_checks, revolve_parts
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from .sketches import entities_of, outlines_of
-from .solid import Turned
 from .sketch_sizes import profile_sizes, projection_doubts
 from .steps import Skip
 from .tools import label
@@ -199,19 +198,37 @@ def _outline_part(profile, outline, point, direction):
     turn = _turn(frame, outline.outer, point, direction)
     if isinstance(turn, Skip):
         return turn
-    return revolve_parts.Part(frame, loops[0], loops[1:], None), turn
+    return revolve_parts.Part(frame, [outline.outer] + outline.holes, loops[0], loops[1:], None), turn
 
 
-def _turned(part, outline, plan, sweep, start):
-    return Turned(part.frame, [outline.outer] + outline.holes, plan.point, plan.axis, sweep, start)
+def _misses(ctx, operation):
+    gap = bool(ctx.left_out)
+    what = "cut" if operation == "cut" else "intersect"
+    return Skip("This %s does not meet the part as the Orca copy builds it%s, and Orca stops the whole rebuild on a "
+                "%s that removes nothing, so it is left out." % (what, " (a step before it is left out)" if gap else "",
+                                                                 what),
+                gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
 
 
-def _halves_meet(ctx, parts, outlines, plan):
-    """True when each half of each outline's symmetric turn meets the part: Orca stops on a cut that removes
-    nothing."""
-    half = plan.angle.n
-    return all(ctx.solid.meets(_turned(part, outline, plan, half, start))
-               for part, outline in zip(parts, outlines) for start in (0.0, -half))
+def _cut(ctx, item, parts, plan):
+    """`(the parts of a cut to write with plan, notes for those left out)` (`revolve_checks.cut_order`), or a Skip."""
+    meeting = [part for part in parts if ctx.solid.meets(part.shape)]
+    if not meeting:
+        return _misses(ctx, "cut")
+    found = revolve_checks.cut_order(ctx.solid, meeting, plan, plan.angle.n, plan.angle.text is None)
+    if found is None:
+        return Skip("An outline of this cut would remove nothing after the outlines cut before it (they turn into "
+                    "the same space), and Orca stops the whole rebuild on a cut that removes nothing, so it is left "
+                    "out.", causes.REVOLVE_OVERLAP)
+    kept, inside = found
+    notes = []
+    if len(meeting) < len(parts):
+        notes.append("%s: %d of its outlines do not meet the part as the Orca copy builds it and are left out."
+                     % (label(item), len(parts) - len(meeting)))
+    if inside:
+        notes.append("%s: %d of its outlines turn wholly inside what its other outlines cut and are left out."
+                     % (label(item), inside))
+    return kept, notes
 
 
 def revolve(ctx, step):
@@ -277,34 +294,44 @@ def revolve(ctx, step):
         if sides == "symmetric":
             start = -total.n / 2.0
     turn_axis = vec.scale(direction, sense)
-    plan = revolve_parts.Plan(point, turn_axis, total, start)
-    sweep, begin = total.n, start
+    plans = [revolve_parts.Plan(point, turn_axis, total, start)]
     if angle.per_side is not None and operation != "intersect":
-        # A symmetric angle that follows sizes: two revolves from the sketch plane, one each way.
-        halves = revolve_parts.Plan(point, turn_axis, _half(angle.per_side), 0.0, (False, True))
-        if operation != "cut" or _halves_meet(ctx, parts, outlines, halves):
-            plan, sweep, begin = halves, 2.0 * halves.angle.n, -halves.angle.n
+        # A symmetric angle that follows sizes: two revolves from the sketch plane, one each way, unless they cannot
+        # be cut one after the other.
+        plans.insert(0, revolve_parts.Plan(point, turn_axis, _half(angle.per_side), 0.0, (False, True)))
+    for plan in plans:
+        for part in parts:
+            part.shape = revolve_checks.whole(part, plan, plan.angle.n)
+        found = _cut(ctx, item, parts, plan) if operation == "cut" else (parts, [])
+        if isinstance(found, Skip):
+            if plan is plans[-1]:
+                return found
+            continue
+        found, notes = found
+        floor = revolve_checks.angle_floor(ctx.solid, found, plan, operation)
+        if floor is None and plan is not plans[-1]:
+            continue
+        if floor is None:
+            # How far the angle may shrink before a revolve misses the part cannot be told: it keeps its number.
+            ctx.doubt(plan.angle.reads, "%s: the copy cannot tell how far its angle may change before it no longer "
+                      "meets the part, so the angle keeps its number in Orca" % label(item))
+            plan.angle, floor = Quantity(plan.angle.n), 0.0
+        parts = found
+        break
+    for note in notes:
+        ctx.note(note)
+    if operation == "intersect" and not any(ctx.solid.meets(part.shape) for part in parts):
+        return _misses(ctx, operation)
+    if operation != "cut" and revolve_checks.overlap(parts):
+        return Skip("Two outlines of this revolve turn into the same space, and the Orca copy cannot tell that Orca "
+                    "joins such turns as Fusion does, so it is left out.", causes.REVOLVE_OVERLAP)
     if len(plan.flips) == 1:
         _fixed_symmetric(ctx, item, angle)
-    for part, outline in zip(parts, outlines):
-        part.shape = _turned(part, outline, plan, sweep, begin)
-    if operation in ("cut", "intersect"):
-        kept = [n for n, part in enumerate(parts) if ctx.solid.meets(part.shape)]
-        if not kept:
-            gap = bool(ctx.left_out)
-            what = "cut" if operation == "cut" else "intersect"
-            return Skip("This %s does not meet the part as the Orca copy builds it%s, and Orca stops the whole "
-                        "rebuild on a %s that removes nothing, so it is left out." % (
-                            what, " (a step before it is left out)" if gap else "", what),
-                        gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
-        if operation == "cut" and len(kept) < len(parts):
-            ctx.notes.append("%s: %d of its outlines do not meet the part as the Orca copy builds it and are left "
-                             "out." % (label(item), len(parts) - len(kept)))
-            parts = [parts[n] for n in kept]
 
     name = label(item)
     kept_refs.mark(ctx, item, axis, "turns about")
     written = revolve_parts.write(ctx, name, parts, plan, operation)
+    revolve_checks.tell_angle(ctx, written, floor)
     for profile in profiles:
         projection_doubts(ctx, item, profile, outlines_of(profile))
         loose = profile_sizes(ctx, profile)
