@@ -1090,6 +1090,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     2.23 ("the inside wall of Revolve1 that Chamfer1 picks would shrink to nothing"), and both chamfers copied with
     `near` points that hold formulas of the sizes. In Paramability set `Radius` to 25, `Height` to 12 and `Wall` to 2,
     then to 15, 8 and 1: the chamfers stay on the ceiling inside and on the inner rim, as in Fusion at the same
-    values. In the second design (past `Lip` = 10 the tip of the lip leaves the side) expect the sizes marked "may
-    give unexpected results" and the rim chamfer with fixed points, not on a wrong edge. Afterwards each design is as
+    values. In the second design (past `Lip` = 10 the tip of the lip leaves the side) expect `Lip` as "not a size"
+    (the outline changes at other values), `Wall` marked "may give unexpected results", and the chamfers on the
+    same faces as in Fusion at other `Radius` and `Height` values. Checked in Fusion 2706 with 0.14.4 plus this
+    change: in both designs the chamfer points were on the chamfered faces of Fusion at four other sets of sizes. Afterwards each design is as
     before.
