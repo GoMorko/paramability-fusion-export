@@ -178,6 +178,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   not measure the face, the sizes that the steps before the extrude use are marked "may give unexpected results",
   with the extrude named. When the tries saw a face or plane move in another way than the copied steps say, the copy
   follows what the tries saw.
+- A parameter that the part shares with another component (a box and its lid share the width, the wall or a print
+  tolerance) is a normal size when it reaches the part only through the values of the part's own steps (an extrude
+  distance, a taper, a fillet radius) and the sketches the tries follow. It keeps the mark "may give unexpected
+  results: it changes this part in a way the copy does not follow" when the part changed in its tries and the export
+  cannot rule out another way: a sketch drawn around another component that the tries do not follow, a construction
+  plane, axis or joint behind the parameter, a place of another component that was not read, or a capture that does
+  not say where the parameter acts.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked

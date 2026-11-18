@@ -18,13 +18,14 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
   axis of the part built on an entity of another component (`built_on_other`) may move with every ticked size;
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
-- the sizes a step reads (`step_sizes`, `item_reads`) and the sizes the probe has to try (`probed_sizes`,
+- the sizes a step reads (`step_sizes`, `item_reads`), the sizes the values of steps read (`value_sizes`), the makers
+  of the model parameters behind a size (`makers_of`) and the sizes the probe has to try (`probed_sizes`,
   `placement_driven`, `reach_driven`).
 """
 from .param_reach import (  # noqa: F401 - the reach of model parameters, named here as well
     CONSTRUCTION_KINDS, PROBED_KINDS, STATIC_KINDS, construction_fixes, construction_sizes, joint_reasons,
-    linked_sizes, offset_param, placed_offsets, probed_sizes, profile_sizes, reasons, sketch_params, sketch_sizes,
-    step_sizes, text_sizes)
+    linked_sizes, makers_of, offset_param, placed_offsets, probed_sizes, profile_sizes, reasons, sketch_params,
+    sketch_sizes, step_sizes, text_sizes)
 
 
 def on_part(ref):
@@ -131,9 +132,9 @@ def _maker_sizes(table, item):
     return names
 
 
-def item_reads(table, item):
-    """Fusion names of the free sizes a timeline item reads: the values in its `data.params`, a sketch's
-    dimensions, the parameters a construction plane or axis made."""
+def _value_reads(table, item):
+    """Fusion names of the free sizes behind the values in the item's `data.params`: what each expression reads, and
+    for one the parser cannot read, what the size table lists for its parameter."""
     found = set()
     params = (item.get("data") or {}).get("params")
     for ref in (params.values() if isinstance(params, dict) else ()):
@@ -142,9 +143,27 @@ def item_reads(table, item):
             found |= set(tr.reads)
             if not tr.ok and not tr.reads:
                 found |= table.depends(ref.get("name") or "")
+    return found
+
+
+def item_reads(table, item):
+    """Fusion names of the free sizes a timeline item reads: the values in its `data.params`, a sketch's
+    dimensions, the parameters a construction plane or axis made."""
+    found = _value_reads(table, item)
     if item.get("type") == "Sketch":
         found |= set(sketch_sizes(table, item.get("name") or ""))
     return found | _maker_sizes(table, item)
+
+
+def value_sizes(table, items):
+    """Fusion names of the free sizes that the values of the steps `items` read (`data.params`: a distance, an angle,
+    a radius, a count), in table order. The sketches and the construction geometry the steps use do not count. A
+    suppressed step counts for nothing."""
+    found = set()
+    for item in items:
+        if isinstance(item, dict) and not item.get("suppressed"):
+            found |= _value_reads(table, item)
+    return [name for name in table.ticked if name in found]
 
 
 def _sketch_item(timeline, sketch, before):

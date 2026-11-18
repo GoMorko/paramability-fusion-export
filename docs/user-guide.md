@@ -84,7 +84,12 @@ and the tries can follow, it is a free size and the outline follows it; if the o
 cannot follow, it is "not followed" with the reason; if nothing in the part moves with it, it is "not used", with the
 reason that it was tried and changes nothing in this part. The export says that only when the part itself stayed the
 same at each try of that parameter. When the part changed but no copied step follows the parameter, it is "not
-followed", with the reason that it changes this part in a way the copy does not follow; the copy keeps its value now. A parameter of a joint, or of a move that places a
+followed", with the reason that it changes this part in a way the copy does not follow; the copy keeps its value now.
+A parameter that the part also uses in its own steps (for example a wall thickness that is the length of an extrude,
+and also the shell of the box the lid is drawn around) is a normal size when the sketches drawn around the other
+component stay where they are in its tries: the copy follows the extrude, and the parameter is not marked. This is
+true only when the tries follow every sketch of the part drawn around another component, and the parameter moves no
+construction plane, axis or joint. A parameter of a joint, or of a move that places a
 component, may move the pipe against the part, so it counts for every such sketch too. Up to 8 more ticked parameters that nothing seems to tie
 to the part are tried too, after the others, since you know your design.
 
