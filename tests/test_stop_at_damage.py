@@ -137,6 +137,14 @@ class StopAtDamageTest(unittest.TestCase):
         job, results = run_job(store, rows(("off", 10.0), ("cube", 20.0)), counts_warning=lambda name: False)
         self.assertEqual((len(results), job.not_back, store.reads), (2, None, 1))  # the baseline read only
 
+    def test_the_stop_line_names_a_retried_try_by_its_size_and_value_only(self):
+        from lib.probe.plan import RETRY_NOTE
+        health = {"tries_stopped": {"after": "Slope at 23 deg" + RETRY_NOTE, "items": ["Sweep5"],
+                                    "steps": [{"name": "Sweep5", "before": "ok", "after": "warning"}]}}
+        line = [text for text in health_module.copy_lines(health) if "Sweep5" in text][0]
+        self.assertIn("Slope at 23 deg,", line)
+        self.assertNotIn(RETRY_NOTE.strip(". "), line)
+
 
 def lid_with(curves):
     """A read whose lid sketch holds one profile of `curves`."""

@@ -10,6 +10,7 @@ from typing import Optional, Sequence
 from ..design_edit import timeline_health as steps_module
 from ..geometry.tolerances import RESTORE_TOLERANCE_MM
 from ..package.text import clip
+from ..probe.plan import RETRY_NOTE
 
 MEASURED, NOT_NEEDED, FAILED = "measured", "not needed", "failed"
 MAX_LISTED = 5
@@ -222,7 +223,8 @@ def steps_line(health):
 def _stopped_line(stopped):
     """The line about tries that stopped because a try left steps worse than before even with the values back: which
     try, and which steps in what state."""
-    after = stopped.get("after") or "a value"
+    # The try label of a retried row ends with a note for the progress window, which does not fit inside this line.
+    after = (stopped.get("after") or "").replace(RETRY_NOTE, "") or "a value"
     steps = stopped.get("steps") or []
     if steps and any(step.get("after") != steps_module.ERROR for step in steps):
         shown = ", ".join(_step_text(step) for step in steps[:MAX_LISTED])
