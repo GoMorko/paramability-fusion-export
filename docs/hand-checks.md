@@ -930,3 +930,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
     The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
     marker held. Afterwards the design is as before.
+81. RO1, the reopen of a design that the export could not undo. Build the model of OC1 (two components, `Box` and
+    `Holder`, and the pocket that cuts through the filleted edge at `Width` = 90 mm). Save the design, and make no
+    change after the save.
+    Export: pick the body of `Box`, tick `Width` with a range of 20 to 90 mm, tick "Lighter on memory", then click OK.
+    Expect the result window to say that the add-in could not undo the export, and to show the part "Reopen the
+    design" with the button "Reopen the design from its last save". Click the button. Expect the result window to
+    close, the design to close without a question and open again in about 2 s, with no unsaved changes, the fillet of
+    the holder as it was before the export, and the timeline marker where it was. The `.paramability` file stays
+    saved. Repeat with one change after the save (for example move the timeline marker one step and back): the
+    result window has no reopen button, and it gives the advice to close the design without saving. Repeat with the
+    network off before you click: expect the reopen to work, or a message that the saved version was not found with
+    the design still open as the export left it. The design must never stay closed without a message.

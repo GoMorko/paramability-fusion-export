@@ -17,7 +17,7 @@ from ...lib.package.naming import body_file_title, component_names, design_title
 from ...lib.export_plan.pipeline import ExportRequest, run_parts_pipeline, run_pipeline
 from ...lib.export_plan import rollback, undo_steps
 from ...lib.export_plan.time_limit import DEFAULT_SECONDS
-from ...lib.dialog_model.result_rows import parts_result_view, result_view
+from ...lib.dialog_model.result_rows import parts_result_view, reopen_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.body_mesh import read_body_mesh
@@ -28,7 +28,7 @@ from ...lib.fusion_reader.read_geometry import ReadContext
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.sketch_keep import SketchKeeper
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
-from ...lib.fusion_ui import result_dialog
+from ...lib.fusion_ui import reopen, result_dialog
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui.notice import status_notice
@@ -249,16 +249,31 @@ def position_pending(design):
         return False
 
 
-def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBACK):
+def _offer_reopen(design, saved_start, undo):
+    """True when the result offers to reopen the design from its last save (`rollback.reopen_offered`); the document
+    and `saved_start` are then kept for the button (`fusion_ui.reopen`). Never raises."""
+    try:
+        if rollback.reopen_offered(saved_start, undo):
+            reopen.keep(design.parentDocument, saved_start)
+            return True
+    except Exception as exc:
+        log(f"offering the reopen failed: {exc!r}")
+    reopen.forget()
+    return False
+
+
+def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBACK, offer=False):
     """The result dialog for a recipe. A part saved as a fixed shape (or a dialog that cannot start) gets the message
     box, which starts with the stopping step, and then a line in Fusion's status area. A design that may be changed
     gets its own message box first; when the export is undone (`undo`, `export_plan.rollback`) that box says so.
+    With `offer` the result dialog has the reopen button; a part without a result dialog gets a small window with
+    only that button (`result_rows.reopen_view`).
 
     The file is saved by now, so nothing here may report a failed export."""
     manifest, report, health = result.manifest, result.report, result.health
     try:
         make_view = parts_result_view if parts else result_view
-        view = make_view(file_name, manifest, report, result.table, ticked, undo)
+        view = make_view(file_name, manifest, report, result.table, ticked, undo, offer)
     except Exception as exc:
         log(f"result view failed: {exc!r}")
         view = None
@@ -273,6 +288,8 @@ def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBA
             text, notice = "Saved %s." % file_name, ""
         message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.says)
         status_notice(notice)
+        if offer:
+            result_dialog.show(reopen_view())
     else:
         if health_module.design_changed(health) or undo.says:
             message_box("\n\n".join(rollback.check_lines(health, undo)), error=True)
@@ -280,7 +297,7 @@ def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBA
 
 
 def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None, command=None,
-               outcome=None):
+               outcome=None, saved_start=None):
     """Run one export and return its `rollback.ExportOutcome`. Never raises. Parameters are always put back before
     this returns.
 
@@ -290,13 +307,16 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     `command` is the running Fusion command; with the dialog's "lighter on memory" box on, the tries end its steps
     without undo data (`undo_steps`).
     `outcome` is the record the export fills in (made here when None): the caller reads it to tell Fusion to undo the
-    export when the design is not back (`rollback.ExecuteGate`). The window of this export says so too."""
+    export when the design is not back (`rollback.ExecuteGate`). The window of this export says so too.
+    `saved_start` is the `SavedStart` the dialog read when it opened, before any change: with it, a design that the
+    export could not undo may be offered a reopen from its last save (`rollback.reopen_offered`)."""
     outcome = rollback.ExportOutcome() if outcome is None else outcome
     return export_common.contained(outcome, lambda: _run_export(
-        design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome))
+        design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome, saved_start))
 
 
-def _run_export(design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome):
+def _run_export(design, parameters, model_params, design_unit, form, captures, timeline_start, command, outcome,
+                saved_start):
     app = export_common.app()
     bodies = form["bodies"]
     body = form["body"]
@@ -336,7 +356,10 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
 
     saved = export_common.run_guarded(design, marker, work, outcome=outcome)
     undo = rollback.decide(outcome)
+    offer = _offer_reopen(design, saved_start, undo)
     if saved is not None:
-        _show_result(saved[0], saved[1], form["ticked"], parts=body is None, undo=undo)
+        _show_result(saved[0], saved[1], form["ticked"], parts=body is None, undo=undo, offer=offer)
     elif undo.says:
         export_common.tell_undone(undo)
+        if offer:
+            result_dialog.show(reopen_view())

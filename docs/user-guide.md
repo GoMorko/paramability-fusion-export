@@ -53,6 +53,12 @@ Nothing is typed in Fusion.
      sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
      on. The add-in then asks Fusion to undo the export. With "Lighter on memory" ticked, once Fusion forgot Undo data,
      all tries stop there instead. Use Undo in Fusion when this section says your design is changed.
+   - `# Reopen the design`: shown under `# Check your design` only when the export could not be undone ("Lighter on
+     memory" was ticked) and your design was saved in the cloud with no unsaved changes when you opened the export
+     dialog. The button "Reopen the design from its last save" closes the design without saving and opens that saved
+     version again. Nothing happens until you click it. The view and the Undo history of this design are lost, and a
+     file that the export saved stays saved. When the design had unsaved changes at the start, the button is not shown,
+     because a reopen would lose your own work: close the design yourself when you are sure.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
    box.
@@ -197,7 +203,9 @@ through the export afterwards: save your design before you export (the dialog re
 The Undo data of the last part of the export is dropped only when the check at the end confirms the design is as it
 was: every value back, no sketch moved, no step worse or left turned off, and every check could be made. On any doubt
 it is kept. When a step still looks changed after Undo data was dropped, the result window and the message box do not
-send you to Undo: they say to close the design without saving and open the version you saved. If your Fusion does
+send you to Undo: they say to close the design without saving and open the version you saved. When the design had no
+unsaved changes before the export, the result window has a button that does this for you (see "Reopen from the last
+save" below). If your Fusion does
 not have the call or refuses it, the export runs as with the box off. `report.json` says what happened in
 `timing.undo` (`on`, `applied`, `steps`) and `health.undo_dropped`.
 
@@ -212,6 +220,30 @@ or when the timeline marker did not go back at the end. An export that stopped o
 is not undone. With "Lighter on memory" ticked the add-in never asks Fusion to undo, because Fusion can undo only the
 last part of the export and that could make the design worse. The window then says that the export could not be undone:
 close the design without saving and open the version you saved.
+
+### Reopen from the last save
+
+When the export could not be undone, the result window can reopen the design for you. It shows the button "Reopen the
+design from its last save" only when both of these were true when you opened the export dialog:
+
+- The design was saved in the cloud (it has a version in the Data Panel).
+- The design had no unsaved changes.
+
+Then the saved version is exactly the design as it was before the export, so the reopen loses only the changes of the
+export. When you click the button, the result window closes. Fusion closes the design without saving and opens the
+same saved version again, in about 2 seconds. When someone saved a newer version in the meantime, the add-in opens the
+version that you had open. The view and the Undo history of this design are lost. The add-in never saves the design and
+never deletes anything. Nothing happens until you click.
+
+When something goes wrong, a message says what happened:
+
+- The saved version was not found (for example, no connection): the design is not closed. It stays as the export left
+  it.
+- Fusion did not close the design: it stays open as the export left it, and nothing was saved.
+- The design closed but did not open again: the message gives its name and its project, so you can open it from the
+  Data Panel.
+
+When the export stopped and saved no file, a small window with only this button opens after the message.
 
 The check at the end also measures the part itself: its volume, its size and place, the number of its pieces and the
 other bodies of its component. A clear difference means your design is changed. A very small difference with nothing

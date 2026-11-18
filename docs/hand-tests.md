@@ -1918,6 +1918,13 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   event, between the tries, ends the step without Undo data and starts a new one; the call is marked a preview in the
   API. The API says it fires the execute event for the new step; the add-in starts at most one export per dialog, so
   that event must do nothing. Check that Fusion frees memory after the call, and what Undo does after the export.
+- Reopen from the last save (`fusion_reader/saved_design.py`, `fusion_ui/reopen.py`, hand check RO1): checked against
+  the installed stubs. `Document.dataFile` and `Document.isModified`, read when the export dialog opens, before any
+  read moves the marker; `Data.findFileById(DataFile.id)` gives the latest version, and `DataFile.versions` holds the
+  older ones with their `versionNumber`; `UserInterface.activeCommand` and `terminateActiveCommand` end the result
+  window from the reopen event; `Document.close(False)` closes without a question and without saving;
+  `Documents.open(dataFile, True)` opens the kept version with `isModified` false. Proven on Fusion 2706 outside the
+  add-in: the close and the open of the same version take about 2 s and give the start state back.
 - Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
   `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
   the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.

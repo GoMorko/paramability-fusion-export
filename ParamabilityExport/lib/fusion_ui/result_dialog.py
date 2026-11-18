@@ -4,16 +4,23 @@ out, what to check), each as a `# Title` line followed by its lines. Each size i
 It is a small command of its own. Fusion does not allow starting a command from inside another command's events,
 so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
 the dialog cannot start, the same story goes to a message box.
+
+A view with `reopen` (`dialog_model.result_rows`, `export_plan.rollback.reopen_offered`) gets the button "Reopen the
+design from its last save" under its `reopen` section. A click hands the reopen to `reopen.request`, which runs it
+once the click's event has returned. The dialog never reopens on its own: only that click starts it.
 """
 import adsk.core
 
 from ..dialog_model.dialog_rows import escape, text_rows
-from .handlers import HandlerList, on_command_created, on_custom_event
+from ..export_plan.rollback import REOPEN_BUTTON
+from . import reopen
+from .handlers import HandlerList, on_command_created, on_custom_event, on_input_changed
 from .log import log, message_box
 
 COMMAND_ID = "ParamabilityExportResultCommand"
 COMMAND_NAME = "Saved for Paramability"
 EVENT_ID = "ParamabilityExportResultEvent"
+REOPEN_ID = "pm_result_reopen_button"
 _MAX_ROWS = 12
 
 _handlers = HandlerList()
@@ -32,6 +39,7 @@ def start():
         on_custom_event(app.registerCustomEvent(EVENT_ID), _on_event, _event_handlers, "showing the result")
     except Exception as error:
         log("registering the result event failed: %s" % error)
+    reopen.start()
 
 
 def show(view):
@@ -86,6 +94,7 @@ def remove():
         log("removing the result command failed: %s" % error)
     _handlers.clear()
     _pending.clear()
+    reopen.remove()
 
 
 def _on_created(args):
@@ -95,9 +104,17 @@ def _on_created(args):
         return
     try:
         build(command, view)
+        if view.get("reopen"):
+            on_input_changed(command.inputChanged, lambda a: on_input(a.input.id), _handlers)
     except Exception as error:
         log("building the result dialog failed: %s" % error)
         message_box(view["message"])
+
+
+def on_input(input_id):
+    """A click in the result dialog: the reopen button asks for the reopen (`reopen.request`); nothing else acts."""
+    if input_id == REOPEN_ID:
+        reopen.request(COMMAND_ID)
 
 
 def build(command, view):
@@ -109,6 +126,8 @@ def build(command, view):
         log("close button text failed: %s" % error)
     for section in view["sections"]:
         _add_text(command.commandInputs, "pm_result_" + section["key"], section["title"], section["lines"])
+        if section["key"] == "reopen" and view.get("reopen"):
+            command.commandInputs.addBoolValueInput(REOPEN_ID, REOPEN_BUTTON, False, "", False)
 
 
 def _add_text(inputs, input_id, title, lines):

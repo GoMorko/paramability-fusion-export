@@ -20,6 +20,11 @@ could not be undone and gives the advice for a design that may be changed.
 
 The texts say what the add-in asked Fusion to do, not that the design is back: the windows of the export show before
 Fusion aborts the command. They say whether the file was saved (`ExportOutcome.saved`).
+
+`reopen_offered` says when the result window offers to reopen the design from its last save: only for
+`undo_unavailable`, and only when the design was a saved cloud file with no unsaved changes when the export started
+(`design_edit.saved_start.SavedStart.can_reopen`), so the reopen loses nothing but the changes of the export. After an
+abort Fusion undoes the export itself, so no reopen is offered.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -32,6 +37,13 @@ ABORT_MESSAGE = (
     "everything the export did.")
 SAVED = "The file is saved. Check its sizes before you use it."
 NOT_SAVED = "No file was saved."
+# The result window's offer to reopen the design (`reopen_offered`): the title, the line above the button, the button.
+REOPEN_TITLE = "Reopen the design"
+REOPEN_LINE = (
+    "Your design had no unsaved changes when the export started. To get it back as it was, reopen it from its last "
+    "save: Fusion closes the design without saving and opens that saved version again. The view and the Undo history "
+    "of this design are lost.")
+REOPEN_BUTTON = "Reopen the design from its last save"
 
 
 @dataclass
@@ -97,6 +109,12 @@ def decide(outcome):
     if outcome.undo_dropped or (health or {}).get("undo_dropped"):
         return Rollback(undo_unavailable=True, changed=changed, saved=saved)
     return Rollback(abort=True, changed=changed, saved=saved)
+
+
+def reopen_offered(start, rollback):
+    """True when the result window offers to reopen the design from its last save: the export could not be undone
+    (`undo_unavailable`) and `start` (a `SavedStart`, or None when not read) shows the open design was that save."""
+    return bool(rollback.undo_unavailable and start is not None and start.can_reopen)
 
 
 def abort_message(rollback):
