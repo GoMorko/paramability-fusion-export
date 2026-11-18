@@ -24,9 +24,9 @@ Several bodies follow the same sequence with one size table and one probe scan f
 
 The modules: `port` (`ExportPort`, `ExportRequest`, `PipelineResult`), `run` (`run_pipeline` and the stages of one
 export), `parts` (`run_parts_pipeline`, `PartsPort`: the same for several bodies), `probe_run` (`ProbeRun`, the try
-runner), `far_phase` (the order of the far rows and the share of the nearer rows) and `put_back` (`PutBack`: what the
-export changed, put back on every way out, and the health inputs). This package re-exports what the rest of the add-in
-reads as `pipeline.<name>`.
+runner), `far_phase` (the order of the far rows and the share of the nearer rows), `try_summary` (the timing of the
+tries for the report) and `put_back` (`PutBack`: what the export changed, put back on every way out, and the health
+inputs). This package re-exports what the rest of the add-in reads as `pipeline.<name>`.
 """
 from .parts import PartsPort, PartsResult, run_parts_pipeline
 from .port import ExportPort, ExportRequest, PipelineResult

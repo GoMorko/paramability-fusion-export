@@ -2191,6 +2191,8 @@ alphabetical order by module.
   - `parts.py` holds `run_parts_pipeline` and `PartsPipeline` for several bodies, `PartsPort` (its port, with the body
     index in each call) and `shared_cuts`.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
+  - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and
+    `with_try_seconds`.
   - `far_phase.py` holds the rules of the far phase: which sizes get their far rows last (`late_sizes`) and how many
     nearer rows a size may take (`nearer_share`, see 1.8, "The far rows, one size at a time").
   - `put_back.py` holds `PutBack`: what the export changed, put back in one order on every way out, the end check, the

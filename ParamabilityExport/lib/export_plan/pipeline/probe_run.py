@@ -12,10 +12,8 @@ from ...timing import trail
 from ...timing.timer import Timer, rounded
 from .. import messages
 from ..time_limit import limit_text
+from . import try_summary
 from .far_phase import late_sizes, nearer_share
-
-# The parts of a probe read the Fusion reader times (`fusion_reader.probe_state.read_state`).
-READ_PARTS = ("sketches", "points", "params", "refs", "box", "pieces", "faces")
 
 
 def plan_rows_left(rows):
@@ -26,14 +24,6 @@ def plan_rows_left(rows):
 class MarkerNotHeld(Exception):
     """A probe read was asked for while the timeline marker sat before the position the tries need, or a read moved
     the marker and could not put it back."""
-
-
-def with_try_seconds(summary, roll):
-    """The probe's timing summary with the time the tries took as `TryTimeline` counted it (`probe.timeline`)."""
-    try:
-        return dict(summary, try_seconds=roll.seconds) if summary is not None and roll is not None else summary
-    except Exception:
-        return summary
 
 
 def _marker_lost(read):
@@ -425,32 +415,9 @@ class ProbeRun:
         self.probe.note_time_limit(self.timed_out, unrun)
 
     def summary(self):
-        """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
-        without the reads made inside them: setting the sizes, rebuilding the design, putting them back), the state
-        `read`s with the time of their parts (`read_parts`: sketches, points and lines, params, refs, box, the pieces of
-        the part, faces) and the `put_back` of sketches. Never raises."""
-        try:
-            timer = self.timer
-            return {
-                "tries": len(self.rows),
-                "tries_seconds": rounded(timer.seconds("rows")),
-                "rebuild": rounded(max(0.0, timer.seconds("rows") - timer.seconds("read_in_rows"))),
-                "read": timer.entry("read"),
-                "read_parts": {name: timer.entry("read_" + name) for name in READ_PARTS
-                               if timer.count("read_" + name)},
-                "put_back": timer.entry("put_back"),
-                "time_limit": self._time_limit_record(),
-            }
-        except Exception:
-            return None
-
-    def _time_limit_record(self):
-        """`{ limit_seconds, hit, left_out }` for `timing.probe`: the limit (None for no limit), whether it stopped the
-        tries, and the sizes it left without a try (`Probe.time_left_out`)."""
-        record = {"limit_seconds": self.time_limit, "hit": self.timed_out is not None}
-        if self.timed_out is not None:
-            record["left_out"] = list(self.probe.time_left_out())
-        return record
+        """How the time of the tries went, for `report.json` (`timing.probe`, `try_summary.summary`). Never raises."""
+        return try_summary.summary(self.timer, len(self.rows), self.time_limit, self.timed_out,
+                                   self.probe.time_left_out)
 
     def probe_states(self, since=0):
         """(values, result, read, start, more) of the rows run from number `since` on, for `SizeProbe.add_states`;

@@ -9,7 +9,7 @@ from ...timing import trail
 from .. import health as health_module
 from ..timeline_trim import TryTimeline
 from ..undo_steps import drop_after
-from .probe_run import with_try_seconds
+from .try_summary import with_try_seconds
 
 
 class PutBack:
