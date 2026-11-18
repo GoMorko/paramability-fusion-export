@@ -16,7 +16,8 @@ The add-in adds three buttons to Fusion:
 - **Export for Orca (experimental)** saves one body as an OrcaSlicer 2.5 project. The Design tab of OrcaSlicer
   rebuilds the part, and your user parameters become its variables (`docs/orca-output.md`). A revolve copies with
   holes in its outline and with several outlines. When the angle of a symmetric revolve follows a parameter, the
-  copy makes two turns, one to each side, so the angle follows in OrcaSlicer too.
+  copy makes two turns, one to each side, so the angle follows in OrcaSlicer too. A pipe with a round section
+  copies as a sweep of its circle, solid or hollow, and its diameter and wall follow your parameters.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.

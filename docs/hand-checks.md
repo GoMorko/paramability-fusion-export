@@ -1120,3 +1120,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     follows its variable; the text height and place are listed as kept numbers. In Orca the Design body has the
     volume of the Fusion part within 0.5 percent at `Depth` 1 and 2 (1.5 for the cut, since 2 cuts through the
     plate), and the holes of "A", "B" and "8" stay open. Afterwards each design is as before.
+
+93. PI3, round pipes exported to Orca. Add user parameters `PipeD` = 8 mm and `Wall` = 1 mm. On the XY plane draw a
+    path: a line from (0, 0) to (20, 0) mm, then from its end point a tangent arc of 90 degrees and radius 20 mm that
+    ends pointing along +Y, then from the end of the arc a line 30 mm along +Y. Use Create > Pipe on the path: Section
+    Circle, Section Size `PipeD`, Hollow on, Section Thickness `Wall`, new body. Make a second design: a block from
+    (-10, -10, 0) to (50, 30, 20) mm, and on a plane 10 mm above the XY plane a path of a line from (-15, 0) to
+    (20, 0), a tangent arc of radius 15 mm to (35, 15) and a line to (35, 40); pipe it with Section Circle 6 mm, Cut.
+    Make a third design: a circle of radius 20 mm on the XY plane, piped with Section Circle 4 mm, new body.
+    Export: Export for Orca each body with all parameters ticked. Each pipe is copied with nothing left out: a sketch
+    of a circle, a sketch of the path and a Sweep, and for the hollow pipe also a sketch of the hole and a Sweep Cut.
+    `PipeD` and `Wall` follow variables, and their lines give the limits (`PipeD` from 2 to 39.9 mm, `Wall` up to
+    4 mm). In OrcaSlicer the Design body has the volume of Fusion (Inspect > Properties) within 0.5 percent: 1790.43
+    mm3, 46061.46 mm3 and 1579.14 mm3. The ends of the first pipe are flat and square to the path, as in Fusion. With
+    `PipeD` set to 10 in OrcaSlicer, the first body is 2301.98 mm3. Afterwards each design is as before.

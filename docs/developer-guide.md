@@ -1818,7 +1818,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilLimit` | more than 8 coils, or more than 100 turns of coils and threads in all | A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest. |
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
-| `pipe` | a pipe with a square or triangle section; every pipe in the Orca output | Draw the section on a sketch square to the path at its start, and sweep it along the path. |
+| `pipe` | a pipe with a square or triangle section | Draw the section on a sketch square to the path at its start, and sweep it along the path. |
 | `pipePartOfPath` | a pipe along a part of its path | Let the pipe run along the whole path. |
 | `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
@@ -4880,8 +4880,38 @@ the two legs of a 90 degree corner meet on the plane that halves the corner, and
 the path length. The app builds a sharp corner of a sweep as a mitre too (`BRepBuilderAPI_RightCorner`). The limits
 of a sweep apply: corners between lines in one plane, at most 160 degrees, with room for the mitres.
 
-The Orca output does not copy a pipe. The step kind table gives the pipe the cause `pipe`, so the Orca gap has the
-same tip.
+The Orca output copies a pipe with a round section (`orca_translate/pipes.py`, see "Pipes" in
+`docs/orca-output.md`). The handler reads the same facts of `design_model/steps/pipe.py`: `section_problem`,
+`start_of` and `section_profile`. It does these steps:
+
+1. It makes the data of a sweep with the section as its outline, as the recipe handler does. It gives these data to
+   `sweeps.plan_path`. This function plans the path and does the checks of the Orca sweep: the path is in one plane,
+   Orca can draw each spline exactly, the path has no sharp corner, and the volume and the end face of a new body
+   agree with the section and the path. When a check fails, the reason of the sweep stays, but the reason names the
+   step a pipe.
+2. It writes each path as an Orca Sweep. This is also true for a line, one arc and a full circle. (The sweep handler
+   writes these paths as an extrude or a revolve.) The section is the simple circle of Orca, so its `radius` can
+   follow the size of the pipe. The sketch of the path starts at the start of the path. A full circle is two half
+   arcs from that start.
+3. Orca makes a face from one closed loop only. Thus a hollow pipe is two sweeps: the outer circle, and the circle
+   of the hole with the mode Cut. When the part already has material, the two sweeps are in a tool body
+   (`Context.push`). Then a Boolean adds the tool to the part, cuts it away or keeps what both share
+   (`tools.boolean`), so the hole cuts nothing else of the part.
+4. A pipe that cuts or intersects must meet the part as the copy builds it (`solid.meets`). For the checks of later
+   steps, the shape of the pipe is the circle carried along the path, less the hole of a hollow pipe.
+5. The `radius` of the circle is half the section size. The radius of the hole is that value less the wall.
+   `limits.guard` finds how far each variable can change: the hole must stay open, and the pipe must stay clear of
+   the centre of the tightest bend and of the other parts of the path. The limit is on the line of the parameter.
+6. The path keeps its numbers. `sweeps.mark_path` marks the sizes that move the path. These sizes include the sizes
+   that move the start of the path, where the section is.
+
+The Orca sweep (`SketchEngine::make_sweep`, OCCT `BRepOffsetAPI_MakePipe` of the face of the circle) closes each end
+with the section. The section starts square to the path, so each end is square to the path. Fusion ends a pipe on an
+open path in the same way.
+
+The Orca output leaves out the same sections as the recipe output: a square or triangle section (cause `pipe`) and
+a pipe along a part of its path (cause `pipePartOfPath`). A closed path that starts on a sharp corner has a sharp
+corner, so the checks of the Orca sweep leave it out (cause `sharpCorner`).
 
 ### 3.9 How a loft is translated
 

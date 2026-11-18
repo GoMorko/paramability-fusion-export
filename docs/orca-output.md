@@ -58,8 +58,8 @@ The modules of `lib/orca_translate/`:
 - `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
   parameters follow").
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
-  `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`,
-  `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
+  `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
+  pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer), `threads.py` and `emboss.py` (an emboss on a flat face, written by the extrude handler). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
@@ -131,10 +131,11 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Sweep along a straight path | Extrude of the outline, as long as the path | the outline's sizes |
 | Sweep along one arc or a full circle | Revolve of the outline about the arc's axis | no |
 | Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed (a closed path without splines), one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
+| Pipe with a round section, solid or hollow, along the whole path: a line, an arc, a full circle, or lines, arcs and splines in one plane that meet smoothly (see "Pipes") | a circle sketch square to the path at its start, a sketch of the path from there, Sweep; a hollow pipe also the circle of its hole and a Sweep Cut, on a part that holds material as a tool body and a Boolean | `radius`: half the size; the hole's radius less the wall |
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
@@ -165,9 +166,8 @@ assistant adds, the size limits of a thread, exporting parts together) and the c
 tip. The result window lists up to five steps in full lines ("name: reason Tip: hint") and points to the report for
 the rest.
 
-A pipe is left out of the Orca copy ("Steps of type pipe are not copied.", cause `pipe` from the step kind table),
-with the tip to draw the section on a sketch and sweep it. The Paramability output copies a pipe with a round
-section as a sweep (`docs/limits.md`).
+A pipe with a round section is copied as a sweep of its circle (see "Pipes"). A pipe with a square or triangle
+section is left out (cause `pipe`), with the tip to draw the section on a sketch and sweep it.
 
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
 the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that
@@ -679,6 +679,40 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   out of a block that holds it (27339.8 against 27339.7529) and joined to a block at its start (1660.2 against
   1660.2471), and with its diameter set by `wire` (660.2, then 1485.6 with `wire` 6 against 1485.56); the first
   line's length `run`, a dimension of the path sketch, is marked and keeps its number.
+
+### Pipes
+
+`orca_translate/pipes.py`, checked against the source of Orca 2.5.1 (`CadDocument::apply_feature` Sweep,
+`build_sketch_wire`, `SketchEngine::make_sweep` and `entities_to_wires`).
+
+- Fusion builds a pipe as a sweep of a section that it draws itself: a circle at the start of the path, square to the
+  path and centred on it, less a circle of the wall for a hollow pipe (`design_model.steps.pipe`, hand check PI1).
+  The copy plans and checks the path as for a sweep with that outline (`sweeps.plan_path`). Thus the path rules of
+  "Sweeps, lofts and splines" apply: one plane, lines, arcs and splines that meet smoothly, splines that Orca draws
+  exactly, no sharp corner, and a new body's measured volume and end face must agree with the section and the path.
+- Every path is an Orca Sweep, also a line, one arc and a full circle (a sweep writes those as an Extrude or a
+  Revolve). Thus the section is Orca's simple circle, and its `radius` can follow the pipe's size. The copy writes a
+  sketch of the circle on the plane square to the path at its start, a sketch of the path from the start in order (a
+  full circle as two half arcs from the start), and a Sweep.
+- Orca makes a face of the circle and runs it along the path wire (OCCT `BRepOffsetAPI_MakePipe`). The ends of the
+  sweep are that face at the start and the face carried to the end. The circle starts square to the path, so both
+  ends are square to the path, as Fusion ends a pipe on an open path.
+- Orca's sweep takes one closed loop (`build_sketch_wire` refuses two circles in one sketch). Thus a hollow pipe is
+  two sweeps: the outer circle, then the circle of the hole cut out of it (mode Cut). When the part already holds
+  material, the two sweeps are a tool body and a Boolean with the step's operation, so that the hole cuts nothing
+  else of the part.
+- What follows variables: the circle's `radius` is half the pipe's size (`0.5 * pipe_d`), and the radius of the hole
+  is that less the wall (`0.5 * pipe_d - wall`). The parameter's line tells how far each may go: the hole must stay
+  open, and the pipe must stay clear of the centre of the tightest bend and of the other parts of the path ("keep
+  pipe_d between 2 and 39.9 mm" for a wall of 1 on a bend of radius 20). The path keeps its numbers. The sizes that
+  move the path are marked, and these include the sizes that move its start, where the section sits.
+- A pipe that cuts or intersects must meet the part as the copy builds it (cause `missesPart`). The shape for later
+  cuts is the tube carried along the path, with the hole of a hollow pipe.
+- Left out: a square or triangle section (cause `pipe`: the capture does not say which way the section turns about
+  the path), a pipe along part of its path (`pipePartOfPath`), a section that cannot be read, and each path that a
+  sweep leaves out, with the words of a sweep said of a pipe. A closed path that starts on a sharp corner has a sharp
+  corner (`sharpCorner`).
+- The captures of `tests/orca_pipes.py` (see "Live check without Fusion") are not yet built in Orca.
 
 ### Which parameters follow
 
@@ -1215,7 +1249,8 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
 - A tapered extrude is checked at the current sizes. When a variable change shrinks a side of its outline to nothing,
   Orca builds a straight extrude instead, without an error. The parameter's line says how far the variable may go.
 - A sweep path keeps its numbers. A swept outline that a variable grows past the tightest bend of its path runs
-  into itself; the parameter's line says how far it may grow, also when that is far from the current size.
+  into itself; the parameter's line says how far it may grow, also when that is far from the current size. The same
+  is true for a pipe, and its line also says how thick the wall of a hollow pipe may get before it closes the hole.
 - The shape the copy keeps to check cuts (`solid.py`) does not know threads, and knows rounds and chamfers only as
   material a later cut may not count on (on the simple parts rounds are copied on).
 - A revolve angle that follows a variable is checked at the current sizes and walked down for the limit on the
@@ -1262,6 +1297,18 @@ sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi 
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.
+
+Pipes: the captures of `tests/orca_pipes.py`. Save one with `python3 -m tests.orca_pipes <name> <file>` and give
+the file to `write`. The volumes are exact (a circle of radius r whose centre runs along a path of length L makes
+pi r^2 L), and the boxes are in the capture's coordinates:
+`solid_pipe_on_plate` (a plate from (-5, -10, 0) to (45, 10, 6) with a solid pipe of diameter `pipe_d` 6 joined
+along a 40 mm line on its top face, half of the pipe above the plate: 6000 + 180 pi = 6565.49 mm3, box to z 9; with
+`--set pipe_d=8` 7005.31), `hollow_pipe_bend` (a new body: diameter 8, `wall` 1, along a 20 mm line, a tangent arc
+of radius 20 through 90 degrees and a 30 mm line: 350 pi + 70 pi^2 = 1790.43 mm3, box from (0, -4, -4) to (44, 50,
+4); with `--set wall=2` 3069.31, with `--set pipe_d=10` 2301.98) and `pipe_cut_into_block` (a block from (-10, -10,
+0) to (50, 30, 20), the box, with a pipe of diameter 6 cut along a line, a tangent arc of radius 15 and a line, in
+through one face and out through another: 48000 - 405 pi - 67.5 pi^2 = 46061.46 mm3; with `--set pipe_d=8`
+44553.70). Not yet built in Orca.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and
