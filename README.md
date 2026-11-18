@@ -88,6 +88,9 @@ One fillet or chamfer can hold several sets of edges, each picked in its own way
 lie apart from each other, the copy makes one step for each way of picking, one after the other. Then each set keeps
 the pick that Fusion used. When one set cannot be copied, only that set is left out, and the copy keeps the others.
 The sizes used before such a step are still marked, since the add-in cannot see whether they move the sets nearer.
+A set that Fusion cannot list (a face picked with Tangent Chain on, where no other face meets it smoothly) leaves its
+whole step out, with a tip. A step that cannot be read from Fusion is left out when the part changed around it, so
+the rest of the part is still copied.
 Paramability then shows the original shape and a list of the missing steps.
 
 ## Install

@@ -58,6 +58,8 @@ def _quantity(ctx, item):
 
 def _set_check(one, kind):
     """A Skip for a set whose edges cannot be copied, else None."""
+    if one.unread:
+        return Skip(shared.ROUND_SET_UNREAD if kind is ROUND else shared.CHAMFER_SET_UNREAD, gap_hints.SET_UNREAD)
     if one.follows_step:
         return Skip("A %s that follows another step's edges is not copied to Orca." % kind.noun)
     if not one.edges or one.unlocated:

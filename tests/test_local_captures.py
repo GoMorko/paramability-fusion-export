@@ -109,7 +109,11 @@ class OwnerCaptureTest(unittest.TestCase):
             assembly = [i["index"] for i in capture["items"] if i["type"] in ("Occurrence", "ConstructionPlane")
                         and i["index"] in walked]
             self.assertTrue(assembly and all(walked[i] == "skipped" for i in assembly))
-            self.assertEqual(capture["items"][result.refusal["index"]]["component"], own)
+            # The walk passed the assembly items: it stops at a step of the part, or writes the recipe.
+            if result.refusal is None:
+                self.assertIsNotNone(result.recipe)
+            else:
+                self.assertEqual(capture["items"][result.refusal["index"]]["component"], own)
         self.each("assembly_walk", check, key="file")
 
     def test_steps_before_the_refusal_are_copied(self):
@@ -118,7 +122,11 @@ class OwnerCaptureTest(unittest.TestCase):
             walked = {v["name"]: v["verdict"] for v in result.items if v["verdict"] != "skipped"}
             for name in case["translated"]:
                 self.assertEqual(walked[name], "translated")
-            self.assertEqual(result.refusal["name"], case["refusal"])
+            # `refusal` names the first step that is not copied: the copy stops there, or leaves it out.
+            not_copied = {v["name"] for v in result.items if v["verdict"] == "leftOut"}
+            if result.refusal is not None:
+                not_copied.add(result.refusal["name"])
+            self.assertIn(case["refusal"], not_copied)
         self.each("steps_copied", check)
 
     def test_an_offset_becomes_an_offset_faces_step(self):

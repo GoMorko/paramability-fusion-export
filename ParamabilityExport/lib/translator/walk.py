@@ -14,7 +14,8 @@ out item would have recorded (doubts, notes) is dropped with it. A handler can a
 the rest out (`StepResult.left_out`, one set of edges of a round): the steps are written and the rest is the item's
 gap, placed after them; its verdict has the `gap` id, and the gap's reason shows once, with the gap. Anything that leaves the body unknown
 still stops the copy. A step Fusion shows in error goes by what the reader measured around it: passed by with a note when the
-body stayed the same, a gap when it changed, a stop when it was not measured.
+body stayed the same, a gap when it changed, a stop when it was not measured. A step whose data could not be read is
+a gap when the reader saw it change the body, else a stop.
 """
 import traceback
 
@@ -238,7 +239,14 @@ def walk_items(ctx, result):
             result.notes.append(note)
             return None
         if step.has(design.UNREAD):
-            return refuse(item, step.problem(design.UNREAD).words)
+            # The reader measured the body around the step: a change it saw is a gap like a type with no handler.
+            # A step that may have done anything stops.
+            if role.changed is not True:
+                return refuse(item, step.problem(design.UNREAD).words)
+            if not leave_out(item, step.problem(design.UNREAD).words, _gap_ids(ctx, item), cause=gap_hints.REFUSED):
+                return False
+            made_in_component = True
+            return None
         if handler is None:
             if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False

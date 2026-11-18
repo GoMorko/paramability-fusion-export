@@ -11,6 +11,7 @@ from tests.test_translate_measured_rounds import changing_set, even, sampled
 from tests.test_translate_sized import on_fixture, param, run
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, verdict_of
 
+from lib.capture_model import gap_hints
 from lib.design_model.steps import finish as sets_of
 from lib.dialog_model import left_out_preview
 from lib.export_plan import reach_pass
@@ -195,6 +196,24 @@ class LeftOutTest(unittest.TestCase):
                 self.assertEqual(repeat["verdict"], "leftOut")
                 self.assertEqual([gap["id"] for gap in result.gaps if gap["id"] != repeat["gap"]], ["gap_3"])
                 self.assertEqual(next(g for g in result.gaps if g["id"] == repeat["gap"])["dependsOn"], ["gap_3"])
+
+
+def unread_set(data):
+    """Set 1 could not be read (Fusion gave no inputs for it): its edges are not known."""
+    data["sets"][0]["edges"] = [side("e0", 0, 0), side("e1", 40, 0)]
+    data["sets"][1].update(input_kinds=[], edges=[], tangent_chain=True, read_error="xlFillet")
+
+
+class UnreadSetTest(unittest.TestCase):
+    def test_a_set_whose_edges_are_not_known_leaves_its_step_out_and_the_rest_is_copied(self):
+        for name, run_with, kind in (("round", translated, "round"), ("chamfer", chamfered, "bevel")):
+            with self.subTest(name):
+                result, _ = run_with(unread_set)
+                self.assertIsNotNone(result.recipe)
+                self.assertEqual(steps_of(result.recipe, kind), [])
+                self.assertEqual(verdict_of(result, 2)["verdict"], "leftOut")
+                (gap,) = result.gaps
+                self.assertEqual(gap["hint"], gap_hints.HINTS[gap_hints.SET_UNREAD])
 
 
 def chamfer_set(index, *edges, kind="equal"):

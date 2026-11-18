@@ -18,6 +18,7 @@ reason to give and how to name the edges.
 - `Part`, `merge`: the edges of a step grouped into parts of one size (and one side, one second measure), so a step
   with sets of different sizes is a list of steps of one size each.
 - `reach`: how far from its edge a set takes material along a face.
+- `FinishSet.unread`: a set whose inputs Fusion did not give, so its edges are not known.
 - `FinishSet.pick`, `box_gap`, `reach_terms`, `only_sets`: how Fusion picked the edges of a set (by faces, along
   tangent chains, or edge by edge), how near the edges of two sets can come and how far a set reaches (so a
   destination can tell whether Fusion gives the same part when it applies them one after the other as when it
@@ -103,6 +104,11 @@ class FinishSet:
     def follows_step(self):
         """True when Fusion was given the edges of another step."""
         return "feature" in (self.entry.get("input_kinds") or [])
+
+    @property
+    def unread(self):
+        """True when Fusion did not give the inputs of the set (`read_error`): its edges are not known."""
+        return bool(self.entry.get("read_error"))
 
     @property
     def unlocated(self):

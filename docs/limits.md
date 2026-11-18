@@ -31,6 +31,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the
   add-in could not confirm the design; the export is undone then too. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
   recomputes; the add-in then compares the curves themselves, so this is not taken for another outline.
+- A step that the add-in cannot read from Fusion is left out of the copy when the part changed around it. When the
+  part could not be measured around it, the part is saved as a fixed shape.
 - A step that Fusion shows in red (an error) is not copied. When the part is the same before and after it, the copy
   leaves it out with a note and goes on. When the part changed (Fusion keeps an older result of the step), it is left
   out like a step that cannot be copied. When the part could not be measured around it, the part is saved as a fixed
@@ -142,6 +144,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   a size moves the edges of two sets near each other, so the sizes read before such a step are marked "may give
   unexpected results", as for a step whose edges are picked one by one. Exports made with add-in 0.14.3 or older do
   not hold what this needs, so their sets stay in one step.
+- A set of a fillet or chamfer that picks a face with Tangent Chain on, where no other face meets that face smoothly,
+  cannot be read: Fusion does not give its edges, and Fusion does not round or cut anything for it. The whole step is
+  left out, with the tip to pick the edges of that set, to turn Tangent Chain off for its face, or to remove the set.
+  The steps before and after it are copied. A face that other faces meet smoothly (the side of a box with rounded
+  corners) reads and copies as usual.
 - A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet or
   apart from the other sets of its fillet (see above), with no radii set between the two ends, and only when the
   radius Fusion made changes evenly from one end to the other (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a

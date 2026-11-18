@@ -119,6 +119,7 @@ can be.
 | Fillet: two radii, curvature continuity | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Fillet: setback corners | Partly | Yes, needs an app change | Partly | Needs Orca | Copied with rolling ball corners, with a note. |
 | Fillet or chamfer with several sets picked in different ways (edges, faces, chains) | Copied | - | Partly | Needs Orca | Paramability: sets that lie apart become one step for each way of picking, each with the pick Fusion used, and a set that cannot be copied is left out alone; the sizes read before the step are marked, since the tries do not show whether a size brings the sets near each other. Sets that meet or come near (also through a sharp angle or a size range) stay one step, with their edges picked one by one. Orca: as in the rows above. |
+| Fillet or chamfer set picked by a face with Tangent Chain on, no smooth neighbour faces | Left out | - | Left out | - | Fusion does not give the edges of such a set and builds nothing for it. The whole step is left out with a tip; the rest of the part is copied. |
 | Rule Fillet, Full Round Fillet | Left out | Yes, add-in only | Left out | Needs Orca | The add-in does not read these step types yet. |
 | Chamfer: equal distance | Copied | - | Partly | Needs Orca | Orca: the same edges as for a fillet. |
 | Chamfer: two distances, distance and angle | Copied | - | Left out | Needs Orca | Orca makes only even chamfers. Paramability: two distances need sides that the add-in could measure. |

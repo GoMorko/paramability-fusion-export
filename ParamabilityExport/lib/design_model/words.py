@@ -262,6 +262,9 @@ ROUND_NO_EDGES = "This round has no edges to copy."
 ROUND_NO_RADIUS = "This round has no readable radius."
 CHAMFER_NO_EDGES = "This chamfer has no edges to copy."
 CHAMFER_NO_SIZE = "This chamfer has no readable size."
+# A set of a round or chamfer whose picked edges or faces Fusion did not give (`FinishSet.unread`).
+ROUND_SET_UNREAD = "Fusion did not give the edges of a set of this round, so the copy cannot tell what it rounds."
+CHAMFER_SET_UNREAD = "Fusion did not give the edges of a set of this chamfer, so the copy cannot tell what it cuts."
 
 # Patterns and mirrors.
 PATTERN_UNEVEN_ROUND = "The copies of this pattern are not spread evenly round the axis."
