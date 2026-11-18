@@ -397,7 +397,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   holding such a curve cannot be followed: it stays loose with the reason, or is left out of the sizes, because the
   points of the curve are not a formula of the sizes. An outline of more than 1000 points is not copied.
 - Sketch text (`Text` in a sketch) is read as outlines and copied by Extrude and Emboss like any other outline: each
-  letter shape is one outline step, a hole in a letter (the inside of an "o") is kept. A text with more than 400
+  letter shape is one outline step, a hole in a letter (the inside of an "o") is kept. Text on a sketch on a face of
+  the part (the top of a plate, a side face) is copied in both exports. Earlier versions left such text out ("The
+  place of this text on its sketch could not be told with certainty"), and left out text whose letters have straight
+  edges because the letter area came out too small: export again. A text with more than 400
   outlines, 1000 points in one outline or 256 holes in one letter is not copied ("This text has too many outline
   points to copy"). A size that moves the sketch of a text, or sets the height of the text, cannot be followed: it stays loose
   or is left out of the sizes, with the reason. An emboss of text must grow or shrink the part by the text area

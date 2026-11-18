@@ -1106,12 +1106,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     copied with nothing left out: the first as a revolve of the rectangle and a revolve cut of the circle (8240.43
     mm3), the second as two revolves joined to the rod (19352.21 mm3). Afterwards each design is as before.
 
-92. OT1, a name tag with text, for Export for Orca. Add a user parameter `Depth` = 1 mm. Model a 60 x 20 x 2 mm
-    plate with its corner at the origin. On its top face make a sketch with the text "AB8" (any plain font, 8 mm
-    high), placed by its corner at (5, 5). Extrude the text by `Depth` up from the top as a join. Make a second design
-    the same with the text cut `Depth` down, and a third with an Emboss of the text on the top face, depth `Depth`.
-    Export: Export for Orca with the plate and `Depth` ticked. Each step is copied as 2 Orca features (a sketch named
-    "... text" and an Extrude). `Depth` follows its variable; the text height and place are listed as kept numbers. In
-    Orca the Design body has the volume of the Fusion part within 0.1 percent, and the holes of "A", "B" and "8" stay
-    open. Set `Depth` to 2: the letters grow (or sink) by 1 mm more, as in Fusion at that value. Afterwards each
-    design is as before.
+92. OT1, a name tag with text, for both exports. Add a user parameter `Depth` = 1 mm. Model a 60 x 20 x 2 mm
+    plate with its corner at the origin. On its top face make a sketch with the text "AB8" (Arial, 8 mm high), placed
+    by its corner at (5, 5). Extrude the text by `Depth` up from the top as a join. Make a second design the same with
+    the text cut `Depth` down, and a third with an Emboss of the text on the top face, depth `Depth`. Make a fourth
+    design with a 60 x 20 x 10 mm plate and the text on its front face (the face at y = 0), extruded out by `Depth` as
+    a join. In the API, the extrude takes the SketchText itself in an ObjectCollection (the sketch has no profile of
+    the text, and the feature's `profile` reads back as the SketchText), and `embossFeatures.createInput` takes
+    Python lists of the text and of the face. Fusion gives the text of "AB8" as 20 lines and 59 NURBS curves in
+    sketch space, and the text adds 64.898 mm3 per 1 mm of depth.
+    Export: Export for Orca, then Export for Paramability, with the plate and `Depth` ticked. In both, the text step
+    is copied with nothing left out; in Orca it is 2 features (a sketch named "... text" and an Extrude). `Depth`
+    follows its variable; the text height and place are listed as kept numbers. In Orca the Design body has the
+    volume of the Fusion part within 0.5 percent at `Depth` 1 and 2 (1.5 for the cut, since 2 cuts through the
+    plate), and the holes of "A", "B" and "8" stay open. Afterwards each design is as before.

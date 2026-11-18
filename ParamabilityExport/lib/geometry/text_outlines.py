@@ -30,15 +30,16 @@ def _ring(loop):
     """The points of a chained loop, each curve run the way the chain goes."""
     if len(loop) == 1:
         return list(polyline(loop[0]))[:-1] or list(polyline(loop[0]))
-    points = []
+    points, tip = [], None
     for n, curve in enumerate(loop):
         line = list(polyline(curve))
         if n == 0:
             if not _touches(line[-1], loop[1]):
                 line.reverse()
-        elif _dist(line[0], points[-1]) > _dist(line[-1], points[-1]):
+        elif _dist(line[0], tip) > _dist(line[-1], tip):
             line.reverse()
         points.extend(line[:-1])
+        tip = line[-1]
     return points
 
 

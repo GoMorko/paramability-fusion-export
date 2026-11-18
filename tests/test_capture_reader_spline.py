@@ -204,6 +204,20 @@ class TextOutlinesTest(unittest.TestCase):
         self.assertEqual((got_sketch["space"], got_model["space"]), ("sketch", "model"))
         self.assertEqual(got_model["loops"][0]["curves"][0]["start"], [2.0, 1.0])
 
+    def test_a_text_on_a_lifted_sketch_is_in_sketch_space(self):
+        # A sketch on the top face of a plate: its frame is only lifted, so both readings fit the box, but as model
+        # points the flat points would lie under the sketch plane.
+        lifted = self.sketch(transform=matrix(origin=(0, 0, 2)),
+                             modelToSketchSpace=lambda p: Obj(x=p.x, y=p.y, z=p.z - 2 * CM))
+        got = read_sketch.read_text_outlines(self.text(self.square(1, 1, 4), lifted, box=(0, 0, 10, 10)))[0][0]
+        self.assertEqual((got["space"], got["loops"][0]["curves"][0]["start"]), ("sketch", [1.0, 1.0]))
+
+    def test_a_text_that_both_readings_put_at_one_place_is_in_sketch_space(self):
+        # A frame that is not the identity but maps the plane z = 0 onto itself point for point.
+        flipped = self.sketch(transform=matrix(z=(0, 0, -1)), modelToSketchSpace=lambda p: Obj(x=p.x, y=p.y, z=-p.z))
+        got = read_sketch.read_text_outlines(self.text(self.square(1, 1, 4), flipped, box=(0, 0, 10, 10)))[0][0]
+        self.assertEqual(got["space"], "sketch")
+
     def test_a_box_that_fits_both_readings_is_ambiguous(self):
         turned = matrix(x=(0, 1, 0), y=(-1, 0, 0))
         sketch = self.sketch(transform=turned, modelToSketchSpace=lambda p: Obj(x=p.y, y=-p.x, z=p.z))
