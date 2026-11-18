@@ -28,7 +28,7 @@ class Probe(Protocol):
     reads_as_start(read): True when a read with every value back shows the part as at the start of the tries (the
       followed sketches, the references, the box and the body).
     note_unfinished(sizes): after the tries stopped early or ran out of time, keep the sides of the sizes whose search
-      for the last value that builds was still to come (`Motion.spans` `unfinished`).
+      for the last value that builds was still to come, or whose far try never ran (`Motion.spans` `unfinished`).
     time_left_out(): the sizes the time limit left without a try that built on its own.
     discovery_rows(candidates, room), set_discovery_base(read, put_back), discover(entries), also_changes: the
       discovery rows and the unticked parameters they showed changing the part.

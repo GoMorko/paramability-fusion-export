@@ -274,21 +274,26 @@ class SizeProbe:
             else:
                 self._timed_out.extend(p for p in row.get("varied") or [] if p not in self._timed_out)
 
-    def note_unfinished(self, sizes, states=None, moving=None):
+    def note_unfinished(self, sizes, states=None, moving=None, nearer=None):
         """After the tries stopped early (`note_stop`), ended for some sizes (`note_ended`, those sizes only) or ran
         out of time (`note_time_limit`): keep the sides of the sizes where the nearer tries were still to come
         (`plan.nearer_left`), so the values between the farthest value that built and the nearest one that did not
-        were never tried. `finish` writes them into `Motion.spans`
-        (`unfinished`). When the nearer tries had used their rows (`plan.MAX_NEARER_ROWS`), the search had ended
-        anyway and nothing is kept. `states` and `moving` are the marked states and the moving sizes to judge by, this
-        probe's own by default (`ProbeGroup` passes those of all parts)."""
+        were never tried, and the sides whose far try never ran (`plan.far_left`), so no value past the farthest one
+        that built was tried. `finish` writes them into `Motion.spans` (`unfinished`). When the nearer tries had used
+        their rows (`plan.MAX_NEARER_ROWS`), their search had ended anyway; `nearer` says whether it had not, from
+        this probe's rows when None. `states` and `moving` are the marked states and the moving sizes to judge by,
+        this probe's own by default (`ProbeGroup` passes those of all parts)."""
         why = ENDED_STOPPED if self.stopped else ENDED_TIME if self._hit_limit() else None
-        if (why is None and not self._ended) or (
-                states is None and self.schedule.nearer_room(plan.MAX_NEARER_ROWS) <= 0):
+        if why is None and not self._ended:
             return
+        if nearer is None:
+            nearer = self.schedule.nearer_room(plan.MAX_NEARER_ROWS) > 0
         states = self._marked() if states is None else states
         moving = self.moving_sizes() if moving is None else moving
-        for param, sides in plan.nearer_left(sizes, states, moving).items():
+        left = plan.far_left(sizes, states)
+        for param, sides in (plan.nearer_left(sizes, states, moving) if nearer else {}).items():
+            left[param] = left.get(param, []) + sides
+        for param, sides in left.items():
             cause = ENDED_STOPPED if param in self._ended else why
             if cause is not None:
                 self._unfinished.setdefault(param, {}).update((side, cause) for side in sides)

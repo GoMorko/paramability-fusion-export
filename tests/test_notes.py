@@ -38,6 +38,16 @@ class NotesTest(unittest.TestCase):
         self.assertEqual(notes.loose_reason("w", notes.Past("past 2", "it breaks.")),
                          "w may give unexpected results past 2: it breaks.")
 
+    def test_a_loose_note_keeps_the_values_the_size_was_followed_between_when_its_reason_is_long(self):
+        span = {"low": 7.5, "high": 12.5, "failed": []}
+        long_why = notes.Past("past 2.05", "the edges that " + "Chamfer5 picks " * 12 + "may move with it")
+        for name, why in (("Depth", long_why), ("N" * 60, long_why), ("Depth", "Chamfer5 picks the edges")):
+            with self.subTest(name=name[:8], why=why[:20]):
+                text = notes.loose_reason(name, notes.with_span(why, span, 5.0, 20.0))
+                self.assertLessEqual(len(text), notes.MAX_NOTE)
+                self.assertIn(notes.span_words(span), text)
+                self.assertIn(name, text)
+
     def test_a_fusion_warning_note_names_the_step_and_keeps_the_message(self):
         text = notes.health_warning_note("Fillet1 (round)", "Some edges were skipped.")
         self.assertIn("Fusion shows a warning on Fillet1 (round): Some edges were skipped. The copy", text)

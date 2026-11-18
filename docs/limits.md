@@ -40,6 +40,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   size whose try stopped the tries, a size whose tries ended because a try changed another component, or the size
   tried when the time ran out. Its reason says so, with a tip: untick
   the size that stopped the tries, or raise the time limit, and export again.
+- When the tries end early before the range ends of a size were tried, the range of that size stops at the values that
+  built in its first tries (often a quarter below and above its value). Its reason says that no value past them was
+  tried, with the same tip. An end you typed in the dialog is kept; that size then says "it was followed between A and B".
 - A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
   size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.
 - The rounds and chamfers on the copies of a rectangular pattern follow its count: the copy writes them for every

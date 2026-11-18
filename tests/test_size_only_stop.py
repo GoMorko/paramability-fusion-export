@@ -3,6 +3,7 @@ behind it, and the other sizes are tried in full; the export is undone at its en
 still stops every try."""
 import copy
 import dataclasses
+import json
 import re
 import tempfile
 import unittest
@@ -231,6 +232,15 @@ class SizeOnlyStopTest(unittest.TestCase):
         self.assertEqual(set(ended["sizes"]), {"width_mm", "height_mm"})
         # No far row, far pair row or check row moves them after the end.
         self.assertEqual(after_end(result, ["width_mm", "height_mm"])[1], [])
+
+    def test_only_an_ended_size_whose_far_tries_never_ran_stops_at_the_values_that_built(self):
+        capture = holder_capture(drives=("height_mm",))
+        result, _ = export(holder_port(capture, wide), capture)
+        sizes = json.loads(result.files["recipe.json"])["sizes"]
+        self.assertEqual({name: (size["min"], size["max"]) for name, size in sizes.items()},
+                         {"width_mm": (20.0, 80.0), "depth_mm": (15.0, 60.0), "height_mm": (15.0, 25.0),
+                          "pipe_d_mm": (6.0, 24.0)})
+        self.assertEqual([cut["name"] for cut in result.report["sizes"]["cut"]], ["height_mm"])
 
     def test_a_row_planned_before_the_end_that_moves_an_ended_size_does_not_run(self):
         for parts in (1, 2):

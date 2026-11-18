@@ -298,9 +298,9 @@ class UnfinishedRangeTest(unittest.TestCase):
     """As `RangeCutTest`, with the pipe tried first (a favourite): its far end 24 fails. When the tries end before the
     values between 15 and 24 are tried, the range stays at 15, and the reason says those values were not tried. The far
     rows run one size at a time, each size followed by its nearer rows, so a later size that ends the tries comes after
-    the pipe's halving."""
+    the pipe's halving. A size whose far tries never ran stops at the values that built on their own."""
 
-    def export(self, breaks=None, limit=None, favourite="pipe_d_mm"):
+    def export(self, breaks=None, limit=None, favourite="pipe_d_mm", ranges=None):
         port = pipe_port(bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) > 20, bad_item="Extrude2", breaks=breaks)
         clock = [0.0]  # each recompute takes 10 s on the export's clock
         port.store.on_recompute = lambda store: clock.__setitem__(0, clock[0] + 10.0)
@@ -308,12 +308,16 @@ class UnfinishedRangeTest(unittest.TestCase):
         params = [dict(p, is_favorite=p["name"] == favourite) for p in USER]
         request = ExportRequest(title="Box", writer="test", up_axis="z", parameters=params, model_params=MODEL,
                                 design_unit="mm", ticked=table_for_body(USER, "mm", MODEL, CAPTURE).ticked,
-                                ranges={}, probe_time_limit=limit)
+                                ranges=ranges or {}, probe_time_limit=limit)
         with tempfile.TemporaryDirectory() as tmp:
             result = run_pipeline(port, request, tmp)
         self.assertEqual(port.store.exprs, START)
-        [cut] = result.report["sizes"]["cut"]
-        return result, cut["reason"], result.report["probe"]["motion"]["spans"]["pipe_d_mm"]
+        self.cuts = {cut["name"]: cut["reason"] for cut in result.report["sizes"]["cut"]}
+        return result, self.cuts["pipe_d_mm"], result.report["probe"]["motion"]["spans"]["pipe_d_mm"]
+
+    def ranges(self, result):
+        recipe = json.loads(result.files["recipe.json"])
+        return {name: (size["min"], size["max"]) for name, size in recipe["sizes"].items()}
 
     def test_tries_stopped_by_a_broken_design_leave_the_range_at_the_last_value_built_and_say_why(self):
         # The pipe's own far end (24) also leaves the design broken with the values back.
@@ -348,6 +352,38 @@ class UnfinishedRangeTest(unittest.TestCase):
         spans = result.report["probe"]["motion"]["spans"]
         self.assertEqual((spans["width_mm"]["low"], spans["width_mm"]["high"]), (20.0, 50.0))
         self.assertEqual((spans["depth_mm"]["low"], spans["depth_mm"]["high"]), (22.5, 37.5))
+
+    def test_sizes_whose_far_tries_never_ran_stop_at_the_values_that_built_and_say_why(self):
+        # The pipe's far end stops the tries before the far rows of the width, the depth and the height.
+        result, _, _ = self.export(breaks=("pipe_d_mm", 20))
+        ranges, spans = self.ranges(result), result.report["probe"]["motion"]["spans"]
+        self.assertEqual((ranges["width_mm"], ranges["depth_mm"], ranges["height_mm"]),
+                         ((30.0, 50.0), (22.5, 37.5), (15.0, 25.0)))
+        self.assertEqual(spans["depth_mm"]["unfinished"], {"low": ENDED_STOPPED, "high": ENDED_STOPPED})
+        self.assertIn(notes.untried_between_why(ENDED_STOPPED, beyond=(("low", 22.5), ("high", 37.5))),
+                      self.cuts["depth_mm"])
+        self.assertNotIn("depth_mm", [f["name"] for f in result.report["sizes"].get("loose", [])])
+
+    def test_a_time_limit_cuts_only_the_sides_whose_far_try_never_ran(self):
+        # The width's far minimum (20) ran before the limit; its maximum did not.
+        result, _, _ = self.export(limit=320)
+        ranges = self.ranges(result)
+        self.assertEqual((ranges["width_mm"], ranges["depth_mm"]), ((20.0, 50.0), (22.5, 37.5)))
+        self.assertIn(notes.untried_between_why(ENDED_TIME, beyond=(("high", 50.0),)), self.cuts["width_mm"])
+
+    def test_a_typed_range_end_is_kept_when_its_far_try_never_ran(self):
+        result, _, _ = self.export(breaks=("pipe_d_mm", 20), ranges={"depth_mm": (10.0, 60.0)})
+        self.assertEqual(self.ranges(result)["depth_mm"], (10.0, 37.5))
+
+    def test_tries_that_do_not_end_early_keep_every_range_and_note(self):
+        result, reason, span = self.export()
+        self.assertEqual(self.ranges(result), {"width_mm": (20.0, 80.0), "depth_mm": (15.0, 60.0),
+                                               "height_mm": (10.0, 40.0), "pipe_d_mm": (6.0, 19.5)})
+        self.assertEqual(list(self.cuts), ["pipe_d_mm"])
+        self.assertEqual(reason, notes.cut_reason("pipe_d_mm", "the range stops at 19.5",
+                                                  notes.not_rebuilt_why([(20.625, "Extrude2")])))
+        self.assertFalse(any("unfinished" in s for s in result.report["probe"]["motion"]["spans"].values()))
+        self.assertNotIn("loose", result.manifest)
 
     def test_tries_that_end_early_after_the_last_value_built_was_found_keep_the_plain_reason(self):
         # The pipe is tried last: its halving ends at 19.5 before the time limit stops the tries.

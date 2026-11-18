@@ -3,7 +3,7 @@ from ...design_model.dimension_sizes import near_values
 from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
 from ..state import as_states
-from .history import fails_by, farthest_built
+from .history import fails_by, farthest_built, tried_alone
 from .rows import MAX_PROBE_ROWS, probe_row, tried_sizes
 
 
@@ -97,6 +97,32 @@ def far_rows(sizes, moved, room, extra=(), states=(), only=None):
             rows.append(probe_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
                              "%s (%s)" % (size["param"], label)))
     return rows
+
+
+def far_left(sizes, states):
+    """`{param: [side, ...]}`: the sides ("low", "high") of each size with a try of its own that built where no try of
+    that size alone reached the range end and none on that side failed or changed an outline (`states` marked as for
+    `nearer_rows`). On such a side the far row never ran, so nothing is known past the farthest value that built
+    there. A side with a try that failed is not listed: the range stops before that try anyway (`nearer_left` tells
+    whether the search there had ended)."""
+    states = as_states(states)
+    out = {}
+    for size in sizes:
+        now = size["value"]
+        tried = tried_alone(states, size["param"], now)
+        if not any(ok for _, ok in tried):
+            continue
+        sides = []
+        for side, end in (("low", size["min"]), ("high", size["max"])):
+            reach = abs(end - now)
+            if reach <= SAME_SIZE:
+                continue
+            there = [(v, ok) for v, ok in tried if (v - now) * (end - now) > 0]
+            if all(ok and abs(v - now) < reach - SAME_SIZE for v, ok in there):
+                sides.append(side)
+        if sides:
+            out[size["param"]] = sides
+    return out
 
 
 def far_pair_rows(sizes, moved, states, room, extra=()):
