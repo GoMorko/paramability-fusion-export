@@ -5469,6 +5469,25 @@ A face group of Orca then holds edges that Fusion does not have. Thus the export
 revolve (`solid.Turned.seam`, set for two halves and for several outlines). A later round or chamfer of a face group
 on that body is left out with the cause `revolveSeam` (`finishes.py`, `solid.seamed`).
 
+Orca writes the cuts of one step one after the other. A cut that removes nothing stops the rebuild in Orca. Thus
+`orca_translate/revolve_checks.py` checks each cut against the part after the cuts before it (`cut_order`). It does
+the same for each half of a symmetric cut. Example: two outlines on the two sides of the axis, turned a full circle,
+make the same ring. The second cut then removes nothing. The export does one of these steps:
+
+- When the whole turn of an outline lies inside what the outlines before it cut, and the angle is a number, the
+  export leaves this outline out of the step. It adds a note.
+- Else the export leaves the step out with the cause `revolveOverlap`.
+
+A join, a new body or an intersect of outlines whose turns share material is left out with the same cause. The copy
+cannot prove that Orca joins such turns as Fusion does.
+
+The Orca revolve fails at an angle of 0 or less. A cut or intersect that a smaller angle moves off the part also
+stops the rebuild. Thus, when a variable sets `revolve_angle`, the export puts a limit on the line of the parameter
+(`revolve_checks.tell_angle`, `limits.tell`). `revolve_angle` is in `limits.POSITIVE`. For a cut or intersect,
+`angle_floor` finds the smallest angle at which the step still works: it halves the gap from the current angle ten
+times, and then it tests eight angles above that floor. When one of these angles fails, the export does not use the
+two halves. For a revolve of one turn, the angle keeps its number, and the sizes are marked.
+
 ### 3.15 Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides
 
 #### An extrude up to a tilted or curved face

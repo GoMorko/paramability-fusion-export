@@ -65,13 +65,13 @@ def ring_with_hole():
                     "Ring from radius 10 to 20, 10 high, with a hole of radius 2 at radius 15, turned a full circle.")
 
 
-def _rod(items_after, volume, comment, top=30):
-    """A rod of radius 12 from z 0 to `top` (Extrude1), then `items_after`."""
+def _rod(items_after, volume, comment, top=30, reach=20):
+    """A rod of radius 12 from z 0 to `top` (Extrude1), then `items_after`; the part reaches `reach` from the axis."""
     rod = copy.deepcopy(fixture("extrude_ring")["items"][1])
     rod["data"]["profiles"][0]["loops"] = [{"outer": True, "curves": [{"kind": "circle", "center": [0, 0],
                                                                          "radius": 12}]}]
     rod["data"]["side_one"]["distance"] = float(top)
-    return _capture([_sketch(0), rod] + items_after, _box([-20, -20, 0], [20, 20, top]), volume, comment)
+    return _capture([_sketch(0), rod] + items_after, _box([-reach, -reach, 0], [reach, reach, top]), volume, comment)
 
 
 def ring_on_rod():
@@ -89,6 +89,16 @@ def two_rings_on_rod():
     return _rod([_sketch(2), revolve_item(3, loops, "join")], 6160 * math.pi,
                 "A rod of radius 12, 30 high, with two separate rings joined in one revolve: radius 10 to 20 from "
                 "z 0 to 5, and radius 10 to 16 from z 20 to 25.")
+
+
+def groove_both_sides(reach=12.0):
+    """A groove cut into the rod by one Revolve Cut of a full turn with two outlines drawn on the two sides of the
+    axis: radius 9 to 12 from z 10 to 14, and its mirror from x = -`reach` to -9. Both turn into the same ring, so Orca
+    gets one cut: rod 4320 pi less the groove 252 pi = 4068 pi = 12780.0 mm3."""
+    loops = [[{"outer": True, "curves": rect(9, 10, 12, 14)}], [{"outer": True, "curves": rect(-reach, 10, -9, 14)}]]
+    return _rod([_sketch(2), revolve_item(3, loops, "cut")], 4068 * math.pi,
+                "A rod of radius 12, 30 high, with a groove from radius 9 to 12, z 10 to 14, cut by one Revolve Cut "
+                "of a full turn whose two outlines lie on the two sides of the axis.", reach=12)
 
 
 def caps(per_side_deg, cut=False):
@@ -121,7 +131,7 @@ def symmetric_ring(per_side=45.0, hole=False):
 
 
 BUILDERS = {"ring_with_hole": ring_with_hole, "ring_on_rod": ring_on_rod, "two_rings_on_rod": two_rings_on_rod,
-            "symmetric_ring": symmetric_ring}
+            "symmetric_ring": symmetric_ring, "groove_both_sides": groove_both_sides}
 
 
 if __name__ == "__main__":

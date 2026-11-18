@@ -35,11 +35,11 @@ class Plan:
 
 
 class Part:
-    """One outline to turn: its sketch `frame`, the Orca entities of its outer loop and of each hole loop, and its
-    shape (`solid.Turned`, holes included)."""
+    """One outline to turn: its sketch `frame`, its `loops` (capture curves, the outer loop first), the Orca entities
+    of its outer loop and of each hole loop, and its shape (`solid.Turned`, holes included)."""
 
-    def __init__(self, frame, outer, holes, shape):
-        self.frame, self.outer, self.holes, self.shape = frame, outer, list(holes), shape
+    def __init__(self, frame, loops, outer, holes, shape):
+        self.frame, self.loops, self.outer, self.holes, self.shape = frame, loops, outer, list(holes), shape
 
 
 def _turned_frame(frame, point, direction, degrees):

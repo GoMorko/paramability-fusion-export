@@ -50,13 +50,13 @@ FAR = 10.0
 # A lower limit this close to zero says only "keep it above zero", which a size always is.
 _AT_ZERO = 1e-3
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# Fields that size a shape: at zero or below the shape vanishes or turns inside out, so a value there never fits, and
+# Fields that size a shape (a revolve angle among them): at zero or below the shape vanishes or turns inside out, so a value there never fits, and
 # the lower limit of a variable that drives one is told even when it is small (it is where the shape stops).
 POSITIVE = frozenset((
     "width", "height", "radius", "dressup_size", "hole_diameter", "hole_depth", "hole_cbore_diameter",
     "hole_cbore_depth", "hole_csink_diameter", "shell_thickness", "thicken_thickness", "rib_thickness",
     "thread_diameter", "thread_radius", "thread_pitch", "thread_height", "thread_depth", "helix_pitch",
-    "helix_radius", "plane_u_size", "plane_v_size",
+    "helix_radius", "plane_u_size", "plane_v_size", "revolve_angle",
 ))
 
 # Why a value past a limit does not fit, as the kind a check gives (`Stop`) and the short plain words of `words`.
@@ -77,6 +77,7 @@ END_PASSES_START = "endPassesStart"
 TAPER_CLOSES = "taperCloses"
 ROUND_NO_ROOM = "roundNoRoom"
 THREAD_NO_FIT = "threadNoFit"
+REVOLVE_MISSES = "revolveMisses"
 CAUSES = {
     SHAPE_ZERO: "a size of the shape reaches zero",
     OUTLINE_MEETS: "two sides of the outline meet or cross",
@@ -95,6 +96,7 @@ CAUSES = {
     TAPER_CLOSES: "the taper closes the outline",
     ROUND_NO_ROOM: "the rounds or chamfers no longer fit on the part",
     THREAD_NO_FIT: "the thread no longer fits",
+    REVOLVE_MISSES: "a cut or intersect of the revolve no longer meets the part",
 }
 
 
