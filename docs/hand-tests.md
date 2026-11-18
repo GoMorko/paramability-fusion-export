@@ -2186,7 +2186,7 @@ and the translator refuses the item, so a wrong guess shows up in `report.json` 
   empty list, which refuses the fit.
 - `inputEntities` of a rectangular, circular or mirror pattern of bodies (`entity_type` `bodies`) with the marker before
   the item, and `bodies` after it: all the copies, not the sources. `PatternElement` has no bodies, so copies are matched
-  to elements by their corner points (`body_copies.match`).
+  to elements by their corner points (`body_pattern.match`).
 - `BRepBody.volume` of each tool with the marker before the Combine, and of the bodies the second pass finds by token
   (`body_states`).
 - `TemporaryBRepManager.get()`, `copy`, `booleanOperation` and `BooleanTypes` (`IntersectionBooleanType`,

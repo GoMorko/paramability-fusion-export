@@ -58,6 +58,7 @@ package may import only packages above it in this list (not every one of them). 
   sit: circular copies by their ids, each place checked against the faces of its copy, places that repeat or do not
   fill the count), `steps/path_pattern.py` (the
   plain pattern a path pattern on one line, arc or circle equals, and the room its copies have on the path), `steps/move.py` (the rigid move fitted from the corners of a body),
+  `steps/body_pattern.py` (the copies of a pattern or mirror of bodies and whether a Combine takes all of them),
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:
   kinds, sizes, the face of the first distance of an uneven chamfer, edges of one size; each translator keeps its own
   picks of the edges), `steps/sweep.py` (the settings that are not plain, the outline points, the volume and end face

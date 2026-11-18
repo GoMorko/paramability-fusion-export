@@ -1,13 +1,13 @@
 """Patterns and mirrors of bodies, and the handlers of every pattern and mirror item.
 
-A pattern of features goes to the `repeat` package. A pattern of bodies makes new bodies. `PatternElement` does not say which body
-is which copy, so copies are matched by their points (`match`).
+A pattern of features goes to the `repeat` package. A pattern of bodies makes new bodies. Which body is which copy, and
+whether a Combine takes a whole pattern, are facts of the shared layer (`design_model/steps/body_pattern.py`).
 
 In the walk of one body, a pattern that has the body among its sources leaves it as it is. A body that is a copy is
 written like a pasted body: the steps of its source, then a `move` for its element. Those numbers cannot follow the
 layout, so the sizes behind it are marked.
 
-A Combine that takes a whole pattern is written better (`groups`, `write`): the sources become tool steps and the
+A Combine that takes a whole pattern (`body_pattern.groups`) is written better (`groups`, `write`): the sources become tool steps and the
 pattern one `pattern` or `mirror` step that repeats them, so the layout can follow sizes. A source that is the Combine's
 own target is repeated by its steps when they only add material; otherwise its steps are gathered into one tool first.
 A subset of the copies, or a layout the `repeat` package refuses, falls back to one tool per copy.
@@ -17,14 +17,13 @@ so the sizes a count reads are marked. Spacing and angle only move the same copi
 """
 from dataclasses import dataclass
 
-from ...capture_model.capture import outside_component, same_body
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
-from ...geometry.rigid import move_from_frame
-from ...design_model import design, roles, tool_chains
+from ...design_model import design, tool_chains
+from ...design_model.problem import is_problem
+from ...design_model import words as shared
 from ...results.verdicts import TRANSLATED
-from ...design_model.steps import pattern_places as places
-from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
+from ...design_model.steps import body_pattern
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
 from ..combine import tool_walk
@@ -48,75 +47,13 @@ class Copy:
     motion: Motion
 
 
-@dataclass
-class Group:
-    """A pattern item a Combine takes whole: its `sources` and its `copies`."""
-
-    item: dict
-    sources: list
-    copies: list
-
-    def holds(self, body):
-        return any(same_body(body, other) for other in self.sources + [c.result for c in self.copies])
-
-
-def _is_mirror(data):
-    return "plane" in data
-
-
-def _motion_of(frame):
-    found = move_from_frame(frame)
-    return Motion(found.rows, found.offset)
-
-
-def _element_motions(data):
-    """The choices for the `Motion` of each copy a pattern or mirror keeps, the original left out: a list of lists,
-    empty when they were not read. A one-sided circular pattern places its copies by their ids, turning either way
-    (`pattern_places`), since its element transforms are not always right; the copies' bodies tell which way."""
-    if _is_mirror(data):
-        plane = mirror_plane(data)
-        return [] if plane is None else [[Motion.mirror(plane["origin"], plane["normal"])]]
-    kept = kept_elements(data)
-    if kept is None:
-        return []
-    if "axis" in data and (not data.get("symmetric") or places.full_turn(data)):
-        choices = [places.id_frames(data, kept, sign) for sign in (1, -1)]
-        return [[_motion_of(frame) for _, frame in found] for found in choices if found is not None]
-    return [[_motion_of(e["frame"]) for e in kept if not is_identity(e["frame"])]]
-
-
-def _lands_on(motion, source, result):
-    """True when `motion` puts every point of `source` on a point of `result`, in any order."""
-    before, after = source.get("points") or [], result.get("points") or []
-    return bool(before) and len(before) == len(after) and all(
-        any(vec.close(motion.numbers(p), q, move.FIT_TOL_MM) for q in after) for p in before)
-
-
 def match(data):
-    """A `Copy` for each body the pattern made, or None when the bodies and the copies do not pair up."""
-    sources, results = data.get("source_bodies"), data.get("result_bodies")
-    if not sources or not isinstance(results, list):
+    """A `Copy` for each body the pattern made, or None when the bodies and the copies do not pair up
+    (`body_pattern.match`)."""
+    found = body_pattern.match(data)
+    if found is None:
         return None
-    for motions in _element_motions(data):
-        found = _paired(sources, results, motions)
-        if found is not None:
-            return found
-    return None
-
-
-def _paired(sources, results, motions):
-    """A `Copy` for each body in `results` that one of `motions` makes from a source, or None when they do not pair
-    up one to one. Two copies on one place, or a place no body sits on, leave a body or a copy without a pair."""
-    left = [r for r in results if not any(same_body(r, s) for s in sources)]
-    copies = []
-    for source in sources:
-        for motion in motions:
-            found = next((r for r in left if _lands_on(motion, source, r)), None)
-            if found is None:
-                return None
-            left = [r for r in left if r is not found]
-            copies.append(Copy(found, source, motion))
-    return None if left else copies
+    return [Copy(c.result, c.source, Motion(c.move.rows, c.move.offset)) for c in found]
 
 
 # ---------------------------------------------------------------- one body at a time
@@ -152,7 +89,7 @@ def _in_walk(ctx, step, paths):
         return Refusal("The copies of this pattern could not be matched to the bodies it made.")
     if ctx.steps:
         return Refusal("This pattern lands on a body that already has steps, which is not copied yet.")
-    if _is_mirror(data):
+    if body_pattern.is_mirror(data):
         return Refusal("A mirrored body is only copied when a Combine takes it together with its source.")
     tool = paste.rebuild(ctx, item, found.source)
     if isinstance(tool, Refusal):
@@ -165,16 +102,12 @@ def _in_walk(ctx, step, paths):
     return out
 
 
-def _of_bodies(data):
-    return data.get("entity_type") == "bodies"
-
-
 def rectangular(ctx, step):
-    return _in_walk(ctx, step, GRID_PATHS) if _of_bodies(step.brought_data) else repeat.rectangular(ctx, step)
+    return _in_walk(ctx, step, GRID_PATHS) if body_pattern.of_bodies(step.brought_data) else repeat.rectangular(ctx, step)
 
 
 def circular(ctx, step):
-    return _in_walk(ctx, step, TURN_PATHS) if _of_bodies(step.brought_data) else repeat.circular(ctx, step)
+    return _in_walk(ctx, step, TURN_PATHS) if body_pattern.of_bodies(step.brought_data) else repeat.circular(ctx, step)
 
 
 def path(ctx, step):
@@ -183,7 +116,7 @@ def path(ctx, step):
 
 
 def mirror(ctx, step):
-    if _of_bodies(step.brought_data) and not step.brought_data.get("combine"):
+    if body_pattern.of_bodies(step.brought_data) and not step.brought_data.get("combine"):
         return _in_walk(ctx, step, ())
     return repeat.mirror(ctx, step)
 
@@ -191,61 +124,20 @@ def mirror(ctx, step):
 # ---------------------------------------------------------------- a whole pattern in a Combine
 
 
-def _listed(body, tools):
-    return any(same_body(body, tool) for tool in tools)
-
-
-def _pattern_that_made(ctx, tool, before):
-    """The pattern item that made the copy `tool`, when nothing changed the copy since; else None."""
-    chain = tool_chains.made_by(ctx.timeline, tool, before, ctx.component)
-    if len(chain) != 1:
-        return None
-    data = design.as_read(chain[0]).brought_data
-    if not _of_bodies(data) or not roles.copies_bodies(chain[0]):
-        return None
-    if tool_chains.unseen_change(ctx.timeline, tool, before, ctx.component) is not None:
-        return None
-    results = data.get("result_bodies") or []
-    return chain[0] if _listed(tool, results) else None
-
-
-def _stays_as_copied(ctx, body, pattern, before):
-    """True when no item after the pattern and before `before` changed the source `body`."""
-    chain = tool_chains.made_by(ctx.timeline, body, before, ctx.component)
-    return all(item["index"] <= pattern["index"] for item in chain)
-
-
-def _whole(ctx, combine_item, pattern, tools, combine):
-    """The `Group` of a pattern whose every body the Combine takes, or None."""
-    read = design.as_read(pattern)
-    data = read.brought_data
-    copies = match(data)
-    if copies is None or outside_component(pattern) or read.foreign:
-        return None
-    for source in data["source_bodies"]:
-        if ctx.is_target(source):
-            if combine != "add" or ctx.wrote_after(pattern["index"]):
-                return None
-        elif not _listed(source, tools) or not _stays_as_copied(ctx, source, pattern, combine_item["index"]):
-            return None
-    if not all(_listed(c.result, tools) and _pattern_that_made(ctx, c.result, combine_item["index"]) for c in copies):
-        return None
-    return Group(pattern, list(data["source_bodies"]), copies)
-
-
 def groups(ctx, combine_item, tools, combine):
-    """The `Group`s of the patterns this Combine takes whole. An intersect cannot be repeated."""
+    """The `body_pattern.Group`s of the patterns this Combine takes whole. An intersect cannot be repeated. A source
+    that is the Combine's own target is repeated by its steps, so the Combine must join, and no step may have been
+    written for the target since the pattern."""
     if combine == "intersect":
         return []
-    patterns = {}
-    for tool in tools:
-        found = _pattern_that_made(ctx, tool, combine_item["index"])
-        if found is not None:
-            patterns[found["index"]] = found
     out = []
-    for pattern in patterns.values():
-        group = _whole(ctx, combine_item, pattern, tools, combine)
-        if group is not None and not any(group.holds(tool) and other.holds(tool) for other in out for tool in tools):
+    for pattern, group in body_pattern.groups(ctx.timeline, combine_item, tools, ctx.component, ctx.is_target):
+        if is_problem(group):
+            continue
+        if any(ctx.is_target(source) for source in group.sources) and (
+                combine != "add" or ctx.wrote_after(pattern["index"])):
+            continue
+        if not body_pattern.overlaps(group, out, tools):
             out.append(group)
     return out
 
@@ -274,15 +166,14 @@ def _own_steps(ctx, out, item):
 
 
 def _repeater(data):
-    if _is_mirror(data):
+    if body_pattern.is_mirror(data):
         return repeat.mirror
     return repeat.circular if "axis" in data else repeat.rectangular
 
 
 def _mark_counts(ctx, item):
     """The recipe repeats the tools for any count, and Fusion may keep the Combine's list as it is."""
-    why = "%s makes more or fewer copies with it, and Fusion may not change what its Combine takes" % (
-        item.get("name") or "A pattern")
+    why = shared.BODY_COPIES_COUNT % (item.get("name") or "A pattern")
     for path in COUNT_PATHS:
         values.pin(ctx, item, path, why)
 
