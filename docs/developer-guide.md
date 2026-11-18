@@ -5379,6 +5379,48 @@ The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check f
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
 marked.
 
+The Orca export writes the sketches, the revolves and the tool bodies in `orca_translate/revolve_parts.py`. The
+`revolve.py` handler does the checks first. Then it gives `revolve_parts.write` a plan (the axis, the angle, the
+start and the turns) and one part for each outline.
+
+Orca makes a face from one closed loop of a sketch only (`build_sketch_wire` in Orca accepts a single wire). Thus
+one Orca revolve cannot turn an outline that has holes. The Orca export does these steps for an outline with holes:
+
+1. It writes each loop of the outline as a sketch of its own. Each sketch has a construction line on the axis.
+2. It turns the outer loop.
+3. It turns each hole loop by the same angle and cuts it away (mode Cut).
+
+When the part has no material yet, the export does these steps on the body itself. When the part has material, the
+export does these steps in a tool body (`Context.push`, `Context.pop`). Then a Boolean adds the tool body to the
+part, cuts it from the part, or keeps what the two share (`tools.boolean`). Thus the hole cuts only the outline of
+the hole, and not the part.
+
+The export turns several outlines one at a time. Each outline has its own sketches. For an intersect, the export
+first joins all the outlines in one tool body, and then one Boolean Intersect follows. Two intersects, one after the
+other, would keep only the material that all of the outlines share. That is not what Fusion makes. The export
+leaves these revolves out:
+
+- A new body that is made of separate outlines. Fusion lists more than one new body after the step
+  (`roles.new_bodies`), as for an extrude.
+- A cut that splits the part into pieces.
+- Outlines that move in different directions at the sketch plane, when the turn is less than a full circle. This
+  occurs for outlines on the two sides of the axis. Fusion gives one start face only, so the export cannot find the
+  direction of each turn. The cause is `revolveOutlineSides`.
+
+Fusion's angle of a symmetric revolve is the angle to each side. When this angle follows sizes, the Orca export
+writes two revolves from the sketch plane. One revolve turns by the right hand rule about the axis. The other
+revolve has `flip`, so Orca turns it by the negative angle. Each revolve has `revolve_angle = min(angle, 180)`, bound
+to the variable. Thus the ring closes when the angle is 180 degrees or more, as in Fusion. A cut that removes
+nothing stops the rebuild in Orca. Thus the export writes a symmetric cut as two halves only when each half meets
+the part as the copy builds it (`solid.meets`). For a cut where one half does not meet the part, and for an
+intersect, the export uses one revolve: the sketch plane turns back by the angle, the revolve turns by twice the
+angle, and the angle keeps its number.
+
+Orca does not merge the faces of two revolves that it joins. The faces stay split where the revolves meet (a seam).
+A face group of Orca then holds edges that Fusion does not have. Thus the export puts a flag on the shape of such a
+revolve (`solid.Turned.seam`, set for two halves and for several outlines). A later round or chamfer of a face group
+on that body is left out with the cause `revolveSeam` (`finishes.py`, `solid.seamed`).
+
 ### 3.15 Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides
 
 #### An extrude up to a tilted or curved face

@@ -57,7 +57,8 @@ The modules of `lib/orca_translate/`:
 - `other_components.py`: geometry of other components (see "Other components" below).
 - `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
   parameters follow").
-- Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
+- Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py` (with
+  `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer) and `threads.py`. `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
@@ -120,7 +121,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Split Body by a solid body | that body as a tool, then a Boolean (Intersect inside it, Cut outside it) | as the tool's steps |
 | Move of the body: a turn about an axis (a negative angle turns about the reversed axis) | Transform about that axis | `xf_angle_deg` |
 | Move of the body: any other move | Transform by the measured turn and shift | no |
-| Revolve of one outline without holes, the axis in its sketch plane: a full turn, an angle, an angle to both sides, two sides with two angles | sketch entities with a construction line on the axis (`revolve_axis_entity`), Revolve | `revolve_angle` (not for both sides or two sides) |
+| Revolve of one or more outlines, with or without holes, the axis in their sketch plane: a full turn, an angle, an angle to both sides, two sides with two angles | per loop a sketch with a construction line on the axis (`revolve_axis_entity`), a Revolve of each outer loop, a Revolve Cut of each hole; on a part that holds material an outline with holes is a tool body and a Boolean, as is an intersect of several outlines. An angle to both sides that follows a size is two Revolves from the sketch, one with `flip` | `revolve_angle` (to both sides as `min(angle, 180)` on each half; not for an intersect or two sides) |
 | Sweep along a straight path | Extrude of the outline, as long as the path | the outline's sizes |
 | Sweep along one arc or a full circle | Revolve of the outline about the arc's axis | no |
 | Sweep along lines, arcs and splines in one plane that meet smoothly, open or closed (a closed path without splines), one outline without holes | the outline's sketch, a sketch of the path from the outline (splines as exact B-spline pieces), Sweep | the outline's sizes (`width`, `height`, `radius`) |
@@ -310,7 +311,9 @@ not judged to meet material where Orca removes nothing.
   ends, one edge along the extrude at each outline corner, and the seam of a full circle. The seam, and the edge where
   two side faces meet smoothly (a slot), are not rounded by Orca and not shown by Fusion, so they may be picked or
   not. Each Fusion edge is matched to an edge of the copy by its measured points (`edges[].points`); an edge that
-  matches none, or several, leaves the step out.
+  matches none, or several, leaves the step out. A part that Orca builds from revolves joined together (see
+  "Revolve" below) has faces split where they meet, so a round of a face group on it is left out with the cause
+  `revolveSeam` before its edges are looked at.
 - Orca stops the whole rebuild on a round it cannot make. Rule (`finish_body.room`): every face must stay larger
   than 1.1 times what the rounds take from it: each outline line longer than the size times the corner cut at its
   ends, each convex arc larger than the size, outline curves that do not share a corner more than twice the size
@@ -537,23 +540,46 @@ not judged to meet material where Orca removes nothing.
   angle (Orca turns by a positive angle, so a negative one turns about the reversed axis and its formula is
   negated); any other move a Transform by the fitted turn (about the component origin) and shift. Orca cannot tie a move
   distance to a variable, so those sizes keep their numbers with the reason.
-- Revolve: Orca turns one closed loop about a line of its sketch (`revolve_axis_entity`) or the sketch plane's x or y
-  axis. The copy writes the outline's lines and arcs and a construction line on the axis, so the axis may sit
-  anywhere in the plane. The turning sense comes from the measured caps (`design_model/steps/revolve.py`): the start
-  cap's outward normal points against the turn for new material and along it for a cut, the end cap's the other way;
-  when a join merged the start cap into a face of the part and the end cap does not tell (a quarter turn ends with the
-  same normal either way), the box of the faces the revolve made must fit the box the outline sweeps one way only.
-  For a join, the made faces (which can include faces of the part the revolve merged with) and the body after the
-  step must fit the box of the body before it together with the swept box, one way only (`body_boxes`). A
-  full turn needs none. Fusion's angle of a symmetric revolve is the turn to each side: the copy turns the sketch
-  plane that angle back and turns twice the angle, so its angle keeps its number, and the measured caps must sit
-  there; 180 degrees or more to each side is a full turn. A turn to two sides with two angles turns the sketch plane
-  back by the angle of one side and turns by the sum: the start face tells which side (`back_sides`), and both angles
-  keep their numbers. When the start face fits both sides (one angle of 90 or 270 degrees), it is left out with the
-  cause `revolveSides`. Left out: an axis off the sketch plane, an outline across the axis, an outline with holes,
-  several outlines. A cut is checked against the copied part like any cut. The outline and the axis keep their drawn
-  numbers in Orca (the sizes that move them are marked), so the outline cannot pass to the other side of the axis in
-  the copy; the recipe output cuts the ranges for that instead (developer guide 3.14, "The side of the axis").
+- Revolve: Orca turns one closed loop per sketch (`build_sketch_wire` takes a single wire) about a line of that
+  sketch (`revolve_axis_entity`) or the sketch plane's x or y axis. The copy writes each loop of an outline as a
+  sketch of its lines and arcs with a construction line on the axis, so the axis may sit anywhere in the plane
+  (`revolve.py` checks, `revolve_parts.py` writes). The turning sense comes from the measured caps
+  (`design_model/steps/revolve.py`): the start cap's outward normal points against the turn for new material and
+  along it for a cut, the end cap's the other way; when a join merged the start cap into a face of the part and the
+  end cap does not tell (a quarter turn ends with the same normal either way), the box of the faces the revolve made
+  must fit the box the outline sweeps one way only. For a join, the made faces (which can include faces of the part
+  the revolve merged with) and the body after the step must fit the box of the body before it together with the
+  swept box, one way only (`body_boxes`). A full turn needs none.
+- Holes and several outlines: each hole of an outline is turned the same way as its outer loop and cut away (Revolve
+  with mode Cut). On the first body this happens on the body itself. On a part that already holds material, the
+  outline is a tool body (outer loop New, then the hole cuts) that a Boolean adds to the part, cuts from it or
+  intersects with it, so a hole cuts nothing else of the part. Several outlines are turned one by one, each with its
+  own sketches. An intersect of several outlines first joins them in a tool body, then one Boolean Intersect keeps
+  what the part and the tool share. Of several cut outlines, those that do not meet the copied part are left out with
+  a note. Left out: a new body made of separate outlines (Fusion lists more than one new body, `roles.new_bodies`, as
+  for extrudes), a cut that splits the part, and outlines that a turn of less than a full circle moves different
+  ways at the sketch (on two sides of the axis, or on two planes through it; cause `revolveOutlineSides`): the one
+  measured start face cannot tell how each one turned.
+- Symmetric: Fusion's angle of a symmetric revolve is the turn to each side. When that angle follows sizes, the copy
+  writes two revolves from the sketch plane: one by the right hand rule, one with `flip` (Orca turns by the negative
+  angle, `CadDocument::apply_feature`, Revolve). Each has `revolve_angle = min(angle, 180)`, bound to the variable, so
+  the ring closes at 180 degrees or more to each side, as in Fusion. A cut is written so only when each half meets
+  the copied part (Orca stops on a cut that removes nothing). Otherwise, and for an intersect (two intersects would
+  keep only what both halves share), the copy turns the sketch plane the angle back and turns twice the angle, so the
+  angle keeps its number and its sizes are marked; 180 degrees or more to each side is then a full turn. Either way
+  the measured caps must sit where the turn puts them.
+- A seam: Orca does not merge the faces of revolves that it joins (the two halves, or outlines turned one by one), so
+  the faces stay split where they meet and Orca's groups of edges hold edges that Fusion does not have. The copy's
+  shape marks such a revolve (`solid.Turned.seam`), and a later round or chamfer of a face group on that body is left
+  out (cause `revolveSeam`). A round drawn into an extrude's outline (`outline_rounds`) does not use face groups and
+  is not changed by this.
+- Two sides: a turn to two sides with two angles turns the sketch plane back by the angle of one side and turns by
+  the sum: the start face tells which side (`back_sides`), and both angles keep their numbers. When the start face
+  fits both sides (one angle of 90 or 270 degrees), it is left out with the cause `revolveSides`.
+- Also left out: an axis off the sketch plane, an outline across the axis. A cut is checked against the copied part
+  like any cut. The outline and the axis keep their drawn numbers in Orca (the sizes that move them are marked), so
+  the outline cannot pass to the other side of the axis in the copy; the recipe output cuts the ranges for that
+  instead (developer guide 3.14, "The side of the axis").
 
 ### Sweeps, lofts and splines
 
@@ -1080,6 +1106,15 @@ sketch graphs, made by the tests. The captures of outlines built from plane cuts
 (`outline_capture`, `window_capture`, `window_pattern_capture`): save one as JSON and give its path to `write`. The
 tests read the written recipe in Python (`orca_cuts.Section`: the cross section of each body, through the sketches,
 extrudes, cuts, transforms, Booleans and patterns) and compare it with the outline at other values of the variables.
+
+Revolves with holes, several outlines and symmetric angles that follow sizes have captures in
+`tests/orca_revolves.py`. Save one with `python3 -m tests.orca_revolves <name> <file>` and give the file to `write`.
+The volumes are exact (a loop of area A whose centre lies at radius R makes 2 pi R A per full turn):
+`ring_with_hole` (radius 10 to 20, 10 high, a hole of radius 2 at radius 15, a full turn: 3000 pi - 120 pi^2 =
+8240.43), `ring_on_rod` (that ring joined onto a rod of radius 12, 30 high: 6880 pi - 120 pi^2 = 20429.80),
+`two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21) and
+`symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
+2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78).
 
 Rounds, chamfers, threads and hole centres, checked with OrcaSlicer 2.5.1 on 2026-11-15 and 16: a top chamfer whose
 size is a variable (7941 mm3 as the capture's 7941, then 7771 at twice the size), a top round of a cylinder (3112.27
