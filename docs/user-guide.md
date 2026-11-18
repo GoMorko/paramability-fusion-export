@@ -49,7 +49,10 @@ Nothing is typed in Fusion.
      that did not come back to their first shape or came back on another outline, a part whose volume or size is not
      as before, timeline steps with a new warning or error, or sketches that could not be measured. When a try left
      a step changed and the add-in could not bring it back, it says that the tries stopped early, after which try,
-     and which step. Use Undo in Fusion when this section says your design is changed.
+     and which step. When that step belongs to another component and the part was not changed, only the tries of the
+     sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
+     in full. The add-in then asks Fusion to undo the export. Use Undo in Fusion when this section says your design is
+     changed.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
    box.
@@ -143,7 +146,10 @@ file's `cuts` list, where Paramability shows it as a quiet note next to the size
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
 any value tried is not a size, and the reason names the values and the step Fusion stopped at. When a try leaves the
 design broken (a step stays in error even with your values back), the tries stop there, since every later try would
-fail for that reason; the result window says so. When the tries stop early like this, or run out of time, before the
+fail for that reason; the result window says so. When the broken step belongs to another component that the part
+does not need, and the part reads as before, only the tries of the sizes behind it end, and the other sizes are tried
+in full. A size that also changes steps of another component gets its range ends after the other sizes, since its
+tries are the most likely to break the design. When the tries stop early like this, or run out of time, before the
 values between the last value that built and the first one that did not were tried, the range still stops at the last
 value that built, and its reason adds "no value between was tried", why, and a tip: untick the size that stopped the
 tries, or raise the time limit. The design may build at some of those values; a later export that tries them can give

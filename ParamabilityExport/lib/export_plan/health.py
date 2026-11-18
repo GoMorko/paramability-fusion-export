@@ -39,6 +39,9 @@ class HealthInputs:
       (`Motion.flipped`); the tries made then blamed no size.
     stopped: `{ after, items }` when a try left the design broken with the values back and the tries stopped there
       (`RowExport.not_back`).
+    ended: `{ after, items, steps, components, sizes }` of each try after which steps of another component stayed
+      worse with the values back, so the tries of `sizes` ended there while the other sizes went on
+      (`RowExport.ended`, `ProbeRun.ended`). The design is changed, so the export is never back as it was.
     broken: names of the timeline steps in error after the export that were not in error before it; taken from
       `steps` when that could compare the steps.
     steps: the `design_edit.timeline_health.TimelineSettle` of the export: the steps whose health differs from the
@@ -66,6 +69,7 @@ class HealthInputs:
     unchecked: Sequence = ()
     flipped: Sequence = ()
     stopped: Optional[dict] = None
+    ended: Sequence = ()
     broken: Sequence = ()
     steps: Optional[object] = None
     deferred_left: Sequence = ()
@@ -100,6 +104,10 @@ def make_health(inputs):
         out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])[:MAX_LISTED]}
         if stopped.get("steps"):
             out["tries_stopped"]["steps"] = [dict(step) for step in stopped["steps"][:MAX_LISTED]]
+    if inputs.ended:
+        out["tries_ended"] = [{k: (list(v)[:MAX_LISTED] if isinstance(v, list) else v) for k, v in record.items()
+                               if k in ("after", "items", "steps", "components", "sizes")}
+                              for record in inputs.ended[:MAX_LISTED]]
     broken = steps.broken if steps is not None and not steps.unread else inputs.broken
     if broken:
         out["broken"] = list(dict.fromkeys(broken))[:MAX_LISTED]
@@ -116,7 +124,7 @@ def make_health(inputs):
         out["outlines_changed"] = list(dict.fromkeys(inputs.outlines_changed))[:MAX_LISTED]
     # A small difference of the body is a change only when something else shows the design changed.
     small = list(inputs.body_small)
-    backed = design_changed(out) or bool(out.get("tries_stopped"))
+    backed = design_changed(out) or bool(out.get("tries_stopped") or out.get("tries_ended"))
     changed = list(inputs.body_changed) + (small if backed else [])
     unconfirmed = list(inputs.body_unconfirmed) + ([] if backed else small)
     if changed:
@@ -149,8 +157,9 @@ def back_as_it_was(health):
     """True only when the end check confirms the design is as it was before the export: every value back, no sketch
     drift, no step worse or left turned off, nothing left deferred, no difference of the body, and every check that
     tells this could be made (the steps read, the sketches compared, the marker back). After tries that stopped on a
-    damaged design, the sketches and the body must also have been compared; the stop alone does not count."""
-    if not health or design_changed(health) or health.get("left_off"):
+    damaged design, the sketches and the body must also have been compared; the stop alone does not count. After tries
+    that ended for some sizes because steps of another component stayed worse, the design is not back."""
+    if not health or design_changed(health) or health.get("left_off") or health.get("tries_ended"):
         return False
     if health.get("steps_unread") or health.get("restore_unverified") or health.get("body_unconfirmed"):
         return False
@@ -236,6 +245,22 @@ def _stopped_line(stopped):
     return clip(text, MAX_LINE)
 
 
+def _ended_line(ended, undo_dropped):
+    """The line about a try after which steps of another component stayed changed with the values back, so the tries
+    of some sizes ended there and the other sizes went on: which try, which steps of which component, and which
+    sizes. Without the Undo data dropped, Fusion undoes the export at its end."""
+    after = (ended.get("after") or "").replace(RETRY_NOTE, "") or "a value"
+    steps = ended.get("steps") or [{"name": name} for name in ended.get("items") or []]
+    shown = ", ".join(_step_text(step) for step in steps[:MAX_LISTED])
+    text = ("The tries of %s ended early: after trying %s, these steps of %s stayed changed even with your values "
+            "back: %s. The other sizes were tried in full."
+            % (_names(ended.get("sizes") or []) or "one size", after,
+               " and ".join(ended.get("components") or []) or "another component", shown))
+    if not undo_dropped:
+        text += " Since your design changed, the add-in undoes the export when it ends."
+    return clip(text, MAX_LINE)
+
+
 def _changed_line(text, found, health):
     """`text` with the things found that changed, then that the design is changed and what to do. The list is cut,
     not the advice after it."""
@@ -305,6 +330,7 @@ def copy_lines(health):
     stopped = health.get("tries_stopped")
     if stopped:
         lines.append(_stopped_line(stopped))
+    lines.extend(_ended_line(ended, health.get("undo_dropped")) for ended in health.get("tries_ended") or [])
     if health.get("probe") == FAILED:
         lines.append(
             "The sketches could not be measured, so sizes that move a sketch may give unexpected results.")

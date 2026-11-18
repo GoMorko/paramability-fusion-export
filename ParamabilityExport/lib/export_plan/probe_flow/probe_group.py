@@ -46,10 +46,10 @@ class ProbeGroup:
 
     def far_order(self, sizes, late=()):
         """The order of the far rows (`SizeProbe.far_order`): a size that moved a reference of another component in any
-        part comes last for all, since the rows are shared."""
+        part, or that drives a step outside every part, comes last for all, since the rows are shared."""
         current = {e.name: e.value for e in self.table.entries}
         late = set(late) | {name for probe in self.probes for name in moves_others(probe.states, probe.refs, current)}
-        return self.probes[0].far_order(sizes, late)
+        return self.probes[0].far_order(sizes, late, [probe.capture for probe in self.probes])
 
     def far_rows(self, sizes, room, only=None):
         """The far rows of the sizes in `only`, or of every size not planned yet (`SizeProbe.far_rows`): every probe
@@ -99,6 +99,16 @@ class ProbeGroup:
     def note_stop(self, record, unrun=()):
         for probe in self.probes:
             probe.note_stop(record, unrun)
+
+    def note_ended(self, record, unrun=()):
+        for probe in self.probes:
+            probe.note_ended(record, unrun)
+
+    def reads_as_start(self, reads):
+        """True when every part reads as at the start of the tries (`SizeProbe.reads_as_start`)."""
+        reads = reads or []
+        return len(reads) == len(self.probes) and all(
+            probe.reads_as_start(read) for probe, read in zip(self.probes, reads))
 
     def note_time_limit(self, record, unrun=()):
         for probe in self.probes:

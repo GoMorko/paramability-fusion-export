@@ -907,3 +907,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     than 2 mm below the largest round Fusion builds on the 30 mm side (about 15 mm), not at 2.5 mm. In `report.json`,
     `probe.states` has the tries of `Round` near 15 mm before the far tries of `Cut`. Afterwards the design is as
     before.
+79. OC1, a lasting change in another component. Add user parameters `Width` = 40 mm (star it as a favourite) and
+    `Depth` = 30 mm. Make two components, `Box` and `Holder`. In `Box`, sketch a `Width` x `Depth` rectangle on the XY
+    plane from the origin and extrude it 10 mm up as a new body. In `Holder`, sketch an 80 x 50 mm rectangle on the XY
+    plane from (0, -60) mm and extrude it 15 mm up as a new body. Fillet the top edge of its right end (x = 80 mm) with
+    2 mm. Then, on the top face of the holder, sketch a pocket rectangle from x = 5 mm to a line projected from the
+    right side edge of the box, 20 mm wide in the middle of the holder, and cut it 5 mm deep. At `Width` = 90 mm the
+    pocket cuts through the filleted edge.
+    Export: pick the body of `Box`, tick `Width` with a range of 20 to 90 mm and `Depth` with a range of 15 to 60 mm.
+    Expect the result window to say that the tries of `Width` ended early after the try at 90 mm, name the fillet of
+    the holder (now a warning or an error), and say that the add-in undoes the export. `Depth` keeps its range of 15 to
+    60 mm. In `report.json`, `probe.ended` names `Width` and the fillet, and `probe.states` has `Depth` at 15 and 60 mm
+    after the try of `Width` at 90 mm. After Fusion undid the export, the design is as before. When the fillet comes
+    back by itself with the values back, the export ends as usual and nothing is undone.
