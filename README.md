@@ -75,8 +75,10 @@ The add-in marks the sizes that change the body before it "may give unexpected r
 A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
 range of that parameter stops before the outline reaches the axis.
 A shell, round or chamfer on the faces or edges of a revolve follows the sizes of the revolve, for example the open
-top and the rounded outer rim of a cup. The inner walls a shell leaves on a revolve, and the end faces of a revolve
-that does not turn a full circle, are not followed yet: their sizes are marked.
+top and the rounded outer rim of a cup. A round or chamfer inside a shelled cup (its inner rim, its inner bottom edge)
+follows the sizes and the thickness of the shell, and one on a flat end face of a part turn follows the outline. Where
+the add-in cannot be sure (the end face turns with a size, a second outline lies against the wall), the sizes are
+marked.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).

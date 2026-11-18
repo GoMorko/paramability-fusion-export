@@ -8,10 +8,12 @@ corner where two curves meet. At other sizes that sketch point moves with the ou
 (`sketch_motion.Outline.follow`: the same share along a line, an arc only when it keeps its shape), and the picked
 point keeps its angle about the axis, which may move too.
 
-A curve that lies on the axis makes no face. The end faces of a revolve that turns less than a full circle are not
-placed. Nor are a point on two curves away from a corner they share, a face point at a corner, an edge point inside
-one face, and a point that also lies on a face of an earlier step: where two faces meet, a mark is better than a
-guess. Such a point is claimed, so its sizes are marked, when the face under it moves with sizes. On a face that
+A curve that lies on the axis makes no face. An end face of a revolve that turns less than a full circle is placed
+when it keeps its angle at every size (`_cap_stays`): a face point inside the outline moves with the outline as a
+point inside an end face of an extrude does, and an edge point on one outline curve moves with that curve. Not placed
+are an end face that turns with a size (its points would need the sine and cosine of a size), a point on two curves away from a
+corner they share, a face point at a corner, an edge point inside one face, and a point that also lies on a face of
+an earlier step: where two faces meet, a mark is better than a guess. Such a point is claimed, so its sizes are marked, when the face under it moves with sizes. On a face that
 stays, the step that made the edge there (a cut through the face) still places it, as without the revolve.
 
 A picked curve must keep its length over the size ranges, and the turn of a revolve that is not a full circle must
@@ -136,7 +138,7 @@ class RevolvePlacer(Placer):
         reach = [self._across(q) for curve in foot.curves for q in polyline(curve)]
         if reach and max(reach, key=abs) < 0:
             self._normal = [axis[1], -axis[0]]
-        self._faces = [n for n, curve in enumerate(foot.curves) if not self._on_axis(curve)]
+        self.face_curves = [n for n, curve in enumerate(foot.curves) if not self.on_axis(curve)]
 
     # ---- the sketch plane and the axis
 
@@ -145,7 +147,12 @@ class RevolvePlacer(Placer):
         a, n = self.turn.axis_point, self._normal
         return (uv[0] - a[0]) * n[0] + (uv[1] - a[1]) * n[1]
 
-    def _on_axis(self, curve):
+    def from_axis(self, uv):
+        """How far the sketch point `uv` lies from the axis."""
+        return abs(self._across(uv))
+
+    def on_axis(self, curve):
+        """True when the outline curve `curve` is a line on the axis: it makes no face."""
         if curve["kind"] != "line":
             return False
         return all(abs(self._across(curve[end])) <= LATERAL_TOL for end in ("start", "end"))
@@ -171,7 +178,8 @@ class RevolvePlacer(Placer):
             return CAP
         return IN if past < total.n else OUT
 
-    def _spot(self, p):
+    def spot(self, p):
+        """Where the model point `p` sits about the axis (`_Spot`)."""
         a, w, n, b = self._axes()
         v = vec.sub(p, a)
         height, flat, out = vec.dot(v, w), vec.dot(v, n), vec.dot(v, b)
@@ -179,8 +187,49 @@ class RevolvePlacer(Placer):
         angle = math.degrees(math.atan2(out, flat)) if radius > LATERAL_TOL else 0.0
         d, m, at = self.turn.axis_dir, self._normal, self.turn.axis_point
         uv = [at[0] + height * d[0] + radius * m[0], at[1] + height * d[1] + radius * m[1]]
-        curves = [k for k in self._faces if curve_distance(self.turn.footprint.curves[k], uv) <= LATERAL_TOL]
+        curves = [k for k in self.face_curves if curve_distance(self.turn.footprint.curves[k], uv) <= LATERAL_TOL]
         return _Spot(uv, radius, angle, self._span(angle, radius), curves)
+
+    def point_at(self, uv, angle):
+        """The model point that the sketch point `uv` turns to, `angle` degrees about the axis from the sketch plane."""
+        a, w, n, b = self._axes()
+        d, m, at = self.turn.axis_dir, self._normal, self.turn.axis_point
+        rel = [uv[0] - at[0], uv[1] - at[1]]
+        height, radius = rel[0] * d[0] + rel[1] * d[1], rel[0] * m[0] + rel[1] * m[1]
+        cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+        return [a[i] + height * w[i] + radius * (cos * n[i] + sin * b[i]) for i in range(3)]
+
+    def model_vector(self, v, angle):
+        """The model direction of the sketch direction `v` in the half plane `angle` degrees about the axis."""
+        _, w, n, b = self._axes()
+        d, m = self.turn.axis_dir, self._normal
+        along, across = v[0] * d[0] + v[1] * d[1], v[0] * m[0] + v[1] * m[1]
+        cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+        return [along * w[i] + across * (cos * n[i] + sin * b[i]) for i in range(3)]
+
+    def holds(self, p):
+        """True when `p` lies in or on the solid this revolve turns (the material it adds, or removes for a cut)."""
+        spot = self.spot(p)
+        return spot.span != OUT and bool(spot.curves or self.turn.footprint.covers(spot.uv))
+
+    def keeps_direction(self, k):
+        """True when no size turns outline curve `k`: a line that keeps its direction, or an arc (a pick follows an arc
+        only while it keeps its shape, `sketch_motion.Outline.follow`)."""
+        curve, outline = self.turn.footprint.curves[k], self.turn.outline
+        if curve["kind"] == "arc":
+            return True
+        if curve["kind"] != "line":
+            return False
+        if outline is None or not outline.moves:
+            return True
+        a, b = curve["start"], curve["end"]
+        gap = math.hypot(b[0] - a[0], b[1] - a[1])
+        raw_a, raw_b = outline.anchors.point(a, PICK_TOL), outline.anchors.point(b, PICK_TOL)
+        if gap <= LENGTH_TOL_MM or raw_a is None or raw_b is None:
+            return False
+        n = [-(b[1] - a[1]) / gap, (b[0] - a[0]) / gap]
+        return _constant(combine([(n[0], raw_b[0]), (n[1], raw_b[1]), (-n[0], raw_a[0]), (-n[1], raw_a[1])],
+                                 outline.sketch))
 
     def _axis_stays(self):
         """True when no size moves the axis or the sketch plane."""
@@ -224,7 +273,9 @@ class RevolvePlacer(Placer):
 
     def place(self, p, edge):
         """The RevolvePlace of point `p` on a face (`edge` False) or an edge (`edge` True) of this revolve, or None."""
-        spot = self._spot(p)
+        spot = self.spot(p)
+        if spot.span == CAP:
+            return self._on_cap(p, spot, edge)
         if spot.span != IN or not spot.curves:
             return None
         curve, corner = self._pick(spot, edge)
@@ -240,7 +291,7 @@ class RevolvePlacer(Placer):
         there (a cut through the face) still places the point."""
         if not self.moves:
             return False
-        spot = self._spot(p)
+        spot = self.spot(p)
         moving = any(not self._still(k) for k in spot.curves)
         if spot.span == IN:
             return moving
@@ -254,7 +305,7 @@ class RevolvePlacer(Placer):
         place: `p` lies on an inner wall (inside the turned outline, `thickness` from the nearest face that stays), or
         only on faces of the outline curves in `opened` (the faces the shell opens). `opened` is None when one of them
         could not be told: any face may be open, and every point on or inside the revolve counts."""
-        spot = self._spot(p)
+        spot = self.spot(p)
         if spot.span == OUT:
             return False
         foot = self.turn.footprint
@@ -264,7 +315,7 @@ class RevolvePlacer(Placer):
             return False
         if opened is None:
             return True
-        kept = [curve_distance(foot.curves[k], spot.uv) for k in self._faces if k not in opened]
+        kept = [curve_distance(foot.curves[k], spot.uv) for k in self.face_curves if k not in opened]
         return bool(kept) and abs(min(kept) - thickness) <= LATERAL_TOL
 
     # ---- placing a point
@@ -286,6 +337,34 @@ class RevolvePlacer(Placer):
             return None, None
         return None, corner
 
+    def _cap_stays(self, spot):
+        """True when the end face under `spot` keeps its angle at every size: the angle of the turn follows no size, or
+        the face is the one in the sketch plane of a turn that starts there."""
+        total = self.turn.total
+        if not total.sized:
+            return True
+        past = (spot.angle + self.turn.back) % 360.0
+        return self.turn.back == 0 and min(past, 360.0 - past) < abs(past - total.n)
+
+    def _on_cap(self, p, spot, edge):
+        """The RevolvePlace of a point on an end face of a partial turn, or None. The face keeps its angle
+        (`_cap_stays`); a face point lies inside the outline and moves with it as a point inside an end face of an
+        extrude does, an edge point lies on one outline curve away from its corners and moves with that curve."""
+        if not self._cap_stays(spot):
+            return None
+        foot = self.turn.footprint
+        if edge:
+            if len(spot.curves) != 1 or foot.corner_at(spot.uv, LATERAL_TOL) is not None:
+                return None
+            curve = spot.curves[0]
+        else:
+            if spot.curves or not foot.covers(spot.uv):
+                return None
+            curve = None
+        if self._on_earlier(p):
+            return None
+        return self._placed(p, spot, curve, None, edge, cap=True)
+
     def _moved_uv(self, spot, curve, corner, edge):
         """The raw (x, y) the sketch point of the spot moves to, or a Stuck."""
         outline = self.turn.outline
@@ -294,7 +373,7 @@ class RevolvePlacer(Placer):
             return [Affine(spot.uv[0]), Affine(spot.uv[1])]
         return found if isinstance(found, Stuck) else list(found)
 
-    def _placed(self, p, spot, curve, corner, edge):
+    def _placed(self, p, spot, curve, corner, edge, cap=False):
         moved = self._moved_uv(spot, curve, corner, edge)
         plain = [Quantity(float(c)) for c in p]
         if isinstance(moved, Stuck):
@@ -317,30 +396,30 @@ class RevolvePlacer(Placer):
             if isinstance(q, Stuck):
                 return RevolvePlace(self, curve, corner, plain, [q])
             coords.append(q)
-        cuts, blocked = self._cuts(spot, curve, corner)
+        cuts, blocked = self._cuts(spot, curve, corner, cap)
         return RevolvePlace(self, curve, corner, coords, blocked, cuts)
 
-    def _cuts(self, spot, curve, corner):
+    def _cuts(self, spot, curve, corner, cap=False):
         """(cuts, blocked) of a pick: each picked curve keeps its length, and a partial turn keeps reaching the
-        point's angle."""
+        point's angle (a point on an end face that keeps its angle needs no such rule)."""
         turn, foot = self.turn, self.turn.footprint
         cuts, blocked = [], []
-        picked = [curve] if curve is not None else spot.curves
+        picked = [curve] if curve is not None else [] if cap else spot.curves
         for k in picked:
-            found = self._length(foot.curves[k])
+            found = self.length_of(foot.curves[k])
             if isinstance(found, Stuck):
                 blocked.append(found)
             elif found is not None:
                 cuts.append((found, LENGTH_TOL_MM, lambda picker: "a side of the outline of %s that %s picks would "
                              "shrink to nothing" % (self.label, picker)))
         total = turn.total
-        if total is not None and total.sized and spot.radius > LATERAL_TOL:
+        if total is not None and total.sized and spot.radius > LATERAL_TOL and not cap:
             past = (spot.angle + turn.back) % 360.0
             cuts.append((total.plus(-past), ANGLE_TOL_DEG, lambda picker: "%s would no longer turn as far as the "
                          "place %s picks" % (self.label, picker)))
         return cuts, blocked
 
-    def _length(self, curve):
+    def length_of(self, curve):
         """How far the ends of a line or arc lie apart along the direction they lie apart now, as a sized Quantity;
         None when the curve has no ends or nothing moves them, a Stuck when they cannot follow."""
         outline = self.turn.outline
