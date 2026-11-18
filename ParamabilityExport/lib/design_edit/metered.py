@@ -16,7 +16,6 @@ OUTCOME = "outcome_"
 
 # The labels of recomputes, by the part of the export that asks for them (`MeteredStore.caller`).
 ROW = "row"  # the rebuild that gives a row its numbers
-CONFIRM_NEW_ERRORS = "confirm_new_errors"  # one more rebuild because a row showed new errors
 COUNTING_WARNING = "counting_warning"  # one more rebuild because a row showed a warning that counts
 CHECK_AFTER_ROW = "check_after_row"  # the rebuild of the check after a row that read worse
 SKETCH_PUT_BACK = "sketch_put_back"
@@ -28,7 +27,6 @@ PUT_BACK_VALUES = "put_back_values"  # the rebuild after the parameters were set
 OTHER = "other"
 
 # The outcomes `note` counts.
-RESCUED = "rescued"  # the confirming rebuild after new errors cleared them: the row built after all
 CHECK_CLEARED = "check_cleared"  # the rebuild of a check after which a step that read worse was fine
 
 
@@ -53,7 +51,7 @@ class MeteredStore:
             self._labels.pop()
 
     def note(self, name):
-        """Count one outcome (`RESCUED`, `CHECK_CLEARED`)."""
+        """Count one outcome (`CHECK_CLEARED`)."""
         try:
             self._timer.add(OUTCOME + name, 0.0)
         except Exception:

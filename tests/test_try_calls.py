@@ -1,5 +1,5 @@
 """The counts of what the tries ask of Fusion (`design_edit.metered`, `timing.probe.calls`): the full rebuilds by the
-part of the export that asked, the parameter sets, the health passes and timeline reads, and the two outcomes."""
+part of the export that asked, the parameter sets, the health passes and timeline reads, and the outcome."""
 import json
 import tempfile
 import unittest
@@ -70,23 +70,22 @@ class CallsTest(unittest.TestCase):
         self.assertEqual(calls["timeline_reads"]["count"], 1)
         # The baseline reads errors and warnings; each row reads errors, then warnings.
         self.assertEqual(calls["health_passes"]["count"], 2 + 2 * 3)
-        self.assertEqual((calls["rescued"], calls["check_cleared"]), (0, 0))
+        self.assertEqual(calls["check_cleared"], 0)
 
-    def test_a_row_whose_errors_clear_after_the_confirming_rebuild_is_rescued(self):
+    def test_a_row_with_new_errors_fails_with_no_extra_rebuild_even_when_a_rebuild_would_clear_them(self):
         store = BatchStore(shows=(2, "Fillet1"), clears=True)
         _, results, timer = run(store, rows=1)
         calls = try_summary.calls(timer)
-        self.assertEqual(results[0]["values"], {"w": 6.0})
-        self.assertEqual(calls["computes"]["confirm_new_errors"]["count"], 1)
-        self.assertEqual(calls["rescued"], 1)
-
-    def test_a_row_whose_errors_stay_after_the_confirming_rebuild_is_not_rescued(self):
-        store = BatchStore(shows=(2, "Fillet1"), clears=False)
-        _, results, timer = run(store, rows=1)
-        calls = try_summary.calls(timer)
         self.assertIsNone(results[0]["values"])
-        self.assertEqual(calls["computes"]["confirm_new_errors"]["count"], 1)
-        self.assertEqual(calls["rescued"], 0)
+        self.assertEqual(results[0]["detail"]["items"], ["Fillet1"])
+        self.assertEqual(set(calls["computes"]), {"baseline"})
+
+    def test_a_failed_row_leaves_the_values_as_they_were(self):
+        store = BatchStore(shows=(2, "Fillet1"), clears=False)
+        job, _, _ = run(store, rows=1)
+        self.assertEqual(store.exprs, store.first)
+        self.assertEqual(job.restore_failures, [])
+        self.assertFalse(job.check_pending())  # the check after the row finds the design back
 
     def test_a_check_that_finds_the_steps_fine_after_the_rebuild_counts_as_cleared(self):
         store = BatchStore(shows=(2, "Fillet1"), clears=False)
@@ -99,14 +98,13 @@ class CallsTest(unittest.TestCase):
         self.assertEqual(calls["computes"]["check_after_row"]["count"], 1)
         self.assertEqual(calls["check_cleared"], 1)
 
-    def test_the_rebuilds_of_a_walk_back_count_as_walk_steps_whatever_asked(self):
-        store = BatchStore(shows=(2, "Fillet1"), clears=False)
+    def test_a_walk_back_whose_step_fails_makes_no_extra_rebuild(self):
+        store = BatchStore(shows=(2, "Fillet1"), clears=True)
         job, _, timer = run(store, rows=1)
-        before = timer.count(metered.COMPUTE + metered.CONFIRM_NEW_ERRORS)
         job.walk_back({"name": "r0", "values": {"w": 6.0}}, 0)
         calls = try_summary.calls(timer)
-        self.assertEqual(calls["computes"]["walk_step"]["count"], 1)
-        self.assertEqual(timer.count(metered.COMPUTE + metered.CONFIRM_NEW_ERRORS), before)
+        self.assertEqual(set(calls["computes"]), {"baseline"})  # the failed step asked for no rebuild
+        self.assertEqual(job.walks[0]["failed"], 1)
 
     def test_a_baseline_measured_again_after_a_rebase_counts_as_a_rebase(self):
         store = BatchStore()
@@ -123,7 +121,7 @@ class CallsTest(unittest.TestCase):
         _, _, timer = run(store, rows=1)
         found = try_summary.summary(timer, 1, None, None, lambda: [])
         self.assertEqual(set(found["calls"]), {"computes", "param_sets", "param_put_backs", "health_passes",
-                                               "timeline_reads", "rescued", "check_cleared"})
+                                               "timeline_reads", "check_cleared"})
         self.assertEqual(json.loads(json.dumps(found)), found)
 
     def test_the_calls_after_the_tries_are_kept_apart_and_set_again_each_time(self):
@@ -140,36 +138,6 @@ class CallsTest(unittest.TestCase):
         self.assertEqual(found["calls"]["after_tries"]["computes"]["end_check"]["count"], 1)
         self.assertEqual(found["calls"]["after_tries"]["timeline_reads"]["count"], 1)
         self.assertEqual(found["calls"]["timeline_reads"]["count"], 1)  # the tries' own count is untouched
-
-    def test_a_walk_back_that_meets_new_errors_does_not_count_as_rescued(self):
-        store = BatchStore(shows=(2, "Fillet1"), clears=True)
-        job, _, timer = run(store, rows=1)
-        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 1)  # the row itself
-        job.walk_back({"name": "r0", "values": {"w": 6.0}}, 0)
-        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 1)
-
-    def test_a_row_that_fails_after_its_confirming_rebuild_is_not_rescued(self):
-        store = BatchStore(shows=(2, "Fillet1"), clears=True)
-        store.warns = lambda exprs: [(4, "Later")] if store.exprs != store.first else []
-        original, seen = store.recompute, []
-
-        def recompute():
-            result = original()
-            seen.append(True)
-            if store.exprs != store.first and len(seen) > 2:  # after the baseline and the confirming rebuild
-                store.errors = [(4, "Later")]  # the counting warning turns into an error on the next rebuild
-            return result
-        job = RowExport(metered.MeteredStore(store, Timer()), UNITS, lambda path: None,
-                        counts_warning=lambda step: True)
-        timer = job.store._timer
-        store.recompute = recompute
-        with tempfile.TemporaryDirectory() as tmp:
-            results = job.run([{"name": "r", "values": {"w": 6.0}, "step": False}], tmp, lambda *a: True,
-                              tolerate_build_errors=True)
-        self.assertIsNone(results[0]["values"])
-        self.assertEqual(results[0]["detail"]["items"], ["Later"])
-        self.assertEqual(timer.count(metered.COMPUTE + metered.CONFIRM_NEW_ERRORS), 1)  # it was confirmed once
-        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 0)
 
     def test_an_export_keeps_the_calls_after_the_tries_apart(self):
         port = FakePort()

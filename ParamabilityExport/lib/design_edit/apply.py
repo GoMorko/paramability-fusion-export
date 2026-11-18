@@ -66,16 +66,14 @@ class Baseline:
 
 class Health:
     """The timeline items in error and in warning, read together in one pass over the timeline (`read`), as
-    {key: name}. `rescued` is True when `apply_row` read it again after a confirming recompute and the new errors were
-    gone: the row built after all. `errors` raises what the read of the errors raised, so a row whose errors cannot be read fails as
-    before; `warnings` is None when the warnings could not be read, which gives no warning. A store with the
+    {key: name}. `errors` raises what the read of the errors raised, so a row whose errors cannot be read fails;
+    `warnings` is None when the warnings could not be read, which gives no warning. A store with the
     `health_entries` control gives both in one pass; any other store gives them in one read each. Without
     `with_warnings` only the errors are read, and `warnings` stays None."""
 
     def __init__(self, store, with_warnings=True):
         self.store, self.with_warnings = store, with_warnings
         self._errors, self._failure, self.warnings = {}, None, None
-        self.rescued = False
         self.read()
 
     @property
@@ -234,8 +232,8 @@ def apply_row(store, units, values, baseline=None, full=False, with_warnings=Tru
 
     The values go in as one change when the store can: Fusion rebuilds the steps they change once, as when the person
     edits the parameters, and no full recompute follows; that rebuild gives no answer of its own, so `recompute_ok`
-    is None and only the steps in error judge the row. A step that reads in error then is judged after one full
-    recompute: a rebuild of only the changed steps can leave an error that a full one clears.
+    is None and only the steps in error judge the row. A step in error after that rebuild fails the row at once, as
+    it does when the person edits the parameters; no full recompute confirms it.
     With `full` (a row whose STEP is written next) the design is recomputed in full after the change and judged by
     that recompute, as when each value is set in turn and the design is recomputed.
     The row fails when Fusion refuses an expression, the recompute raises, the recompute reports failure while
@@ -251,12 +249,6 @@ def apply_row(store, units, values, baseline=None, full=False, with_warnings=Tru
             ok = _set_each(store, expressions)
     health = Health(store, with_warnings)
     broken = _broken(health, baseline)
-    if broken and ok is None:
-        with metered.caller(store, metered.CONFIRM_NEW_ERRORS):
-            _recompute(store)
-        health.read()
-        broken = _broken(health, baseline)
-        health.rescued = not broken
     if broken:
         raise _new_errors(broken, ok)
     if ok is False and baseline.recompute_ok:
