@@ -276,6 +276,11 @@ and lists what is missing. You can switch between the original shape and the cop
 the missing steps are added. If you connect an AI assistant to Paramability, it can add the missing steps for you.
 The add-in itself has no AI in it.
 
+A fillet or chamfer with several sets of edges (rows in the Fusion dialog) can be copied in part. When the sets lie
+apart from each other and one set cannot be copied, the add-in copies the other sets and leaves out only that set.
+The result window lists the step with "Set 2 of 3 of this step is left out" and the reason. In Paramability the
+missing step holds only that set. Sets that meet at a corner are copied together, or left out together.
+
 A step that picks edges or faces of a left out step is left out too, since in the copy those faces do not exist (a
 round on the edges of a coil, for example). The add-in asks Fusion which step made the faces each later round,
 chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not

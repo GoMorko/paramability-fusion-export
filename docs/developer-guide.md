@@ -1572,6 +1572,27 @@ when the first translation stopped only because of the cap (`TranslateResult.ove
 What a left out step would have recorded (doubts, notes) is dropped with it. So a step that is not written never
 fixes or marks a size by itself.
 
+A step can also be written in part. A round or chamfer handler can copy some sets of edges of a step and leave one
+set out (see "Sets of one step copied one after the other" in 3.3, `finishes/set_split.py`). The handler then gives
+a `StepResult` with steps and with `left_out`, a `result.LeftOut`. The walk (`walk.py`) does these things:
+
+1. It asks `stop_reason` first, as for any gap. When the gap cannot be kept, the copy stops at the step.
+2. It writes the steps of the sets that it copies, as for any copied step.
+3. It gives the audit the item with the values of the copied sets only (`LeftOut.copied_item`). The audit thus does
+   not ask for the sizes of the set that is left out.
+4. It records the gap with the item that holds only the sets that are left out (`LeftOut.gap_item`). These sets
+   and the keys of their parameters are numbered again from 0. Thus the gap file holds only the missing sets, and an
+   assistant that fills the gap adds only those sets. The gap comes after the steps of step 2.
+5. The gap has no `bodyBefore`. The body that the reader measured before the item does not hold the copied sets,
+   but the body just before the missing sets holds them. `bodyAfter` is correct: it is the body after the item.
+6. The verdict is `translatedWithNote`, with the ids of the written steps and with `gap` and `cause` "own". The note
+   holds the reason of the gap.
+
+The early list in the export window (`dialog_model/left_out_preview.py`) and the reach read
+(`export_plan/reach_pass.py`) look at `gap` on any verdict, so they treat such a step like a step that is left out.
+The reach read asks which later steps pick faces of the whole step. Thus a later step that picks a face of a copied
+set is also left out. This is safe, but it can leave out more than necessary.
+
 A join that would float. An extrude join can meet only material of a step that was left out. Example: a rib stands
 on a floor, and the Combine that made the floor is a gap. In the copy the rib would float apart from the part. The
 app's kernel refuses a step that leaves the part in separate pieces, so this one step would stop the whole copy. So
@@ -1635,7 +1656,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
 | `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
-| `roundChanging` | a changing radius on more than one edge, with other sets in its fillet, with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
+| `roundChanging` | a changing radius on more than one edge, with other sets in its fillet that are not apart from it (see "Sets of one step copied one after the other"), with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `shellKind` | a shell that grows its wall both inward and outward, or one with corners that are not sharp or rounded (`finishes/finish.py`, see 3.19) | Shell one way only, inward or outward, with sharp or rounded corners. |
 | `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
 | `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
@@ -2461,7 +2482,7 @@ one folder per family of steps.
     mirror plane is in `design_model/steps/repeat.py`. The plain pattern that a path pattern equals is in
     `design_model/steps/path_pattern.py` (see 3.17). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
-  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py` and `offset_round.py` (offsets of faces, see 3.20).
+  - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `set_split.py` (the sets of one round or chamfer step copied one after the other, and a set left out alone), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py` and `offset_round.py` (offsets of faces, see 3.20).
   - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `scale.py` (see 3.18), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
@@ -2711,6 +2732,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     edge. `reach` is how far the chamfer reaches along a face.
   - `reach` also exists on `RoundSet`. The Orca output uses it to measure a step that it leaves out
     (`outline_rounds.note_left_out`).
+  - `pick`, `ends`, `apart`, `all_apart` and `only_sets` tell how Fusion picked the edges of a set, where the vertices
+    of its edges are, whether two sets lie apart, and give an item with only some of its sets. See "Sets of one step
+    copied one after the other".
   - `ChamferSet.sides()` splits the edges of an uneven chamfer by the face that takes the first distance. The reader
     measured, for each point of an edge, the normals of the two faces (`sides`) and the normal of the chamfer face
     (`cut_normals`). The chamfer face normal is a mix of the two face normals, weighted by the two distances. The
@@ -3740,14 +3764,70 @@ copy that picks each edge by a point does not see these edges. Thus the handler 
 3. The edges of one extrude (`featureEdges`), when all the edges have one size.
 4. One point for each edge.
 
-The recipe cannot say the pick of Fusion for these cases: a step that mixes sets picked by faces and sets picked by
-tangent chains, sets of different sizes picked by faces, a chamfer set that is split by the face of its first
-distance, part of a set, and picks with too many points. Each step of the copy is then a different operation than
-the one step of Fusion, so the steps can only be the same where the sets do not meet. The capture cannot show that
-the sets stay apart at all sizes. Thus, for steps 3 and 4, when a set was picked by faces or by a tangent chain, the
-handler marks the sizes that can change which edges the pick holds (`_mark_own_picks`). These are all the sizes that
-the steps before the round or chamfer read (`reach.any_face_sizes`). Each one is marked "may give unexpected results".
-The first translation of an export marks nothing.
+The recipe cannot say the pick of Fusion in one step for these cases: a step that mixes sets picked by faces and sets
+picked by tangent chains, sets of different sizes picked by faces, a chamfer set that is split by the face of its first
+distance, part of a set, and picks with too many points. When the sets of the step lie apart, the handler copies the
+step as several steps, one for each way of picking (see the next part). Otherwise, for steps 3 and 4, when a set was
+picked by faces or by a tangent chain, the handler marks the sizes that can change which edges the pick holds
+(`_mark_own_picks`). These are all the sizes that the steps before the round or chamfer read
+(`reach.any_face_sizes`). Each one is marked "may give unexpected results". The first translation of an export marks
+nothing. The marks come only from the sets of each step of the copy, so a set whose own pick the copy writes marks
+nothing.
+
+#### Sets of one step copied one after the other
+
+A Fusion fillet or chamfer can hold several sets of edges. Each set has its own way of picking (edge by edge, through
+faces, along tangent chains) and its own size. Fusion builds all the sets in one operation. Where two sets meet at a
+corner, Fusion makes one blend at that corner. Two steps one after the other do not make that blend. Where the sets
+do not meet, the result of one operation is the same as the result of the sets one after the other, in any order.
+
+The reader records the points of the two vertices of each edge of a set (`ends`, `read_finish._edge_set`). The shared
+layer uses them (`design_model/steps/finish.py`):
+
+- `FinishSet.pick` tells how Fusion picked the edges of a set: `FACES` (only faces), `CHAINS` (only edges, along
+  tangent chains), `EDGES` (only edges, one by one), or None (inputs of more than one kind, or the edges of another
+  step).
+- `apart(a, b)` is true when no vertex of set `a` is nearer to a vertex of set `b` than `CORNER_MARGIN` (2) times the
+  two reaches together. The reach is how far a set takes material along a face: the radius of a round, the larger
+  distance of a chamfer, the larger end radius of a changing radius, the chord of a round by chord length. A shared
+  vertex has the distance 0, and a shared edge has two shared vertices, so `apart` is false for sets that touch. The
+  margin covers two vertices with a short edge between them, where the two rounds can meet, and faces that meet at
+  a sharp angle, where a round reaches further than its radius. `apart` is false when an edge has no `ends` (a
+  capture of add-in 0.14.3 or older), or when the reach of a set is not known (a round with curvature continuity, a
+  round with two radii, a chamfer whose size cannot be read).
+- `only_sets(item, indexes)` makes a copy of an item that holds only some of its sets and their parameters.
+
+Example. A fillet has two sets. Set 1 picks the top face of a boss, radius 1 mm. Set 2 picks one edge along a tangent
+chain around a slot at the other end of the part, radius 2 mm. No vertex of set 1 is nearer than 6 mm to a vertex of
+set 2. The copy writes two `round` steps: the first with `faceEdges` on the top face, the second with `chain:
+tangent` on the slot edge. No size is marked. In one step, the copy would have to pick every edge by a point, and
+it would mark the sizes read before the fillet.
+
+The handlers (`finishes/finish.py`) use `finishes/set_split.py`:
+
+- A round: when the step has more than one set and every two sets are `apart`, the handler puts the sets in groups
+  (`set_split.groups`). Sets picked by faces with the same radius and the same parameter expression make one group.
+  Sets picked by chains with one radius each make one group (the step writes `edgeSizes` when the radii differ).
+  Sets picked edge by edge make one group. A changing radius, a round by chord length picked by faces or chains, and
+  a set with inputs of more than one kind each make a group of their own. The handler writes one step for each group,
+  in the order of the first set of each group. A step with one group is copied as before.
+- A chamfer: the handler already writes one step for each size (`Part`, `merge`). Inside one size, when the sets of
+  that size were picked in different ways and every two of them are `apart`, the handler writes one step for each
+  way (`_pick_groups`).
+- A set that cannot be copied (`_round_set_refusal`, `_bevel_set_refusal`, or a group whose copy gives a `Refusal`)
+  is left out alone, when it is `apart` from every other set. A group whose copy fails is tried again set by set, so
+  only the set that fails is left out. The result has `left_out` (see 1.9.3). The reason is "Set 2 of 3 of this step
+  is left out, the other sets are copied." followed by the reason of the set. The cause is the cause of the set, so
+  the hint is the hint of that set.
+- What the copy of a group records on the context (marks of sizes, notes, the values it asked for) counts only when
+  the group is written (`Context.recording`, `Context.replay`). The notes of the whole step (setback corners,
+  smoothness that cannot be read, another corner type) come once.
+- When the sets are not apart, the step is handled as before: one step, the picks of steps 1 to 4, and the marks.
+  One set that cannot be copied then leaves the whole step out.
+
+The test is made at the sizes of the capture. A size that moves two sets near each other at other values is not
+seen. The margin of 2 gives some room for this. The hand check "One fillet with sets picked in different ways" in
+`docs/hand-checks.md` checks the result in Fusion and in the app.
 
 #### A construction plane
 
@@ -4391,6 +4471,10 @@ A step becomes a gap (left out, recipe still written):
 - it is an extrude join that meets only material of earlier gaps, so it would float apart from the copy (1.9.3);
 - Fusion shows it in error and the part changed (`target_changed` true): Fusion keeps an older result of the step,
   which the copy cannot rebuild (cause `failsInFusion`, 1.9.1).
+
+Part of a step becomes a gap when a round or chamfer handler copies the other sets of edges of the step and leaves
+one set out: the sets lie apart, and that set alone cannot be copied (1.9.3, and "Sets of one step copied one after
+the other" in 3.3).
 
 A step stops the copy (fixed shape):
 

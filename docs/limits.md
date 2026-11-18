@@ -114,9 +114,22 @@ What the copy can and cannot do, step by step. The README lists only the main li
   different radii in one round. Otherwise the copy picks the edges one by one, and the sizes read before the step
   are marked "may give unexpected results": at other sizes the faces or the chain may hold other edges, which the
   copy does not round. This happens for a round set by chord length, a round whose radius changes along the edge,
-  sets picked by faces and sets picked by chains in one step, sets of different sizes picked by faces, and a chamfer
-  with two different sizes whose edges take the first size on different faces.
-- A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet, with
+  and a chamfer with two different sizes whose edges take the first size on different faces. It also happens for
+  sets picked by faces and sets picked by chains in one step, and for sets of different sizes picked by faces, when
+  those sets meet at a corner or come near one (see the next point).
+- One fillet or chamfer step can hold several sets of edges. When no two sets share a corner, and no corner of one
+  set is nearer to a corner of another set than twice the sizes of the two sets together, the copy makes the sets
+  one step after the other, in their order in Fusion: one step for the sets picked by faces (one step for each
+  size), one for the sets picked by chains, one for the edges picked one by one, and one for each other set. Each
+  step then picks its edges as Fusion did, so no size is marked for the picks of those sets. A round whose radius
+  changes along the edge gets its own step this way. When one set cannot be copied, only that set is left out: the
+  result window lists the step with the reason of that set, and the other sets are in the copy. Where the sets meet
+  or come near, Fusion makes one blend at the corner, which steps one after the other do not make, so the copy keeps
+  the sets in one step as before, and a set that cannot be copied leaves the whole step out. Exports made with
+  add-in 0.14.3 or older do not hold the corners of the edges, so their sets stay in one step. The test is made at
+  the sizes of the export: a size that brings two sets near each other is not seen.
+- A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet or
+  apart from the other sets of its fillet (see above), with
   no radii set between the two ends, and only when the radius Fusion made changes evenly from one end to the other
   (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a
   tool body. A size that may swap which end of the edge lies lowest along x, y and z is marked "may give unexpected

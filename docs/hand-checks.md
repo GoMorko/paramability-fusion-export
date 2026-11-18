@@ -930,3 +930,22 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
     The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
     marker held. Afterwards the design is as before.
+81. MP1, one fillet with sets picked in different ways. Add user parameters `Height` = 20 mm and `Round` = 2 mm. On
+    the XY plane sketch an 80 x 40 mm rectangle from the origin and extrude it `Height` up as a new body. On its top
+    face sketch a 20 x 20 mm square from (10, 10) mm and extrude it 10 mm up as a join (the boss). On the plate top
+    face sketch a slot 30 mm long and 10 mm wide with round ends, centred at (55, 20) mm along X, and cut it 5 mm deep.
+    Make one Fillet with three sets (rows): set 1 picks the top face of the boss, radius `Round`; set 2 picks one
+    straight edge of the slot rim with Tangent Chain on, radius 1 mm; set 3 picks the vertical edge of the plate at
+    (80, 40) mm with Tangent Chain off, radius 3 mm. Second design: the same, but set 3 picks the vertical edge of the
+    boss at (30, 30) mm, which meets the top face of the boss at a corner. Third design: the first one, but set 3 is a
+    variable radius on the same plate edge, 1 mm at the bottom and 3 mm at the top, with one more radius of 2 mm in
+    the middle. Fourth design: the first one with a Chamfer of 1 mm on the same three sets instead of the Fillet.
+    Export: tick `Height` (10 to 40 mm) and `Round` (1 to 4 mm) each time. First design: the fillet is three round
+    steps, one per set, with the note that the sets are copied one after the other; no size is marked "may give
+    unexpected results"; in `report.json` every edge of the fillet sets has `ends`. In Paramability the copy matches
+    the STEP, and at other `Height` and `Round` values the rounds stay on the boss top, around the whole slot rim and
+    on the plate corner. Second design: the fillet is one round step and `Height` is marked "may give unexpected
+    results", as before this change; the corner where the boss edge meets the boss top matches Fusion. Third design:
+    sets 1 and 2 are copied, the result window lists the fillet as left out with "Set 3 of 3 of this step is left
+    out", the tip about a changing radius, and `gaps.json` has a gap for the fillet whose data holds one set. Fourth
+    design: three bevel steps, no size marked. Afterwards each design is as before.
