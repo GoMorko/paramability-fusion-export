@@ -942,7 +942,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     result window has no reopen button, and it gives the advice to close the design without saving. Repeat with the
     network off before you click: expect the reopen to work, or a message that the saved version was not found with
     the design still open as the export left it. The design must never stay closed without a message.
-82. SH1, a box and a lid that share sizes. Add user parameters `Width` = 60 mm, `Depth` = 40 mm, `Height` = 30 mm
+82. SZ1, a box and a lid that share sizes. Add user parameters `Width` = 60 mm, `Depth` = 40 mm, `Height` = 30 mm
     and `Wall` = 2 mm. Make two components, `Box` and `Lid`. In `Box`, sketch a `Width` x `Depth` rectangle on the XY
     plane from the origin, extrude it `Height` up as a new body, and shell it with the top face open and a thickness
     of `Wall`. Make the lid in three versions, one at a time:

@@ -1338,7 +1338,7 @@ with the reason of the sketch or the reference.
 
 Tests: `tests/test_shared_sizes.py` (a shared size that changes the part through its own values is not in
 `body_moved`; a shared size that no value of the part reads stays in it; each point above that is not true keeps the
-mark). Hand check SH1 in `docs/hand-checks.md` tests this in Fusion.
+mark). Hand check SZ1 in `docs/hand-checks.md` tests this in Fusion.
 
 ### 1.9 The final translation
 
