@@ -2728,12 +2728,12 @@ one folder per family of steps.
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `revolve_walls.py` (the inner walls a shell leaves on a revolve, see 3.19), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `revolve_joined.py` (the outline that the touching outlines of one revolve make together, see 3.3), `revolve_walls.py` (the inner walls a shell leaves on a revolve, see 3.19), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
   (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
   `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
-  `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
+  `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file), `joined_outline.py` (an outline joined from touching outlines, drawn through their corners),
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
@@ -3974,6 +3974,84 @@ A pick on a revolve face does not give the move of a flat face or of an edge. Th
 reaches to, and an edge that a plane or an axis is built on, are not followed on a revolve (`follow.target_shift`,
 `follow._edge_shift`). Their sizes are marked, as before. An extrude up to a revolve face writes its `near` point with
 formulas (`follow.placed_point`).
+
+#### The outlines of one revolve together
+
+One revolve can turn several sketch outlines. When two outlines share a sketch line, Fusion turns them as one solid.
+The shared line makes no face. The faces of the part come from the outer boundary of all the outlines together. The
+handler writes one revolve step for each outline (3.14), and the placer of each step knows only its own outline. Thus
+a wall that runs across two outlines is not a wall of either outline.
+
+Example. A cap has the sizes `Radius` (20 mm), `Height` (10 mm) and `Wall` (1.5 mm). The sketch has two outlines.
+The body is a rectangle from the axis to `Radius`, and from 0 to `Height`. The flange is below the body. It is 1 mm
+high, and its outer edge leans out by 0.5 mm: its corners are (0, -1), (`Radius` + 0.5, -1), (`Radius`, 0) and
+(0, 0). The two outlines share the line from (0, 0) to (`Radius`, 0). `Shell1` is `Wall` thick, and it opens the
+bottom face of the flange. The flange is thinner than the wall. Thus the inner wall of the leaning edge comes from the
+flange, and it ends where the inner wall of the body side starts. `Chamfer1` picks the inner rim, where the inner wall
+of the leaning edge meets the open bottom.
+
+- The placer of the flange alone sees a flange 1 mm high with a top face. A shell 1.5 mm thick closes it up. The
+  placer of the body alone does not have the leaning edge. Thus neither placer can place the inner rim.
+- The joined outline is (0, -1), (`Radius` + 0.5, -1), (`Radius`, 0), (`Radius`, `Height`), (0, `Height`). The
+  leaning edge meets the body side at (`Radius`, 0). The inner rim is placed on this outline, as for one outline
+  (3.19): its point at 30 degrees is `[0.866025404 * Radius + 0.433012702 + (-0.968245837 * Wall), 0.5 * Radius +
+  0.25 + (-0.559016994 * Wall), -1]`.
+- The rule of 3.19 keeps the inner wall of the leaning edge longer than its set back at the open bottom. The set
+  back is 0.5 mm for each millimetre of `Wall`, and the edge is 1.118 mm long. Thus the range of `Wall` stops at
+  2.23. This cut is on the safe side. At the concave corner where the leaning edge meets the body side, the inner
+  wall runs on past the corner, but the rule counts that run as 0 (3.19).
+
+`faces/revolve_joined.py` makes the joined outline:
+
+1. `geometry.outlines.merge_touching` joins the outlines that share a curve, as for an extrude. It leaves out each
+   shared curve. It joins the pieces of one sketch line back into that line. Example: a leaning edge is one sketch
+   line, and the line between two outlines ends on it. Fusion gives each outline one piece of the leaning edge. The
+   joined outline has the whole line again.
+2. `sketch/joined_outline.py` (`joined_outline`) gives each corner of the joined outline the formulas of the corner in the outlines
+   that have it. Two outlines can have the same corner. They must move it in the same way. If they do not, there is no
+   joined outline.
+3. The check `_holds` tests the joined outline and each outline at the sizes now and at the size settings over the
+   ranges (`range_check.corners` and `middles`, inside the ranges cut for the outlines). At each setting, no outline
+   and not the joined outline may cross or touch itself. Each outline and the joined outline must also run round the
+   same way as now.
+4. A crossing can start and stop between two of these settings. Thus `_between` adds more settings. It moves one
+   size at a time, and keeps the other sizes at their values now. For each corner of a loop and each edge of the same
+   loop, it calculates on which side of the line of the edge the corner is. With one size, this value is a quadratic
+   (a corner moves along a line, or along a curve when its formula holds a product of sizes). `_between` finds the
+   places in the range where the value is 0, and adds a setting halfway between each two neighbouring places. Thus
+   each interval where the corners keep their sides has one setting. When one size has more than 256 such places
+   (`MAX_BETWEEN`), there is no joined outline. The check does not look at the middle points of arcs. It also does not
+   find a crossing that needs two sizes to change together and that the settings of `range_check` do not reach.
+
+The joined outline must stay on one side of the axis. Outlines on the two sides of the axis turn into the same solid,
+and the placer reads only one side (`RevolvePlacer._normal`). Thus there is no joined outline when the joined outline
+reaches both sides of the axis, or when two outlines share a line on the axis (`_across_axis`).
+
+The check finds these problems:
+
+- Two outlines overlap. The joined outline then crosses itself or folds back on itself.
+- A meeting point slides off the end of the line that it lies on. Example: the tip of a lip on the side of the body
+  moves with `Lip`, and it goes past the top of the side. The side of the body is cut in pieces at the tip. A piece
+  then runs back, and the body outline folds back on itself.
+- An outline turns over onto its neighbour. Example: the tip of a bump on the side of the body moves into the body.
+  The bump outline then runs round the other way.
+
+When the check fails, or an outline has holes, there is no joined outline. The handler then gives only the placers
+of the outlines, and a pick where they meet is marked, as before.
+
+The joined outline has a placer of its own, a `RevolvePlacer` with the parts in `joins`. The handler gives the maker
+of each step the same `JoinedRevolve` and the place of the step among the parts. When each place has its placer in
+one walk, the joined placer is added. Thus it is the latest placer of the
+revolve, and `follow.locate` asks it first. Its `before` holds only the placers made before the first outline, so
+the outlines are not "a step before it". The shell does not count the joined placer and its outlines as other steps
+of each other (`revolve_placer.kin`). A point that the joined placer does not place, and does not claim, goes to the
+placers of the outlines, as before.
+
+A shell opens faces by points, and `follow.locate` places these points on the joined placer first. The shell then
+also opens the curves of each outline that lie along an opened curve of the joined outline
+(`RevolvePlacer.curves_along`). Thus an outline does not see an opened face as a closed face. Example: a flange 4 mm
+thick is open at its bottom. Without this rule, the flange placer would read a point 1.5 mm above the opening as a
+point on the inner floor, but the shell leaves no floor there.
 
 #### A face of another body
 
@@ -5293,7 +5371,9 @@ When no shorter ranges keep the rule, the step is left out with the cause `revol
 size that the step reads has a range that the person typed.
 
 Each written revolve step gives the walk a placer (`RevolveMaker`, `faces/revolve_placer.py`). Then a later pick on
-a face or an edge of the revolve follows the outline, the axis and the turn (3.3).
+a face or an edge of the revolve follows the outline, the axis and the turn (3.3). Outlines that share a line also
+give the placer of the outline that they make together (`faces/revolve_joined.py`, "The outlines of one revolve
+together" in 3.3).
 
 The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
@@ -6046,6 +6126,11 @@ The move must be the same at all sizes. A line keeps its direction when no size 
 (`RevolvePlacer.keeps_direction`). An arc keeps its shape, or the pick on it is stuck (3.3). When a size turns a line
 of the move, the point is not placed.
 
+The two ends of a line can move by a product of sizes. Example: the side of a cup is at `Diameter * Scale / 4`. The
+probe gives such a value as a formula with a product (`Curved`), not as a sum of sizes (`Affine`). The placer
+subtracts the values of the two ends. When the products cancel and no size is left, the line keeps its direction. The
+same rule tells whether a face stays where it is (`_still`) and whether the sketch plane stays.
+
 Each pick adds rules for the ranges (`RevolvePlace.cuts`, as in 3.3):
 
 - The inner wall of each picked line keeps a length of more than 0.001 mm. Each end of the inner wall is set back from
@@ -6065,8 +6150,10 @@ The shell does not place a point in these cases. It claims the point, so the siz
   flange that is as thick as the wall.
 - An end of the inner wall cannot be told: the corner joins an arc at an angle, the corner is on the axis without a
   line on the axis next to it, or the curve next to the corner has more than one neighbour.
-- Another step covers the outer face of the point, or the face next to it. Example: a second outline of the same
-  revolve that lies against the side wall, or an extrude that joins the side wall. The shell tests the material of
+- Another step covers the outer face of the point, or the face next to it. Example: an extrude that joins the side
+  wall, or a second outline of the same revolve that lies against the side wall when the two outlines have no joined
+  outline (3.3, "The outlines of one revolve together"). Outlines that have a joined outline are one outline for the
+  shell. Thus the inner walls are placed on the joined outline. The shell tests the material of
   the other steps 0.01 mm outside the face (`OUT_STEP`). The other revolves give their material (`RevolvePlacer.holds`).
   An extrude gives its material (`material_at`).
 - A step before the shell places the point, or claims it.

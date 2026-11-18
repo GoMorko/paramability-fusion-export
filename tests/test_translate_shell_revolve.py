@@ -9,7 +9,7 @@ from tests.translator_helpers import assert_schema_ok, steps_of
 
 from lib.design_model.values import Quantity
 from lib.params import size_table
-from lib.sketch_values.motion import Affine, Motion
+from lib.sketch_values.motion import Affine, Motion, Terms
 from lib.translator import translate
 from lib.translator.faces.shells import Shell
 
@@ -83,6 +83,22 @@ class InnerWallTest(unittest.TestCase):
         self.assertEqual(marked(result), set())
         self.assertGreater(result.recipe["sizes"]["Wall"]["max"], 29.0)
         self.assertLess(result.recipe["sizes"]["Wall"]["max"], 30.0)
+
+    def test_the_inner_rim_follows_a_side_set_by_a_product_of_two_sizes(self):
+        # The side of the cup sits at Diameter * Scale / 4: both ends of the side line move by that product.
+        capture = shelled_cup(edges=[turned_point(28, 40, 30)])
+        capture["parameters"]["user"].append(dict(size_param("Scale", 2), kind="count", unit="", expression="2",
+                                                  value=2.0, display_value=2))
+        product = lambda k: Terms(0.0, [(k, [("", "Diameter", 1.0), ("", "Scale", 1.0)])], "Sketch1")
+        height = lambda k: Terms(0.0, [(k, [("", "Height", 1.0)])], "Sketch1")
+        values = {"1/p0/l0/center.0": product(0.125), "1/p0/l0/center.1": height(0.5),
+                  "1/p0/l0/width": product(0.25), "1/p0/l0/height": height(1.0)}
+        motion = Motion(values=values, states=[{"values": {"Diameter": 66.0, "Scale": 3.0}, "built": True}])
+        table, result = run(capture, motion, sizes=SIZES + ["Scale"])
+        self.assertIsNone(result.refusal)
+        self.assertEqual(marked(result), set())
+        self.assert_at(table, picked(result.recipe, "round")[0], turned_point(57, 50, 30), Height=50, Diameter=80,
+                       Wall=3, Scale=3)
 
     def test_a_pick_on_an_inner_wall_whose_outer_side_a_size_turns_is_marked(self):
         # The side leans out by Flare at the top: the inner rim sits where the wall meets the open top.

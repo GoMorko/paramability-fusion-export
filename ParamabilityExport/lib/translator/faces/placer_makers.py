@@ -84,16 +84,21 @@ class ShellMaker:
 class RevolveMaker:
     """A revolve step: `turn` is the `revolve_placer.Turn` of its written outline and axis. The steps written before
     it are kept, to tell where its faces meet theirs. An intersect gets no placer: the faces it keeps can lie on the
-    part as well."""
+    part as well. `joined` is `(JoinedRevolve, place among its parts)` of the outline this one makes with the other
+    outlines of the revolve that touch it (faces/revolve_joined.py), or None."""
 
-    def __init__(self, turn):
-        self.turn = turn
+    def __init__(self, turn, joined=None):
+        self.turn, self.joined = turn, joined
 
     def make(self, ctx, step_id, step):
         combine = step.get("combine", "add")
         if combine == "intersect":
             return
-        ctx.add_placer(RevolvePlacer(step_id, step.get("label") or "a revolve", self.turn, ctx.placers, combine))
+        placer = RevolvePlacer(step_id, step.get("label") or "a revolve", self.turn, ctx.placers, combine)
+        ctx.add_placer(placer)
+        if self.joined is not None:
+            group, at = self.joined
+            group.made(ctx, at, placer)
 
 
 class MovedFacesMaker:

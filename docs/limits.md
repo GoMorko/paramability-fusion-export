@@ -85,11 +85,14 @@ What the copy can and cannot do, step by step. The README lists only the main li
   does not turn a full circle follows the outline when the angle of that face does not change with a size. The range
   of a size stops before a picked side of the outline would shrink to nothing, before an inside wall or the opening
   of the shell would close up, and before a revolve that does not turn a full circle would no longer reach the picked
-  place. These picks are not followed: a pick on an end face whose angle changes with a size, a pick on the inside of
-  a shelled revolve that does not turn a full circle, a pick on the inside where a line of the outline turns with a
-  size, where the inside wall meets a curved wall at an angle, or where a second outline or another step lies against
-  the outside wall, a pick where the revolve meets a step made before it, and a pick that lies on two sides of the
-  outline at once. When sizes
+  place. Outlines of one revolve that share a line (a lid and its rim, drawn as two outlines and revolved together)
+  count as one outline for these picks, also where they meet and inside a shell. These picks are not followed: a pick
+  on an end face whose angle changes with a size, a pick on the inside of a shelled revolve that does not turn a full
+  circle, a pick on the inside where a line of the outline turns with a size, where the inside wall meets a curved
+  wall at an angle, or where another step lies against the outside wall, a pick where outlines of one revolve meet
+  when they overlap, when they lie on both sides of the axis, or when a size in its range moves one so that they meet
+  in another way (the tip of one outline passes the end of the line it stands on), a pick where the revolve meets a step made before it, and a pick that
+  lies on two sides of the outline at once. When sizes
   move the face under such a pick, the pick keeps its place and the sizes the steps before it use are marked "may give
   unexpected results". Picks on an intersect revolve, and on a revolve to two sides whose angle before the sketch
   follows a size, do not follow sizes either.

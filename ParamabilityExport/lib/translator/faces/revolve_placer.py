@@ -28,6 +28,7 @@ from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import Footprint, curve_distance, polyline
 from ...sketch_values.motion import Affine, Stuck
+from ..sketch.curved import Curved
 from ..sketch.sketch_motion import PICK_TOL, combine, rendered
 from .placer import Placer
 from .slabs import CONSTANT_TOL, LATERAL_TOL, cleaned_all
@@ -49,7 +50,7 @@ class Turn:
     `total` is None for a full circle."""
 
     def __init__(self, profile, outline, table, axis_point, axis_raw, axis_dir, back=0.0, total=None):
-        self.frame = profile["frame"]
+        self.profile, self.frame = profile, profile["frame"]
         self.footprint = Footprint(profile)
         self.outline, self.table = outline, table
         self.axis_point, self.axis_raw = list(axis_point), axis_raw
@@ -71,7 +72,9 @@ class Turn:
 
 
 def _constant(value):
-    return isinstance(value, Affine) and value.is_constant
+    """True when a raw value reads no size: a sum over sizes, or a product of sizes whose terms cancel (two corners
+    that move by the same product)."""
+    return isinstance(value, (Affine, Curved)) and value.is_constant
 
 
 def _tidy(value):
@@ -79,6 +82,20 @@ def _tidy(value):
     if isinstance(value, Affine) and value.terms and abs(value.const) <= CONSTANT_TOL:
         return Affine(0.0, value.terms, value.sketch)
     return value
+
+
+def kin(a, b):
+    """True when one of two placers is the joined outline of a revolve and the other one of the outlines it joins:
+    their faces are the same faces, not faces of two steps."""
+    return any(p is b for p in getattr(a, "joins", ())) or any(p is a for p in getattr(b, "joins", ()))
+
+
+def _lies_on(a, b):
+    """True when the ends and the middle of the line or arc `a` lie on the curve `b`."""
+    if a["kind"] not in ("line", "arc"):
+        return False
+    middle = a.get("mid") or [(a["start"][0] + a["end"][0]) / 2.0, (a["start"][1] + a["end"][1]) / 2.0]
+    return all(curve_distance(b, q) <= LATERAL_TOL for q in (a["start"], middle, a["end"]))
 
 
 class _Spot:
@@ -123,10 +140,12 @@ class RevolvePlace:
 class RevolvePlacer(Placer):
     """The faces of one written revolve step `step_id` (named `label` in reasons): `turn` is its `Turn`, `before` the
     placers of the steps written before it, whose faces a point of the revolve may also lie on, `combine` how it
-    meets the part (new, add or cut)."""
+    meets the part (new, add or cut). The placer of the outline that several touching outlines of one revolve make
+    together (faces/revolve_joined.py) holds the placers of those outlines in `joins`."""
 
     is_copy = False
     taper = None
+    joins = ()
 
     def __init__(self, step_id, label, turn, before, combine="add"):
         self.id, self.label, self.combine = step_id, label, combine
@@ -156,6 +175,17 @@ class RevolvePlacer(Placer):
         if curve["kind"] != "line":
             return False
         return all(abs(self._across(curve[end])) <= LATERAL_TOL for end in ("start", "end"))
+
+    def curves_along(self, other, k):
+        """The face curves of this placer that lie along curve `k` of `other`, a placer of the same sketch (the joined
+        outline of a revolve, or one of its outlines): the ends and the middle of one curve lie on the other one."""
+        theirs = other.turn.footprint.curves[k]
+        found = set()
+        for n in self.face_curves:
+            mine = self.turn.footprint.curves[n]
+            if _lies_on(mine, theirs) or _lies_on(theirs, mine):
+                found.add(n)
+        return found
 
     def _axes(self):
         """(A, W, N, B) in model space: the axis point, the axis direction, the direction from the axis toward the

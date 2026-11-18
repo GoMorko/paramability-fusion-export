@@ -214,7 +214,7 @@ def _unread(anchors, sketch):
     return Stuck(_names(anchors.all_values()), UNREAD, sketch)
 
 
-def _from_anchors(loop, anchors, sketch, sources=None):
+def from_anchors(loop, anchors, sketch, sources=None):
     """The raw loop of a loop drawn through anchor points (an outline merged from several profiles). A circle that
     stands for arcs of one sketch circle takes that circle's centre and radius."""
     kind = loop["kind"]
@@ -484,7 +484,7 @@ def outline(ctx, item, profile, outer, inners, parts):
                 own = [built[0]] + list(built[1])
                 for loop, raw_loop in zip(own, _keyed_loops(ctx, keys.profile(item.get("index"), n), own, sketch)):
                     anchors.add(loop, _mend(loop, raw_loop, sources))
-        raw_loops = [_from_anchors(loop, anchors, sketch, sources) for loop in loops]
+        raw_loops = [from_anchors(loop, anchors, sketch, sources) for loop in loops]
     if any(isinstance(v, Curved) for v in _raw_values(raw_loops)) and not keeps_order(
             ctx.table, ctx.motion, loops, raw_loops, sketch):
         kept = order_ranges(ctx.table, loops, raw_loops, sketch, ctx.motion)

@@ -40,7 +40,7 @@ PRIVATE_REACHES_IN_TESTS = {
     "test_capture_reader_helpers.py": {"_Pass"},
     "test_recipe_export.py": {"_parts_notes"},
     "test_step_export_copy_guard.py": {"_require_copy_in_place"},
-    "test_translate_crossings.py": {"_from_anchors", "_joined"},
+    "test_translate_crossings.py": {"_joined"},
     "test_translate_follow.py": {"_fix_long_formulas"},
     "test_translate_moved_faces.py": {"_walk"},
     "test_translate_sized.py": {"_gives_whole_numbers"},
