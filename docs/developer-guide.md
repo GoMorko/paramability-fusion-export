@@ -3354,6 +3354,20 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - `emboss.py`: the check of an emboss against what Fusion measured (`volume_check`: the change of the part against
     the outline area times the depth, or the end face area times the depth when the outline runs past its face) and
     the face an outline is trimmed to (`trimmed_face`). The recipe output and the probe plan both read it.
+    The module also gives the facts of an emboss on a flat face. Both outputs use these facts in the same order:
+    1. `flat_faces` gives the input faces. It gives a problem when a face is curved, when a face cannot be read, or
+       when the faces are not on one plane.
+    2. `settings_problem` gives a problem when the depth or a place setting cannot be read, when the depth is zero,
+       when the outline is moved or turned on its face, or when the emboss has no outline.
+    3. `tilted` is true when a sketch plane is not parallel to the face.
+    4. `tangent_problem` gives a problem when the outline can go onto a tangent face that is not on the plane of the
+       face.
+    5. `as_extrude` gives the data of the extrude that the emboss is: the outlines extruded from the face by the
+       depth. A positive depth gives a join. A negative depth gives a cut. The model parameter of the depth becomes
+       the distance of the extrude (`side_one.distance`).
+    The recipe output (`translator/extrude/emboss.py`) and the Orca output (`orca_translate/emboss.py`) give that data
+    to their extrude handler. Each output makes its own decision about an outline that Fusion trims to the face: the
+    recipe output writes it with `within`, and the Orca output leaves the step out.
   - `loft.py`: the volumes of a ruled loft between two parallel outlines of straight lines, one for each pairing of
     corners that the kernel can choose (`ruled_volumes`), and the check of a measured volume against them
     (`matches`).

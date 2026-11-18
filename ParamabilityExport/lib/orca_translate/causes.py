@@ -75,6 +75,14 @@ ROUND_UNBINDS = "roundUnbinds"
 # a corner the formulas do not give, another side in the tool), or the copy cannot tell how far a variable may go
 # with them.
 CORNER_TOOLS = "cornerTools"
+# Sketch text and embosses (`text_regions`, `emboss`): letters Orca would build otherwise than drawn or leave out
+# without an error (a loop it cannot build, letters that touch, text with other outlines or as the first body of
+# several letters), an extent Orca does not build for text (two sides, a taper), and an emboss that Fusion trims to
+# its face or that sits on a face the copy cannot follow (curved, several planes, tangent faces).
+TEXT_OUTLINE = "textOutline"
+TEXT_EXTENT = "textExtent"
+EMBOSS_TRIMMED = "embossTrimmed"
+EMBOSS_FACE = "embossFace"
 # A step that lists a body with the part's name under another token (`roles.lost`): the part may have a new token,
 # so the copy cannot tell whether the step changes it.
 BODY_LOST = "bodyLost"

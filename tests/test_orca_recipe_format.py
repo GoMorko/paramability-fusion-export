@@ -167,6 +167,12 @@ class FeatureFieldTest(unittest.TestCase):
         self.assertEqual(back, f)
         self.assertEqual((back.stored_fields, back.tail), (None, b""))
 
+    def test_imported_regions_read_back(self):
+        regions = [[[(0.0, 0.0), (2.0, 0.0), (2.0, 3.0)], [(0.5, 0.5), (1.0, 1.0), (1.5, 0.5)]],
+                   [[(5.0, 5.0), (6.0, 5.0), (6.0, 6.0)]]]
+        f = CadFeature(type=FeatureType.SKETCH, name="Text", imported_regions=regions)
+        self.assertEqual(read_feature_block(Reader(feature_bytes(f))).imported_regions, regions)
+
 
 class ShortBlockTest(unittest.TestCase):
     def test_a_short_block_keeps_defaults_and_writes_back_short(self):

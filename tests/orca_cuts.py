@@ -353,7 +353,7 @@ class Section:
     outline between the heights along its sketch plane's normal that its end gives (as `steps._Side.ends` writes
     them: one side from the plane, `flip` the other way; symmetric about the plane; two sides; through all).
     Reads the features the outline cuts and corner tools write: sketches, extrudes, cuts, transforms, Booleans,
-    patterns along a line and holes through all."""
+    patterns along a line, holes through all, and sketches of imported regions (text)."""
 
     def __init__(self, recipe, changed=None):
         variables = dict(recipe.variables)
@@ -386,6 +386,15 @@ class Section:
     def _region(self, f):
         plane = f.plane
         origin, x, y = list(plane.origin), list(plane.x_axis), list(plane.y_axis)
+        if f.imported_regions:
+            # Imported regions (text): inside a region's outer loop and outside its holes.
+            def in_regions(p):
+                d = _sub(p, origin)
+                uv = (_dot(d, x), _dot(d, y))
+                return any(halfplanes.in_polygon(region[0], uv)
+                           and not any(halfplanes.in_polygon(hole, uv) for hole in region[1:])
+                           for region in f.imported_regions)
+            return in_regions
         if f.entities:
             loop = [tuple(e.p0) for e in f.entities]
 

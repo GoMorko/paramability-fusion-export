@@ -1,0 +1,523 @@
+{
+ "_comment": "Synthetic, written by tests/orca_text.py: a 60 x 20 x 2 plate with the letters L (six sided) and O (a square ring) of sketch text on its top, raised 1 mm by an emboss. Volume 2492 mm3.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Extents",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -30.0,
+    -10.0,
+    0.0
+   ],
+   "max": [
+    30.0,
+    10.0,
+    3.0
+   ]
+  },
+  "volume_mm3": 2492.0
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Plate",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -30,
+           -10
+          ],
+          "end": [
+           30,
+           -10
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           30,
+           -10
+          ],
+          "end": [
+           30,
+           10
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           30,
+           10
+          ],
+          "end": [
+           -30,
+           10
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -30,
+           10
+          ],
+          "end": [
+           -30,
+           -10
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 2.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "end_offset": 2.0,
+    "params": {},
+    "target_box_before": null
+   }
+  },
+  {
+   "index": 2,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Emboss1",
+   "type": "EmbossFeature",
+   "suppressed": false,
+   "health": "ok",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "profiles": [
+     {
+      "sketch": "Sketch2",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        2.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -20,
+           -5
+          ],
+          "end": [
+           -14,
+           -5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -14,
+           -5
+          ],
+          "end": [
+           -14,
+           -3
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -14,
+           -3
+          ],
+          "end": [
+           -18,
+           -3
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -18,
+           -3
+          ],
+          "end": [
+           -18,
+           5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -18,
+           5
+          ],
+          "end": [
+           -20,
+           5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -20,
+           5
+          ],
+          "end": [
+           -20,
+           -5
+          ]
+         }
+        ]
+       }
+      ],
+      "text": true,
+      "sketch_token": "s2",
+      "space": "sketch",
+      "text_params": [
+       "d9"
+      ]
+     },
+     {
+      "sketch": "Sketch2",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        2.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -5,
+           -5
+          ],
+          "end": [
+           5,
+           -5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           5,
+           -5
+          ],
+          "end": [
+           5,
+           5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           5,
+           5
+          ],
+          "end": [
+           -5,
+           5
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -5,
+           5
+          ],
+          "end": [
+           -5,
+           -5
+          ]
+         }
+        ]
+       },
+       {
+        "outer": false,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -3,
+           -3
+          ],
+          "end": [
+           3,
+           -3
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           3,
+           -3
+          ],
+          "end": [
+           3,
+           3
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           3,
+           3
+          ],
+          "end": [
+           -3,
+           3
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           -3,
+           3
+          ],
+          "end": [
+           -3,
+           -3
+          ]
+         }
+        ]
+       }
+      ],
+      "text": true,
+      "sketch_token": "s2",
+      "space": "sketch",
+      "text_params": [
+       "d9"
+      ]
+     }
+    ],
+    "areas": [
+     28.0,
+     64.0
+    ],
+    "faces": [
+     {
+      "entity_type": "BRepFace",
+      "surface": "Plane",
+      "plane": {
+       "point": [
+        0.0,
+        0.0,
+        2.0
+       ],
+       "normal": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "outward": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "face_point": [
+       0.0,
+       8.0,
+       2.0
+      ]
+     }
+    ],
+    "tangent_chain": false,
+    "depth": 1.0,
+    "offset_x": 0.0,
+    "offset_y": 0.0,
+    "rotation_deg": 0.0,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      -30.0,
+      -10.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      10.0,
+      2.0
+     ]
+    },
+    "volume_before": 2400.0,
+    "volume_after": 2492.0,
+    "end_offset": 1.0,
+    "end_area": 92.0,
+    "params": {
+     "depth": {
+      "name": "d2",
+      "expression": "text_depth",
+      "value": 1.0
+     }
+    }
+   }
+  }
+ ],
+ "parameters": {
+  "user": [
+   {
+    "name": "text_depth",
+    "expression": "1 mm",
+    "value": 0.1,
+    "display_value": 1.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": false,
+    "kind": "length",
+    "value_type": "numeric",
+    "dependency_parameters": []
+   }
+  ],
+  "model": [
+   {
+    "name": "d2",
+    "expression": "text_depth",
+    "value": 0.1,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d2",
+     "name": ""
+    }
+   },
+   {
+    "name": "d9",
+    "expression": "5 mm",
+    "value": 0.5,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [],
+    "created_by": {
+     "kind": "sketchText",
+     "token": "tok_d9",
+     "name": ""
+    }
+   }
+  ]
+ }
+}

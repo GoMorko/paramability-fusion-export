@@ -1095,3 +1095,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     same faces as in Fusion at other `Radius` and `Height` values. Checked in Fusion 2706 with 0.14.4 plus this
     change: in both designs the chamfer points were on the chamfered faces of Fusion at four other sets of sizes. Afterwards each design is as
     before.
+
+91. OT1, a name tag with text, for Export for Orca. Add a user parameter `Depth` = 1 mm. Model a 60 x 20 x 2 mm
+    plate with its corner at the origin. On its top face make a sketch with the text "AB8" (any plain font, 8 mm
+    high), placed by its corner at (5, 5). Extrude the text by `Depth` up from the top as a join. Make a second design
+    the same with the text cut `Depth` down, and a third with an Emboss of the text on the top face, depth `Depth`.
+    Export: Export for Orca with the plate and `Depth` ticked. Each step is copied as 2 Orca features (a sketch named
+    "... text" and an Extrude). `Depth` follows its variable; the text height and place are listed as kept numbers. In
+    Orca the Design body has the volume of the Fusion part within 0.1 percent, and the holes of "A", "B" and "8" stay
+    open. Set `Depth` to 2: the letters grow (or sink) by 1 mm more, as in Fusion at that value. Afterwards each
+    design is as before.
