@@ -920,3 +920,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     60 mm. In `report.json`, `probe.ended` names `Width` and the fillet, and `probe.states` has `Depth` at 15 and 60 mm
     after the try of `Width` at 90 mm. After Fusion undid the export, the design is as before. When the fillet comes
     back by itself with the values back, the export ends as usual and nothing is undone.
+80. TO1, steps turned on with a step in error after them. Make two components, `Box` and `Holder`. Add a user
+    parameter `Width` = 40 mm. In `Box`, sketch a `Width` x 30 mm rectangle on the XY plane and extrude it 10 mm up as
+    a new body. In `Holder`, sketch a 50 x 50 mm rectangle on the XY plane and extrude it 15 mm up as a new body, then
+    add a second sketch and extrude on it (these steps are the ones the export turns off). After them, in `Holder`,
+    fillet an edge with a radius that is too large for the part, so that the fillet is in error from the start. Keep
+    the marker at the end of the timeline.
+    Export: pick the body of `Box`, tick `Width`, and leave "Faster tries" on. Expect the export to finish with no
+    step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
+    The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
+    marker held. Afterwards the design is as before.

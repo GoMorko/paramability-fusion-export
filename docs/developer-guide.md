@@ -1225,7 +1225,14 @@ pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline
    1. Every parameter is put back (`PutBack.restore`, which calls `restore_parameters`). After one change, the
       expressions are read back as text; any that did not take is set on its own, and one that still differs is
       listed in `health.unrestored`.
-   2. The suppressed items are turned back on (`PutBack.end_trim`).
+   2. The suppressed items are turned back on (`PutBack.end_trim`). Turning an item on makes Fusion rebuild the steps
+      after it. A later step that was in error before the export can make that fail, and then the item stays off.
+      So the store tries again for each item that stays off (`DesignParameterStore._on_with_marker_rolled`). It reads
+      where the marker is. It moves the marker to the lowest timeline index of the items that stay off, so that Fusion
+      does not rebuild past them. It turns each item on. Then it moves the marker back to the place it read, also when
+      a call failed. It writes one line to the trail. The store does not use this second way when the first one works,
+      or when no item sits before the marker. When the marker does not go back, the store does not hide it: the
+      marker check of the end check (`return_marker`) finds the marker away from its place and reports it as lost.
    3. `run.settle()` puts a flipped sketch back: first with the keeper, then with a walk back of each size that the
       rows since the sketch last read as at E0 moved, one size at a time (`walk_back`). It drops the Undo data of the tries only when the sketches read as at E0 and no check found a
       step worse.
@@ -1953,7 +1960,7 @@ another state than before. One object does all the put backs of one export, in o
 | --- | --- | --- |
 | Parameter values (the tries) | `RowExport` puts every expression back before each row and at the end (`restore_parameters`): one `Design.modifyParameters`, the expressions read back as text, any that did not take set one by one, then `computeAll`. `PutBack.restore` does the same at every point of the end (after the tries, in `settle`, in `close` and in `close_failed`). | The text is back, but the steps were rebuilt from the last try. A step that only solved by luck from its previous solution (a fillet that barely fits, a sketch with two solutions) can land elsewhere. `modifyParameters` rebuilds only the steps it touches, so a step can keep an error or warning that a full rebuild would clear. |
 | Timeline marker (capture walk, helper pass, face reads, reach reads, marker roll, temporary copy) | Each read puts it back in a `finally` (`restore_marker`, `put_back`), the store puts it back after every recompute, `unroll_marker` rebuilds once, `PutBack.close` and `PutBack.close_failed` put it back (`TryTimeline.end`), and `run_guarded` puts it back once more at the very end. | Moving the marker rebuilds the steps after it one by one; a risky step can come out of that rebuild in a warning. The capture walk of the dialog runs before the export, so its effect is only seen when the start is read before it (it is, since this change). |
-| Suppressed steps (Faster tries) | `TimelineTrim.end` (called by `TryTimeline.end_trim`) turns them on, read back, then one rebuild; `left_off` names those that stay off. The end check below tries again to turn them on. | A step that stays off; the steps after it rebuilt without it. |
+| Suppressed steps (Faster tries) | `TimelineTrim.end` (called by `TryTimeline.end_trim`) turns them on, read back, then one rebuild; `left_off` names those that stay off. An item that a plain set cannot turn on (a later step was in error before the export) is turned on again with the marker held at the first of such items, and the marker goes back (`_on_with_marker_rolled`). The end check below tries again to turn them on. | A step that stays off even then; the steps after it rebuilt without it. |
 | Sketch points (`SketchKeeper.put_back`) | Points more than 0.0001 mm off are moved back with the sketch's compute deferred, then one rebuild. | Moving a point of an under-constrained sketch changes the sketch even when it goes to its old place; a fully constrained sketch may solve to the other side. The compute flag goes back to its start value and is read back (`deferred_left` names a sketch where it would not). |
 | Compute calls | `computeAll` in the baseline, after a failed row, after one change with a step in error, in the restore fallback, after unsuppress and unroll. | A full rebuild can show warnings the person's last incremental rebuild did not show: a step reads worse although the export did not change it. |
 | Temporary copy (`step_export`) | The occurrence and only the timeline items the copy added are deleted; the marker goes back; leftovers stop the export. | Nothing in the steps before the marker. |
@@ -6097,9 +6104,10 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Timeline.markerPosition` (set), `moveToEnd` | `capture.py`, `read_gap_reach.py`, `read_face.py`, `rows.py`, `design_edit/marker.py` | The marker may not go back. The code checks after every move and raises `MarkerError`. |
 | `UserParameter.expression` (set), `Design.computeAll` | `rows.py` | A parameter may not go back. `restore_parameters` tries twice, plain numbers before formulas. |
 | `TimelineObject.isSuppressed` (set) | `rows.py` (`suppress_items`) | An item may stay off. Only with "Faster tries" (on to start with). `left_off` names it, and the end check turns it on again. |
+| `TimelineObject.index` (get) | `rows.py` (`_on_with_marker_rolled`) | Read to find the lowest item to turn on. A value that is not a number gives no second try for that item. |
 | `Command.beginStep(makeExistingStepNonUndoable=True)` | `undo_steps.py` (through the port) | A preview call. Only with "Lighter on memory". Undo may not step back through the export. On a failed call no further call is made. |
 | `SketchPoint.move`, `Sketch.isComputeDeferred` | `sketch_keep.py` | Moves sketch points back after a solver flip. The flag goes back to its start value, read back. |
-| `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again. |
+| `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again, with the marker held at the first such step when a plain set fails. |
 | `Occurrences.addNewComponent`, `BRepBody.copyToComponent`, `Occurrence.deleteMe` | `step_export.py`, `temp_copy.py` | The temporary copy adds timeline items; they must all go. |
 | `Design.findEntityByToken` | everywhere in the probe and reach reads | A token may change after a rebuild. A probe sketch that does not match E0 is not followed. |
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
@@ -6159,7 +6167,7 @@ The lines come from these places:
 | `fusion_reader/capture.py` | each marker move, the start and the finish of each item (index, type, name), each call of a before or after reader (index, type), a reader that failed, the tool pass, the read of the sketch links and graphs, and the marker back |
 | `fusion_reader/helper_pass.py` | each marker move for the tool bodies of other components |
 | `fusion_reader/read_gap_reach.py` | each marker move of the reach read |
-| `fusion_reader/rows.py`, `DesignParameterStore` | the stages "recompute", "turn off N timeline items", "turn on N timeline items", "turn on N timeline items (end check)", and "marker A to B (roll, unroll, return or keep)" (only when the marker reads elsewhere); each parameter value that it sets |
+| `fusion_reader/rows.py`, `DesignParameterStore` | the stages "recompute", "turn off N timeline items", "turn on N timeline items", "turn on N timeline items (end check)", and "marker A to B (roll, unroll, return, keep or turn on)" (only when the marker reads elsewhere), and one line when it held the marker to turn steps on (how many, and whether the marker went back); each parameter value that it sets |
 | `design_edit/runner.py`, `RowExport` | each try (number, name, values) and the parameters set back before the next try |
 | `fusion_reader/step_export.py`, `export_body_step` | the stage "STEP file" |
 | `design_edit/timeline_health.py` | the stages "read timeline", "end check" (`settle_timeline`), "full compute" (the rebuild of the end check) and "values again" |
