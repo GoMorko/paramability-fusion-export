@@ -40,8 +40,9 @@ learning only.
    confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. This also happens
    for an export that you cancel or that stops, when the add-in cannot confirm that your design came back. A file
    that was saved stays saved (with "Lighter on memory" ticked the add-in cannot undo, and the window says so; when the
-   design was saved in the cloud and had no unsaved changes before the export, the window has a button "Reopen the
-   design from its last save", which closes the design without saving and opens that version again after your click).
+   design was saved in the cloud, the window has a button "Reopen the design from its last save", which closes the
+   design without saving and opens that version again after your click; when Fusion showed unsaved changes before the
+   export, the window says that they are lost too).
    A parameter that no copied step uses
    is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
    When a change leaves a step in a new warning or error, or a sketch on its other solution, also with the values

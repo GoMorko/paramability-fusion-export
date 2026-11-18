@@ -256,14 +256,17 @@ def short_message(saved_line, left_out_count, check):
 
 
 def _reopen_section(reopen):
-    """The section above the reopen button, or None when the reopen is not offered."""
-    return _section("reopen", REOPEN_TITLE, [REOPEN_LINE]) if reopen else None
+    """The section above the reopen button, or None when the reopen is not offered. `reopen` is True or the line to
+    show (`rollback.reopen_line`)."""
+    if not reopen:
+        return None
+    return _section("reopen", REOPEN_TITLE, [reopen if isinstance(reopen, str) else REOPEN_LINE])
 
 
-def reopen_view():
+def reopen_view(reopen=True):
     """A view with only the reopen section, for an export that showed its story in a message box (no file saved, or
-    a file without a recipe) but still offers the reopen (`rollback.reopen_offered`)."""
-    sections = [_reopen_section(True)]
+    a file without a recipe) but still offers the reopen (`rollback.reopen_offered`). `reopen` as in `_reopen_section`."""
+    sections = [_reopen_section(reopen or True)]
     return {"title": REOPEN_TITLE, "sections": sections, "message": view_message(sections),
             "summary": view_message(sections), "rolled_back": False,
             "undo_unavailable": True, "reopen": True}

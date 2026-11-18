@@ -2291,8 +2291,13 @@ and a marker move can make the document modified. The record keeps these values:
 5. `name` and `project`: the name of the file and the name of its project (`DataFile.parentProject`), for the
    messages.
 
-`SavedStart.can_reopen` is true only when `in_cloud` is true, `modified` is False (not None), and the file id and the
-version are known. A value that the add-in cannot read never gives a reopen.
+`SavedStart.can_reopen` is true only when `in_cloud` is true and the file id and the version are known. A value that
+the add-in cannot read never gives a reopen. `SavedStart.unsaved_at_start` is true when `modified` is not False (True,
+or not read). Fusion sets `Document.isModified` also when the add-in moves the timeline marker and puts it back (this
+was measured on Fusion 2706: a marker move to step 100 and back set it). The export dialog and every export move the
+marker. Thus the add-in cannot tell its own moves from the changes of the person. The add-in does not decide for the
+person: when `unsaved_at_start` is true, the line above the button (`rollback.reopen_line`, `REOPEN_LINE_UNSAVED`)
+says that the reopen loses every change since the last save.
 
 The decision. `rollback.reopen_offered(start, rollback)` is true only when both of these conditions are true:
 
@@ -2300,8 +2305,8 @@ The decision. `rollback.reopen_offered(start, rollback)` is true only when both 
 - `start.can_reopen` is true.
 
 The add-in does not offer the reopen after an abort (`Rollback.abort`). Fusion then undoes the export itself, and the
-design comes back with its Undo history. The add-in does not offer the reopen when the design is back, when the design
-had unsaved changes at the start, or when the design is not in the cloud. In these cases the window gives the advice
+design comes back with its Undo history. The add-in does not offer the reopen when the design is back, or when the
+design is not in the cloud. In these cases the window gives the advice
 of today (`health.NO_UNDO_ADVICE` or `health.UNDO_ADVICE`).
 
 The window. `_offer_reopen` in `export_flow.py` makes the decision after `rollback.decide`. When the decision is
@@ -6602,7 +6607,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `TimelineObject.isSuppressed` (set) | `rows.py` (`suppress_items`) | An item may stay off. Only with "Faster tries" (on to start with). `left_off` names it, and the end check turns it on again. |
 | `TimelineObject.index` (get) | `rows.py` (`_on_with_marker_rolled`) | Read to find the lowest item to turn on. A value that is not a number gives no second try for that item. |
 | `Command.beginStep(makeExistingStepNonUndoable=True)` | `undo_steps.py` (through the port) | A preview call. Only with "Lighter on memory". Undo may not step back through the export. On a failed call no further call is made. |
-| `Document.dataFile`, `Document.isModified`, `Document.close(False)`, `Documents.open`, `Data.findFileById`, `DataFile.id`, `versionNumber`, `versions`, `parentProject`; `UserInterface.activeCommand`, `terminateActiveCommand`, `UserInterface.commandTerminated` (`ApplicationCommandEventHandler`, `ApplicationCommandEventArgs.commandId`) | `saved_design.py`, `fusion_ui/reopen.py`, `fusion_ui/result_dialog.py` | Only after the person clicks "Reopen the design from its last save". The close loses the changes of the export, so the add-in offers it only for a cloud design that had no unsaved changes at the start. The version is found before the close; a close that fails leaves the design open. Checked against the installed stubs. Hand check RO1. |
+| `Document.dataFile`, `Document.isModified`, `Document.close(False)`, `Documents.open`, `Data.findFileById`, `DataFile.id`, `versionNumber`, `versions`, `parentProject`; `UserInterface.activeCommand`, `terminateActiveCommand`, `UserInterface.commandTerminated` (`ApplicationCommandEventHandler`, `ApplicationCommandEventArgs.commandId`) | `saved_design.py`, `fusion_ui/reopen.py`, `fusion_ui/result_dialog.py` | Only after the person clicks "Reopen the design from its last save". The close loses every change since the last save, so the add-in offers it only for a cloud design, and the window warns when Fusion showed unsaved changes at the start. The version is found before the close; a close that fails leaves the design open. Checked against the installed stubs. Hand check RO1. |
 | `SketchPoint.move`, `Sketch.isComputeDeferred` | `sketch_keep.py` | Moves sketch points back after a solver flip. The flag goes back to its start value, read back. |
 | `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again, with the marker held at the first such step when a plain set fails. |
 | `Occurrences.addNewComponent`, `BRepBody.copyToComponent`, `Occurrence.deleteMe` | `step_export.py`, `temp_copy.py` | The temporary copy adds timeline items; they must all go. |

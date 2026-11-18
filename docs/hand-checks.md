@@ -939,7 +939,8 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     close (or to say that the design reopens when you close it; then close it), the design to close without a question and open again in about 2 s, with no unsaved changes, the fillet of
     the holder as it was before the export, and the timeline marker where it was. The `.paramability` file stays
     saved. Repeat with one change after the save (for example move the timeline marker one step and back): the
-    result window has no reopen button, and it gives the advice to close the design without saving. Repeat with the
+    result window still has the reopen button, and the line above it says that every change since the last save is
+    lost. Repeat with the
     network off before you click: expect the reopen to work, or a message that the saved version was not found with
     the design still open as the export left it. The design must never stay closed without a message.
 82. SZ1, a box and a lid that share sizes. Add user parameters `Width` = 60 mm, `Depth` = 40 mm, `Height` = 30 mm
