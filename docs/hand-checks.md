@@ -953,30 +953,36 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     C. As B, but replace the projected left edge by a fit point spline through three points that bulges 5 mm out.
     Export: pick the body of `Lid` and tick `Width`, `Depth` and `Wall`. In A and B, expect all three as sizes with
     no "may give unexpected results", and `probe.motion.body_moved` empty in `report.json`. In B, `probe.states` has
-    tries of `Wall`, and the lid outline follows `Width` and `Depth` in Paramability. In C, expect `Width`, `Depth`
-    and `Wall` marked "may give unexpected results", since the tries do not follow a sketch with a spline. Afterwards
-    the design is as before.
+    tries of `Wall`, and the lid outline follows `Width` and `Depth` in Paramability. In C, expect `Width` and `Depth`
+    as "not a size" (they change `Box`, which the lid sketch is drawn around, and the tries do not follow a sketch
+    with a spline), and `Wall` as a size, since only the lid's own extrude reads it. Afterwards the design is as
+    before. Checked in Fusion 2706 with 0.14.3 plus this change: A, B and C as written here.
 83. RV9, picks on the inner walls a shell leaves on a revolve. Add user parameters `Height` = 40 mm, `Diameter` =
     60 mm and `Wall` = 2 mm. On the XZ plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`,
     with its left side on the z axis. Revolve it a full turn about the z axis as a new body (a cup). Shell it `Wall`
     inside, with the top face open. Fillet the inner rim (the circle where the inside wall meets the top of the wall)
-    by 0.5 mm, and the inner bottom edge (the circle where the inside wall meets the floor inside) by 1 mm. Chamfer the
-    floor inside by 0.3 mm, picking the face. Make a second design the same, with a second outline on the sketch, a
+    by 0.5 mm, and the inner bottom edge (the circle where the inside wall meets the floor inside) by 1 mm. Chamfer
+    the bottom face outside by 0.3 mm, picking the face. Make a design the same without the round on the inner bottom
+    edge and with the chamfer on the floor inside, picking the face (Fusion cannot chamfer the floor inside after the
+    round, since the floor then has only the edge of the round, tangent to it). Make a second design the same, with a second outline on the sketch, a
     5 x 20 mm rectangle from x = `Diameter` / 2 to `Diameter` / 2 + 5 and z = 0 to 20, revolved in the same Revolve.
     Export: tick the three sizes. In the first design expect no size marked "may give unexpected results", and the
     fillet and the chamfer copied with `near` points that hold formulas of `Diameter`, `Height` and `Wall`. In
     Paramability set `Height` to 50, `Diameter` to 80 and `Wall` to 3, then to 30, 40 and 1.5: the rounds stay on the
     inner rim and the inner bottom edge, and the chamfer on the floor inside, as in Fusion at the same values. In the
     second design the inner bottom edge lies where the inside wall meets the second outline: expect its sizes marked
-    "may give unexpected results", and no round on a wrong edge. Afterwards each design is as before.
+    "may give unexpected results", and no round on a wrong edge. Afterwards each design is as before. Checked in
+    Fusion 2706 with 0.14.3 plus this change: the picks hold formulas of the sizes, the second design marks its sizes
+    and keeps fixed picks; the size changes in Paramability are still to check.
 
 84. RV10, picks on the end faces of a half turn. Add user parameters `Height` = 40 mm and `Diameter` = 60 mm. On the
     XZ plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`, with its left side on the z
-    axis. Revolve it 180 degrees about the z axis as a new body (half a cylinder). Fillet by 1 mm the edge where the
-    flat face in the sketch plane meets the round side, and chamfer by 0.5 mm the other flat face, picking the face.
+    axis. Revolve it 180 degrees about the z axis as a new body (half a cylinder). Fusion makes the two flat ends of a
+    half turn one flat face. Fillet by 1 mm the straight edge at x = `Diameter` / 2 where the flat face meets the
+    round side, and chamfer by 0.5 mm the flat face, picking the face.
     Make a second design the same with the angle of the revolve a user parameter `Turn` = 180 deg.
     Export: tick `Height` and `Diameter` (and `Turn` in the second design). In the first design expect no size marked
     "may give unexpected results"; in Paramability set `Height` to 50 and `Diameter` to 80: the round stays on its
     edge and the chamfer on the flat face, as in Fusion. In the second design the round still follows the sizes, and
     the chamfer on the flat face that `Turn` turns keeps its place with the sizes marked. Afterwards each design is as
-    before.
+    before. Checked in Fusion 2706 with 0.14.3 plus this change, except the size changes in Paramability.
