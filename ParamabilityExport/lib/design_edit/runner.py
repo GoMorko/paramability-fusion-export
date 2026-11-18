@@ -4,8 +4,7 @@ import os
 from ..package.caps import check_step_size, check_total_size
 from ..timing import trail
 from . import metered, walk_back
-from .apply import (RowBuildError, apply_row_values, cleared_errors, error_entries, measure_baseline, new_warnings,
-                    warning_entries)
+from .apply import Health, RowBuildError, apply_row, cleared_errors, measure_baseline, new_warnings
 from .errors import StepExportError
 from .restore import restore_parameters
 from .timeline_health import changes, is_worse, read_timeline
@@ -142,11 +141,14 @@ class RowExport:
     def _others_left(self):
         """For a row that showed only new warnings that do not count: True when, with the parameters back, a timeline
         item is still in a warning or an error it did not have in the baseline. Reads only the health of the items
-        (`apply.warning_entries`, `apply.error_entries`), not the whole timeline; True when that read fails."""
+        (`apply.Health`, one pass), not the whole timeline; True when that read fails."""
         base = self._baseline
         try:
-            warned = [k for k in warning_entries(self.store) if k not in base.warnings and k not in base.errors]
-            return bool(warned or [k for k in error_entries(self.store) if k not in base.errors])
+            health = Health(self.store)
+            if health.warnings is None:
+                return True
+            warned = [k for k in health.warnings if k not in base.warnings and k not in base.errors]
+            return bool(warned or [k for k in health.errors if k not in base.errors])
         except Exception:
             return True
 
@@ -311,11 +313,11 @@ class RowExport:
                 trail.line("try %d of %d %r: %s" % (index, count, self._last, row["values"]))
                 others = []
                 try:
-                    values = apply_row_values(self.store, self.units, row["values"], self._baseline,
-                                              full=row.get("step") is not False)
-                    warned = new_warnings(self.store, self._baseline, self.counts_warning, others) \
+                    values, health = apply_row(self.store, self.units, row["values"], self._baseline,
+                                               full=row.get("step") is not False)
+                    warned = new_warnings(self.store, self._baseline, self.counts_warning, others, health) \
                         if tolerate_build_errors else []
-                    cleared = cleared_errors(self.store, self._baseline) if tolerate_build_errors else []
+                    cleared = cleared_errors(self.store, self._baseline, health) if tolerate_build_errors else []
                     self._check_next, self._check_others = bool(warned), bool(others)
                 except RowBuildError as exc:
                     if tolerate_build_errors:

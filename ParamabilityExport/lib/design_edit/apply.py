@@ -40,9 +40,10 @@ def detail_steps(detail):
     return [(position(at[i]) if i < len(at) else None, name) for i, name in enumerate(names)]
 
 
-def _broken(store, baseline):
-    """`[(position, name)]` of the timeline items in error now that were not in error in `baseline`."""
-    return [(position(key), name) for key, name in error_entries(store).items() if key not in baseline.errors]
+def _broken(health, baseline):
+    """`[(position, name)]` of the timeline items in error in `health` that were not in error in `baseline`. Raises
+    what the read of the errors raised."""
+    return [(position(key), name) for key, name in health.errors.items() if key not in baseline.errors]
 
 
 def _new_errors(broken, ok):
@@ -63,6 +64,47 @@ class Baseline:
         self.warnings = dict(warnings or {})
 
 
+class Health:
+    """The timeline items in error and in warning, read together in one pass over the timeline (`read`), as
+    {key: name}. `errors` raises what the read of the errors raised, so a row whose errors cannot be read fails as
+    before; `warnings` is None when the warnings could not be read, which gives no warning. A store with the
+    `health_entries` control gives both in one pass; any other store gives them in one read each. Without
+    `with_warnings` only the errors are read, and `warnings` stays None."""
+
+    def __init__(self, store, with_warnings=True):
+        self.store, self.with_warnings = store, with_warnings
+        self._errors, self._failure, self.warnings = {}, None, None
+        self.read()
+
+    @property
+    def errors(self):
+        if self._failure is not None:
+            raise self._failure
+        return self._errors
+
+    def read(self):
+        """Read the items again, after a recompute. Never raises."""
+        self._failure = None
+        both = timeline_control(self.store, "health_entries") if self.with_warnings else None
+        if both is not None:
+            try:
+                errors, warnings = both()
+                self._errors, self.warnings = dict(errors), dict(warnings)
+            except Exception as exc:
+                self._errors, self._failure, self.warnings = {}, exc, None
+            return
+        try:
+            self._errors = error_entries(self.store)
+        except Exception as exc:
+            self._errors, self._failure = {}, exc
+        if not self.with_warnings:
+            return
+        try:
+            self.warnings = warning_entries(self.store)
+        except Exception:
+            self.warnings = None
+
+
 def error_entries(store):
     """{key: name} of the timeline items in error. The key tells apart items that share a name."""
     return dict(store.error_entries())
@@ -74,44 +116,50 @@ def warning_entries(store):
     return dict(read()) if read is not None else {}
 
 
-def new_warnings(store, baseline, counts=None, others=None):
+def new_warnings(store, baseline, counts=None, others=None, health=None):
     """`[(position, name)]` of the timeline items in warning now that were neither in warning nor in error in
     `baseline` (a `Baseline`): a step that a row made unsure. The position is the item's place in the timeline (None
     when the store gives none), so two items that share a name stay apart. `counts((position, name))` keeps only the
     steps that matter to the caller (all when None); the new warnings that do not count are added to the list `others`,
-    when given, from the same read. A step that reads in warning after a rebuild of only the changed steps is read
-    again after one full recompute; a step that is in error after that recompute fails the row (RowBuildError, as
-    `apply_row_values` raises it). Only a warning that counts leads to the recompute. An unreadable timeline gives
-    no warning."""
+    when given, from the same read. `health` is the `Health` the row's own read gave; without it the items are read
+    now. A step that reads in warning after a rebuild of only the changed steps is read again after one full
+    recompute (`health` is read again, in place); a step that is in error after that recompute fails the row
+    (RowBuildError, as `apply_row_values` raises it). Only a warning that counts leads to the recompute. An unreadable
+    timeline gives no warning."""
     def read(note=None):
         try:
-            found = [(position(key), name) for key, name in warning_entries(store).items()
+            if health.warnings is None:
+                return []
+            found = [(position(key), name) for key, name in health.warnings.items()
                      if key not in baseline.warnings and key not in baseline.errors]
+            if note is not None and counts is not None:
+                note.extend(step for step in found if not counts(step))
+            return [step for step in found if counts is None or counts(step)]
         except Exception:
             return []
-        if note is not None and counts is not None:
-            note.extend(step for step in found if not counts(step))
-        return [step for step in found if counts is None or counts(step)]
 
+    health = health or Health(store)
     found = read(others)
     if found:
         with metered.caller(store, metered.COUNTING_WARNING):
             _recompute(store)
-        broken = _broken(store, baseline)
+        health.read()
+        broken = _broken(health, baseline)
         if broken:
             raise _new_errors(broken, True)
         found = read()
     return found
 
 
-def cleared_errors(store, baseline):
+def cleared_errors(store, baseline, health=None):
     """`[(position, name)]` of the timeline items in error in `baseline` that are not in error now: steps that build
     with the values of a row although they did not at the start. A step the copy leaves out because Fusion shows it in
-    error may then make a shape the copy does not have. An unreadable timeline gives none. Never raises."""
+    error may then make a shape the copy does not have. `health` is the `Health` the row's own read gave; without it
+    the items are read now. An unreadable timeline gives none. Never raises."""
     if not baseline.errors:
         return []
     try:
-        now = error_entries(store)
+        now = (health or Health(store)).errors
     except Exception:
         return []
     return [(position(key), name) for key, name in baseline.errors.items() if key not in now]
@@ -148,15 +196,12 @@ def measure_baseline(store):
             ok = store.recompute() is not False
         except Exception:
             ok = False
+    health = Health(store)
     try:
-        errors = error_entries(store)
+        errors = health.errors
     except Exception:
         errors = {}
-    try:
-        warnings = warning_entries(store)
-    except Exception:
-        warnings = {}
-    return Baseline(ok, errors, warnings)
+    return Baseline(ok, errors, health.warnings or {})
 
 
 def set_all(store, expressions):
@@ -172,7 +217,14 @@ def set_all(store, expressions):
 
 
 def apply_row_values(store, units, values, baseline=None, full=False):
-    """Set the row's values, rebuild, and return {name: number in mm or deg}.
+    """`apply_row`'s numbers: {name: number in mm or deg}."""
+    return apply_row(store, units, values, baseline, full, with_warnings=False)[0]
+
+
+def apply_row(store, units, values, baseline=None, full=False, with_warnings=True):
+    """Set the row's values, rebuild, and return `({name: number in mm or deg}, health)`: the numbers, and the `Health`
+    read after the last rebuild, for the checks that follow (`new_warnings`, `cleared_errors`). Without
+    `with_warnings` the health holds only the errors.
 
     store is a `store.ParameterStore` (values in internal cm or rad). units maps parameter name to the Fusion unit
     string. baseline is `measure_baseline`'s result from before the first row; None
@@ -195,15 +247,17 @@ def apply_row_values(store, units, values, baseline=None, full=False):
             ok = _recompute(store) if full else None
         else:
             ok = _set_each(store, expressions)
-    broken = _broken(store, baseline)
+    health = Health(store, with_warnings)
+    broken = _broken(health, baseline)
     if broken and ok is None:
         with metered.caller(store, metered.CONFIRM_NEW_ERRORS):
             _recompute(store)
-        broken = _broken(store, baseline)
+        health.read()
+        broken = _broken(health, baseline)
         if not broken:
             metered.note(store, metered.RESCUED)
     if broken:
         raise _new_errors(broken, ok)
     if ok is False and baseline.recompute_ok:
         raise RowBuildError("Fusion could not rebuild the design for this size.", {"reason": "recompute_failed"})
-    return {name: to_manifest_value(store.read_value(name), units[name]) for name in values}
+    return {name: to_manifest_value(store.read_value(name), units[name]) for name in values}, health

@@ -311,6 +311,27 @@ class DesignParameterStore:
         without a timeline."""
         return self._entries_in(_warning_state())
 
+    def health_entries(self):
+        """`(errors, warnings)`: the items `error_entries` and `warning_entries` give, read in one pass over the
+        timeline. Both empty when the timeline cannot be read."""
+        try:
+            timeline = self.design.timeline
+            error, warning = _error_state(), _warning_state()
+            errors, warnings = [], []
+            end = timeline.count if self.marker is None else min(self.marker["position"], timeline.count)
+            for i in range(end):
+                item = timeline.item(i)
+                if item.isSuppressed:
+                    continue
+                state = item.healthState
+                if state == error:
+                    errors.append((i, item.name))
+                elif state == warning:
+                    warnings.append((i, item.name))
+            return errors, warnings
+        except Exception:
+            return [], []
+
     def _entries_in(self, state):
         """(timeline position, name) of each item before the marker that is not suppressed and whose health
         (`TimelineObject.healthState`) is `state`. Empty when the timeline cannot be read."""

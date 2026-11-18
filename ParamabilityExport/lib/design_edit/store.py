@@ -6,7 +6,7 @@ from typing import Protocol
 # one goes on without it (see `timeline_control`).
 TIMELINE_CONTROLS = (
     "timeline_health", "turn_on", "keep_marker", "roll_marker", "unroll_marker", "suppress_items", "unsuppress_items",
-    "warning_entries")
+    "warning_entries", "health_entries")
 
 
 class ParameterStore(Protocol):
@@ -38,6 +38,9 @@ class ParameterStore(Protocol):
       nothing is suppressed.
     warning_entries(): {key: name} of the timeline items before the marker whose health is warning, keyed as
       `error_entries`. Without it no warning is read.
+    health_entries(): `(errors, warnings)`, the same items as `error_entries` and `warning_entries` (each a list of
+      (position, name) or a {key: name}), read in one pass over the timeline. Without it `apply.Health` reads the two
+      one after the other.
     """
 
     def saved_expressions(self): ...
