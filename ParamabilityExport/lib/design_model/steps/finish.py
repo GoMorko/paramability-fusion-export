@@ -518,9 +518,10 @@ def _uneven_groups(edges, ratio):
 # ---- sets far enough apart to apply one after the other -------------------------------------------------------
 
 # Fusion builds the sets of one step together: where two sets meet at a corner it makes one blend there, which two
-# steps one after the other do not make. Sets are apart when no corner of one lies nearer to a corner of the other than
-# CORNER_MARGIN times the two reaches together (plus CORNER_TOL, mm). The margin covers faces that meet at a sharper
-# angle than square, where a round reaches further along a face than its radius.
+# steps one after the other do not make. Sets are apart when no point of one (the corners of its edges and the points
+# measured on them) lies nearer to a point of the other than CORNER_MARGIN times the two reaches together (plus
+# CORNER_TOL, mm). The margin covers faces that meet at a sharper angle than square, where a round reaches further
+# along a face than its radius. The measured points count too since a closed edge has one corner only.
 CORNER_MARGIN = 2.0
 CORNER_TOL = 1e-3
 
@@ -539,7 +540,7 @@ def _apart_reach(one):
 
 
 def apart(a, b):
-    """True when the sets `a` and `b` share no edge and no corner, and no corner of one lies near a corner of the other
+    """True when the sets `a` and `b` share no edge and no corner, and no point of one lies near a point of the other
     (CORNER_MARGIN, see above): Fusion then gives the same part when it applies them one after the other, in either
     order, as when it applies them together. False when the corners of an edge or the reach of a set are not known.
     The test holds at the sizes the capture was read at."""
@@ -548,7 +549,12 @@ def apart(a, b):
     if ends_a is None or ends_b is None or reach_a is None or reach_b is None:
         return False
     limit = CORNER_MARGIN * (reach_a + reach_b) + CORNER_TOL
-    return all(vec.length(vec.sub(p, q)) > limit for p in ends_a for q in ends_b)
+    found_a, found_b = ends_a + _points(a), ends_b + _points(b)
+    return all(vec.length(vec.sub(p, q)) > limit for p in found_a for q in found_b)
+
+
+def _points(one):
+    return [p for edge in one.edges for p in edge.get("points") or [] if _is_point(p)]
 
 
 def all_apart(sets):

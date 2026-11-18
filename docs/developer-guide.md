@@ -3787,8 +3787,9 @@ layer uses them (`design_model/steps/finish.py`):
 - `FinishSet.pick` tells how Fusion picked the edges of a set: `FACES` (only faces), `CHAINS` (only edges, along
   tangent chains), `EDGES` (only edges, one by one), or None (inputs of more than one kind, or the edges of another
   step).
-- `apart(a, b)` is true when no vertex of set `a` is nearer to a vertex of set `b` than `CORNER_MARGIN` (2) times the
-  two reaches together. The reach is how far a set takes material along a face: the radius of a round, the larger
+- `apart(a, b)` is true when no point of set `a` is nearer to a point of set `b` than `CORNER_MARGIN` (2) times the
+  two reaches together. The points of a set are the vertices of its edges and the points measured on the edges
+  (`points`). A closed edge, such as a circle, has one vertex only, so its measured points count too. The reach is how far a set takes material along a face: the radius of a round, the larger
   distance of a chamfer, the larger end radius of a changing radius, the chord of a round by chord length. A shared
   vertex has the distance 0, and a shared edge has two shared vertices, so `apart` is false for sets that touch. The
   margin covers two vertices with a short edge between them, where the two rounds can meet, and faces that meet at
@@ -3798,7 +3799,7 @@ layer uses them (`design_model/steps/finish.py`):
 - `only_sets(item, indexes)` makes a copy of an item that holds only some of its sets and their parameters.
 
 Example. A fillet has two sets. Set 1 picks the top face of a boss, radius 1 mm. Set 2 picks one edge along a tangent
-chain around a slot at the other end of the part, radius 2 mm. No vertex of set 1 is nearer than 6 mm to a vertex of
+chain around a slot at the other end of the part, radius 2 mm. No point of set 1 is nearer than 6 mm to a point of
 set 2. The copy writes two `round` steps: the first with `faceEdges` on the top face, the second with `chain:
 tangent` on the slot edge. No size is marked. In one step, the copy would have to pick every edge by a point, and
 it would mark the sizes read before the fillet.

@@ -171,7 +171,7 @@ class ChamferTest(unittest.TestCase):
 
 
 class ApartTest(unittest.TestCase):
-    def test_sets_are_apart_only_when_their_corners_lie_beyond_twice_their_reaches(self):
+    def test_sets_are_apart_only_when_their_points_lie_beyond_twice_their_reaches(self):
         def round_set(*edges):
             return sets_of.RoundSet(0, {"kind": "constant", "radius": 1.0, "continuity": "tangent",
                                         "input_kinds": ["edge"], "edges": list(edges)})
@@ -180,6 +180,13 @@ class ApartTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(sets_of.apart(a, round_set(side("b", x, 0))), expected)
         self.assertFalse(sets_of.apart(a, round_set({"token": "b", "closed": False, "points": [[9, 0, 5]]})))
+
+    def test_closed_edges_whose_corners_lie_apart_are_near_where_their_points_are(self):
+        def ring(radius, seam):
+            return sets_of.RoundSet(0, {"kind": "constant", "radius": 1.0, "continuity": "tangent",
+                                        "input_kinds": ["edge"], "edges": [{"token": "r%d" % radius, "closed": True,
+                                        "points": [[0, radius, 0], [0, -radius, 0]], "ends": [seam, seam]}]})
+        self.assertFalse(sets_of.apart(ring(10, [10, 0, 0]), ring(9, [-9, 0, 0])))
 
     def test_only_sets_keeps_the_sets_and_their_parameters(self):
         item = {"index": 4, "data": {"sets": [{"kind": "a"}, {"kind": "b"}, {"kind": "c"}],
