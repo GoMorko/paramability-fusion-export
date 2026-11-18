@@ -712,7 +712,8 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   the path), a pipe along part of its path (`pipePartOfPath`), a section that cannot be read, and each path that a
   sweep leaves out, with the words of a sweep said of a pipe. A closed path that starts on a sharp corner has a sharp
   corner (`sharpCorner`).
-- The captures of `tests/orca_pipes.py` (see "Live check without Fusion") are not yet built in Orca.
+- The captures of `tests/orca_pipes.py` (see "Live check without Fusion") built in OrcaSlicer 2.5.1 with the volumes
+  worked out, also the hollow pipe whose hole ends lie on the ends of the pipe.
 
 ### Which parameters follow
 
@@ -1308,7 +1309,8 @@ of radius 20 through 90 degrees and a 30 mm line: 350 pi + 70 pi^2 = 1790.43 mm3
 4); with `--set wall=2` 3069.31, with `--set pipe_d=10` 2301.98) and `pipe_cut_into_block` (a block from (-10, -10,
 0) to (50, 30, 20), the box, with a pipe of diameter 6 cut along a line, a tangent arc of radius 15 and a line, in
 through one face and out through another: 48000 - 405 pi - 67.5 pi^2 = 46061.46 mm3; with `--set pipe_d=8`
-44553.70). Not yet built in Orca.
+44553.70). All three built with these volumes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set`
+changes.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and
