@@ -2248,7 +2248,10 @@ true, it keeps the document and the `SavedStart` in `fusion_ui/reopen.py` (`keep
 The click. The reopen must not run inside an event of a command. Thus the button does not close the design. The
 click calls `reopen.request`, and `request` fires the custom event `ParamabilityExportReopenEvent`. Fusion runs the
 handler of the event (`reopen.run_pending`) after the click event has returned. This is the same pattern as the result
-window itself (`result_dialog.show`). The handler does these steps:
+window itself (`result_dialog.show`). Two copies of the add-in can be loaded at the same time (for example an older
+version and a new one), and they use the same event names. When one copy stops, it removes the events of both. Thus,
+when an event does not fire, `result_dialog.show` and `reopen.request` register the event again and fire it one more
+time (`_fire`). Only when the second fire also fails, the person sees the message box. The handler does these steps:
 
 1. It ends the result window: when `UserInterface.activeCommand` is the command of the result window, it calls
    `terminateActiveCommand`. When this fails, it shows a message and does nothing more.

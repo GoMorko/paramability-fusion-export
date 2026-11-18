@@ -188,5 +188,41 @@ class WindowTest(unittest.TestCase):
         self.assertEqual((app.fired, calls), ([], []))
 
 
+class LostEvent:
+    """An `Application` whose custom events were removed by another copy of the add-in: an event fires only after
+    it is registered again."""
+
+    def __init__(self):
+        self.registered, self.fired = set(), []
+
+    def unregisterCustomEvent(self, event_id):
+        self.registered.discard(event_id)
+
+    def registerCustomEvent(self, event_id):
+        self.registered.add(event_id)
+        return types.SimpleNamespace(add=lambda handler: True)
+
+    def fireCustomEvent(self, event_id):
+        self.fired.append(event_id)
+        return event_id in self.registered
+
+
+class LostEventTest(unittest.TestCase):
+    def test_the_result_window_and_the_reopen_register_their_event_again_when_it_is_gone(self):
+        app = LostEvent()
+        boxes = []
+        with mock.patch.object(core, "Application", types.SimpleNamespace(get=lambda: app), create=True), \
+                mock.patch.object(result_dialog, "message_box", boxes.append), \
+                mock.patch.object(reopen_ui, "message_box", lambda *a, **k: boxes.append(a)):
+            result_dialog.show(plain_view())
+            self.assertIn(result_dialog.EVENT_ID, app.registered)
+            reopen_ui.keep(FakeDocument(FakeDataFile(4)), SAVED)
+            app.registered.clear()
+            reopen_ui.request(result_dialog.COMMAND_ID)
+        self.assertEqual(boxes, [])
+        self.assertEqual(app.fired.count(reopen_ui.EVENT_ID), 2)
+        reopen_ui.forget()
+
+
 if __name__ == "__main__":
     unittest.main()

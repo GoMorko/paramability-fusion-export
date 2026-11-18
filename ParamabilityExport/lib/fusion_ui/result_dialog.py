@@ -48,11 +48,21 @@ def show(view):
     The dialog opens after the calling command has ended."""
     _pending["view"] = view
     try:
-        if not adsk.core.Application.get().fireCustomEvent(EVENT_ID):
+        if not _fire():
             raise RuntimeError("The result event did not fire.")
     except Exception as error:
         log("result dialog failed: %s" % error)
         _fallback()
+
+
+def _fire():
+    """Fire the result event. When it does not fire, register it again and fire once more: another copy of the
+    add-in that stopped (an older version loaded at the same time) removes the event of the same id."""
+    if adsk.core.Application.get().fireCustomEvent(EVENT_ID):
+        return True
+    log("the result event did not fire; registering it again")
+    start()
+    return adsk.core.Application.get().fireCustomEvent(EVENT_ID)
 
 
 def _fallback():
