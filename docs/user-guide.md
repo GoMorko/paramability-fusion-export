@@ -51,8 +51,8 @@ Nothing is typed in Fusion.
      a step changed and the add-in could not bring it back, it says that the tries stopped early, after which try,
      and which step. When that step belongs to another component and the part was not changed, only the tries of the
      sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
-     in full. The add-in then asks Fusion to undo the export. Use Undo in Fusion when this section says your design is
-     changed.
+     on. The add-in then asks Fusion to undo the export. With "Lighter on memory" ticked, once Fusion forgot Undo data,
+     all tries stop there instead. Use Undo in Fusion when this section says your design is changed.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
    box.
@@ -149,7 +149,7 @@ design broken (a step stays in error even with your values back), the tries stop
 fail for that reason; the result window says so. When the broken step belongs to another component that the part
 does not need, and the part reads as before, only the tries of the sizes behind it end, and the other sizes are tried
 in full. A size that also changes steps of another component gets its range ends after the other sizes, since its
-tries are the most likely to break the design. When the tries stop early like this, or run out of time, before the
+tries are the most likely to break the design; your favourite sizes still come first. When the tries stop early like this, or run out of time, before the
 values between the last value that built and the first one that did not were tried, the range still stops at the last
 value that built, and its reason adds "no value between was tried", why, and a tip: untick the size that stopped the
 tries, or raise the time limit. The design may build at some of those values; a later export that tries them can give

@@ -106,7 +106,7 @@ def make_health(inputs):
             out["tries_stopped"]["steps"] = [dict(step) for step in stopped["steps"][:MAX_LISTED]]
     if inputs.ended:
         out["tries_ended"] = [{k: (list(v)[:MAX_LISTED] if isinstance(v, list) else v) for k, v in record.items()
-                               if k in ("after", "items", "steps", "components", "sizes")}
+                               if k in ("after", "items", "steps", "components", "sizes", "others_full")}
                               for record in inputs.ended[:MAX_LISTED]]
     broken = steps.broken if steps is not None and not steps.unread else inputs.broken
     if broken:
@@ -248,14 +248,17 @@ def _stopped_line(stopped):
 def _ended_line(ended, undo_dropped):
     """The line about a try after which steps of another component stayed changed with the values back, so the tries
     of some sizes ended there and the other sizes went on: which try, which steps of which component, and which
-    sizes. Without the Undo data dropped, Fusion undoes the export at its end."""
+    sizes. That the other sizes were tried in full only when no later stop, time limit or row limit cut their tries
+    (`others_full`). Without the Undo data dropped, Fusion undoes the export at its end."""
     after = (ended.get("after") or "").replace(RETRY_NOTE, "") or "a value"
     steps = ended.get("steps") or [{"name": name} for name in ended.get("items") or []]
     shown = ", ".join(_step_text(step) for step in steps[:MAX_LISTED])
     text = ("The tries of %s ended early: after trying %s, these steps of %s stayed changed even with your values "
-            "back: %s. The other sizes were tried in full."
+            "back: %s."
             % (_names(ended.get("sizes") or []) or "one size", after,
                " and ".join(ended.get("components") or []) or "another component", shown))
+    if ended.get("others_full"):
+        text += " The other sizes were tried in full."
     if not undo_dropped:
         text += " Since your design changed, the add-in undoes the export when it ends."
     return clip(text, MAX_LINE)

@@ -389,16 +389,16 @@ class SizeProbe:
         return plan.pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
     def far_order(self, sizes, late=(), captures=None):
-        """The Fusion names of the sizes `probe_rows` tried, in the order their far rows run (`plan.far_order`): the
-        sizes in `late`, those whose tries so far moved a reference of another component (`moves_others`) and those
-        that drive a step outside the parts of `captures` (`geometry_links.outside_drivers`; this probe's capture by
-        default) last."""
+        """The Fusion names of the sizes `probe_rows` tried, in the order their far rows run (`plan.far_order`): among
+        the favourites and among the rest, those that drive a step outside the parts of `captures`
+        (`geometry_links.outside_drivers`; this probe's capture by default) after the others, and the sizes in `late`
+        and those whose tries so far moved a reference of another component (`moves_others`) last."""
         planned = self.schedule.take(NEAR)
         if planned is None:
             return []
         late = set(late) | set(moves_others(self.states, self.refs, {e.name: e.value for e in self.table.entries}))
-        late |= set(outside_drivers([self.capture] if captures is None else captures))
-        return plan.far_order(sizes, *planned, late=late)
+        risky = outside_drivers([self.capture] if captures is None else captures)
+        return plan.far_order(sizes, *planned, late=late, risky=risky)
 
     def far_rows(self, sizes, room, states=None, only=None):
         """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`): of the

@@ -8,7 +8,6 @@ import json
 import re
 import tempfile
 import unittest
-from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.fakes import FakePort, FakeStore
@@ -18,7 +17,6 @@ from tests.translator_helpers import load_capture, steps_of
 from lib import orca_translate
 from lib.dialog_model.result_rows import NOT_USED, result_view, section, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
-from lib.export_plan.probe_flow import size_probe
 from lib.export_plan.size_offers import offers, table_for_body
 from lib.design_model import step_links
 from lib.params import size_table
@@ -311,8 +309,7 @@ class UnfinishedRangeTest(unittest.TestCase):
         request = ExportRequest(title="Box", writer="test", up_axis="z", parameters=params, model_params=MODEL,
                                 design_unit="mm", ticked=table_for_body(USER, "mm", MODEL, CAPTURE).ticked,
                                 ranges={}, probe_time_limit=limit)
-        # The pipe drives the extrude of the Pipe component, which puts its far rows last; these cases need them first.
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(size_probe, "outside_drivers", lambda c: []):
+        with tempfile.TemporaryDirectory() as tmp:
             result = run_pipeline(port, request, tmp)
         self.assertEqual(port.store.exprs, START)
         [cut] = result.report["sizes"]["cut"]

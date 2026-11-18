@@ -6,15 +6,18 @@ The tries may go on only when every step that stays worse is outside what they n
 - no capture needs the item for its tries (`marker_roll.needed_items`: an item that may change a part, a sketch its
   steps use, an item of another component a link or a measured reference depends on, an assembly item, an item of an
   unknown type);
-- no part is built from it (`counts_warning`, `tried_ranges.part_step` over every part);
+- no part of the export is built from it (`tried_ranges.part_step` of every capture of the export, also of a part
+  whose sketches the tries do not follow);
 - the item names its component.
-When any of these cannot be shown, the answer is None and the tries stop as for any lasting change. The caller also
+When any of these cannot be shown, or a part of the export has no capture, the answer is None and the tries stop as
+for any lasting change. The caller also
 checks that the part reads as at the start with the values back before it goes on.
 
 The sizes that end with such a try are the sizes the try moved and every user parameter that drives a step or a sketch
 of a component of the worse steps (`geometry_links.acts`): more tries of them may damage that component again.
 """
 from ...design_model import step_links
+from ...design_model.tried_ranges import part_step
 from ...params.geometry_links import acts
 from ..marker_roll import needed_items
 
@@ -42,13 +45,15 @@ def _named_components(captures):
 
 
 class OutsideDamage:
-    """What the captures of one export (one per part) tell about the steps a try left worse.
+    """What the captures of one export tell about the steps a try left worse. `captures` are the captures of the parts
+    the tries run for (their `needed_items`), `parts` every capture of the export, one per part (`captures` when
+    None); an entry that is not a dict is a part whose read failed."""
 
-    `counts_warning(step)` is the probe's test for a step a part is built from (`(position, name)`)."""
-
-    def __init__(self, captures, counts_warning):
+    def __init__(self, captures, parts=None):
         self.captures = [c for c in captures if isinstance(c, dict)]
-        self.counts_warning = counts_warning
+        parts = list(self.captures if parts is None else parts)
+        self._parts_known = all(isinstance(c, dict) for c in parts)
+        self._mine = [part_step(c) for c in parts if isinstance(c, dict)]
         self._needed = None  # positions of the items the tries need, worked out once; empty set and False: unknown
         self._items = {}
         for capture in self.captures:
@@ -77,7 +82,7 @@ class OutsideDamage:
         needed = self._needed_positions()
         if item is None or needed is None or item.get("name") != name or at in needed:
             return None
-        if self.counts_warning((at, name)) or item.get("in_target_component") is not False:
+        if any(mine((at, name)) for mine in self._mine) or item.get("in_target_component") is not False:
             return None
         component = str(item.get("component") or "")
         return component or None
@@ -88,7 +93,7 @@ class OutsideDamage:
         and of every user parameter that drives a step or a sketch of those components. None when one step is not
         outside, or the row moved no size."""
         moved = list((row or {}).get("varied") or [])
-        if not worse or not moved or not self.captures:
+        if not worse or not moved or not self.captures or not self._parts_known:
             return None
         tokens = []
         for change in worse:

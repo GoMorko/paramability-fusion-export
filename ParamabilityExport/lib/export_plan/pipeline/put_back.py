@@ -101,7 +101,7 @@ class PutBack:
         if self._tries_back is not run:
             self._after_tries(run)
         self.stopped = run.stopped
-        self.ended = list(run.ended)
+        self.ended = run.ended_records()
         self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
 
     def _after_tries(self, run):

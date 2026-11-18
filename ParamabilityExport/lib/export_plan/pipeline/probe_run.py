@@ -14,6 +14,7 @@ from ..time_limit import limit_text
 from . import try_summary
 from .far_phase import late_sizes, nearer_share
 from .outside_damage import OutsideDamage
+from .ended_sizes import EndedSizes
 from .walk_backs import WalkBacks
 
 
@@ -55,7 +56,7 @@ def _row_values(row):
     return {param: state[param] for param in row.get("varied") or [] if param in state}
 
 
-class ProbeRun(WalkBacks):
+class ProbeRun(EndedSizes, WalkBacks):
     """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
     recompute (no STEP). `probe` is a `probe_flow.Probe` (one part, or a group of parts over shared rows). It keeps
     the probe state read at every row that built, by row key, and `rows` lists (row, result) of every row run.
@@ -113,7 +114,8 @@ class ProbeRun(WalkBacks):
 
     MAX_PUT_BACK_MISSES = 2
 
-    def __init__(self, port, tmp, probe, before_discovery=None, time_limit=None, clock=None, captures=()):
+    def __init__(self, port, tmp, probe, before_discovery=None, time_limit=None, clock=None, captures=(),
+                 parts=None):
         self.port, self.tmp, self.probe = port, tmp, probe
         self.before_discovery = before_discovery
         self.time_limit = time_limit  # seconds the tries may take from now on, or None for no limit
@@ -137,7 +139,8 @@ class ProbeRun(WalkBacks):
         self.keeper = self._keeper()
         self.end = None  # `EndRead` of the put back after the tries (`settle`)
         self.undo = port.undo_steps
-        self.damage = OutsideDamage(captures, self.probe.counts_warning) if captures else None
+        self.damage = OutsideDamage(captures, parts) if captures else None
+        self._walked = []  # Fusion names of the sizes walked back before the row run last (`_before_row`)
         self.ended = []  # the records of the tries after which the tries of some sizes ended (`_take_ended`)
         self.ended_names = []  # Fusion names of the sizes and parameters whose tries ended, in order
         self._tried = set()  # Fusion names of the sizes `measure` was given
@@ -229,6 +232,7 @@ class ProbeRun(WalkBacks):
         design is known to be as at the start (`_drop_undo`). Before the first row the body is read for the end check
         (`Probe.keep_body_start`)."""
         self._home()
+        self._walked = []
         key = row_key(row)
         previous, self._previous = self._previous, key
         if previous is None and self.read_failure is None:
@@ -416,52 +420,6 @@ class ProbeRun(WalkBacks):
                 finally:
                     self._home()
 
-    def _contain(self, worse, row):
-        """`RowExport`'s `contain`: what ends with `row` (`OutsideDamage.judge`, the sizes it gives that `measure` was
-        given) when every step in `worse` is outside what the tries need and the part reads as at the start with the
-        values back (`Probe.reads_as_start`); else None, and the tries stop."""
-        found = self.damage.judge(worse, row)
-        if found is None:
-            return None
-        try:
-            read = self._mark(self._read_now({}))
-        except ExportCancelled:
-            raise
-        except Exception as exc:
-            self.port.log(f"reading the part after a lasting change failed: {exc!r}")
-            return None
-        if not self.probe.reads_as_start(read):
-            return None
-        found["sizes"] = list(dict.fromkeys(found["sizes"] + [p for p in found["params"] if p in self._tried]))
-        return found
-
-    def _take_ended(self):
-        """Note the checks that ended the tries of some sizes since the last call (`RowExport.ended`): their sizes and
-        parameters join `ended_names`, and the probe is told. True when there was one."""
-        new = self.job.ended[len(self.ended):]
-        for record in new:
-            self.ended.append(record)
-            self.ended_names.extend(n for n in record["sizes"] + record["params"] if n not in self.ended_names)
-            self.port.log("tries of %s ended: %s of %s stayed worse with the values back after %s"
-                          % (", ".join(record["sizes"]), ", ".join(record["items"]),
-                             ", ".join(record["components"]), record["after"]))
-            self.probe.note_ended(record)
-        return bool(new)
-
-    def _without_ended(self, rows):
-        """`rows` without those that move a size or parameter whose tries ended (`ended_names`); the probe is told of
-        those left out."""
-        ended = set(self.ended_names)
-        left = [row for row in rows if ended & set(row.get("varied") or ())]
-        if left:
-            self.probe.note_ended(None, left)
-        return [row for row in rows if not ended & set(row.get("varied") or ())]
-
-    def _live(self, sizes):
-        """The probe sizes whose tries did not end (`ended_names`)."""
-        ended = set(self.ended_names)
-        return [size for size in sizes if size["param"] not in ended]
-
     def _note_stop(self, unrun):
         """Log the stop of the tries on a broken design and tell the probe, with the rows that did not run."""
         self.port.log("tries stopped: %s stayed worse with the values back after %s"
@@ -539,7 +497,10 @@ class ProbeRun(WalkBacks):
             last = self.rows[-1][0]
             self._tails[row_key(last)] = self._try_read()
             self._check_reads()
-        again = self._again(done)
+        # A row that moves a size whose tries ended does not run again: it keeps its first run, as a row the room
+        # left out does.
+        ended = set(self.ended_names)
+        again = [(key, row) for key, row in self._again(done) if not ended & set(row.get("varied") or ())]
         if again:
             self.redone.extend(key for key, _ in again)
             self._note()

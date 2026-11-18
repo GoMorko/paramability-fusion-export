@@ -57,14 +57,22 @@ def pair_rows(sizes, moved, states, room, extra=()):
     return rows
 
 
-def far_order(sizes, moved, extra=(), late=()):
+def far_order(sizes, moved, extra=(), late=(), risky=()):
     """The Fusion names of the tried sizes in the order their far rows run, one size after the other: as `probe_rows`
-    tries them, with the sizes in `late` moved to the end in that same order. `late` are the sizes whose near tries
-    showed trouble outside the part (`ProbeRun`): a far try of such a size is the likeliest to leave the design broken
-    and stop the tries, so the other sizes get their far tries first."""
-    names = [s["param"] for s in tried_sizes(sizes, moved, extra)]
-    late = set(late)
-    return [n for n in names if n not in late] + [n for n in names if n in late]
+    tries them, the favourites of the design first. In each of the two groups, the favourites and the rest, the sizes
+    in `risky` come after the others and the sizes in `late` come last, each in the same order. `late` are the sizes
+    whose tries so far showed trouble outside the part (`ProbeRun`); `risky` are the sizes that drive a step of another
+    component (`geometry_links.outside_drivers`). A far try of such a size is the likeliest to leave the design broken
+    and stop the tries, so the other sizes get their far tries first. The favourites stay first, so a time limit or
+    the row limit cuts the tries of the other sizes first."""
+    tried = tried_sizes(sizes, moved, extra)
+    late, risky = set(late), set(risky)
+
+    def place(at):
+        name = tried[at]["param"]
+        return (not tried[at].get("favorite"), 2 if name in late else 1 if name in risky else 0, at)
+
+    return [tried[at]["param"] for at in sorted(range(len(tried)), key=place)]
 
 
 def far_rows(sizes, moved, room, extra=(), states=(), only=None):
