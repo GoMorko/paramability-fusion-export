@@ -102,6 +102,24 @@ def acts(capture, param):
     return out
 
 
+def outside_drivers(captures):
+    """Fusion names of the user parameters that drive a timeline step outside every part of `captures` (capture
+    dicts of one design): a step of `acts` that every capture marks `in_target_component` false. A far try of such a
+    parameter is the likeliest to break a step of another component. A step that follows a part through geometry
+    alone is not among the `dependents`, so it is not found here."""
+    captures = [c for c in captures if isinstance(c, dict)]
+    if not captures:
+        return []
+    outside = None
+    for capture in captures:
+        found = {item.get("index") for item in capture.get("items") or []
+                 if type(item.get("index")) is int and item.get("in_target_component") is False}
+        outside = found if outside is None else outside & found
+    first = captures[0]
+    return [param["name"] for param in ((first.get("parameters") or {}).get("user") or [])
+            if acts(first, param).items & outside]
+
+
 # ---- measured references of the steps ------------------------------------------------------------------------
 
 def ref_key(index, slot):

@@ -4,6 +4,7 @@ from ...design_edit.marker import MARKER_LOST
 from ...geometry.tolerances import FIT_TOLERANCE, FLIP_TOLERANCE, SAME_SIZE
 from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
+from ...params.geometry_links import outside_drivers
 from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, same_shape, series
 from ...probe.state import ProbeState
 from ...timing import trail
@@ -353,13 +354,16 @@ class SizeProbe:
         moved, extra = planned
         return plan.pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
-    def far_order(self, sizes, late=()):
+    def far_order(self, sizes, late=(), captures=None):
         """The Fusion names of the sizes `probe_rows` tried, in the order their far rows run (`plan.far_order`): the
-        sizes in `late` and those whose tries so far moved a reference of another component (`moves_others`) last."""
+        sizes in `late`, those whose tries so far moved a reference of another component (`moves_others`) and those
+        that drive a step outside the parts of `captures` (`geometry_links.outside_drivers`; this probe's capture by
+        default) last."""
         planned = self.schedule.take(NEAR)
         if planned is None:
             return []
         late = set(late) | set(moves_others(self.states, self.refs, {e.name: e.value for e in self.table.entries}))
+        late |= set(outside_drivers([self.capture] if captures is None else captures))
         return plan.far_order(sizes, *planned, late=late)
 
     def far_rows(self, sizes, room, states=None, only=None):

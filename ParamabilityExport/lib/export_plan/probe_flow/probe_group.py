@@ -46,10 +46,10 @@ class ProbeGroup:
 
     def far_order(self, sizes, late=()):
         """The order of the far rows (`SizeProbe.far_order`): a size that moved a reference of another component in any
-        part comes last for all, since the rows are shared."""
+        part, or that drives a step outside every part, comes last for all, since the rows are shared."""
         current = {e.name: e.value for e in self.table.entries}
         late = set(late) | {name for probe in self.probes for name in moves_others(probe.states, probe.refs, current)}
-        return self.probes[0].far_order(sizes, late)
+        return self.probes[0].far_order(sizes, late, [probe.capture for probe in self.probes])
 
     def far_rows(self, sizes, room, only=None):
         """The far rows of the sizes in `only`, or of every size not planned yet (`SizeProbe.far_rows`): every probe

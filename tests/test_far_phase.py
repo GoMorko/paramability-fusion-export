@@ -60,6 +60,22 @@ class FarOrderTest(unittest.TestCase):
         self.assertEqual(far, ["count (min)", "count (max)", "off (min)", "off (max)", "height (min)", "height (max)",
                                "cube (min)", "cube (max)"])
 
+    def test_a_size_that_drives_a_step_of_another_component_has_its_far_rows_last(self):
+        capture = copy.deepcopy(CAPTURE)
+        for item in capture["items"]:
+            item["in_target_component"] = True
+        capture["items"].append({"index": 9, "name": "Pocket1", "type": "ExtrudeFeature", "component": "holder",
+                                 "in_target_component": False, "data": {}})
+        capture["parameters"] = {"user": [dict(p, dependents=[{"name": "d9", "kind": "feature", "component": "holder",
+                                                                "feature": "Pocket1"}] if p["name"] == "off" else [])
+                                          for p in PARAMS]}
+        for parts in (1, 2):
+            with self.subTest(parts=parts):
+                keys = measured(flow.Fusion(), capture, parts)
+                far = [k for k in keys if k.endswith(("(min)", "(max)"))]
+                self.assertEqual(far, ["count (min)", "count (max)", "cube (min)", "cube (max)", "height (min)",
+                                       "height (max)", "off (min)", "off (max)"])
+
 
 class NearerShareTest(unittest.TestCase):
     def test_sizes_whose_far_tries_fail_each_get_nearer_rows_under_the_cap(self):

@@ -28,6 +28,8 @@ learning only.
    at a value tried, the range stops before that value too. The add-in finds the step by its place in the timeline, so a step of another
    component with the same name (two components can each have a "Chamfer1") does not hide it. The add-in tries the
    range ends one size at a time, and finds the last value that builds for that size before it goes to the next size.
+   A size that also changes steps of another component gets its range ends last, since its tries are the most likely
+   to break the design.
    When the tries end early, the range stops at the last value that built, and its note says that the values after it
    were not tried.
 3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot

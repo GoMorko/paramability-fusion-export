@@ -725,10 +725,20 @@ The order of the sizes:
      in `RowExport.walks`; only the first 24 attempts are kept).
 3. A size also goes last when, set alone in a row that built, it moved a measured reference of another component
    (`states.moves_others`; a reference without `own`).
-4. The sizes that go last keep their order. When no size shows these facts, the order is the order of the near rows.
+4. A size also goes last when it drives a step of another component (`geometry_links.outside_drivers`). This fact
+   comes from the capture, before any try. `geometry_links.acts` gives the timeline items that a size drives, from the
+   model parameters that read it (`parameters.user[].dependents`). When one of these items has `in_target_component`
+   false, the item is outside the part. In a group export, the item must be outside every part
+   (`ProbeGroup.far_order` gives the captures of all parts to `SizeProbe.far_order`).
+5. The sizes that go last keep their order. When no size shows these facts, the order is the order of the near rows.
 
-These facts come from the rows that ran before. The add-in does not read Fusion again for them. A far try of such a
-size is the most likely to break the design, so the other sizes get their far rows and their halving first.
+The facts of points 2 and 3 come from the rows that ran before. The fact of point 4 comes from the capture. The
+add-in does not read Fusion again for them. A far try of such a size is the most likely to break the design, so the
+other sizes get their far rows and their halving first.
+
+Point 4 has a blind spot. A step of another component can follow the part through geometry only, for example a
+pocket that projects an edge of the part. Such a step is not in `dependents`, so point 4 does not find it. Points 2
+and 3 cover this case: the near rows of the size show the trouble outside the part.
 
 The share of the nearer rows (`far_phase.nearer_share`). The nearer rows have one cap for the export (24,
 `MAX_NEARER_ROWS`). Without a share, the first two or three sizes whose far rows fail could use all of them, and the
@@ -763,7 +773,7 @@ read when its last row did not build or read another outline (`ProbeRun._tails`)
 be one such read per size. The number of rebuilds per row does not change.
 
 Tests: `tests/test_far_phase.py` (the same rows for a clean export, one part and a group; the order of a size that
-warned outside the part; the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py`
+warned outside the part and of a size that drives a step of another component; the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py`
 (a later size that breaks the design after the halving of the first size, and a time limit between the far rows of
 two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
 
@@ -2193,8 +2203,9 @@ alphabetical order by module.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
   - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and
     `with_try_seconds`.
-  - `far_phase.py` holds the rules of the far phase: which sizes get their far rows last (`late_sizes`) and how many
-    nearer rows a size may take (`nearer_share`, see 1.8, "The far rows, one size at a time").
+  - `far_phase.py` holds the rules of the far phase: which sizes get their far rows last from the rows so far
+    (`late_sizes`; the probe adds the sizes that drive a step of another component, `geometry_links.outside_drivers`)
+    and how many nearer rows a size may take (`nearer_share`, see 1.8, "The far rows, one size at a time").
   - `put_back.py` holds `PutBack`: what the export changed, put back in one order on every way out, the end check, the
     last Undo drop and the health inputs (see 1.11).
   - The package re-exports what the rest of the add-in reads as `pipeline.<name>`.
@@ -2967,6 +2978,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`evaluate` for the text of a formula, `evaluate_tree` for a parsed tree), `simplify.py` (`collected_sum`), `text.py`
   (`format_number`, `MAX_FORMULA_LENGTH`, `is_constant_expression`), `errors.py` (`ExpressionError`).
 - `labels.py`: the readable label of each size (`assign`, see 1.3).
+- `geometry_links.py`: which parameters may reach a sketch or a place of the part through another component. `acts`
+  gives the components, the timeline items and the sketches that one user parameter drives. `outside_drivers` gives
+  the parameters that drive a step outside every part (see 1.8, "The far rows, one size at a time").
 
 #### design_edit
 
