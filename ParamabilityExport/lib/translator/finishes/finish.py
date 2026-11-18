@@ -362,7 +362,7 @@ def fillet(ctx, step):
     item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Refusal(shared.ROUND_NO_EDGES)
-    if len(sets) > 1 and sets_of.all_apart(sets):
+    if len(sets) > 1 and set_split.all_apart(ctx, item, sets):
         joins = _round_joins(item)
         found = set_split.copy_apart(
             ctx, item, sets, lambda one: _round_set_refusal(one) or _unlocated(one),
@@ -436,14 +436,15 @@ def _same_pick(a, b):
     return a.pick is not None and a.pick == b.pick
 
 
-def _pick_groups(ctx, part):
+def _pick_groups(ctx, item, part):
     """The edges of `part` (a `sets_of.Part`) as lists of edges for one step each: one list, or, when the part holds
     sets that Fusion picked in different ways and that lie apart, one list per way (`set_split`)."""
     owners = list({one.index: one for one in part.sets}.values())
     found = set_split.groups(owners, _same_pick)
-    if len(found) < 2 or not sets_of.all_apart(owners):
+    if len(found) < 2 or not set_split.all_apart(ctx, item, owners):
         return [part.edges]
     ctx.note(set_split.SPLIT_NOTE)
+    set_split.mark_apart(ctx, item)
     out = []
     for group in found:
         held = {id(edge) for one in group for edge in one.edges}
@@ -463,7 +464,7 @@ def _bevels(ctx, item, sets):
         extra = {_SECOND_KEYS[kind]: q.json() for kind, q in part.extra.items()}
         if part.direction is not None:
             extra["sizeOn"] = part.direction
-        for edges in _pick_groups(ctx, part):
+        for edges in _pick_groups(ctx, item, part):
             sizes = [part.size] * sets_of.point_count(edges)
             entries += _edge_steps(ctx, item, "bevel", edges, sizes, extra, sets)
     return entries
@@ -476,7 +477,7 @@ def chamfer(ctx, step):
     refusals = [_bevel_set_refusal(one) for one in sets]
     left = [one for one, refusal in zip(sets, refusals) if refusal is not None]
     found = None
-    if left and all(sets_of.apart(a, b) for a in left for b in sets if b is not a):
+    if left and all(set_split.apart(ctx, item, a, b) for a in left for b in sets if b is not a):
         found = set_split.copy_apart(ctx, item, sets, _bevel_set_refusal, lambda kept: [kept],
                                      lambda group: _bevels(ctx, item, group))
     elif not left:

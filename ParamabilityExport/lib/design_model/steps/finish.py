@@ -18,9 +18,10 @@ reason to give and how to name the edges.
 - `Part`, `merge`: the edges of a step grouped into parts of one size (and one side, one second measure), so a step
   with sets of different sizes is a list of steps of one size each.
 - `reach`: how far from its edge a set takes material along a face.
-- `FinishSet.pick`, `apart`, `all_apart`, `only_sets`: how Fusion picked the edges of a set (by faces, along tangent
-  chains, or edge by edge), whether sets lie far enough apart that Fusion gives the same part when it applies them one
-  after the other as when it applies them together, and an item cut down to some of its sets.
+- `FinishSet.pick`, `box_gap`, `reach_terms`, `only_sets`: how Fusion picked the edges of a set (by faces, along
+  tangent chains, or edge by edge), how near the edges of two sets can come and how far a set reaches (so a
+  destination can tell whether Fusion gives the same part when it applies them one after the other as when it
+  applies them together), and an item cut down to some of its sets.
 
 A size that follows the sizes of the design is a `Quantity` (`design_model.values`). The destination makes it: each
 set gives `size(quantity)` the number and the path of its parameter, and `quantity(path, number, dim)` gives back the
@@ -65,6 +66,10 @@ def _positive(value):
 
 def _is_point(value):
     return isinstance(value, list) and len(value) == 3 and all(is_number(c) for c in value)
+
+
+def _is_box(value):
+    return isinstance(value, dict) and _is_point(value.get("min")) and _is_point(value.get("max"))
 
 
 def _close(a, b, tol=SIZE_TOL):
@@ -121,15 +126,13 @@ class FinishSet:
         return None
 
     @property
-    def ends(self):
-        """The vertex points of all edges, or None when the set has no edge or an edge has no readable `ends`."""
-        found = []
-        for edge in self.edges:
-            ends = edge.get("ends")
-            if not isinstance(ends, list) or len(ends) != 2 or not all(_is_point(p) for p in ends):
-                return None
-            found += ends
-        return found or None
+    def boxes(self):
+        """The boxes of all edges (`box` of the edge records), or None when the set has no edge or an edge has no
+        readable box."""
+        found = [edge.get("box") for edge in self.edges]
+        if not found or not all(_is_box(box) for box in found):
+            return None
+        return found
 
 
 class RoundSet(FinishSet):
@@ -517,49 +520,80 @@ def _uneven_groups(edges, ratio):
 
 # ---- sets far enough apart to apply one after the other -------------------------------------------------------
 
-# Fusion builds the sets of one step together: where two sets meet at a corner it makes one blend there, which two
-# steps one after the other do not make. Sets are apart when no point of one (the corners of its edges and the points
-# measured on them) lies nearer to a point of the other than CORNER_MARGIN times the two reaches together (plus
-# CORNER_TOL, mm). The margin covers faces that meet at a sharper angle than square, where a round reaches further
-# along a face than its radius. The measured points count too since a closed edge has one corner only.
+# Fusion builds the sets of one step together: where two sets meet or come near, it makes one blend there, which two
+# steps one after the other do not make. A destination may copy the sets one after the other only when the edges of
+# two sets lie further apart than CORNER_MARGIN times the two reaches together (plus CORNER_TOL, mm), at every size
+# setting. `box_gap` gives a distance the edges cannot be nearer than, and `reach_terms` how far each set reaches. The
+# margin gives room for what the reader did not measure: the angle between the faces between its measured places,
+# and how sizes turn the faces.
 CORNER_MARGIN = 2.0
 CORNER_TOL = 1e-3
+# A round on faces that turn more than this (degrees) reaches too far along them to tell.
+MAX_TURN_DEG = 170.0
 
 
-def _apart_reach(one):
-    """How far (mm) the set `one` reaches along a face, for `apart`: its `reach`, else for a changing radius the larger
-    end radius and for a round set by chord length the chord. None when it is not known."""
-    if one.reach is not None:
-        return one.reach
-    if isinstance(one, RoundSet) and one.continuity != "curvature":
-        if one.kind == VARIABLE and one.start is not None and one.end is not None:
-            return float(max(one.start, one.end))
+def _box_distance(a, b):
+    gaps = [max(0.0, a["min"][k] - b["max"][k], b["min"][k] - a["max"][k]) for k in range(3)]
+    return math.sqrt(sum(g * g for g in gaps))
+
+
+def box_gap(a, b):
+    """A distance (mm) that no edge of set `a` comes nearer than to an edge of set `b`: the least distance between the
+    box of an edge of one and the box of an edge of the other (each box holds its whole edge). 0 for sets that share
+    an edge or a corner. None when a box is not known."""
+    boxes_a, boxes_b = a.boxes, b.boxes
+    if boxes_a is None or boxes_b is None:
+        return None
+    return min(_box_distance(p, q) for p in boxes_a for q in boxes_b)
+
+
+def _turn(one):
+    """The largest angle (degrees) between the face normals of the edges of `one`, or None when an edge lacks it."""
+    found = [edge.get("turn_deg") for edge in one.edges]
+    if not found or not all(is_number(t) and 0 <= t <= 180 for t in found):
+        return None
+    return max(found)
+
+
+class ReachTerms:
+    """How far a set reaches along a face from its edges, at most: the sum of `factor * value` over `terms`, each
+    `(field, number, factor, dim)` with `field` the set's value (its parameter `path`). The factors hold only while the
+    values in `held`, each `(field, number, dim)`, stay as they are now."""
+
+    def __init__(self, terms, held=()):
+        self.terms, self.held = list(terms), tuple(held)
+
+
+def reach_terms(one):
+    """The `ReachTerms` of the set `one`, or None when how far it reaches is not known.
+
+    A round of radius r between faces whose normals are `t` degrees apart touches each face r * tan(t / 2) from the
+    edge (r on a square edge); a round by chord length c touches it c / (2 cos(t / 2)) from the edge. `t` is the
+    largest angle the reader measured on the edges (`turn_deg`); past MAX_TURN_DEG the reach is not known. A changing
+    radius counts both end radii, and is not known with radii between the ends. A chamfer reaches its distances along
+    the faces; one by distance and angle reaches distance * tan(angle), which holds while the angle stays."""
+    if isinstance(one, RoundSet):
+        turn = _turn(one)
+        if one.continuity == "curvature" or turn is None or turn > MAX_TURN_DEG:
+            return None
+        half = math.radians(turn) / 2.0
+        factor = max(1.0, math.tan(half))
+        if one.kind == CONSTANT and one.radius is not None:
+            return ReachTerms([("radius", one.radius, factor, "length")])
+        if one.kind == VARIABLE and one.start is not None and one.end is not None and one.mid_count == 0:
+            return ReachTerms([("start_radius", one.start, factor, "length"), ("end_radius", one.end, factor, "length")])
         if one.kind == CHORD_LENGTH and one.chord is not None:
-            return float(one.chord)
+            return ReachTerms([("chord_length", one.chord, max(1.0, 1.0 / (2.0 * math.cos(half))), "length")])
+        return None
+    if isinstance(one, ChamferSet) and not one.problem:
+        if one.kind == EQUAL:
+            return ReachTerms([("distance", one.distance, 1.0, "length")])
+        if one.kind == TWO_DISTANCES:
+            return ReachTerms([("distance", one.distance, 1.0, "length"), ("distance_two", one.other, 1.0, "length")])
+        if one.kind == DISTANCE_ANGLE and one.angle < REACH_ANGLE_DEG:
+            factor = max(1.0, math.tan(math.radians(one.angle)))
+            return ReachTerms([("distance", one.distance, factor, "length")], held=[("angle_deg", one.angle, "angle")])
     return None
-
-
-def apart(a, b):
-    """True when the sets `a` and `b` share no edge and no corner, and no point of one lies near a point of the other
-    (CORNER_MARGIN, see above): Fusion then gives the same part when it applies them one after the other, in either
-    order, as when it applies them together. False when the corners of an edge or the reach of a set are not known.
-    The test holds at the sizes the capture was read at."""
-    ends_a, ends_b = a.ends, b.ends
-    reach_a, reach_b = _apart_reach(a), _apart_reach(b)
-    if ends_a is None or ends_b is None or reach_a is None or reach_b is None:
-        return False
-    limit = CORNER_MARGIN * (reach_a + reach_b) + CORNER_TOL
-    found_a, found_b = ends_a + _points(a), ends_b + _points(b)
-    return all(vec.length(vec.sub(p, q)) > limit for p in found_a for q in found_b)
-
-
-def _points(one):
-    return [p for edge in one.edges for p in edge.get("points") or [] if _is_point(p)]
-
-
-def all_apart(sets):
-    """True when every two of `sets` are `apart`."""
-    return all(apart(a, b) for n, a in enumerate(sets) for b in sets[n + 1:])
 
 
 def only_sets(item, indexes, renumber=False):

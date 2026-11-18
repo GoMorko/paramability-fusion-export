@@ -117,19 +117,22 @@ What the copy can and cannot do, step by step. The README lists only the main li
   and a chamfer with two different sizes whose edges take the first size on different faces. It also happens for
   sets picked by faces and sets picked by chains in one step, and for sets of different sizes picked by faces, when
   those sets meet at a corner or come near one (see the next point).
-- One fillet or chamfer step can hold several sets of edges. When no two sets share a corner, and no corner or
-  middle point of an edge of one set is nearer to one of another set than twice the sizes of the two sets together,
-  the copy makes the sets one step after the other, in their order in Fusion: one step for the sets picked by
-  faces (one step for each size), one for the sets picked by chains, one for the edges picked one by one, and one
-  for each other set. Each step then picks its edges as Fusion did, so no size is marked for the picks of those
-  sets. A round whose radius changes along the edge gets its own step this way. When one set cannot be copied, only
-  that set is left out: the result window lists the step with the reason of that set, and the other sets are in the
-  copy. Where the sets meet or come near, Fusion makes one blend at the corner, which steps one after the other do
-  not make, so the copy keeps the sets in one step as before, and a set that cannot be copied leaves the whole step
-  out. A set whose reach is not known (two radii, curvature continuity, a chamfer size that cannot be read) also
-  keeps the whole step as before. Exports made with add-in 0.14.3 or older do not hold the corners of the edges, so
-  their sets stay in one step. The test is made at the sizes of the export: a size that brings two sets near each
-  other is not seen.
+- One fillet or chamfer step can hold several sets of edges. When the edges of every two sets stay further apart
+  than twice the distance that the two sets reach along their faces together, the copy makes the sets one step after
+  the other, in their order in Fusion: one step for the sets picked by faces (one step for each size), one for the
+  sets picked by chains, one for the edges picked one by one, and one for each other set. Each step then picks its
+  edges as Fusion did. A round reaches further than its radius where its faces meet at a sharp angle (3.7 times the
+  radius between faces 30 degrees apart), and the copy counts this. When a radius or a distance follows a size, the
+  largest value in the range of that size counts. A round whose radius changes along the edge gets its own step this
+  way. When one set cannot be copied, only that set is left out: the result window lists the step with the reason of
+  that set, and the other sets are in the copy. A pattern or mirror of such a step is left out too. Where the sets
+  meet or come near, Fusion makes one blend there, which steps one after the other do not make, so the copy keeps the
+  sets in one step as before, and a set that cannot be copied leaves the whole step out. A set whose reach is not
+  known (two radii, curvature continuity, radii between the ends of a changing radius, faces that fold back on each
+  other, a chamfer size that cannot be read) also keeps the whole step as before. The size tries do not show whether
+  a size moves the edges of two sets near each other, so the sizes read before such a step are marked "may give
+  unexpected results", as for a step whose edges are picked one by one. Exports made with add-in 0.14.3 or older do
+  not hold what this needs, so their sets stay in one step.
 - A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet or
   apart from the other sets of its fillet (see above), with no radii set between the two ends, and only when the
   radius Fusion made changes evenly from one end to the other (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a

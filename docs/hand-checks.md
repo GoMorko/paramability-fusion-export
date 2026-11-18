@@ -936,16 +936,31 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     face sketch a slot 30 mm long and 10 mm wide with round ends, centred at (55, 20) mm along X, and cut it 5 mm deep.
     Make one Fillet with three sets (rows): set 1 picks the top face of the boss, radius `Round`; set 2 picks one
     straight edge of the slot rim with Tangent Chain on, radius 1 mm; set 3 picks the vertical edge of the plate at
-    (80, 40) mm with Tangent Chain off, radius 3 mm. Second design: the same, but set 3 picks the vertical edge of the
-    boss at (30, 30) mm, which meets the top face of the boss at a corner. Third design: the first one, but set 3 is a
-    variable radius on the same plate edge, 1 mm at the bottom and 3 mm at the top, with one more radius of 2 mm in
-    the middle. Fourth design: the first one with a Chamfer of 1 mm on the same three sets instead of the Fillet.
-    Export: tick `Height` (10 to 40 mm) and `Round` (1 to 4 mm) each time. First design: the fillet is three round
-    steps, one per set, with the note that the sets are copied one after the other; no size is marked "may give
-    unexpected results"; in `report.json` every edge of the fillet sets has `ends`. In Paramability the copy matches
-    the STEP, and at other `Height` and `Round` values the rounds stay on the boss top, around the whole slot rim and
-    on the plate corner. Second design: the fillet is one round step and `Height` is marked "may give unexpected
-    results", as before this change; the corner where the boss edge meets the boss top matches Fusion. Third design:
-    sets 1 and 2 are copied, the result window lists the fillet as left out with "Set 3 of 3 of this step is left
-    out", the tip about a changing radius, and `gaps.json` has a gap for the fillet whose data holds one set. Fourth
-    design: three bevel steps, no size marked. Afterwards each design is as before.
+    (80, 40) mm with Tangent Chain off, radius 3 mm.
+    Second design: the same, but set 3 picks the vertical edge of the boss at (30, 30) mm, which meets the top face of
+    the boss at a corner.
+    Third design: the first one, but set 3 is a variable radius on the same plate edge, 1 mm at the bottom and 3 mm at
+    the top, with one more radius of 2 mm in the middle.
+    Fourth design: the first one with a Chamfer of 1 mm on the same three sets instead of the Fillet.
+    Fifth design: an 80 x 40 x 10 mm plate with a hole of 10 mm diameter through it, its centre at (10, 7) mm, so its
+    rim is 2 mm from the front edge. One Fillet: set 1 picks the top rim of the hole with Tangent Chain on, radius
+    1 mm; set 2 picks the top front edge of the plate (y = 0) with Tangent Chain off, radius 1 mm.
+    Sixth design: a 60 x 40 x 20 mm block from the origin with a V groove cut along X across its top: its two faces 30
+    degrees apart, 10 mm deep, the bottom edge at y = 12 mm. One Fillet: set 1 picks the bottom edge of the groove with
+    Tangent Chain on, radius 2 mm; set 2 picks the top front edge of the block (y = 0) with Tangent Chain off, radius
+    2 mm.
+    Export: tick `Height` (10 to 40 mm) and `Round` (1 to 4 mm) where they exist.
+    First design: the fillet is three round steps, one per set, with the note that the sets are copied one after the
+    other; `Height` is marked "may give unexpected results" (the tries cannot show that it keeps the sets apart); in
+    `report.json` every edge of the fillet sets has `box`, and `turn_deg` near 90. In Paramability the copy matches
+    the STEP, and at other `Height` and `Round` values the rounds stay on the boss top, around the whole slot rim and on
+    the plate corner.
+    Second design: the fillet is one round step with its edges picked one by one, as before this change; the corner
+    where the boss edge meets the boss top matches Fusion.
+    Third design: sets 1 and 2 are copied, the result window lists the fillet once, as left out with "Set 3 of 3 of
+    this step is left out", and the tip about a changing radius; `gaps.json` has a gap for the fillet whose data holds
+    one set.
+    Fourth design: three bevel steps.
+    Fifth design: one round step (the hole rim comes 2 mm from the plate edge, nearer than twice the two radii).
+    Sixth design: one round step (`turn_deg` of the groove edge near 150, so its round reaches 3.7 times its radius).
+    Afterwards each design is as before.

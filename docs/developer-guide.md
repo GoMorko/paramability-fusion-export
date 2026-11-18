@@ -1585,8 +1585,8 @@ a `StepResult` with steps and with `left_out`, a `result.LeftOut`. The walk (`wa
    assistant that fills the gap adds only those sets. The gap comes after the steps of step 2.
 5. The gap has no `bodyBefore`. The body that the reader measured before the item does not hold the copied sets,
    but the body just before the missing sets holds them. `bodyAfter` is correct: it is the body after the item.
-6. The verdict is `translatedWithNote`, with the ids of the written steps and with `gap` and `cause` "own". The note
-   holds the reason of the gap.
+6. The verdict has the ids of the written steps, and `gap` and `cause` "own". The reason of the gap is not a note of
+   the verdict. Thus the export window and the result window show it once, as a step left out.
 
 The early list in the export window (`dialog_model/left_out_preview.py`) and the reach read
 (`export_plan/reach_pass.py`) look at `gap` on any verdict, so they treat such a step like a step that is left out.
@@ -2732,9 +2732,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     edge. `reach` is how far the chamfer reaches along a face.
   - `reach` also exists on `RoundSet`. The Orca output uses it to measure a step that it leaves out
     (`outline_rounds.note_left_out`).
-  - `pick`, `ends`, `apart`, `all_apart` and `only_sets` tell how Fusion picked the edges of a set, where the vertices
-    of its edges are, whether two sets lie apart, and give an item with only some of its sets. See "Sets of one step
-    copied one after the other".
+  - `pick`, `boxes`, `box_gap`, `reach_terms` and `only_sets` tell how Fusion picked the edges of a set, how near the
+    edges of two sets can come, how far a set reaches, and give an item with only some of its sets. See "Sets of one
+    step copied one after the other".
   - `ChamferSet.sides()` splits the edges of an uneven chamfer by the face that takes the first distance. The reader
     measured, for each point of an edge, the normals of the two faces (`sides`) and the normal of the chamfer face
     (`cut_normals`). The chamfer face normal is a mix of the two face normals, weighted by the two distances. The
@@ -3781,28 +3781,53 @@ faces, along tangent chains) and its own size. Fusion builds all the sets in one
 corner, Fusion makes one blend at that corner. Two steps one after the other do not make that blend. Where the sets
 do not meet, the result of one operation is the same as the result of the sets one after the other, in any order.
 
-The reader records the points of the two vertices of each edge of a set (`ends`, `read_finish._edge_set`). The shared
-layer uses them (`design_model/steps/finish.py`):
+The reader records two more values for each edge of a set (`read_finish._edge_set`):
+
+- `box`: the box of the edge (`BRepEdge.boundingBox`). The box holds the whole edge, also the part between the
+  measured points.
+- `turn_deg` (fillets only): the largest angle between the outward normals of the two faces of the edge. The reader
+  measures it at 0, 1/4, 1/2, 3/4 and 1 along the edge, so the two ends are included.
+
+The shared layer uses these values (`design_model/steps/finish.py`):
 
 - `FinishSet.pick` tells how Fusion picked the edges of a set: `FACES` (only faces), `CHAINS` (only edges, along
   tangent chains), `EDGES` (only edges, one by one), or None (inputs of more than one kind, or the edges of another
   step).
-- `apart(a, b)` is true when no point of set `a` is nearer to a point of set `b` than `CORNER_MARGIN` (2) times the
-  two reaches together. The points of a set are the vertices of its edges and the points measured on the edges
-  (`points`). A closed edge, such as a circle, has one vertex only, so its measured points count too. The reach is how far a set takes material along a face: the radius of a round, the larger
-  distance of a chamfer, the larger end radius of a changing radius, the chord of a round by chord length. A shared
-  vertex has the distance 0, and a shared edge has two shared vertices, so `apart` is false for sets that touch. The
-  margin covers two vertices with a short edge between them, where the two rounds can meet, and faces that meet at
-  a sharp angle, where a round reaches further than its radius. `apart` is false when an edge has no `ends` (a
-  capture of add-in 0.14.3 or older), or when the reach of a set is not known (a round with curvature continuity, a
-  round with two radii, a chamfer whose size cannot be read).
+- `box_gap(a, b)` gives the smallest distance between the box of an edge of set `a` and the box of an edge of set
+  `b`. No edge of `a` can be nearer than this to an edge of `b`. Sets that share an edge or a vertex give 0. Two
+  edges can be much nearer than any two of their measured points: a short edge 1.5 mm beside a long one, or a hole
+  rim 2 mm from the edge of a plate. The boxes see this. A box can be larger than the edge (a tilted line, an arc).
+  Then the gap is smaller than the true distance, so the test is on the safe side.
+- `reach_terms(one)` tells how far a set takes material along a face from its edges, at most:
+  - A round of radius r touches each face at r * tan(t / 2) from the edge. Here t is `turn_deg`. On a square edge
+    (t = 90 degrees) this is r. Between faces 30 degrees apart (t = 150 degrees) it is 3.73 r. The factor is never
+    less than 1.
+  - A round by chord length c touches each face at c / (2 cos(t / 2)) from the edge, and at least c.
+  - A changing radius counts both end radii. With radii between the two ends, the reach is not known.
+  - A chamfer reaches its distances along the faces. A chamfer by distance and angle reaches distance * tan(angle),
+    and this holds only while the angle does not follow a size.
+  - Above `MAX_TURN_DEG` (170 degrees), with curvature continuity, for two radii, and for a chamfer whose size cannot
+    be read, the reach is not known.
 - `only_sets(item, indexes)` makes a copy of an item that holds only some of its sets and their parameters.
 
+`set_split.apart(ctx, item, a, b)` is true when `box_gap` is more than `CORNER_MARGIN` (2) times the largest reach
+of the two sets together. The values in the reach can follow sizes. Thus `set_split` makes the sum as a formula of
+the sizes and finds its largest value over the size ranges (`range_check.sweep`). When the sweep fails, when a value
+cannot follow its sizes, or when the reach is not known, `apart` is false. The margin gives room for what the reader
+does not measure: the angle between the faces between the measured places.
+
+The size tries do not read the edges of a round at each try. Thus the copy cannot see a size that moves the edges of
+two sets near each other. When a step is copied as more than one step, `set_split.mark_apart` marks the sizes that
+the steps before the round or chamfer read (`reach.any_face_sizes`). These are the same sizes that the step in one
+piece marks when it picks its edges one by one. Each one is marked "may give unexpected results". The first
+translation of an export marks nothing. The split thus does not remove marks. It gives each set the pick of Fusion,
+it gives a changing radius a step of its own, and it lets a set that cannot be copied be left out alone.
+
 Example. A fillet has two sets. Set 1 picks the top face of a boss, radius 1 mm. Set 2 picks one edge along a tangent
-chain around a slot at the other end of the part, radius 2 mm. No point of set 1 is nearer than 6 mm to a point of
-set 2. The copy writes two `round` steps: the first with `faceEdges` on the top face, the second with `chain:
-tangent` on the slot edge. No size is marked. In one step, the copy would have to pick every edge by a point, and
-it would mark the sizes read before the fillet.
+chain around a slot at the other end of the part, radius 2 mm. The edges meet at square angles. The boxes of the
+edges of set 1 are more than 6 mm from the boxes of the edges of set 2. The copy writes two `round` steps: the first
+with `faceEdges` on the top face, the second with `chain: tangent` on the slot edge. In one step, the copy would
+have to pick every edge by a point.
 
 The handlers (`finishes/finish.py`) use `finishes/set_split.py`:
 
@@ -3816,19 +3841,21 @@ The handlers (`finishes/finish.py`) use `finishes/set_split.py`:
   that size were picked in different ways and every two of them are `apart`, the handler writes one step for each
   way (`_pick_groups`).
 - A set that cannot be copied (`_round_set_refusal`, `_bevel_set_refusal`, or a group whose copy gives a `Refusal`)
-  is left out alone, when it is `apart` from every other set. A group whose copy fails is tried again set by set, so
-  only the set that fails is left out. The result has `left_out` (see 1.9.3). The reason is "Set 2 of 3 of this step
-  is left out, the other sets are copied." followed by the reason of the set. The cause is the cause of the set, so
-  the hint is the hint of that set.
+  is left out alone, when it is `apart` from every other set. A group whose copy fails is tried again set by set, but
+  only when the sets of the group are `apart` from each other. Otherwise all sets of the group are left out, and the
+  whole step is handled as before. The result has `left_out` (see 1.9.3). The reason is "Set 2 of 3 of this step is
+  left out, the other sets are copied." followed by the reason of the set. The cause is the cause of the set, so the
+  hint is the hint of that set.
 - What the copy of a group records on the context (marks of sizes, notes, the values it asked for) counts only when
   the group is written (`Context.recording`, `Context.replay`). The notes of the whole step (setback corners,
   smoothness that cannot be read, another corner type) come once.
 - When the sets are not apart, the step is handled as before: one step, the picks of steps 1 to 4, and the marks.
   One set that cannot be copied then leaves the whole step out.
+- A pattern or mirror of a step that is written in part is left out (`repeat_sources.split_sources`, "It repeats
+  ..., which is missing from the copy"). Its copies would lack the set that is left out.
 
-The test is made at the sizes of the capture. A size that moves two sets near each other at other values is not
-seen. The margin of 2 gives some room for this. The hand check "One fillet with sets picked in different ways" in
-`docs/hand-checks.md` checks the result in Fusion and in the app.
+Captures of add-in 0.14.3 or older have no `box` and no `turn_deg`, so their steps stay in one piece. The hand check
+MP1 in `docs/hand-checks.md` checks the result in Fusion and in the app.
 
 #### A construction plane
 

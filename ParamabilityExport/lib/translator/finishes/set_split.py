@@ -2,18 +2,78 @@
 
 A Fusion fillet or chamfer can hold several sets of edges, each picked its own way (edge by edge, through faces, along
 tangent chains) and each with its own size. One recipe step picks its edges in one way only. Fusion builds the sets
-together; where they lie apart (`design_model.steps.finish.apart`: no shared edge or corner, and no corners near
-each other) it gives the same part when it builds them one after the other. The handler then copies the sets as
-several steps, one per group of sets that one step can pick the way Fusion did (`groups`), in the order of the sets,
-and a set that cannot be copied is left out on its own: a gap after the written steps (`result.LeftOut`). The caller
-checks that the sets lie apart; `copy_apart` does the rest.
+together; where they lie apart (`apart`) it gives the same part when it builds them one after the other. The handler
+then copies the sets as several steps, one per group of sets that one step can pick the way Fusion did (`groups`), in
+the order of the sets, and a set that cannot be copied is left out on its own: a gap after the written steps
+(`result.LeftOut`). The caller checks that the sets lie apart; `copy_apart` does the rest.
+
+Two sets lie apart when their edges stay further apart (`design_model.steps.finish.box_gap`) than the margin times
+the most the two sets reach over the size ranges (`reach_terms`, swept with `range_check.sweep`). Sizes that move the
+edges are not tried edge by edge, so the sizes read before a step that is copied as several steps are marked, as for
+a pick the copy cannot follow (`mark_apart`).
 """
 from ...capture_model import gap_hints
+from ...design_model import reach
 from ...design_model.steps import finish as sets_of
+from ...design_model.values import Quantity
+from .. import values
+from ..ranges import range_check
 from ..result import LeftOut, Refusal, StepResult
 
 SPLIT_NOTE = ("The sets of edges of this step are copied one after the other, since Fusion picked them in different "
               "ways or with different sizes.")
+
+
+def _largest_reach(ctx, item, sets):
+    """The most (mm) that `sets` reach together along their faces at any size setting, or None when it is not known:
+    also when a value cannot follow its sizes, or a value that the reach holds only while it stays follows sizes.
+    Nothing it works out counts for the walk."""
+    total = Quantity(0.0)
+    with ctx.recording() as recorded:
+        for one in sets:
+            found = sets_of.reach_terms(one)
+            if found is None:
+                return None
+            for field, number, dim in found.held:
+                if values.quantity(ctx, item, one.path(field), number, dim=dim).sized:
+                    return None
+            for field, number, factor, dim in found.terms:
+                total = total.plus(values.quantity(ctx, item, one.path(field), number, dim=dim, absolute=True)
+                                   .scaled(factor))
+    if recorded.doubts:
+        return None
+    if not total.sized or ctx.table is None:
+        return total.n
+    span = range_check.sweep(ctx.table, total.text, total.reads)
+    if span.failed or span.high is None:
+        return None
+    return max(span.high, total.n)
+
+
+def apart(ctx, item, a, b):
+    """True when the edges of the sets `a` and `b` of `item` stay further apart than `sets_of.CORNER_MARGIN` times the
+    most the two reach together, so Fusion gives the same part when it applies them one after the other."""
+    gap = sets_of.box_gap(a, b)
+    if gap is None:
+        return False
+    most = _largest_reach(ctx, item, [a, b])
+    return most is not None and gap > sets_of.CORNER_MARGIN * most + sets_of.CORNER_TOL
+
+
+def all_apart(ctx, item, sets):
+    """True when every two of `sets` lie `apart`."""
+    return all(apart(ctx, item, a, b) for n, a in enumerate(sets) for b in sets[n + 1:])
+
+
+def mark_apart(ctx, item):
+    """The step `item` is copied as several steps: mark the sizes that may move the edges of its sets near each other
+    (`reach.any_face_sizes`: every size read before the step). The first translation of an export marks nothing."""
+    if ctx.table is None or getattr(ctx.motion, "optimistic", False):
+        return
+    names = reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item)
+    if names:
+        ctx.doubt(names, "%s is copied as several steps, one after the other, which gives the same part only while "
+                  "its sets of edges stay apart" % item.get("name", "a step"))
 
 
 def groups(sets, joins):
@@ -70,7 +130,7 @@ def copy_apart(ctx, item, sets, refusal_of, grouped, copy_group, notes=None):
         # One group: the step is copied as one, unless the group cannot be; then its sets are tried one by one.
         with ctx.recording():
             whole = copy_group(found[0])
-        if not isinstance(whole, Refusal) or len(found[0]) == 1:
+        if not isinstance(whole, Refusal) or len(found[0]) == 1 or not all_apart(ctx, item, found[0]):
             return None
     entries, written = [], []
     queue = list(found)
@@ -79,11 +139,11 @@ def copy_apart(ctx, item, sets, refusal_of, grouped, copy_group, notes=None):
         with ctx.recording() as recorded:
             made = copy_group(group)
         if isinstance(made, Refusal):
-            if len(group) > 1:
+            if len(group) > 1 and all_apart(ctx, item, group):
                 # Each set on its own, so only the sets that cannot be copied are left out.
                 queue[:0] = [[one] for one in group]
             else:
-                left.append((group[0], made))
+                left += [(one, made) for one in group]
             continue
         ctx.replay(recorded)
         entries += made
@@ -94,6 +154,7 @@ def copy_apart(ctx, item, sets, refusal_of, grouped, copy_group, notes=None):
         notes([one for group in written for one in group])
     if len(written) > 1:
         ctx.note(SPLIT_NOTE)
+        mark_apart(ctx, item)
     out = StepResult(entries)
     if left:
         out.left_out = _left_out(item, sorted(left, key=lambda pair: pair[0].index), len(sets))

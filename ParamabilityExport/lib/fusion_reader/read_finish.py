@@ -5,7 +5,8 @@ the shape the feature was applied to. Edge and face inputs are expanded here: a 
 chain gives every tangentially connected edge or face, so the translator sees one flat list of picks. A fillet or
 chamfer set also keeps how its edges were picked: the faces it was given (`faces`), whether it follows tangent
 chains (`tangent_chain`), and on each picked edge of a chain `seed`, so the copy can pick the same way. Each edge
-also has the points of its two vertices (`ends`), so the copy can tell whether two sets of one step meet at a corner.
+also has its box (`box`), and an edge of a fillet the largest angle between the normals of its two faces (`turn_deg`),
+so the copy can tell whether two sets of one step lie apart.
 A required collection that cannot be read raises, and the walk records that as a read_error for the item.
 
 A chamfer with two distances, or a distance and an angle, also records at each edge point the outward normals of
@@ -106,26 +107,41 @@ def expand_edges(entities, tangent_chain):
     return kinds, _unique(edges), _unique(faces), seeds
 
 
-def _vertex_point(edge, member):
-    return geo.safe(lambda: geo.point(getattr(edge, member).geometry), None)
+def _edge_box(edge):
+    """The box of an edge (`BRepEdge.boundingBox`, mm): it holds the whole edge."""
+    return geo.box_of(edge)
 
 
-def _ends(edge):
-    """[start, end]: the points (mm) of the two vertices of an edge (one vertex twice for a closed edge); None when
-    one cannot be read."""
-    found = [_vertex_point(edge, "startVertex"), _vertex_point(edge, "endVertex")]
-    return None if None in found else found
+def _turn_deg(edge):
+    """The largest angle (degrees) between the outward normals of the edge's two faces, at the places
+    `SAMPLE_FRACTIONS` along it (the two ends among them); None when one cannot be read."""
+    faces = strict_items(edge.faces)
+    if len(faces) != 2:
+        return None
+    found = []
+    for fraction in SAMPLE_FRACTIONS:
+        p = geo.point_at(edge, fraction)
+        if p is None:
+            return None
+        a, b = (_normal_at(face, p) for face in faces)
+        found.append(math.degrees(math.acos(max(-1.0, min(1.0, vec.dot(a, b))))))
+    return round(max(found), 6) + 0.0
 
 
-def _edge_set(edge_set, ctx, tangent_default=True, measure=None):
-    """The edges of a set as records. `measure(edge, record)` gives more keys for the record of each edge, or None."""
+def _edge_set(edge_set, ctx, tangent_default=True, measure=None, turns=False):
+    """The edges of a set as records. `measure(edge, record)` gives more keys for the record of each edge, or None.
+    `turns` adds `turn_deg` to each record (fillets)."""
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
     kinds, edges, faces, seeds = expand_edges(strict_items(edge_set.edges), tangent_chain)
     records = [geo.edge_record(e, ctx) for e in edges]
     for record, edge in zip(records, edges):
-        ends = geo.safe(lambda: _ends(geo.native_input(edge, ctx)), None)
-        if ends is not None:
-            record["ends"] = ends
+        native = geo.native_input(edge, ctx)
+        box = geo.safe(lambda: _edge_box(native), None)
+        if box is not None:
+            record["box"] = box
+        turn = geo.safe(lambda: _turn_deg(native), None) if turns else None
+        if turn is not None:
+            record["turn_deg"] = turn
     if measure is not None:
         for record, edge in zip(records, edges):
             found = geo.safe(lambda: measure(geo.native_input(edge, ctx), record), None)
@@ -231,7 +247,7 @@ def _fillet_set(edge_set, ctx):
         entry["end_radius"] = geo.safe(lambda: geo.length(edge_set.endRadius), None)
         entry["mid_count"] = geo.safe(lambda: len(strict_items(edge_set.midPositions)), None)
         measure = _samples
-    entry.update(_edge_set(edge_set, ctx, measure=measure))
+    entry.update(_edge_set(edge_set, ctx, measure=measure, turns=True))
     return entry
 
 
