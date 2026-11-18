@@ -139,10 +139,10 @@ class StopAtDamageTest(unittest.TestCase):
 
     def test_the_stop_line_names_a_retried_try_by_its_size_and_value_only(self):
         from lib.probe.plan import RETRY_NOTE
-        health = {"tries_stopped": {"after": "Slope at 23 deg" + RETRY_NOTE, "items": ["Sweep5"],
-                                    "steps": [{"name": "Sweep5", "before": "ok", "after": "warning"}]}}
-        line = [text for text in health_module.copy_lines(health) if "Sweep5" in text][0]
-        self.assertIn("Slope at 23 deg,", line)
+        health = {"tries_stopped": {"after": "Angle at 30 deg" + RETRY_NOTE, "items": ["Sweep2"],
+                                    "steps": [{"name": "Sweep2", "before": "ok", "after": "warning"}]}}
+        line = [text for text in health_module.copy_lines(health) if "Sweep2" in text][0]
+        self.assertIn("Angle at 30 deg,", line)
         self.assertNotIn(RETRY_NOTE.strip(". "), line)
 
 
