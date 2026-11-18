@@ -97,6 +97,11 @@ def extent_of(data):
     kind = extent.get("kind")
     if kind not in (DISTANCE, THROUGH_ALL, TO_ENTITY):
         return Problem("holeExtent", words.HOLE_EXTENT)
+    if kind == TO_ENTITY and "offset" in extent:
+        # An offset of the face or plane is not followed: only the end measured on the part is.
+        offset = extent["offset"]
+        if not _number(offset) or abs(offset) > DEPTH_TOL:
+            return Problem("holeOffset", words.HOLE_TO_OFFSET)
     if kind != DISTANCE:
         return Extent(kind, None)
     depth = extent.get("depth")

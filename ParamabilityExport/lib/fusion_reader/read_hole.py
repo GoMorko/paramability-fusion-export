@@ -135,7 +135,16 @@ def _hole_extent(feature, ctx):
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "depth": geo.length(definition.distance)}
     if "ToEntity" in name:
-        return dict({"kind": "toEntity"}, **read_extent.target(definition, ctx, "extent"))
+        # A `ToEntityExtentDefinition` has an offset and the choice to join the faces next to the face (`isChained`).
+        return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None),
+                     "chained": geo.safe(lambda: bool(definition.isChained), None)},
+                    **read_extent.target(definition, ctx, "extent"))
+    if name == "OneSideToExtentDefinition":
+        # The extent of a hole made up to a face or plane. It has no offset. `matchShape` is true when Fusion keeps the
+        # face as it is and uses the faces next to it, false when it extends the face (a hole that finds no face
+        # under it fails in Fusion with true, and ends on the extended plane with false).
+        return dict({"kind": "toEntity", "chained": geo.safe(lambda: bool(definition.matchShape), None)},
+                    **read_extent.target(definition, ctx, "extent"))
     return {"kind": "other", "type": name}
 
 
@@ -237,6 +246,22 @@ def _end_face(face, direction):
     return geo.point(face.pointOnFace), kind
 
 
+def _end_faces(feature, data):
+    """The faces at the bottom of a hole. Fusion lists none for a hole up to a face or plane (`endFaces` is empty), so
+    there the faces the hole made, less its side faces, stand in for them; when a face has no token to tell them
+    apart, none are given."""
+    ends = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
+    if ends or (data.get("extent") or {}).get("kind") != "toEntity":
+        return ends
+    made = geo.collection_items(geo.safe(lambda: feature.faces, None))
+    sides = geo.collection_items(geo.safe(lambda: feature.sideFaces, None))
+    tokens = [geo.safe(lambda: f.entityToken, "") for f in made + sides]
+    if not all(tokens):
+        return []
+    side_tokens = {geo.safe(lambda: f.entityToken, "") for f in sides}
+    return [f for f in made if geo.safe(lambda: f.entityToken, "") not in side_tokens]
+
+
 def hole_after(feature, ctx, data):
     side = []
     for face in geo.collection_items(geo.safe(lambda: feature.sideFaces, None)):
@@ -244,7 +269,7 @@ def hole_after(feature, ctx, data):
         if cylinder is not None:
             side.append(cylinder)
     ends, end_types = [], []
-    for face in geo.collection_items(geo.safe(lambda: feature.endFaces, None)):
+    for face in _end_faces(feature, data):
         found = geo.safe(lambda: _end_face(face, data.get("direction")), None)
         if found is not None:
             ends.append(found[0])

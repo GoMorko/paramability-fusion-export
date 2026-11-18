@@ -16,11 +16,19 @@ def construction_token(entity):
     return {}
 
 
+def to_entity(definition):
+    """The face or plane an extent definition goes to: `toEntity` on a `OneSideToExtentDefinition` (the extent of a
+    hole up to a face), `entity` on the others."""
+    if geo.type_name(definition) == "OneSideToExtentDefinition":
+        return definition.toEntity
+    return definition.entity
+
+
 def target(definition, ctx, slot):
-    """The face or plane an extrude starts from or reaches to: its plane, its type, its token, and a point on a face.
-    One of another component is marked foreign and carries its measured reference (`ref`, see
+    """The face or plane an extrude starts from or reaches to, or a hole reaches to: its plane, its type, its token,
+    and a point on a face. One of another component is marked foreign and carries its measured reference (`ref`, see
     `placement.ref_record`)."""
-    entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
+    entity = geo.native_input(geo.safe(lambda: to_entity(definition), None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     found.update(construction_token(entity))

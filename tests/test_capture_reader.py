@@ -847,6 +847,45 @@ class HoleThreadReadTest(unittest.TestCase):
         extent = self.read(extentDefinition=Obj("fusion::ToEntityExtentDefinition", entity=face))["extent"]
         self.assertEqual((extent["kind"], extent["entity_type"], extent["face_point"]), ("toEntity", "BRepFace", [5, 5, 4]))
 
+    def test_a_hole_made_up_to_a_plane_reads_the_plane_and_its_bottom_face(self):
+        # Fusion gives a hole made by `setOneSideToExtent` a `OneSideToExtentDefinition` (`toEntity`, `matchShape`) and
+        # no end faces: the bottom is the made face that is not a side face.
+        plane = Obj("fusion::ConstructionPlane", entityToken="p1",
+                    geometry=Obj("core::Plane", origin=P(0, 0, 8), normal=Obj(x=0.0, y=0.0, z=1.0)))
+        wall = Obj("fusion::BRepFace", entityToken="w", geometry=Obj("core::Cylinder", origin=P(10, 10, 10),
+                                                                    axis=Obj(x=0, y=0, z=-1.0), radius=0.25))
+        bottom = Obj("fusion::BRepFace", entityToken="b", pointOnFace=P(10, 10, 8),
+                     geometry=Obj("core::Plane", normal=P(0, 0, 1)))
+        data = self.read(extentDefinition=Obj("fusion::OneSideToExtentDefinition", toEntity=plane, matchShape=False),
+                              endFaces=Coll([]), sideFaces=Coll([wall]), faces=Coll([wall, bottom]))
+        self.assertEqual((data["extent"]["kind"], data["extent"]["entity_type"], data["extent"]["chained"]),
+                         ("toEntity", "ConstructionPlane", False))
+        self.assertNotIn("offset", data["extent"])
+        self.assertEqual((data["end_points"], data["end_face_types"]), ([[10, 10, 8]], ["plane"]))
+
+    def test_the_bottom_is_not_guessed_when_faces_cannot_be_told_apart(self):
+        plane = Obj("fusion::ConstructionPlane", entityToken="p1")
+        bottom = Obj("fusion::BRepFace", pointOnFace=P(10, 10, 8), geometry=Obj("core::Plane", normal=P(0, 0, 1)))
+        data = self.read(extentDefinition=Obj("fusion::OneSideToExtentDefinition", toEntity=plane), endFaces=Coll([]),
+                              sideFaces=Coll([]), faces=Coll([bottom]))
+        self.assertEqual(data["end_points"], [])
+        self.assertIsNone(data["extent"]["chained"])
+
+    def test_the_made_faces_stand_in_for_end_faces_only_for_a_hole_up_to_a_face(self):
+        bottom = Obj("fusion::BRepFace", entityToken="b", pointOnFace=P(10, 10, 8),
+                     geometry=Obj("core::Plane", normal=P(0, 0, 1)))
+        data = self.read(endFaces=Coll([]), sideFaces=Coll([]), faces=Coll([bottom]))
+        self.assertEqual(data["end_points"], [])
+
+    def test_a_hole_with_a_to_entity_definition_gives_its_offset_and_chain(self):
+        face = Obj("fusion::BRepFace", geometry=Obj("core::Plane", origin=P(0, 0, 4), normal=Obj(x=0.0, y=0.0, z=1.0)),
+                   pointOnFace=P(5, 5, 4), entityToken="f1")
+        extent = self.read(extentDefinition=Obj("fusion::ToEntityExtentDefinition", entity=face, offset=param(0.2),
+                                                isChained=True))["extent"]
+        self.assertEqual((extent["offset"], extent["chained"]), (2.0, True))
+        unread = self.read(extentDefinition=Obj("fusion::ToEntityExtentDefinition", entity=face))["extent"]
+        self.assertEqual((unread["offset"], unread["chained"]), (None, None))
+
 
 class CombineVolumeTest(unittest.TestCase):
     def read(self, volume_at):
