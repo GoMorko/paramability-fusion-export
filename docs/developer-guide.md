@@ -2724,7 +2724,7 @@ one folder per family of steps.
   (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
   `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
-  `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
+  `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file), `joined_outline.py` (an outline joined from touching outlines, drawn through their corners),
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
@@ -3996,7 +3996,7 @@ of the leaning edge meets the open bottom.
    shared curve. It joins the pieces of one sketch line back into that line. Example: a leaning edge is one sketch
    line, and the line between two outlines ends on it. Fusion gives each outline one piece of the leaning edge. The
    joined outline has the whole line again.
-2. `sketch_motion.joined_outline` gives each corner of the joined outline the formulas of the corner in the outlines
+2. `sketch/joined_outline.py` (`joined_outline`) gives each corner of the joined outline the formulas of the corner in the outlines
    that have it. Two outlines can have the same corner. They must move it in the same way. If they do not, there is no
    joined outline.
 3. The check `_holds` tests the joined outline and each outline at the sizes now and at the size settings over the

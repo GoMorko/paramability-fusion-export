@@ -11,7 +11,7 @@ from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck
 from lib.translator import translate
 from lib.translator.sketch.sketch_crossings import Sources
-from lib.translator.sketch.sketch_motion import Anchors, _from_anchors
+from lib.translator.sketch.sketch_motion import Anchors, from_anchors
 
 R = 10.0
 
@@ -141,7 +141,7 @@ class CornerWithThreeCurvesTest(unittest.TestCase):
     def test_the_cause_of_a_stuck_corner_stays_on_the_anchor_value(self):
         sources = self.sources([line((5, 0), (0, 0), "a"), line((0, 0), (0, 5), "b")])
         loop = {"kind": "polygon", "points": [[0, 0], [5, 0], [0, 5]]}
-        raw = _from_anchors(loop, Anchors("S"), "S", sources)
+        raw = from_anchors(loop, Anchors("S"), "S", sources)
         self.assertEqual(raw["points"][0], [self.STUCK, self.STUCK])
 
 

@@ -9,7 +9,7 @@ that runs across two outlines (the inner wall that a shell leaves along a lid an
 pieces of one sketch line are joined back. The joined outline gets a placer of its own (`JoinedRevolve`), made once
 the steps of all its parts are written. It is the latest placer, so a pick is placed on it first; a point it does not
 place goes to the placers of the parts, as before. Its corners follow sizes through the corners of the parts
-(`sketch_motion.joined_outline`).
+(`sketch/joined_outline.py`).
 
 The joined outline is used only while it is the outline of the parts, at the sizes now and at every size setting over
 the ranges (`range_check.corners` and `middles`, inside the ranges cut for the parts):
@@ -28,7 +28,8 @@ from ...geometry.footprint import polyline
 from ...params.expressions.errors import ExpressionError
 from ..ranges import range_check
 from ..result import Refusal
-from ..sketch import loops, sketch_motion
+from ..sketch import loops
+from ..sketch.joined_outline import joined_outline
 from ..sketch.sketch_crossings import loop_crosses
 from ..sketch.written_loops import profile_at, written_reads
 from .revolve_placer import LENGTH_TOL_MM, RevolvePlacer, Turn
@@ -89,7 +90,7 @@ def joined_turn(ctx, profile, parts):
     if any(d is not None for d in drawn):
         if any(d is None for d in drawn):
             return None
-        outline = sketch_motion.joined_outline(ctx, profile, [built[0]], drawn)
+        outline = joined_outline(ctx, profile, [built[0]], drawn)
         if outline is None:
             return None
         built = outline.preview()
