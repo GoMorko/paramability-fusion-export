@@ -183,6 +183,17 @@ def on_input(input_id):
             log("showing the reopen note failed: %s" % error)
 
 
+def add_button(inputs, input_id, text):
+    """A button with `text` on it. A Fusion button without an icon shows its `text`, not its name, so both are set;
+    without `text` the button is an empty space."""
+    button = inputs.addBoolValueInput(input_id, text, False, "", False)
+    try:
+        button.text = text
+    except Exception as error:
+        log("setting the button text failed: %s" % error)
+    return button
+
+
 def build(command, view):
     """Add the inputs of the result dialog. view comes from dialog_model.result_rows.result_view."""
     _note.clear()
@@ -199,7 +210,7 @@ def build(command, view):
         inputs, grouped = _section_inputs(command.commandInputs, section)
         add_text(inputs, "pm_result_" + section["key"], section["title"], section["lines"], heading=not grouped)
         if section["key"] == "reopen" and view.get("reopen"):
-            inputs.addBoolValueInput(REOPEN_ID, REOPEN_BUTTON, False, "", False)
+            add_button(inputs, REOPEN_ID, REOPEN_BUTTON)
             note = inputs.addTextBoxCommandInput(REOPEN_NOTE_ID, "", REOPEN_NOTE, 1, True)
             note.isVisible = False
             _note["box"] = note

@@ -10,7 +10,7 @@ from tests.test_result_rows import view as plain_view
 from lib.design_edit.saved_start import SavedStart, reopen
 from lib.dialog_model.result_rows import reopen_view, result_view, section
 from lib.export_plan.health import HealthInputs, make_health
-from lib.export_plan.rollback import ExportOutcome, decide, reopen_offered
+from lib.export_plan.rollback import REOPEN_BUTTON, ExportOutcome, decide, reopen_offered
 from lib.fusion_reader.saved_design import FusionReopen, read_saved_start
 from lib.params import size_table
 
@@ -178,7 +178,10 @@ class WindowTest(unittest.TestCase):
         self.assertEqual([s["key"] for s in shown["sections"]][:3], ["reopen", "check", "result"])
         command = fakes.FakeCommand()
         result_dialog.build(command, shown)
-        self.assertIsNotNone(command.commandInputs.itemById(result_dialog.REOPEN_ID))
+        button = command.commandInputs.itemById(result_dialog.REOPEN_ID)
+        self.assertIsNotNone(button)
+        # A Fusion button without an icon shows its text; without it the button is an empty space.
+        self.assertEqual(button.text, REOPEN_BUTTON)
         plain = fakes.FakeCommand()
         result_dialog.build(plain, plain_view())
         self.assertIsNone(section(plain_view(), "reopen"))
