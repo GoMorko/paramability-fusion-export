@@ -7,10 +7,12 @@ from .placement import (is_component_origin, native_sketch_placement, owner_comp
                         target_move)
 
 # Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
-# every point is at z = 0 and the sketch frame is not the identity, the curve is compared with its sketch entity
-# (SketchCurve.geometry is in sketch space); if that cannot decide, the profile is marked "ambiguous" and the
-# translator refuses it. Set "sketch" or "model" once hand test 2 (docs/hand-tests.md) shows which one Fusion uses.
-# The curves of a SketchText have no sketch entity: they are compared with `SketchText.boundingBox` (sketch space).
+# every point is at z = 0 and the sketch frame is not the identity, the points are read as model points
+# (`modelToSketchSpace`): a point that then lies off the sketch plane proves sketch space, and points that keep their
+# place either way (at least three, not on one line) make the choice not matter. Else the curve is compared with its
+# sketch entity (SketchCurve.geometry is in sketch space); if that cannot decide, the profile is marked "ambiguous"
+# and the translator refuses it. The curves of a SketchText (`SketchText.asCurves`, sketch space in Fusion 2706) have
+# no sketch entity: they are compared with `SketchText.boundingBox` (sketch space).
 GEOMETRY_SPACE = "auto"
 
 _FLAT_CM = 1e-5  # 1e-4 mm
@@ -58,12 +60,6 @@ def _frame_is_identity(frame):
         max(abs(a - b) for a, b in zip(frame[key], want)) <= 1e-6 for key, want in _IDENTITY.items())
 
 
-def _on_ground_plane(frame):
-    """True when the sketch plane is the plane z = 0, where model and sketch points both have z = 0."""
-    z = frame["z"]
-    return abs(abs(z[2]) - 1.0) <= 1e-6 and abs(frame["origin"][2]) <= 1e-4
-
-
 def _spread(points):
     """True when the points (mm) do not all lie on one line."""
     if len(points) < 3:
@@ -80,6 +76,18 @@ def _spread(points):
         if math.sqrt(sum(c * c for c in cross)) / length > 1e-4:
             return True
     return False
+
+
+def _by_plane(sketch, probes):
+    """"sketch" when the points cannot be model points (one lies off the sketch plane when read as one) or when both
+    readings put them at the same place in the sketch, else None."""
+    mapped = [sketch.modelToSketchSpace(p) for p in probes]
+    if any(abs(m.z) > _FLAT_CM for m in mapped):
+        return "sketch"
+    same = all(max(abs(m.x - p.x), abs(m.y - p.y)) <= _FLAT_CM for m, p in zip(mapped, probes))
+    if same and _spread([geo.point(p) for p in probes]):
+        return "sketch"
+    return None
 
 
 def _decide_by_entity(sketch, curves):
@@ -126,11 +134,10 @@ class _Space:
                 mode = "model"
             elif _frame_is_identity(frame):
                 mode = "sketch"
+            elif geo.safe(lambda: _by_plane(sketch, probes), None):
+                mode = "sketch"
             elif box is not None:
                 mode = geo.safe(lambda: _decide_by_box(sketch, probes, box), "ambiguous")
-            elif not _on_ground_plane(frame) and _spread([geo.point(p) for p in probes]):
-                # Model points off a line on a plane other than z = 0 cannot all have z = 0.
-                mode = "sketch"
             else:
                 mode = geo.safe(lambda: _decide_by_entity(sketch, curves), "ambiguous")
         self.sketch = sketch

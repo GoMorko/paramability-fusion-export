@@ -165,6 +165,15 @@ class TextSortTest(unittest.TestCase):
         self.assertEqual([loop["outer"] for loop in found[0]["loops"]], [True, False])
         self.assertEqual(found[0]["area"], 84.0)
 
+    def test_the_area_of_a_letter_of_straight_lines_follows_its_outline(self):
+        # The outline of an "A" as a font gives it: lines that run the loop's way, one line that runs against it.
+        corners = [(5, 1), (8.07, 9), (9.21, 9), (12.49, 1), (11.28, 1), (10.35, 3.42), (7.0, 3.42), (6.12, 1)]
+        pieces = segments(corners)
+        pieces[3] = {"kind": "line", "start": pieces[3]["end"], "end": pieces[3]["start"]}
+        ring = corners + corners[:1]
+        want = abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:]))) / 2.0
+        self.assertAlmostEqual(text_outlines.outlines_of(pieces)[0]["area"], want, places=6)
+
     def test_a_dot_over_a_stem_is_two_outlines(self):
         found = text_outlines.outlines_of(square(0, 0, 4) + square(0, 6, 4))
         self.assertEqual([len(o["loops"]) for o in found], [1, 1])
