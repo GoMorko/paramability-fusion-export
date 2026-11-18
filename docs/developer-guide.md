@@ -2466,7 +2466,7 @@ one folder per family of steps.
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `revolve_walls.py` (the inner walls a shell leaves on a revolve, see 3.19), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
   (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
   `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
@@ -5551,13 +5551,14 @@ How later steps find faces after a shell. Each step that makes faces is kept as 
   the step that made the outer face, and follows that step and the thickness. A closed hollow is the same placer with no
   open face.
 - After a revolve, the outer faces of the revolve stay where they are. A point on them is placed on the revolve (3.3).
-  The inner walls of a revolve are not placed yet. `Shell` claims a point of an inner wall: a point inside the turned
-  outline, at the thickness from the nearest face that the shell keeps. `Shell` also claims a point that lies only on
-  faces that the shell opens (`RevolvePlacer.hollowed`). Example: the inner rim of a cup lies on the plane of the
-  opened top face, but only the wall of the shell is there. A point on the
-  corner of an opened face and a kept face (the outer rim of the cup) is placed on the revolve. When a face that the
-  shell opens is placed on no step, any face of a revolve can be that face. Then `Shell` claims every point on a
-  revolve.
+  A point on an inner wall of a revolve is placed through the outline of the revolve (`faces/revolve_walls.py`, see
+  "The inner walls of a revolve" below). A point on the corner of an opened face and a kept face (the outer rim of a
+  cup) is placed on the revolve.
+- `Shell` claims each point on a revolve that it cannot place: a point inside the turned outline, at the thickness
+  from the nearest face that the shell keeps, or a point that lies only on faces that the shell opens
+  (`RevolvePlacer.hollowed`). Then `follow.locate` stops, and the sizes of the steps before the pick are marked. When a
+  face that the shell opens is placed on no step, any face of a revolve can be that face. Then `Shell` places no point
+  on a revolve, and it claims every point on a revolve.
 - A shell that goes outward is the placer `OutsideShell`. The faces of the part before it stay where they are, and a
   pick on one of them is placed as before. The new outer faces are not placed. A point that lies outside the part as it
   was, and inside the box of the wall, is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and
@@ -5587,6 +5588,70 @@ How later steps find faces after a shell. Each step that makes faces is kept as 
   The material lies in the box of the wall (`added_bounds.outside_shell_bound`), so a join on the outer wall stays.
   A shell without a box is a step that the check cannot bound: every later join stays. An inward shell only removes
   material.
+
+#### The inner walls of a revolve
+
+A face of a revolve is one outline curve, turned about the axis. The normal of this face lies in the plane of the
+outline. Thus a shell that goes inward by the thickness t makes the inner wall from the same curve, moved by t into
+the outline, and turned about the axis. The placer of the shell uses this rule (`revolve_walls.inner_place`). It moves
+the point back out onto the outer face or the outer corner. It places that outer point on the revolve (3.3). Then it
+writes the point as the outer point less t times the move, as formulas. The thickness can follow a size.
+
+The shell places these points (`InnerTurnPlace`):
+
+1. A point inside one inner wall. The outer point lies on the curve. The move is the normal of the curve. The curve
+   can be a line or an arc.
+2. An edge where the inner walls of two lines meet, at a corner of the outline. The outer point is the corner. The
+   move is along the bisector of the two normals, as for the corner of an extrude: (n1 + n2) / (1 + n1 . n2). The
+   corner must point out of the material (a convex corner).
+3. An edge where an inner wall meets a face that the shell opens. This is the inner rim of a cup. The outer point is
+   the corner of the line of the wall and the line of the opened face. The move is along the line of the opened face,
+   by t / |n . u|. Here n is the normal of the wall, and u is the direction of the opened line.
+4. A point on the rim that is left of an opened face, between the outer rim and the inner rim. The point keeps its
+   share of the distance between the two rims.
+
+Example. A cup has the sizes `Height` (40 mm), `Diameter` (60 mm) and `Wall` (2 mm). Its outline is a rectangle from
+the axis to `Diameter / 2`, and from the floor to `Height`. `Shell1` opens the top face with the thickness `Wall`.
+`Fillet1` rounds the inner rim and the inner bottom edge.
+
+- The inner rim is 28 mm from the axis, at the height 40 mm. Its outer point is the corner of the side line and the
+  top line. The move is 1 mm along the top line, away from the axis, for each millimetre of the wall. At 30 degrees the
+  step writes `[0.433012702 * Diameter + (-0.866025404 * Wall), 0.25 * Diameter + (-0.5 * Wall), Height]`.
+- The inner bottom edge is 28 mm from the axis, at the height 2 mm. Its outer point is the corner of the side line and
+  the bottom line. The move is (1, -1) in the plane of the outline: 1 mm out from the axis and 1 mm down.
+- At `Height` 50, `Diameter` 80 and `Wall` 3, the two edges are 37 mm from the axis, at the heights 50 mm and 3 mm.
+- No size is marked.
+
+The move must be the same at all sizes. A line keeps its direction when no size turns it
+(`RevolvePlacer.keeps_direction`). An arc keeps its shape, or the pick on it is stuck (3.3). When a size turns a line
+of the move, the point is not placed.
+
+Each pick adds rules for the ranges (`RevolvePlace.cuts`, as in 3.3):
+
+- The inner wall of each picked line keeps a length of more than 0.001 mm. Each end of the inner wall is set back from
+  the corner of the outline by a distance per millimetre of the wall. A convex corner sets the wall back. A concave
+  corner does not. At the axis, a wall that is square to the axis is not set back. For a point inside the wall, the rule is for the part of the wall on each side of the
+  point. Example: the inner floor of the cup above is `Diameter / 2 - Wall` long. With `Wall` 20 mm in this cup, the
+  range of `Wall` stops at 29.99.
+- The opening of a face that the shell opens keeps a width of more than 0.001 mm between the inner walls at its two
+  ends.
+- The inner wall of an arc whose centre lies inside the material keeps a radius of more than 0.001 mm.
+
+The shell does not place a point in these cases. It claims the point, so the sizes are marked:
+
+- The revolve turns less than a full circle. The end faces then make inner walls of their own.
+- A face that the shell opens is placed on no step.
+- The point is nearer than the thickness to a face of the revolve that the shell keeps. Example: the top face of a
+  flange that is as thick as the wall.
+- An end of the inner wall cannot be told: the corner joins an arc at an angle, the corner is on the axis without a
+  line on the axis next to it, or the curve next to the corner has more than one neighbour.
+- Another step covers the outer face of the point, or the face next to it. Example: a second outline of the same
+  revolve that lies against the side wall, or an extrude that joins the side wall. The shell tests the material of
+  the other steps 0.01 mm outside the face (`OUT_STEP`). The other revolves give their material (`RevolvePlacer.holds`).
+  An extrude gives its material (`material_at`).
+- A step before the shell places the point, or claims it.
+
+Hand check RV9 in `docs/hand-checks.md` checks these picks in Fusion.
 
 An outward shell, a closed hollow and a rounded shell cannot be checked in Fusion's tests. They have hand checks in
 `docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).

@@ -930,3 +930,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
     The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
     marker held. Afterwards the design is as before.
+81. RV9, picks on the inner walls a shell leaves on a revolve. Add user parameters `Height` = 40 mm, `Diameter` =
+    60 mm and `Wall` = 2 mm. On the XZ plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`,
+    with its left side on the z axis. Revolve it a full turn about the z axis as a new body (a cup). Shell it `Wall`
+    inside, with the top face open. Fillet the inner rim (the circle where the inside wall meets the top of the wall)
+    by 0.5 mm, and the inner bottom edge (the circle where the inside wall meets the floor inside) by 1 mm. Chamfer the
+    floor inside by 0.3 mm, picking the face. Make a second design the same, with a second outline on the sketch, a
+    5 x 20 mm rectangle from x = `Diameter` / 2 to `Diameter` / 2 + 5 and z = 0 to 20, revolved in the same Revolve.
+    Export: tick the three sizes. In the first design expect no size marked "may give unexpected results", and the
+    fillet and the chamfer copied with `near` points that hold formulas of `Diameter`, `Height` and `Wall`. In
+    Paramability set `Height` to 50, `Diameter` to 80 and `Wall` to 3, then to 30, 40 and 1.5: the rounds stay on the
+    inner rim and the inner bottom edge, and the chamfer on the floor inside, as in Fusion at the same values. In the
+    second design the inner bottom edge lies where the inside wall meets the second outline: expect its sizes marked
+    "may give unexpected results", and no round on a wrong edge. Afterwards each design is as before.
+

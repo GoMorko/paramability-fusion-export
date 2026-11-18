@@ -78,7 +78,7 @@ class ShellMaker:
         turned = [placer for placer in ctx.placers if isinstance(placer, RevolvePlacer)
                   and placer.combine in ("new", "add")]
         ctx.add_placer(Shell(self.thickness, ctx.slabs, [o for o in opened if o is not None], turned,
-                             any(o is None for o in opened)))
+                             any(o is None for o in opened), ctx.placers))
 
 
 class RevolveMaker:

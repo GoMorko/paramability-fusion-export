@@ -5,15 +5,16 @@ the point of an outer face (or edge, where two inner walls meet) moved inward by
 back out, placed on the slab that made the outer face, and its coordinates follow that slab and the thickness.
 
 A shell after a revolve leaves the outer faces of the revolve where they are, so a point on them is still placed on the
-revolve. The inner walls of a revolve are not placed: a point on one (inside the turned outline, the thickness from a
-face that stays), or on a face the shell opens (where only the rim of the wall is left), is claimed
-(`RevolvePlacer.hollowed`).
+revolve. A point on an inner wall of a revolve that turns a full circle is moved back out onto the revolve's outline
+and follows it and the thickness (faces/revolve_walls.py). A point on an inner wall that is not placed so, or on a face
+the shell opens (where only the rim of the wall is left), is claimed (`RevolvePlacer.hollowed`).
 
 A shell that grows outward leaves the faces of the part where they are, as the walls of its hollow, and adds a wall
 outside them. Those new outer faces are not placed (`OutsideShell`), and only points near them are kept from the steps
 before it.
 """
 from ...geometry import vec
+from . import revolve_walls
 from .placer import ADD, CUT, Placer
 from .slabs import AXIAL_TOL, LATERAL_TOL, Place, as_quantity
 
@@ -55,18 +56,24 @@ class InnerPlace(Place):
 class Shell(Placer):
     """One shell step: `thickness` a Quantity, `slabs` the solid slabs of the part when it was made, `opened` the
     Places of the faces it opens. `turned` are the revolves of the part (faces/revolve_placer.py); `unknown_open`
-    is True when a face it opens was placed on no step, so any face of a revolve may be one."""
+    is True when a face it opens was placed on no step, so any face of a revolve may be one. `before` are the placers
+    written before the shell."""
 
-    def __init__(self, thickness, slabs, opened, turned=(), unknown_open=False):
+    def __init__(self, thickness, slabs, opened, turned=(), unknown_open=False, before=()):
         self.thickness = as_quantity(thickness)
         self.slabs = [s for s in slabs if s.combine in ("new", "add") and s.taper is None]
         self.opened = opened
         self.turned, self.unknown_open = list(turned), unknown_open
+        self.before = list(before)
+
+    def _opened_on(self, revolve):
+        """The outline curves of `revolve` whose faces this shell opens."""
+        return {place.curve for place in self.opened if place.slab is revolve}
 
     def claims(self, p):
         """True when `p` lies on an inner wall of a revolve, or on a face of one that this shell opens."""
         for revolve in self.turned:
-            opened = None if self.unknown_open else {place.curve for place in self.opened if place.slab is revolve}
+            opened = None if self.unknown_open else self._opened_on(revolve)
             if revolve.hollowed(p, opened, self.thickness.n):
                 return True
         return False
@@ -97,10 +104,18 @@ class Shell(Placer):
         return False
 
     def place(self, p, edge):
-        """The InnerPlace of point `p` on an inner wall, or None."""
+        """The InnerPlace of point `p` on an inner wall of an extrude, or the InnerTurnPlace of one on an inner wall of
+        a revolve (faces/revolve_walls.py), or None."""
         t = self.thickness.n
         for slab in reversed(self.slabs):
             found = self._place_on(slab, p, edge, t)
+            if found is not None:
+                return found
+        if self.unknown_open:
+            return None
+        for revolve in reversed(self.turned):
+            others = [placer for placer in self.before if placer is not revolve]
+            found = revolve_walls.inner_place(revolve, p, edge, self._opened_on(revolve), self.thickness, others)
             if found is not None:
                 return found
         return None

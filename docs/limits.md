@@ -70,11 +70,16 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A shell, round or chamfer that picks a face or an edge made by a revolve follows the outline, the axis and the angle
-  of the revolve: the open top of a cup and a round on its outer rim follow its height and its diameter. The range of
-  a size stops before a picked side of the outline would shrink to nothing, and before a revolve that does not turn a
-  full circle would no longer reach the picked place. These picks are not followed: a pick on an end face of a
-  revolve that does not turn a full circle, a pick on the inner walls a shell leaves (the inner rim of a cup), a pick
-  where the revolve meets a step made before it, and a pick that lies on two sides of the outline at once. When sizes
+  of the revolve: the open top of a cup and a round on its outer rim follow its height and its diameter. A round or
+  chamfer on the inside of a shelled revolve that turns a full circle (the inner rim of a cup, its inner bottom edge,
+  the floor inside) follows these sizes and the thickness of the shell. The range of a size stops before a picked
+  side of the outline would shrink to nothing, before an inside wall or the opening of the shell would close up, and
+  before a revolve that does not turn a full circle would no longer reach the picked place. These picks are not
+  followed: a pick on an end face of a revolve that does not turn a full circle, a pick on the inside of
+  a shelled revolve that does not turn a full circle, a pick on the inside where a line of the outline turns with a
+  size, where the inside wall meets a curved wall at an angle, or where a second outline or another step lies against
+  the outside wall, a pick where the revolve meets a step made before it, and a pick that lies on two sides of the
+  outline at once. When sizes
   move the face under such a pick, the pick keeps its place and the sizes the steps before it use are marked "may give
   unexpected results". Picks on an intersect revolve, and on a revolve to two sides whose angle before the sketch
   follows a size, do not follow sizes either.
