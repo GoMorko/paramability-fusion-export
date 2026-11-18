@@ -158,9 +158,14 @@ def _on_created(args):
         """Run the export once per dialog, and have Fusion undo it when the design is not back. A step the export
         starts (`export_plan.undo_steps`) fires this event again, while the export runs or after it; the gate lets only
         the first event run the export and set the abort."""
-        gate.run(args, lambda outcome: export_flow.run_export(
-            design, parameters, model_params, design_unit, recipe_dialog.read_form(args.command.commandInputs, offers),
-            captures, timeline_start, command=args.command, outcome=outcome, saved_start=saved_start))
+        def export(outcome):
+            form = recipe_dialog.read_form(args.command.commandInputs, offers)
+            _empty_dialog(args.command)
+            return export_flow.run_export(design, parameters, model_params, design_unit, form, captures,
+                                          timeline_start, command=args.command, outcome=outcome,
+                                          saved_start=saved_start)
+
+        gate.run(args, export)
 
     handlers.on_execute(command.execute, on_execute, _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)
@@ -183,3 +188,19 @@ def _add_version(command):
         command.commandInputs.addTextBoxCommandInput("pm_addin_version", "", text, 1, True)
     except Exception as exc:
         log(f"showing the add-in version failed: {exc!r}")
+
+
+def _empty_dialog(command):
+    """Hide the inputs of the export dialog once the form is read. Fusion keeps the dialog on screen until the export
+    in its OK step has ended (the export runs there so Fusion can undo it as one step), so only an empty frame stays
+    behind the progress window. Never raises."""
+    try:
+        inputs = command.commandInputs
+        for index in range(inputs.count):
+            try:
+                inputs.item(index).isVisible = False
+            except Exception:
+                pass
+        adsk.doEvents()
+    except Exception as exc:
+        log(f"emptying the export dialog failed: {exc!r}")
