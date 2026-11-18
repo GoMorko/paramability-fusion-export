@@ -6037,6 +6037,11 @@ The move must be the same at all sizes. A line keeps its direction when no size 
 (`RevolvePlacer.keeps_direction`). An arc keeps its shape, or the pick on it is stuck (3.3). When a size turns a line
 of the move, the point is not placed.
 
+The two ends of a line can move by a product of sizes. Example: the side of a cup is at `Diameter * Scale / 4`. The
+probe gives such a value as a formula with a product (`Curved`), not as a sum of sizes (`Affine`). The placer
+subtracts the values of the two ends. When the products cancel and no size is left, the line keeps its direction. The
+same rule tells whether a face stays where it is (`_still`) and whether the sketch plane stays.
+
 Each pick adds rules for the ranges (`RevolvePlace.cuts`, as in 3.3):
 
 - The inner wall of each picked line keeps a length of more than 0.001 mm. Each end of the inner wall is set back from

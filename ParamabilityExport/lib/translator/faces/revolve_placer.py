@@ -28,6 +28,7 @@ from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import Footprint, curve_distance, polyline
 from ...sketch_values.motion import Affine, Stuck
+from ..sketch.curved import Curved
 from ..sketch.sketch_motion import PICK_TOL, combine, rendered
 from .placer import Placer
 from .slabs import CONSTANT_TOL, LATERAL_TOL, cleaned_all
@@ -71,7 +72,9 @@ class Turn:
 
 
 def _constant(value):
-    return isinstance(value, Affine) and value.is_constant
+    """True when a raw value reads no size: a sum over sizes, or a product of sizes whose terms cancel (two corners
+    that move by the same product)."""
+    return isinstance(value, (Affine, Curved)) and value.is_constant
 
 
 def _tidy(value):
