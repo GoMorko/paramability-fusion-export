@@ -5,8 +5,9 @@ Extrude: one side, symmetric and two sides; new body, join, cut and intersect; a
 plane, or through all for a cut or intersect (a join through all ends where the part ends, which no Orca length
 follows). The shared reader (`design_model/steps/extrude.py`) gives where the extrude starts and, per side, how it
 ends, its direction and its length, and the checks against what Fusion measured: the end face (`_end_gap`), the side
-walls (`extents.taper_measured`) and the volume of spline outlines. A start offset or a start on a face or plane moves the sketch plane. A taper is a Blind extrude's
-`taper_deg`, two Blind halves for symmetric and two sided extrudes (`extents` has these rules). Orca's "through all"
+walls (`extents.taper_measured`) and the volume of spline outlines. A start offset or a start on a face or plane (with
+or without an offset from it) moves the sketch plane. A taper is a Blind extrude's `taper_deg`, two Blind halves for
+symmetric and two sided extrudes (`extents` has these rules). Orca's "through all"
 goes both ways from the sketch, so a one way through all becomes Orca's through all only when the part lies on that
 side of the sketch; otherwise a long blind cut.
 A cut or intersect that does not meet the part the copy built (`solid.Solid`) is left out: Orca stops the whole
@@ -371,8 +372,7 @@ def extrude(ctx, step):
         return Skip.of(found)
     if any(p.get("text") for p in profiles):
         return text_regions.extrude(ctx, item, profiles, sides, shift, operation)
-    start = data.get("start") or {}
-    moved = ctx.quantity(item, "start.offset", shift).reads if start.get("kind") == "offset" else ()
+    moved = shift.reads
 
     parts = []
     for profile in profiles:

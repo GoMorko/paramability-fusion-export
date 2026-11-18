@@ -58,7 +58,7 @@ can be.
 | Extrude: All, join or new body | Partly | - | Left out | Needs Orca | Fusion ends it where the part ends. Paramability: one way, no taper, no thin wall, the picked body the only body it joins, and Fusion's end on the far side of that body; the sizes that may change the body before it or move its outline are marked. A new body has no body before it, so it is left out. |
 | Extrude: start offset | Copied | - | Partly | Needs Orca | Orca: the offset keeps its number. |
 | Extrude: start From object | Copied | - | Partly | Needs Orca | Orca: the sketch plane moves to the face, but does not follow it. |
-| Extrude: start From object with an offset | Copied | - | Left out | Yes, add-in only | Paramability: the start face that Fusion measured shows which way the offset goes; without it the step is left out. |
+| Extrude: start From object with an offset | Copied | - | Partly | Needs Orca | Both: the start face that Fusion measured (or the end cap of a join) shows which way the offset goes; without it the step is left out. Orca: the sketch plane moves to the face plus the offset, and the offset keeps its number. |
 | Extrude: taper | Copied | - | Partly | Needs Orca | Paramability: under 45 degrees. A tapered cut through all both ways is left out. Orca: not with holes in the outline, not through all. |
 | Extrude: new body, join, cut | Copied | - | Copied | - | Both: a new body from several outlines that makes several bodies is left out. Orca: a cut that splits the part is left out. |
 | Extrude: intersect | Partly | Yes, add-in only | Partly | Yes, add-in only | Both: one outline only. |
@@ -84,7 +84,7 @@ can be.
 | Emboss: curved face, tangent chain | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Hole: simple, counterbore, countersink | Copied | - | Copied | - | |
 | Hole: depth distance or through all | Copied | - | Copied | - | |
-| Hole: To face | Copied | - | Left out | Yes, add-in only | Paramability: the face must give a flat end. |
+| Hole: To face | Copied | - | Copied | - | Both: the face or plane must be flat, square to the hole, with a flat hole end. Orca: the measured depth; it follows an offset plane or the end face of a copied extrude. |
 | Hole: drill point | Copied | - | Partly | Needs Orca | Orca: the drill point is left flat. |
 | Hole: tapped, cosmetic thread | Copied | - | Copied | - | Cut at the drill size Fusion measured (the thread's minor diameter). |
 | Hole: tapped, modeled thread | Copied | - | Partly | Needs Orca | Through all holes need an export with this version. Orca: simple and counterbore holes, right hand only; the thread start under a counterbore keeps its number. |

@@ -65,7 +65,7 @@ The modules of `lib/orca_translate/`:
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
   cause (`causes.py`).
 - Helpers of the handlers: `extents.py` (To, From and taper of an extrude, as values that follow sizes), `text_regions.py` (sketch text
-  as Orca's imported regions), `hole_place.py` (where holes sit),
+  as Orca's imported regions), `hole_place.py` (where holes sit), `hole_reach.py` (the depth of a hole up to a face or plane),
   `drilled.py` (circle holes of the first outline drilled as Orca holes), `sketch_sizes.py` (the sizes an outline
   sketch follows or keeps),
   `sketches.py` and `splines.py` (outlines as Orca sketches), `sweep_splines.py` (splines of a sweep path, exactly), `outline_cuts.py` and `halfplanes.py` (outlines of
@@ -99,7 +99,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | The first body's outline with holes | the outer outline, then a cut through all per hole, so each stays a simple rectangle or circle where it is one; a circle hole whose centre moves, in a one sided extrude without taper, is an Orca Hole through all instead (see "Outlines built from plane cuts") | as above; the drilled hole: `hole_x`, `hole_y`, `hole_diameter` |
 | Extrude: one side, symmetric, two sides; new body, join, cut, intersect; a distance, or through all for a cut or intersect; a start offset | Extrude | `distance`, `distance2` |
 | Extrude side "To" a flat face or plane square to the extrude, with an offset | the measured distance (Blind, or a side of Two sides) | `distance` when the plane follows: an offset plane, or an end face of a copied extrude (see "Extents") |
-| Extrude "From" a flat face or plane square to the extrude | the sketch plane moved to that plane | no |
+| Extrude "From" a flat face or plane square to the extrude, at an offset from it or not | the sketch plane moved to that plane, and by the offset (the way the measured start face shows) | no |
 | Thin extrude of one rectangle or one circle, one way or symmetric, no taper (see "Thin extrudes") | the outer outline as a new body less the inner outline cut through all; on a part, as a tool body and a Boolean with the step's operation | `width`, `height`, `radius` (the drawn size plus or minus the thickness), `distance` |
 | Thin extrude of one straight line, the wall centred on it | simple rectangle centred on the line | `width` (the length of the line), `height` (the thickness), `distance` |
 | Thin extrude of any other open line of straight lines | the outline of the wall as sketch lines | `distance`; the line and the thickness keep their numbers |
@@ -108,6 +108,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Emboss on a flat face: raised or sunk, text or other outlines (see "Sketch text and embosses") | the extrude from the face it stands for | `distance` (the depth) |
 | Tapered extrude: one side, symmetric or two sides, of an outline that Orca tapers the same way (see "Extents") | Extrude with `taper_deg` (Blind; two Blind halves for symmetric and two sides) | `taper_deg` for a smooth outline |
 | Hole: simple, counterbore, countersink; a depth or through all; one Orca hole per point | Hole | diameter, depth, counterbore and countersink sizes |
+| Hole "To" a flat face or plane square to the hole, with a flat end (see "Extents") | Hole of the measured depth | `hole_depth` when the plane follows: an offset plane, or an end face of a copied extrude |
 | Hole on sketch points, with the sketch's frame (`sketch_frame`) and graph in the capture | Hole on the sketch plane, at `hole_x`, `hole_y` | `hole_x`, `hole_y` |
 | Tapped hole with a cosmetic thread | Hole at the drill size | as Hole |
 | Tapped hole with a modeled thread (metric or Unified, right hand), simple or counterbore | Hole at the minor diameter, then an inside Thread per point from the counterbore floor or the top, half a pitch inside each end, and a lead-in Hole at each open end | as Hole; `thread_height` with the depth (the thread start under a counterbore keeps its number) |
@@ -138,7 +139,7 @@ path pattern, pasted body, scale (Orca has no step that scales a body)...), the 
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
-threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
+threads whose ends the copy cannot judge, holes up to a tilted or curved face, one of another component or one whose end is not flat or not on the face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
 part may have a new token, so the copy cannot tell whether the step changes it). A left out step changes the shape Orca builds; later steps are still
 copied. A cut or intersect while no body is in the copy yet is left out too. A step that is left out keeps nothing
@@ -239,7 +240,26 @@ not judged to meet material where Orca removes nothing.
   (`design_model.reach.reach_sizes`: the sizes read before the step, and those behind the planes of the chain).
 - "From" a face or plane: the sketch plane is moved to that plane. Orca cannot move a sketch plane with a variable, so
   the shift is a number and the sizes that move the face are marked. A start at a distance from the face (a
-  `start.offset` that is not zero) is left out: which way Fusion measures that distance is not read.
+  `start.offset` that is not zero) moves the sketch plane by that distance as well, as a number: no Orca field carries
+  it, and the sizes that set the offset are marked (the Orca datum plane feature is not used). Which way Fusion
+  measures the offset is not read, so the way is the one that puts the start on the face Fusion measured
+  (`start_offset`), or else the one that puts the end on the measured end cap, as for a recipe
+  (`dm.start_of(..., offsets=True)`); where it is not sure, the step is left out (cause `extrudeStartOffset`). The sizes
+  that move the start (its face and its offset) also go to the end faces of this extrude (`extents.Shift.reads`,
+  `solid.Prism.plane_sizes`), so a later face that follows an end of it is marked with them.
+- A hole "To" a face or plane (`hole_reach.py`): a Hole of the measured depth, from each position to its flat end. The
+  face or plane must be flat and square to the hole, and the distance from each position to its plane must be the
+  measured depth, else the hole is left out; a face of another component, a tilted or curved one, a drill point at the
+  end and an end that was not measured give the reader's reasons (cause `refused`), a tilted, curved or foreign face
+  the causes of an extrude up to a face. The depth follows the plane as the length of an extrude does (`extents.plane_move`: an offset plane
+  with its own distance and its base, an end face of a copied extrude): Orca keeps the plane the hole sits on as a
+  number, so the depth is the measured one plus how far the face moves along the drilling direction (an offset plane
+  `lift` above the origin and a hole drilled down gives `depth - (lift - number)`). A face that sizes may move in any
+  other way keeps the measured depth and its sizes are marked. The capture does not say whether the hole may also end
+  on the faces next to the face (Chain Faces), so the sizes that may move the face are marked for a face. The
+  variables behind the depth are walked down to where the depth reaches zero (`hole_reach.guard`: "keep lift_mm under
+  20 mm"). A tapped hole goes up to a plane with the thread length from that depth. Orca limits of the hole stay: a
+  flat end, the counterbore and the countersink as for a depth.
 - A flat face of the body as the outline: its loops and plane as they are now, as sketch entities. Every size read
   before the step is marked, since the face may move or change with it.
 - The plane a sketch sits on: Orca cannot move it with a variable, so the sizes that may move it
@@ -1193,7 +1213,7 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   the side without material (seen on a sketch on the XZ plane of a Z up design). Such a one way cut or hole goes to
   the side where its outline meets the copied part, with a note; when both sides meet material the stored direction
   stays.
-- A blind hole's drill point is left flat; the result notes it.
+- A blind hole's drill point is left flat; the result notes it. A hole up to a face with a drill point is left out.
 - A round or chamfer drawn into an outline keeps its number, and the drawn outline has numbers only. On an outline
   with a size that follows a variable, corner tools cut the corners, and they follow within the limits on the
   parameters' lines. The checks against other steps hold at the current sizes: a variable that later moves another
@@ -1258,10 +1278,24 @@ The volumes are exact (a loop of area A whose centre lies at radius R makes 2 pi
 8240.43), `ring_on_rod` (that ring joined onto a rod of radius 12, 30 high: 6880 pi - 120 pi^2 = 20429.80),
 `two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21),
 `groove_both_sides` (one Revolve Cut of a full turn with a groove from radius 9 to 12, z 10 to 14, drawn on both
-sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi = 12780.0; not yet built in Orca) and
+sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi = 12780.0, built so in Orca) and
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.
+
+A hole up to a plane and extrudes that start at a distance from a face have captures in `tests/orca_to_faces.py`. Save
+one with `python3 -m tests.orca_to_faces <name> <file>` and give the file to `write`. The volumes are exact. All three
+built with these volumes in OrcaSlicer 2.5.1 on 2026-11-18, also after the `--set` changes:
+
+- `hole_to_plane`: a 40 x 40 x 20 block (box -20 to 20 in x and y, 0 to 20 in z) with a hole of diameter 5 from the
+  middle of its top down to Plane1 at `lift_mm` 8, so 12 deep: 32000 - 75 pi = 31764.38 mm3. The depth is
+  `12 - (lift_mm - 8)`: `--set lift_mm=5` gives 15 deep, 31705.48 mm3, and `--set lift_mm=12` 8 deep, 31842.92 mm3.
+- `boss_into_plate`: a 40 x 40 x 10 plate (16000 mm3) and a 10 x 10 boss that starts From its top face at the offset
+  `-inset_mm` (`inset_mm` 2, so 2 mm inside the plate, z 8) and goes 5 mm up: 16000 + 100 x 3 = 16300 mm3, box z 0 to 13.
+  The sketch plane keeps z 8, so `--set inset_mm=4` leaves the body as it is (16300 mm3): the offset keeps its number.
+- `lowered_post`: the same plate and a 10 x 10 post that starts From its top face at the offset `rise_mm` (2, so 2 mm
+  above it, z 12) and goes 4 mm down: 16000 + 100 x 2 = 16200 mm3, box z 0 to 12. `--set rise_mm=...` leaves the body as it
+  is.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and

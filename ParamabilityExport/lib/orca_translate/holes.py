@@ -1,14 +1,14 @@
 """Hole steps of the capture as Orca Hole features. The handler returns the features it wrote, or a `Skip` with the
 reason the step is left out of the copy.
 
-Simple, counterbore and countersink holes; a depth or through all; one Orca hole per position, on a plane whose normal
-is the drilling direction (Orca drills along the normal): the sketch plane with the centre's sketch coordinates when
-they are known (`hole_place`), else a plane at the centre. A tapped hole is drilled at the drill size of a cosmetic
-thread, or at the minor diameter of a modeled one with an Orca thread after it (`threads`); under a counterbore the
-thread starts at its floor, and a tapped hole with a countersink is left out. A hole that does not meet
-the part the copy built (`solid.Solid`) is left out: Orca stops the whole rebuild on a hole that removes nothing. A
-through all hole with no measured bottom goes to the side where it meets that part when Fusion's stored direction
-meets none (`steps.toward_material`).
+Simple, counterbore and countersink holes; a depth, through all, or up to a face or plane (`hole_reach`); one Orca
+hole per position, on a plane whose normal is the drilling direction (Orca drills along the normal): the sketch plane
+with the centre's sketch coordinates when they are known (`hole_place`), else a plane at the centre. A tapped hole is
+drilled at the drill size of a cosmetic thread, or at the minor diameter of a modeled one with an Orca thread after it
+(`threads`); under a counterbore the thread starts at its floor, and a tapped hole with a countersink is left out. A
+hole that does not meet the part the copy built (`solid.Solid`) is left out: Orca stops the whole rebuild on a hole
+that removes nothing. A through all hole with no measured bottom goes to the side where it meets that part when
+Fusion's stored direction meets none (`steps.toward_material`).
 """
 import math
 
@@ -16,7 +16,7 @@ from ..capture_model import gap_hints
 from ..geometry import vec
 from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
-from . import causes, finish_body, hole_place, threads
+from . import causes, finish_body, hole_place, hole_reach, threads
 from ..design_model.problem import Problem
 from ..design_model.steps import hole as hole_facts
 from ..design_model.values import Quantity
@@ -54,9 +54,6 @@ def hole(ctx, step):
     extent = hole_facts.extent_of(data)
     if isinstance(extent, Problem):
         return Skip.of(extent)
-    if extent.kind == hole_facts.TO_ENTITY:
-        return Skip("This hole goes up to a face, which the Orca copy does not follow yet.",
-                    gap_hints.EXTRUDE_END_FACE)
     spec, tapped = None, tap != hole_facts.PLAIN
     if tapped:
         found = threads.tapped(item, data)
@@ -75,6 +72,10 @@ def hole(ctx, step):
         depth = ctx.quantity(item, "extent.depth", extent.depth)
         if "cone" in (data.get("end_face_types") or []):
             ctx.notes.append("%s: the drill point at the bottom is left flat in Orca." % label(item))
+    elif extent.kind == hole_facts.TO_ENTITY:
+        depth = hole_reach.depth(ctx, item, data, normal)
+        if isinstance(depth, Skip):
+            return depth
     box = (item.get("target_before") or {}).get("box") or data.get("target_box_before")
     style, extra, bore_depth = 0, [], None
     if kind == hole_facts.COUNTERBORE:
@@ -167,6 +168,8 @@ def hole(ctx, step):
         for field, words, value in extra:
             ctx.bind(feature, field, value, "%s %s" % (name, words))
         ctx.add(feature)
+        if extent.kind == hole_facts.TO_ENTITY:
+            hole_reach.guard(ctx, feature)
         out.append(feature)
         if spec is not None:
             out += threads.hole_thread(ctx, name, where, spec, start, lengths[n], ends[n])

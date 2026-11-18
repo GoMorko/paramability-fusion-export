@@ -12,8 +12,10 @@ Orca's own numbering of the body it rebuilt, which the copy cannot know, so a fa
   follows what it is built on: an origin plane stays, an offset plane moves with its own distance and with its base,
   and a face follows the end of a copied extrude it lies on (`solid.Prism.ends`). Sizes that may move the plane in any
   other way leave the length a number, and those sizes are marked.
-- From a face or plane (`start`): the sketch plane is moved to that plane. Orca cannot move a sketch plane with
-  a variable, so the shift is a number and the sizes that move the face are marked.
+- From a face or plane (`start`): the sketch plane is moved to that plane, and by the offset from it when there is one:
+  the way of the offset is the one that puts the start on the face Fusion measured (`dm.start_of`), and a start whose
+  way is not sure is left out. Orca cannot move a sketch plane with a variable (its datum plane feature is not used),
+  so the shift is a number and the sizes that move the face or set the offset are marked.
 - Limits (`guard`): Orca variables have no ranges, and past some values Orca builds these extrudes wrong without an
   error: a "To" length at zero or below extrudes the other way, and a taper that shrinks a side of its outline to
   nothing builds a straight extrude. The parameter's line says how far each variable may go; a field whose limit
@@ -237,22 +239,44 @@ def reader_skip(found, item):
     return Skip.of(found)
 
 
+class Shift(float):
+    """How far along the sketch normal (mm) an extrude starts from its sketch plane. `reads` are the Fusion names of
+    the sizes that move that start (its offset, the face it starts from): the Orca sketch plane keeps its number, so
+    a face made on the end of this extrude may not follow them."""
+
+    reads = ()
+
+
 def start(ctx, item, data, frame):
-    """How far along the sketch normal (mm) the extrude starts from its sketch plane (`dm.start_of`), or a Skip. The
-    sizes that move a start offset, or the face or plane it starts from, are marked: Orca keeps the sketch plane in
-    place."""
-    found = dm.start_of(data, frame)
+    """How far along the sketch normal (mm) the extrude starts from its sketch plane (`dm.start_of`), as a `Shift`, or
+    a Skip. The sizes that move a start offset, or the face or plane it starts from, are marked: Orca cannot move a
+    sketch plane with a variable, so the sketch plane keeps the number. A start at a distance from a face or plane
+    (`found.offset`) goes from the measured start face, which gives the sign of that distance (`dm.start_of`): where
+    it is not sure, the step is left out."""
+    found = dm.start_of(data, frame, offsets=True)
     if is_problem(found):
         return reader_skip(found, item)
-    if found.kind == dm.OFFSET and found.shift:
-        ctx.doubt(ctx.quantity(item, found.path, found.shift).reads,
-                  "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))
+    reads = ()
+    if found.kind == dm.OFFSET:
+        moved = ctx.quantity(item, found.path, found.shift)
+        reads = moved.reads
+        if found.shift:
+            ctx.doubt(moved.reads, "%s starts away from its sketch, and Orca cannot move a sketch with a variable"
+                      % _label(item))
     if found.kind == dm.FACE:
         move = plane_move(ctx, item, found.target.record, vec.unit(frame["z"]), "starts from")
         if move is not None and move.text is not None:
+            reads += move.reads
             ctx.doubt(move.reads, "%s starts from a face or plane that moves with it, and Orca cannot move a sketch "
                       "plane with a variable" % _label(item))
-    return found.shift
+        if found.offset:
+            away = ctx.quantity(item, found.path, found.offset * found.way)
+            reads += away.reads
+            ctx.doubt(away.reads, "%s starts at a distance from a face or plane, and Orca cannot move a sketch with "
+                      "a variable" % _label(item))
+    shift = Shift(found.shift)
+    shift.reads = tuple(dict.fromkeys(reads))
+    return shift
 
 
 def reach(ctx, item, side, z):

@@ -3225,7 +3225,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     When exactly one of the two does this, `Start.offset` is the distance with that sign, and `Start.way` is the
     sign. When there is no measured start face, the measured end cap can tell the sign (`_way_from_end`, see the
     section "A start at a distance from a face" in part 3). Else the result is a `Problem`. The recipe output sets
-    `offsets`. The Orca output does not set it.
+    `offsets`, and so does the Orca output (`orca_translate/extents.start`): it keeps the offset as a number and marks
+    the sizes that set it, since Orca cannot move a sketch plane with a variable.
   - `read_sides(data, frame, shift, faces)` gives one `SidePlan` for each side, or a `Problem`. A `SidePlan` has
     the kind (`DISTANCE`, `REACH`, `UP_TO`, `THROUGH`, `THROUGH_BOTH`, `SYMMETRIC`), the capture field of the side
     (`which`, which is also the start of its parameter paths), the direction (`sign`), the length as a `Quantity` of
@@ -5201,6 +5202,16 @@ same depth, and the end faces must be planes. A hole that ends in a
 drill point on such a face is left out with a reason. The depth follows the face or body that the hole goes up to
 (`follow.target_shift`) and the entry, as the length of an extrude up to an entity does. When the depth could be zero or
 negative at some sizes, those sizes are marked.
+
+The Orca output (`orca_translate/hole_reach.py`) reads the same facts. The face or plane must be flat and square to the
+hole, with `reach_depth` for the measured depth. The distance from each position to the plane of the face must be that
+depth, else the hole is left out. A face of another component, a tilted or curved face, and a hole with a drill point
+or an end that was not measured are left out with the reasons of an extrude up to a face. The depth is the measured
+depth plus the move of the face along the drilling direction (`extents.plane_move`, which also decides the move of an
+extrude "To" a face). Orca keeps the plane that the hole sits on as a number, so only the move of the face counts, and
+the entry does not. The reader does not read whether Fusion may chain the face to the faces next to it for a hole, so
+the sizes that may move the face are marked. The variables behind the depth are walked down to where the depth reaches
+zero (`hole_reach.guard`).
 
 ### 3.13 How a coil is translated
 
