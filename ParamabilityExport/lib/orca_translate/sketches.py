@@ -4,7 +4,7 @@ One outline (an outer loop with its holes) becomes one Orca sketch:
 - one rectangle: the simple rectangle (`SketchShape.RECTANGLE`), centred on its plane's origin, so the plane origin
   moves to the rectangle's centre and its x axis runs along a side; `width` and `height` may follow variables;
 - one circle: the simple circle (`SketchShape.CIRCLE`) on a plane at its centre; `radius` may follow variables;
-- anything else of lines, arcs, circles and splines (`splines`): entities at their current values. Orca cannot tie
+- anything else of lines, arcs, circles, ellipses and splines (`splines`): entities at their current values. Orca cannot tie
   sketch dimensions to variables yet, so such an outline keeps its numbers.
 
 Which variables a rectangle or circle follows comes from the sketch's own dimensions (`capture.sketch_graphs`),
@@ -160,8 +160,24 @@ def _arc_entity(c):
                         center=(cx, cy), radius=float(c["radius"]), start_angle=a0, end_angle=a0 + sweep)
 
 
+def _ellipse_entity(c):
+    """An Orca ellipse for a capture ellipse, or None when its numbers are not usable. Orca swaps the two radii
+    without turning the ellipse, so `radius` is always the major radius and `rotation` the angle of the major
+    axis."""
+    try:
+        cx, cy = float(c["center"][0]), float(c["center"][1])
+        dx, dy = float(c["major_dir"][0]), float(c["major_dir"][1])
+        major, minor = float(c["major_radius"]), float(c["minor_radius"])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
+    if not (0 < minor <= major) or math.hypot(dx, dy) < 1e-9:
+        return None
+    return SketchEntity(type=EntityType.ELLIPSE, center=(cx, cy), p0=(cx, cy), radius=major, rminor=minor,
+                        rotation=math.atan2(dy, dx))
+
+
 def entities_of(loops):
-    """Orca entities for capture curves (lines, arcs, circles, and splines Orca draws exactly: `splines`), or None
+    """Orca entities for capture curves (lines, arcs, circles, ellipses, and splines Orca draws exactly: `splines`), or None
     when a curve is of another kind."""
     out = []
     for curves in loops:
@@ -175,6 +191,11 @@ def entities_of(loops):
             elif kind == "circle":
                 centre = tuple(float(v) for v in c["center"])
                 out.append(SketchEntity(type=EntityType.CIRCLE, center=centre, p0=centre, radius=float(c["radius"])))
+            elif kind == "ellipse":
+                entity = _ellipse_entity(c)
+                if entity is None:
+                    return None
+                out.append(entity)
             elif kind == "other" and c.get("nurbs"):
                 drawn = splines.entities(c)
                 if drawn is None:

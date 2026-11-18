@@ -34,7 +34,7 @@ can be.
 | Arc, sketch fillet | Copied | - | Partly | Needs Orca | Orca keeps arcs as numbers. |
 | Polygon | Copied | - | Partly | Needs Orca | Orca: as for lines. |
 | Slot | Copied | - | Partly | Needs Orca | Orca: the arcs keep their numbers. |
-| Ellipse | Copied | - | Left out | Yes, add-in only | Paramability: a full ellipse. An elliptical arc is copied as spline segments with fixed numbers. Orca has ellipse curves; the copy does not write them yet. |
+| Ellipse | Copied | - | Copied, fixed numbers | Yes, add-in only | Paramability: a full ellipse. An elliptical arc is copied as spline segments with fixed numbers. Orca: a full ellipse is written as an ellipse curve (centre, major radius, minor radius, direction of the major axis) with its current numbers; the sizes that move it are marked as for other curves that keep numbers. An elliptical arc is left out. |
 | Spline, conic curve | Partly | No | Partly | No | The shape is copied as fixed numbers. The points of a free curve are not a formula of the sizes. Orca: only a spline that Fusion gives exactly. |
 | Text | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: each letter is an outline. The text height is not a size. At most 400 outlines. |
 | Offset | Copied | - | Partly | Needs Orca | Orca: as for the curves it makes. |
