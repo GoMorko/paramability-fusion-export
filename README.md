@@ -36,7 +36,10 @@ learning only.
 3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot
    confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. This also happens
    for an export that you cancel or that stops, when the add-in cannot confirm that your design came back. A file
-   that was saved stays saved (with "Lighter on memory" ticked the add-in cannot undo, and the window says so). A parameter that no copied step uses
+   that was saved stays saved (with "Lighter on memory" ticked the add-in cannot undo, and the window says so; when the
+   design was saved in the cloud and had no unsaved changes before the export, the window has a button "Reopen the
+   design from its last save", which closes the design without saving and opens that version again after your click).
+   A parameter that no copied step uses
    is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
    When a change leaves a step in a new warning or error, or a sketch on its other solution, also with the values
    back, the add-in tries to bring the design back: it sets the sizes of the recent changes a little past their

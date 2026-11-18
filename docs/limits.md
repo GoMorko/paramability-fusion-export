@@ -22,7 +22,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   (the size of that try, and every size that changes that component); the other sizes are tried on. The sizes
   whose tries ended keep only the values tried before, and their reasons say that the values after them were not
   tried. Your design is changed then, so the export is undone at its end. With "Lighter on memory" ticked, after the
-  add-in let Fusion forget Undo data, every try stops there as before, since the export could not be undone. When the
+  add-in let Fusion forget Undo data, every try stops there as before, since the export could not be undone. The
+  result window then offers to reopen the design from its last save only when the design was saved in the cloud and
+  had no unsaved changes when the export dialog opened; a design with unsaved changes, or one that was never saved,
+  gets the advice to close it without saving instead. When the
   sketch still reads another outline after the export, or the body has another volume or size than before, the result
   window says that your design is changed, and the add-in asks Fusion to undo the export. A very small difference of the body with
   nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the

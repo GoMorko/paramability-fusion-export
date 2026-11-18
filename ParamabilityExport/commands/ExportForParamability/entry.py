@@ -12,6 +12,7 @@ from ...lib.export_plan.size_offers import offers as size_offers, table_for_bodi
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.rows import DesignParameterStore
+from ...lib.fusion_reader.saved_design import read_saved_start
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog, timeline_select
@@ -49,6 +50,9 @@ def _on_created(args):
         recipe_dialog.build_blocked(command, export_flow.PENDING_POSITION_MESSAGE)
         return
 
+    # Read before anything moves the marker: whether the design is its last save decides if a design the export
+    # cannot undo may be reopened from that save (`export_plan.rollback.reopen_offered`).
+    saved_start = read_saved_start(_document_of(design))
     # Read before the capture below moves the marker: the export compares the steps with this at its end.
     timeline_start = read_timeline(DesignParameterStore(design))
     root = design.rootComponent
@@ -154,7 +158,16 @@ def _on_created(args):
         the first event run the export and set the abort."""
         gate.run(args, lambda outcome: export_flow.run_export(
             design, parameters, model_params, design_unit, recipe_dialog.read_form(args.command.commandInputs, offers),
-            captures, timeline_start, command=args.command, outcome=outcome))
+            captures, timeline_start, command=args.command, outcome=outcome, saved_start=saved_start))
 
     handlers.on_execute(command.execute, on_execute, _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)
+
+
+def _document_of(design):
+    """The document of `design` (`Product.parentDocument`), or None when it cannot be read."""
+    try:
+        return design.parentDocument
+    except Exception as exc:
+        log(f"reading the document of the design failed: {exc!r}")
+        return None
