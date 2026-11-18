@@ -1308,8 +1308,8 @@ along a quarter arc of radius 35 about (5, 5) from (40, 5), turning with the arc
 0 to 10; `--set count=4` 8864, box to y = 40; `--set pitch=13` 9080, box to y = 43.12; `--set count=3` 8648, box to
 y = 40. The parameter lines say count under 5.58 and pitch under 13.7 mm. `pegs_arc_slide`: the same plate and arc,
 5 pegs over 48 mm of the arc keeping their direction: 9080 mm3, box 0 to 50, 0 to 42.31, 0 to 10; `--set count=4`
-8864 and `--set count=3` 8648, the box the same (the last peg stays at 48 mm). `pitch` keeps its number. Not yet
-built in Orca.
+8864 and `--set count=3` 8648, the box the same (the last peg stays at 48 mm). `pitch` keeps its number. All three
+built with these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set` changes.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and
