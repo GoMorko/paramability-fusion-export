@@ -3637,9 +3637,34 @@ Example. A cup has the sizes `Height` (40 mm) and `Diameter` (60 mm). Its outlin
   `[0.433012702 * Diameter, 0.25 * Diameter, Height]`.
 - No size is marked.
 
+A revolve that turns less than a full circle has two flat end faces. The placer places a point on an end face only
+when the end face keeps its angle at all sizes (`_cap_stays`). This is true in two cases:
+
+1. No size changes the angle of the revolve.
+2. The end face is the face in the sketch plane, and the revolve starts at the sketch plane (it does not turn back
+   before the sketch).
+
+The placer does not place a point on an end face that turns with a size. The coordinates of such a point would
+need the sine and the cosine of the angle as formulas, and the placer does not write these yet.
+
+On an end face that keeps its angle, the placer works as on the end face of an extrude:
+
+- A point of a face must lie inside the outline, and on no outline curve. The point moves with one place of the
+  outline: a corner whose move keeps the point inside the outline, or the centre of the corners (`inner_pick.anchor`,
+  see "A point on an earlier extrude").
+- A point of an edge must lie on exactly one outline curve, and not at a corner. This edge is where the end face meets
+  the face of that curve. The point moves with that curve, as a point of a face on the curve does.
+- The point keeps its angle. A point on an end face needs no rule for the angle of the revolve.
+
+Example. A half cylinder has the sizes `Height` (40 mm) and `Diameter` (60 mm). Its outline is a rectangle from the
+axis to `Diameter / 2`, and from the floor to `Height`. It turns 180 degrees about the z axis, and the angle is a
+number. `Fillet1` rounds the edge where the end face in the sketch plane meets the round side, at the height 20 mm.
+The edge point lies on the side line, at one half of the line. At `Height` 50 and `Diameter` 80 the point is at
+x = 40 mm and z = 25 mm. Hand check RV10 in `docs/hand-checks.md` checks the end faces in Fusion.
+
 The placer does not place a point in these cases:
 
-- The point is on an end face of a revolve that turns less than a full circle. The end faces are not placed yet.
+- The point is on an end face that turns with a size.
 - The point is on two curves, and not at a corner of these two curves.
 - The point is a point of a face, and it is at a corner.
 - The point is a point of an edge, and it lies inside one face. The edge then comes from another step.

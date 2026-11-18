@@ -8,10 +8,12 @@ corner where two curves meet. At other sizes that sketch point moves with the ou
 (`sketch_motion.Outline.follow`: the same share along a line, an arc only when it keeps its shape), and the picked
 point keeps its angle about the axis, which may move too.
 
-A curve that lies on the axis makes no face. The end faces of a revolve that turns less than a full circle are not
-placed. Nor are a point on two curves away from a corner they share, a face point at a corner, an edge point inside
-one face, and a point that also lies on a face of an earlier step: where two faces meet, a mark is better than a
-guess. Such a point is claimed, so its sizes are marked, when the face under it moves with sizes. On a face that
+A curve that lies on the axis makes no face. An end face of a revolve that turns less than a full circle is placed
+when it keeps its angle at every size (`_cap_stays`): a face point inside the outline moves with the outline as a
+point inside an end face of an extrude does, and an edge point on one outline curve moves with that curve. Not placed
+are an end face that turns with a size (its points would need the sine and cosine of a size), a point on two curves away from a
+corner they share, a face point at a corner, an edge point inside one face, and a point that also lies on a face of
+an earlier step: where two faces meet, a mark is better than a guess. Such a point is claimed, so its sizes are marked, when the face under it moves with sizes. On a face that
 stays, the step that made the edge there (a cut through the face) still places it, as without the revolve.
 
 A picked curve must keep its length over the size ranges, and the turn of a revolve that is not a full circle must
@@ -272,6 +274,8 @@ class RevolvePlacer(Placer):
     def place(self, p, edge):
         """The RevolvePlace of point `p` on a face (`edge` False) or an edge (`edge` True) of this revolve, or None."""
         spot = self.spot(p)
+        if spot.span == CAP:
+            return self._on_cap(p, spot, edge)
         if spot.span != IN or not spot.curves:
             return None
         curve, corner = self._pick(spot, edge)
@@ -333,6 +337,34 @@ class RevolvePlacer(Placer):
             return None, None
         return None, corner
 
+    def _cap_stays(self, spot):
+        """True when the end face under `spot` keeps its angle at every size: the angle of the turn follows no size, or
+        the face is the one in the sketch plane of a turn that starts there."""
+        total = self.turn.total
+        if not total.sized:
+            return True
+        past = (spot.angle + self.turn.back) % 360.0
+        return self.turn.back == 0 and min(past, 360.0 - past) < abs(past - total.n)
+
+    def _on_cap(self, p, spot, edge):
+        """The RevolvePlace of a point on an end face of a partial turn, or None. The face keeps its angle
+        (`_cap_stays`); a face point lies inside the outline and moves with it as a point inside an end face of an
+        extrude does, an edge point lies on one outline curve away from its corners and moves with that curve."""
+        if not self._cap_stays(spot):
+            return None
+        foot = self.turn.footprint
+        if edge:
+            if len(spot.curves) != 1 or foot.corner_at(spot.uv, LATERAL_TOL) is not None:
+                return None
+            curve = spot.curves[0]
+        else:
+            if spot.curves or not foot.covers(spot.uv):
+                return None
+            curve = None
+        if self._on_earlier(p):
+            return None
+        return self._placed(p, spot, curve, None, edge, cap=True)
+
     def _moved_uv(self, spot, curve, corner, edge):
         """The raw (x, y) the sketch point of the spot moves to, or a Stuck."""
         outline = self.turn.outline
@@ -341,7 +373,7 @@ class RevolvePlacer(Placer):
             return [Affine(spot.uv[0]), Affine(spot.uv[1])]
         return found if isinstance(found, Stuck) else list(found)
 
-    def _placed(self, p, spot, curve, corner, edge):
+    def _placed(self, p, spot, curve, corner, edge, cap=False):
         moved = self._moved_uv(spot, curve, corner, edge)
         plain = [Quantity(float(c)) for c in p]
         if isinstance(moved, Stuck):
@@ -364,15 +396,15 @@ class RevolvePlacer(Placer):
             if isinstance(q, Stuck):
                 return RevolvePlace(self, curve, corner, plain, [q])
             coords.append(q)
-        cuts, blocked = self._cuts(spot, curve, corner)
+        cuts, blocked = self._cuts(spot, curve, corner, cap)
         return RevolvePlace(self, curve, corner, coords, blocked, cuts)
 
-    def _cuts(self, spot, curve, corner):
+    def _cuts(self, spot, curve, corner, cap=False):
         """(cuts, blocked) of a pick: each picked curve keeps its length, and a partial turn keeps reaching the
-        point's angle."""
+        point's angle (a point on an end face that keeps its angle needs no such rule)."""
         turn, foot = self.turn, self.turn.footprint
         cuts, blocked = [], []
-        picked = [curve] if curve is not None else spot.curves
+        picked = [curve] if curve is not None else [] if cap else spot.curves
         for k in picked:
             found = self.length_of(foot.curves[k])
             if isinstance(found, Stuck):
@@ -381,7 +413,7 @@ class RevolvePlacer(Placer):
                 cuts.append((found, LENGTH_TOL_MM, lambda picker: "a side of the outline of %s that %s picks would "
                              "shrink to nothing" % (self.label, picker)))
         total = turn.total
-        if total is not None and total.sized and spot.radius > LATERAL_TOL:
+        if total is not None and total.sized and spot.radius > LATERAL_TOL and not cap:
             past = (spot.angle + turn.back) % 360.0
             cuts.append((total.plus(-past), ANGLE_TOL_DEG, lambda picker: "%s would no longer turn as far as the "
                          "place %s picks" % (self.label, picker)))

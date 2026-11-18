@@ -140,15 +140,6 @@ class RevolvePlacerTest(unittest.TestCase):
         self.assertTrue(found.claims(turned_point(10.0004, 30, 60)))
         self.assertIsNotNone(found.place(turned_point(30, 20, 60), False))
 
-    def test_an_end_face_of_a_partial_turn_is_claimed_not_placed(self):
-        found = placer(self.CUP, Quantity(180.0, "Angle", ("Angle",)))
-        for point in (turned_point(10, 20, 180), turned_point(30, 20, 180), turned_point(10, 20, 0)):
-            self.assertIsNone(found.place(point, False))
-            self.assertTrue(found.claims(point))
-        self.assertIsNotNone(found.place(turned_point(30, 20, 90), False))
-        self.assertIsNone(found.place(turned_point(30, 20, 270), False))
-        self.assertFalse(found.claims(turned_point(30, 20, 270)))
-
     def test_an_edge_inside_a_face_that_stays_is_left_to_other_steps(self):
         # Only the angle follows a size: the side wall stays, so a cut through it still places its edges.
         found = placer(self.CUP, Quantity(180.0, "Angle", ("Angle",)), axis_moves=False)

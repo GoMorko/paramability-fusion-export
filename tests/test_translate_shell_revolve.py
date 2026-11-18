@@ -1,4 +1,5 @@
-"""Picks on the inner walls a shell leaves on a revolve follow the sizes and the thickness (faces/revolve_walls.py)."""
+"""Picks on the inner walls a shell leaves on a revolve, and on the end faces of a revolve that does not turn a full
+circle, follow the sizes (faces/revolve_walls.py, faces/revolve_placer.py)."""
 import math
 import unittest
 
@@ -138,6 +139,34 @@ class DoubtfulWallTest(unittest.TestCase):
         flange = [[0, 0], [30, 0], [30, 2], [40, 2], [40, 4], [30, 4], [30, 40], [0, 40]]
         shell = shell_on([placer(flange)], turned_point(10, 40, 45))
         self.assertIsNone(shell.place(turned_point(35, 4, 30), False))
+
+
+class EndFaceTest(unittest.TestCase):
+    def test_picks_on_the_end_faces_of_a_half_turn_follow_the_outline(self):
+        # A round on the edge of the start face along the side line, and a chamfer on a face picked inside the end
+        # face; both end faces lie in the sketch plane.
+        capture = cup(angle=180.0, rim_point=turned_point(30, 20, 0))
+        capture["items"] = capture["items"][:2] + capture["items"][3:]
+        capture["items"].append(face_chamfer(4, turned_point(10, 20, 180), turned_point(30, 20, 180)))
+        table, result = run(capture, rect_motion(), sizes=["Height", "Diameter"])
+        self.assertIsNone(result.refusal)
+        self.assertEqual(marked(result), set())
+        side = at_sizes(table, picked(result.recipe, "round")[0], Height=50, Diameter=80)
+        for got, want in zip(side, [40.0, 0.0, 25.0]):
+            self.assertAlmostEqual(got, want, places=6)
+        x, y, z = at_sizes(table, picked(result.recipe, "bevel")[0], Height=50, Diameter=80)
+        self.assertAlmostEqual(y, 0.0, places=6)
+        self.assertTrue(-40.0 < x < 0.0 and 0.0 < z < 50.0, (x, z))
+
+    def test_an_end_face_that_turns_with_a_size_is_claimed_not_placed(self):
+        found = placer(CUP, Quantity(180.0, "Angle", ("Angle",)))
+        for point in (turned_point(10, 20, 180), turned_point(30, 20, 180)):
+            self.assertIsNone(found.place(point, False))
+            self.assertTrue(found.claims(point))
+        self.assertIsNotNone(found.place(turned_point(10, 20, 0), False))
+        self.assertIsNotNone(found.place(turned_point(30, 20, 90), False))
+        self.assertIsNone(found.place(turned_point(30, 20, 270), False))
+        self.assertFalse(found.claims(turned_point(30, 20, 270)))
 
 
 if __name__ == "__main__":

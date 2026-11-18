@@ -944,3 +944,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     second design the inner bottom edge lies where the inside wall meets the second outline: expect its sizes marked
     "may give unexpected results", and no round on a wrong edge. Afterwards each design is as before.
 
+82. RV10, picks on the end faces of a half turn. Add user parameters `Height` = 40 mm and `Diameter` = 60 mm. On the
+    XZ plane draw a rectangle from x = 0 to `Diameter` / 2 and from z = 0 to `Height`, with its left side on the z
+    axis. Revolve it 180 degrees about the z axis as a new body (half a cylinder). Fillet by 1 mm the edge where the
+    flat face in the sketch plane meets the round side, and chamfer by 0.5 mm the other flat face, picking the face.
+    Make a second design the same with the angle of the revolve a user parameter `Turn` = 180 deg.
+    Export: tick `Height` and `Diameter` (and `Turn` in the second design). In the first design expect no size marked
+    "may give unexpected results"; in Paramability set `Height` to 50 and `Diameter` to 80: the round stays on its
+    edge and the chamfer on the flat face, as in Fusion. In the second design the round still follows the sizes, and
+    the chamfer on the flat face that `Turn` turns keeps its place with the sizes marked. Afterwards each design is as
+    before.
