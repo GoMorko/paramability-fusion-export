@@ -5,11 +5,13 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeStore
+from tests.fakes import FakePort, FakeStore
+from tests.test_pipeline import export
 
 from lib.design_edit import metered
 from lib.design_edit.runner import RowExport
 from lib.export_plan.pipeline import try_summary
+from lib.timing.export_timing import ExportTiming
 from lib.timing.timer import Timer
 
 UNITS = {"w": "mm"}
@@ -124,19 +126,58 @@ class CallsTest(unittest.TestCase):
                                                "timeline_reads", "rescued", "check_cleared"})
         self.assertEqual(json.loads(json.dumps(found)), found)
 
-    def test_the_end_check_is_added_to_the_summary(self):
+    def test_the_calls_after_the_tries_are_kept_apart_and_set_again_each_time(self):
         store = BatchStore()
         _, _, timer = run(store, rows=1)
         found = try_summary.summary(timer, 1, None, None, lambda: [])
-        end = Timer()
-        counted = metered.MeteredStore(store, end)
+        after = Timer()
+        counted = metered.MeteredStore(store, after)
         with metered.caller(counted, metered.END_CHECK):
             counted.recompute()
         counted.timeline_health()
-        reads = found["calls"]["timeline_reads"]["count"]
-        try_summary.add_end_check(found, end)
-        self.assertEqual(found["calls"]["computes"]["end_check"]["count"], 1)
-        self.assertEqual(found["calls"]["timeline_reads"]["count"], reads + 1)
+        try_summary.note_after_tries(found, after)
+        try_summary.note_after_tries(found, after)
+        self.assertEqual(found["calls"]["after_tries"]["computes"]["end_check"]["count"], 1)
+        self.assertEqual(found["calls"]["after_tries"]["timeline_reads"]["count"], 1)
+        self.assertEqual(found["calls"]["timeline_reads"]["count"], 1)  # the tries' own count is untouched
+
+    def test_a_walk_back_that_meets_new_errors_does_not_count_as_rescued(self):
+        store = BatchStore(shows=(2, "Fillet1"), clears=True)
+        job, _, timer = run(store, rows=1)
+        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 1)  # the row itself
+        job.walk_back({"name": "r0", "values": {"w": 6.0}}, 0)
+        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 1)
+
+    def test_a_row_that_fails_after_its_confirming_rebuild_is_not_rescued(self):
+        store = BatchStore(shows=(2, "Fillet1"), clears=True)
+        store.warns = lambda exprs: [(4, "Later")] if store.exprs != store.first else []
+        original, seen = store.recompute, []
+
+        def recompute():
+            result = original()
+            seen.append(True)
+            if store.exprs != store.first and len(seen) > 2:  # after the baseline and the confirming rebuild
+                store.errors = [(4, "Later")]  # the counting warning turns into an error on the next rebuild
+            return result
+        job = RowExport(metered.MeteredStore(store, Timer()), UNITS, lambda path: None,
+                        counts_warning=lambda step: True)
+        timer = job.store._timer
+        store.recompute = recompute
+        with tempfile.TemporaryDirectory() as tmp:
+            results = job.run([{"name": "r", "values": {"w": 6.0}, "step": False}], tmp, lambda *a: True,
+                              tolerate_build_errors=True)
+        self.assertIsNone(results[0]["values"])
+        self.assertEqual(results[0]["detail"]["items"], ["Later"])
+        self.assertEqual(timer.count(metered.COMPUTE + metered.CONFIRM_NEW_ERRORS), 1)  # it was confirmed once
+        self.assertEqual(timer.count(metered.OUTCOME + metered.RESCUED), 0)
+
+    def test_an_export_keeps_the_calls_after_the_tries_apart(self):
+        port = FakePort()
+        port.timing = ExportTiming()
+        calls = export(port).report["timing"]["probe"]["calls"]
+        self.assertGreater(calls["param_sets"]["count"], 0)
+        self.assertIn("param_put_backs", calls["after_tries"])  # nothing differs once each try put its values back
+        self.assertGreater(calls["after_tries"]["health_passes"]["count"], 0)  # the end check read the steps
 
     def test_a_store_without_a_member_still_lacks_it_through_the_wrapper(self):
         counted = metered.MeteredStore(FakeStore(START), Timer())

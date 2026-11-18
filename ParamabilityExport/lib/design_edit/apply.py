@@ -66,7 +66,8 @@ class Baseline:
 
 class Health:
     """The timeline items in error and in warning, read together in one pass over the timeline (`read`), as
-    {key: name}. `errors` raises what the read of the errors raised, so a row whose errors cannot be read fails as
+    {key: name}. `rescued` is True when `apply_row` read it again after a confirming recompute and the new errors were
+    gone: the row built after all. `errors` raises what the read of the errors raised, so a row whose errors cannot be read fails as
     before; `warnings` is None when the warnings could not be read, which gives no warning. A store with the
     `health_entries` control gives both in one pass; any other store gives them in one read each. Without
     `with_warnings` only the errors are read, and `warnings` stays None."""
@@ -74,6 +75,7 @@ class Health:
     def __init__(self, store, with_warnings=True):
         self.store, self.with_warnings = store, with_warnings
         self._errors, self._failure, self.warnings = {}, None, None
+        self.rescued = False
         self.read()
 
     @property
@@ -254,8 +256,7 @@ def apply_row(store, units, values, baseline=None, full=False, with_warnings=Tru
             _recompute(store)
         health.read()
         broken = _broken(health, baseline)
-        if not broken:
-            metered.note(store, metered.RESCUED)
+        health.rescued = not broken
     if broken:
         raise _new_errors(broken, ok)
     if ok is False and baseline.recompute_ok:

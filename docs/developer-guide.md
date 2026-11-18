@@ -860,7 +860,10 @@ with the seconds of each. The counts go to `timing.probe.calls` (see 4.2). A par
 rebuilds made inside it with `metered.caller`. When one part runs inside another, the rebuilds count under the label
 of the outer part: a walk back that meets a row error counts all its rebuilds as walk steps. The labels are `row` (the
 rebuild that gives a row its numbers), `confirm_new_errors`, `counting_warning`, `check_after_row`, `sketch_put_back`,
-`baseline`, `rebase`, `end_check`, `walk_step`, `put_back_values` and `other`.
+`baseline`, `rebase`, `walk_step`, `put_back_values` and `other`; the put back after the tries has its own
+counting store (`PutBack`), with the label `end_check` for the end check (`timing.probe.calls.after_tries`). The outcome
+`rescued` is counted by `RowExport.run` once a try is finished and built: `apply.Health.rescued` says that the confirming
+rebuild cleared the new errors, and a walk back never counts it.
 
 So each row costs two rebuilds: one with the new values and one to put the values back. A row whose read includes an
 outline face leaves the marker before the face's step (`park`, `read_faces(stay=True)`); the change that puts the
@@ -6866,7 +6869,9 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    after which a step that read worse was fine. `computes.walk_step` is every rebuild of the walks back.
    `health_passes` counts the passes over the timeline items (one per try, with `health_entries`) and
    `timeline_reads` counts the reads of the whole timeline (a read after the baseline is a light read, see 1.8, "The
-   check after a row, and the stop"). The end check adds `computes.end_check`.
+   check after a row, and the stop"). `calls.after_tries` has the same keys for the put back after the tries: the values
+   put back and the end check (`computes.end_check`). The totals leave out the rebuilds that Fusion makes inside the
+   calls that turn items on or off and move the marker, and everything else that does not use the counting store.
 9. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
    sizes that got no try (1.8).
 10. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and

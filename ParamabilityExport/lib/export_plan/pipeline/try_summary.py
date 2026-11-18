@@ -32,9 +32,10 @@ def calls(timer):
     """What the tries asked of Fusion through the counting store (`metered.MeteredStore`), each as `{ count, seconds }`:
     `computes` (full rebuilds, by the part of the export that asked), `param_sets` (values set for a try or a walk),
     `param_put_backs`, `health_passes` (passes over the timeline items for errors and warnings) and `timeline_reads`
-    (reads of the whole timeline); and two outcomes as counts: `rescued` (a confirming rebuild after new errors after
-    which the try built after all) and `check_cleared` (a rebuild of a check after which a step that read worse was
-    fine)."""
+    (reads of the whole timeline); and two outcomes as counts: `rescued` (a try that built after a confirming rebuild
+    after new errors; counted once the try is finished and built, not in a walk back) and `check_cleared` (a rebuild of
+    a check after which a step that read worse was fine). These are the calls of the tries. The calls of the put back
+    after the tries are in `calls.after_tries` (`note_after_tries`)."""
     return {
         "computes": {name[len(metered.COMPUTE):]: timer.entry(name) for name in timer.names(metered.COMPUTE)},
         "param_sets": timer.entry(metered.SETS),
@@ -46,20 +47,14 @@ def calls(timer):
     }
 
 
-def add_end_check(found, timer):
-    """The probe's timing summary `found` with the calls of the end check added: `timer` holds what the end check asked
-    of the store (`metered.MeteredStore`, label `metered.END_CHECK`). Changes `found` in place and returns it. Never
-    raises."""
+def note_after_tries(found, timer):
+    """The probe's timing summary `found` with `after_tries`: the calls the put back asked of the store once the tries
+    were done (`calls` of `timer`: the values put back, and the end check under the label `metered.END_CHECK`). It is
+    set again each time it is called, so it always holds all calls so far. Changes `found` in place and returns it.
+    Never raises."""
     try:
-        record = found.get("calls") if isinstance(found, dict) else None
-        if record is None:
-            return found
-        extra = calls(timer)
-        for name, entry in extra["computes"].items():
-            record["computes"][name] = entry
-        for name in ("health_passes", "timeline_reads"):
-            record[name] = {"count": record[name]["count"] + extra[name]["count"],
-                            "seconds": rounded(record[name]["seconds"] + extra[name]["seconds"])}
+        if isinstance(found, dict) and "calls" in found:
+            found["calls"]["after_tries"] = calls(timer)
     except Exception:
         pass
     return found

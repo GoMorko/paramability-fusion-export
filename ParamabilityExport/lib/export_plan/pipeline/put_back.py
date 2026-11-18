@@ -11,7 +11,7 @@ from .. import health as health_module
 from ..timeline_trim import TryTimeline
 from ..undo_steps import drop_after
 from ...timing.timer import Timer
-from .try_summary import add_end_check, with_try_seconds
+from .try_summary import note_after_tries, with_try_seconds
 
 
 class PutBack:
@@ -51,6 +51,7 @@ class PutBack:
         self.body_unchecked = False  # the body could not be compared at the end
         self._tries_back = None  # the try run the design was put back after
         self.outcome = getattr(request, "outcome", None)  # the `rollback.ExportOutcome` this export fills in
+        self._counted = None  # `(store, timer)`: the store that counts the calls of the put back, and its timer
 
     @classmethod
     def start(cls, port, request, timing):
@@ -60,10 +61,25 @@ class PutBack:
         start = request.timeline_start
         return cls(port, request, timing, saved, start if start is not None else read_timeline(port.store))
 
+    def _store(self):
+        """The port's store as a store that counts its calls (`metered.MeteredStore`) for `timing.probe.calls.after_tries`."""
+        if self._counted is None:
+            timer = Timer(self.timing.clock)
+            self._counted = (metered.MeteredStore(self.port.store, timer), timer)
+        return self._counted[0]
+
+    def _note_counts(self):
+        """Keep the calls the put back made so far in the timing record of the tries. Never raises."""
+        try:
+            if self._counted is not None:
+                note_after_tries(self.timing.probe, self._counted[1])
+        except Exception:
+            pass
+
     def restore(self):
         """Put every parameter back to its saved expression. Returns the names that would not go back and keeps them
         for the health record. Safe to call at any time."""
-        self.unrestored = restore_parameters(self.port.store, self.saved)
+        self.unrestored = restore_parameters(self._store(), self.saved)
         return self.unrestored
 
     # ---- the tries ---------------------------------------------------------------------------------------------
@@ -105,6 +121,7 @@ class PutBack:
         self.stopped = run.stopped
         self.ended = run.ended_records()
         self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
+        self._note_counts()
 
     def _after_tries(self, run):
         """Put every parameter back, run the check of the steps the last try asked for (`ProbeRun.check_pending`), turn
@@ -149,6 +166,7 @@ class PutBack:
         with self.timing.span("probe"):
             self.gap_mm, self.gap_after_mm = self._gap_after_settle(gap, read_outline_gap)
             self._body_after(read_body, before)
+        self._note_counts()
 
     def _body_after(self, read_body, before):
         """Keep what of the body differs at the end: from `before`, or from a read after the end check when it rebuilt
@@ -183,11 +201,10 @@ class PutBack:
         once per export, after the parameters, the suppressed items, the sketches and the marker are back. Items of
         the tries that would not turn back on and that this turned on leave `TryTimeline.left_off`."""
         if self.settled is None:
-            counts = Timer(self.timing.clock)
-            store = metered.MeteredStore(self.port.store, counts)
+            store = self._store()
             with metered.caller(store, metered.END_CHECK):
                 self.settled = settle_timeline(store, self.steps_start, self.saved, self.port.log)
-            add_end_check(self.timing.probe, counts)
+            self._note_counts()
             if self.roll is not None and self.settled.recovered:
                 self.roll.back_on(self.settled.recovered)
         return self.settled
@@ -286,6 +303,7 @@ class PutBack:
         with trail.stage("put back the marker"):
             self._end_roll()
         self._warn_left_off()
+        self._note_counts()
         drop_after(self.port.undo_steps, health)
 
     def close_failed(self):
@@ -295,6 +313,7 @@ class PutBack:
         self._note_undo()
         failed = self.restore()
         self._end_roll()
+        self._note_counts()
         if failed:
             self._tell("the parameters that did not go back", lambda: self.port.warn_unrestored(failed))
         self._warn_steps()

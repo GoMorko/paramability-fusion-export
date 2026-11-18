@@ -318,6 +318,8 @@ class RowExport:
                     warned = new_warnings(self.store, self._baseline, self.counts_warning, others, health) \
                         if tolerate_build_errors else []
                     cleared = cleared_errors(self.store, self._baseline, health) if tolerate_build_errors else []
+                    if health.rescued:
+                        metered.note(self.store, metered.RESCUED)
                     self._check_next, self._check_others = bool(warned), bool(others)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
