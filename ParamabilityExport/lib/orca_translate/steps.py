@@ -16,6 +16,9 @@ where its outline meets that part when Fusion's stored direction meets none (`to
 An outline of straight lines whose corners follow sizes is built from plane cuts (`outline_cuts`, `_cut_built`)
 instead of drawn, when the extrude has one side without taper.
 
+Sketch text goes to `text_regions` once the sides are known: its letters become Orca's imported regions in a sketch of
+their own, and only the depth follows sizes.
+
 The other handlers that write outlines or cuts share these helpers: `misses_reason` (a cut that meets nothing), and
 for holes `toward_material`, `behind`, `LONG` and `SIDE_TOL`. The sizes an outline sketch follows or keeps are
 worked out in `sketch_sizes`.
@@ -30,7 +33,8 @@ from ..design_model.steps import extrude_checks as dmc
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
-from . import causes, drilled, extents, outline_cuts
+from . import causes, drilled, extents, outline_cuts, text_regions
+from ..design_model.loops import outline_problem
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from .skip import Skip
@@ -287,10 +291,10 @@ def _profile_check(profile):
     """The reason a profile record cannot be copied, or None."""
     if profile.get("face") and (profile.get("surface") != "Plane" or profile.get("problem")):
         return "This extrude uses a face of the body that is not flat, or could not be read, as its outline."
-    if profile.get("text"):
-        return "Sketch text is not copied to Orca yet."
     if profile.get("foreign"):
         return "This extrude uses a sketch of another component, which is not copied."
+    if profile.get("text") and "loops" not in profile:
+        return outline_problem(profile).words
     if profile.get("space") not in (None, "sketch", "model") or not isinstance(profile.get("frame"), dict):
         return "The outline of this extrude could not be read."
     return None
@@ -363,6 +367,8 @@ def extrude(ctx, step):
                                False)
     if found is not None:
         return Skip.of(found)
+    if any(p.get("text") for p in profiles):
+        return text_regions.extrude(ctx, item, profiles, sides, shift, operation)
     start = data.get("start") or {}
     moved = ctx.quantity(item, "start.offset", shift).reads if start.get("kind") == "offset" else ()
 

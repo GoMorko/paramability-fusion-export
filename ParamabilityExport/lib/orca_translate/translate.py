@@ -32,12 +32,13 @@ from .repeat import HANDLERS as REPEAT_HANDLERS
 from .revolve import HANDLERS as REVOLVE_HANDLERS
 from .sweeps import HANDLERS as SWEEP_HANDLERS
 from .lofts import HANDLERS as LOFT_HANDLERS
+from .emboss import HANDLERS as EMBOSS_HANDLERS
 from .holes import HANDLERS as HOLE_HANDLERS
 from .tools import Pass
 
 HANDLERS = dict(HANDLERS, **HOLE_HANDLERS, **FINISH_HANDLERS, **THREAD_HANDLERS)
 HANDLERS.update(REPEAT_HANDLERS, **COMBINE_HANDLERS, **BODY_HANDLERS, **REVOLVE_HANDLERS,
-                **SWEEP_HANDLERS, **LOFT_HANDLERS)
+                **SWEEP_HANDLERS, **LOFT_HANDLERS, **EMBOSS_HANDLERS)
 
 VARIABLE, PARTLY, FIXED, UNUSED = "variable", "partly", "fixed", "unused"
 _INTERNAL = ("The Orca copy stopped on an error it did not expect in this step, so the step is left out. The report "

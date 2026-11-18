@@ -36,7 +36,7 @@ can be.
 | Slot | Copied | - | Partly | Needs Orca | Orca: the arcs keep their numbers. |
 | Ellipse | Copied | - | Copied, fixed numbers | Yes, add-in only | Paramability: a full ellipse. An elliptical arc is copied as spline segments with fixed numbers. Orca: a full ellipse is written as an ellipse curve (centre, major radius, minor radius, direction of the major axis) with its current numbers; the sizes that move it are marked as for other curves that keep numbers. An elliptical arc is left out. |
 | Spline, conic curve | Partly | No | Partly | No | The shape is copied as fixed numbers. The points of a free curve are not a formula of the sizes. Orca: only a spline that Fusion gives exactly. |
-| Text | Partly | Yes, add-in only | Left out | Yes, add-in only | Paramability: each letter is an outline. The text height is not a size. At most 400 outlines. |
+| Text | Partly | Yes, add-in only | Partly | Needs Orca | Paramability: each letter is an outline. The text height is not a size. At most 400 outlines. Orca: each letter is a fixed outline in a sketch of its own; only the depth follows. One side or symmetric, no taper, not with other outlines in one extrude. |
 | Offset | Copied | - | Partly | Needs Orca | Orca: as for the curves it makes. |
 | Project, Intersect, Include 3D geometry | Copied | - | Partly | Needs Orca | Paramability: follows what the size tries measure. From another component it may give unexpected results. Orca: keeps its place, and the sizes read before the sketch are marked. |
 | Constraints | Copied | - | Partly | Needs Orca | Paramability: Fusion solves them during the size tries. Orca: the add-in solves them itself. It does not read smooth, polygon, sketch pattern or face constraints. |
@@ -80,7 +80,7 @@ can be.
 | Loft: three or more outlines | Left out | Yes, add-in only | Left out | Needs Orca | The app lofts through many outlines; check that the smooth shape matches Fusion's. |
 | Loft: rails, centre line, point or tangent ends, closed | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Rib, Web | Left out | Yes, add-in only | Left out | Yes, add-in only | As a wall along an open line. Orca has a rib. |
-| Emboss: flat face | Copied | - | Left out | Yes, add-in only | Paramability: as an extrude from the face. Not moved or turned on the face. |
+| Emboss: flat face | Copied | - | Partly | Yes, add-in only | Both: as an extrude from the face. Not moved or turned on the face. Orca: the depth follows; an outline that Fusion trims to its face is left out. |
 | Emboss: curved face, tangent chain | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Hole: simple, counterbore, countersink | Copied | - | Copied | - | |
 | Hole: depth distance or through all | Copied | - | Copied | - | |

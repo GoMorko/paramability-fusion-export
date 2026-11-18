@@ -60,11 +60,12 @@ The modules of `lib/orca_translate/`:
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py` (with
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
-  and chamfer) and `threads.py`. `holes.py` and `threads.py` read the hole and the thread through the shared readers
+  and chamfer), `threads.py` and `emboss.py` (an emboss on a flat face, written by the extrude handler). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
   cause (`causes.py`).
-- Helpers of the handlers: `extents.py` (To, From and taper of an extrude, as values that follow sizes), `hole_place.py` (where holes sit),
+- Helpers of the handlers: `extents.py` (To, From and taper of an extrude, as values that follow sizes), `text_regions.py` (sketch text
+  as Orca's imported regions), `hole_place.py` (where holes sit),
   `drilled.py` (circle holes of the first outline drilled as Orca holes), `sketch_sizes.py` (the sizes an outline
   sketch follows or keeps),
   `sketches.py` and `splines.py` (outlines as Orca sketches), `sweep_splines.py` (splines of a sweep path, exactly), `outline_cuts.py` and `halfplanes.py` (outlines of
@@ -100,6 +101,8 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Extrude side "To" a flat face or plane square to the extrude, with an offset | the measured distance (Blind, or a side of Two sides) | `distance` when the plane follows: an offset plane, or an end face of a copied extrude (see "Extents") |
 | Extrude "From" a flat face or plane square to the extrude | the sketch plane moved to that plane | no |
 | Extrude of a flat face of the body (the face as the outline) | sketch entities of the face where it is now | no |
+| Extrude of sketch text: one side, symmetric, or a cut through all; no taper (see "Sketch text and embosses") | a sketch of its own with each letter as an imported region (polygons within 0.005 mm of the letter), Extrude | `distance` (the text keeps its size and place) |
+| Emboss on a flat face: raised or sunk, text or other outlines (see "Sketch text and embosses") | the extrude from the face it stands for | `distance` (the depth) |
 | Tapered extrude: one side, symmetric or two sides, of an outline that Orca tapers the same way (see "Extents") | Extrude with `taper_deg` (Blind; two Blind halves for symmetric and two sides) | `taper_deg` for a smooth outline |
 | Hole: simple, counterbore, countersink; a depth or through all; one Orca hole per point | Hole | diameter, depth, counterbore and countersink sizes |
 | Hole on sketch points, with the sketch's frame (`sketch_frame`) and graph in the capture | Hole on the sketch plane, at `hole_x`, `hole_y` | `hole_x`, `hole_y` |
@@ -129,7 +132,8 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
-ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
+ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
+embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
@@ -1017,6 +1021,55 @@ about z: 23214.6 mm3 as worked out, 23607.3 after `tool_len = 5`, 28407.3 after 
 turned a quarter about x so that it lies along -y of the part (22994.7 as worked out, 23748.7 after `tool_len = 5`;
 a turn the wrong way would leave half the rod outside the box).
 
+### Sketch text and embosses
+
+Sketch text arrives as one outline per letter (`geometry/text_outlines.py`): the outer loop and the holes inside it.
+Orca has no sketch text that Fusion's can become, but a sketch can hold imported regions (`imported_regions`, the
+field Orca's own Text and SVG import write): each region is a list of polygons, the outer loop first, then its holes,
+in the sketch plane. Orca extrudes such a sketch through its own path (`SketchEngine::make_extrude_regions`), and the
+regions take precedence over the entities of the sketch. So the extrude of text gets a sketch of its own
+(`orca_translate/text_regions.py`), named after the step with " text", and an Extrude that names it.
+
+Each letter is written as polygons. A line keeps its two ends. An arc or a circle gets points close enough that no
+chord is more than 0.005 mm from the arc. A free curve (a spline of a font) starts from its samples, which lie within
+0.0005 mm of the curve, and keeps only the samples it needs to stay within the rest of the 0.005 mm. Points closer
+than 0.001 mm to the point before them are merged, as Orca merges them.
+
+Orca leaves out a region that it cannot build, and gives no error. The copy therefore checks every letter before it
+writes it, and leaves the step out (cause `textOutline`) when one check fails:
+
+- each loop closes, has at least three points more than 0.001 mm apart, and has an area;
+- no loop crosses or touches itself, and no two loops of the text cross or touch;
+- every hole lies inside the outer loop of its letter and outside the other holes of that letter;
+- no letter lies in the material of another letter (a letter inside the hole of another, as in a ring mark, is
+  correct);
+- every curve can be written: a free curve whose samples do not stand for the whole curve, and an ellipse, stop the
+  copy;
+- all letters lie in one sketch plane, and the extrude takes only text (text and other outlines in one extrude are
+  left out: put the text in an extrude of its own);
+- text of several letters does not start the part (Orca would make the part a set of separate solids).
+
+Orca reads the distance and the flip of an extrude of regions, and treats every end other than Blind as symmetric: a
+two sided extrude is built symmetric, through all is built symmetric 100000 mm long, and a taper is not read. The
+copy writes one side (Blind), Symmetric, and through all as for any extrude: Orca's own through all only when no part
+of the body lies behind the sketch (then it is the same as one way), else a 1000 mm one way Blind. Two sides and a
+taper are left out (cause `textExtent`). A cut or intersect is checked against the part the copy built, letter by
+letter: the letters that miss it are left out with a note, and a cut whose letters all miss is left out.
+
+Only the depth follows a variable. The size and the place of the text keep their numbers, and these sizes are marked
+with the reason: the text height (`text_params`), the dimensions of the text's sketch, the sizes that may move its
+sketch plane, and the sizes read before the sketch when the sketch holds geometry projected from the part (or when the
+capture has no graph of the sketch to tell).
+
+An emboss on a flat face is an extrude of its outlines from that face by the depth: a join for a positive depth
+(raised), a cut for a negative one (sunk). The shared layer gives that extrude (`design_model/steps/emboss.py`,
+`as_extrude`), and the Orca copy hands it to the extrude handler, so text goes to imported regions and other outlines
+are drawn as for any extrude. The depth follows its variable. Left out: an emboss on a curved face, on faces of more
+than one plane, or that may follow tangent faces (cause `embossFace`); an outline that runs past its face, which
+Fusion trims to the face (cause `embossTrimmed`: Orca has no step that keeps an extrude within a face); an outline
+moved or turned on its face, a sketch plane tilted to the face, and a measured change that is not the outline area
+times the depth. A size that moves the outline on its face is marked.
+
 ### Where the part sits
 
 Capture values are in the body's component coordinates. They go to the root (`target.placement`), turn so the
@@ -1040,6 +1093,8 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
 - An outline built from cuts gives the outline only within the limits on the parameters' lines. Past a limit Orca
   builds another shape without an error. The limits are worked out for one variable at a time.
 - Geometry projected into a sketch keeps its place in Orca; every size read before the sketch is marked.
+- Sketch text keeps its size and place in Orca; only the depth of its extrude or emboss follows a variable. The
+  letters are polygons within 0.005 mm of Fusion's curves.
 - A sketch whose plane Fusion does not name (Fusion 2706 does so for some sketches on a face) counts as one on a face:
   every size read before it is marked, also a size that only changes the face's extent (a width under a boss).
 - A circular pattern whose copies Fusion places off its count and angle (Fusion 2706, hand check CP1) is left out.
@@ -1114,7 +1169,19 @@ The volumes are exact (a loop of area A whose centre lies at radius R makes 2 pi
 8240.43), `ring_on_rod` (that ring joined onto a rod of radius 12, 30 high: 6880 pi - 120 pi^2 = 20429.80),
 `two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21) and
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
-2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78).
+2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
+2026-11-18, and `symmetric_ring` followed `half_deg`.
+
+Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
+`orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and
+`orca_text_emboss_sunk` (sunk 0.6 mm, 2344.8 mm3) in `tests/fixtures/captures` are a 60 x 20 x 2 mm plate with an
+"L" of six sides (28 mm2) and an "O" that is a square ring (64 mm2). `tests/orca_text.py` makes them (`python3 -m
+tests.orca_text` writes them again). Each volume is 2400 plus or less 92 times the depth `text_depth`: with
+`--set text_depth=2` a raised copy gives 2584 mm3, a sunk one 2216 mm3. All four built with these volumes in OrcaSlicer 2.5.1 on 2026-11-18,
+also after `--set text_depth=2`.
+
+A full ellipse: the capture `extrude_ellipse_turned` (radii 10 and 5, its major axis turned 30 degrees, 2 mm
+thick) built in OrcaSlicer 2.5.1 on 2026-11-18 with a box of 18.03 x 13.23 x 2 mm and 314.2 mm3, as worked out.
 
 Rounds, chamfers, threads and hole centres, checked with OrcaSlicer 2.5.1 on 2026-11-15 and 16: a top chamfer whose
 size is a variable (7941 mm3 as the capture's 7941, then 7771 at twice the size), a top round of a cylinder (3112.27

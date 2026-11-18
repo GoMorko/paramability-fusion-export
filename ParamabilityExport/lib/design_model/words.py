@@ -246,6 +246,14 @@ def face_outline_label(item):
 EMBOSS_UNMEASURED = "The change this emboss makes to the part could not be measured, so it is not copied."
 EMBOSS_NOT_MATCHING = "The result of this emboss does not match its outline and depth, so it is not copied."
 EMBOSS_WRONG_WAY = "This emboss does not raise or sink its outline the way its depth says, so it is not copied."
+EMBOSS_UNREADABLE = "A setting of this emboss could not be read from Fusion."
+EMBOSS_CURVED = "Emboss on a curved face is not copied."
+EMBOSS_PLANES = "This emboss lands on faces that are not on one plane, which is not copied."
+EMBOSS_NO_DEPTH = "This emboss has no depth."
+EMBOSS_MOVED = "This emboss is moved or turned on its face, which is not copied."
+EMBOSS_NO_OUTLINE = "This emboss has no sketch outline."
+EMBOSS_TILTED = "This emboss is drawn on a plane that is tilted to its face, which is not copied."
+EMBOSS_TANGENT = "This emboss follows tangent faces (Tangent Chain), which is not copied."
 
 # Lofts, revolves and shaping steps.
 LOFT_UNREAD = "A setting of this loft could not be read from Fusion."
