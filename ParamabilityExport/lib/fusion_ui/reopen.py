@@ -62,11 +62,21 @@ def request(window_command_id):
         return
     _kept["window"] = window_command_id
     try:
-        if not adsk.core.Application.get().fireCustomEvent(EVENT_ID):
+        if not _fire():
             raise RuntimeError("The reopen event did not fire.")
     except Exception as error:
         log("reopen failed to start: %s" % error)
         message_box(NOT_STARTED, error=True)
+
+
+def _fire():
+    """Fire the reopen event. When it does not fire, register it again and fire once more: another copy of the
+    add-in that stopped removes the event of the same id."""
+    if adsk.core.Application.get().fireCustomEvent(EVENT_ID):
+        return True
+    log("the reopen event did not fire; registering it again")
+    start()
+    return adsk.core.Application.get().fireCustomEvent(EVENT_ID)
 
 
 def run_pending(args=None):
