@@ -16,16 +16,19 @@ toward its start when the direction is flipped; copies that run the other way sh
 Fusion sees it. Pure.
 """
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from ...capture_model import gap_hints
 from ...geometry import vec
 from .. import words
-from ..problem import Problem
+from ..problem import Problem, is_problem
 
 # Lengths (mm) that count as the same, and the smallest radius or length read as a curve.
 LENGTH_TOL_MM = 1e-4
+# Share of the turn between copies by which a measured turn may differ from the one the distance and the radius give
+# (the radius is read rounded).
+TURN_SHARE = 1e-4
 
 UNREAD = Problem("pathUnread", words.PATH_PATTERN_UNREAD, gap_hints.PATH_PATTERN)
 CURVE = Problem("pathCurve", words.PATH_PATTERN_CURVE, gap_hints.PATH_PATTERN)
@@ -42,6 +45,8 @@ class PathLayout:
     axis: for a round path, `{ "point": centre, "dir": unit }`, turning positively from the path's start to its end.
     radius: for a round path, its radius in mm.
     room: `(toward the end, toward the start)` in mm along the path from the start point.
+    turns: for a round path, True when the copies turn with the path; False when they keep the original's direction
+    and only slide along it (`layout` with `slides`).
     """
 
     kind: str
@@ -49,6 +54,7 @@ class PathLayout:
     direction: Optional[list] = None
     axis: Optional[dict] = None
     radius: Optional[float] = None
+    turns: bool = True
 
 
 def _number(value):
@@ -97,8 +103,10 @@ def _round(curve, opposed, start):
     return PathLayout("round", room, axis={"point": list(centre), "dir": turning}, radius=float(radius))
 
 
-def layout(data):
-    """The `PathLayout` of the data of a path pattern, or a `Problem`."""
+def layout(data, slides=False):
+    """The `PathLayout` of the data of a path pattern, or a `Problem`. With `slides`, copies that keep their direction
+    on a round path give a layout with `turns` False (an output that can slide copies along an arc reads them);
+    without it they are the problem `SLIDES`."""
     path = data.get("path")
     if not isinstance(path, dict) or not isinstance(path.get("curves"), list):
         return UNREAD
@@ -116,9 +124,10 @@ def layout(data):
         return _line(curves[0], opposed, start)
     if along is None:
         return UNREAD
-    if not along:
+    if not along and not slides:
         return SLIDES
-    return _round(curves[0], opposed, start)
+    found = _round(curves[0], opposed, start)
+    return found if is_problem(found) or along else replace(found, turns=False)
 
 
 def turn_deg(found, frame):
@@ -147,3 +156,19 @@ def run_of(found, frame):
         if abs(along) <= 1e-6 or abs(abs(along) - 180.0) <= 1e-6:
             return 0
     return 1 if along > 0 else -1
+
+
+def measured_turn(found, frames, way, delta):
+    """The turn in degrees between neighbour copies that the element `frames` (the copies other than the original)
+    show when they turn `way` (1 or -1) along the round `PathLayout` `found`, or None when they do not sit on whole
+    steps of `delta`, the turn the distance and the radius give (within `TURN_SHARE` of it). The radius is read
+    rounded, so the measured turn is the one to write."""
+    best, steps = delta, 0
+    for frame in frames:
+        turn = (way * turn_deg(found, frame)) % 360.0
+        k = round(turn / delta)
+        if k < 1 or abs(turn / k - delta) > TURN_SHARE * delta:
+            return None
+        if k > steps:
+            best, steps = turn / k, k
+    return best

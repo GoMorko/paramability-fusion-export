@@ -1120,3 +1120,19 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     follows its variable; the text height and place are listed as kept numbers. In Orca the Design body has the
     volume of the Fusion part within 0.5 percent at `Depth` 1 and 2 (1.5 for the cut, since 2 cuts through the
     plate), and the holes of "A", "B" and "8" stay open. Afterwards each design is as before.
+93. PP2, path patterns for Export for Orca. Add user parameters `Count` = 4 and `Pitch` = 10 mm. Model a 40 x 20 x 4 mm
+    plate with its corner at the origin. On the top face sketch a 6 x 6 mm square centred at (5, 10) and extrude it
+    6 mm up as a join. On the top face sketch a line from (5, 10) to (45, 10). Make a Pattern on Path of the square
+    extrude along the line: quantity `Count`, distance `Pitch`, spacing, orientation Path Direction. In a second
+    design, add `Count` = 5 and `Pitch` = 12 mm, model a 50 x 40 x 4 mm plate, a 6 x 6 mm square centred at (40, 5)
+    extruded 6 mm up as a join, and on the top face an arc of radius 35 mm centred at (5, 5) from (40, 5) counter
+    clockwise to (5, 40). Make a Pattern on Path of the square extrude along the arc: quantity `Count`, distance
+    `Pitch`, spacing, orientation Path Direction. On a copy of the second design, set `Pitch` to 48 mm, the
+    orientation to Identical and the distance type to Extent.
+    Export: Export for Orca each design with `Count` and `Pitch` ticked. Each path pattern is copied with nothing
+    left out: a linear Pattern (4064 mm3), a circular Pattern (9080 mm3) and a Pattern along a sketch arc (9080 mm3,
+    `Pitch` kept as a number). In `report.json` the `elements` of the third pattern are moves without a turn. The
+    parameter lines say: keep
+    `Count` under 5 and `Pitch` under 13.3 mm for the line, `Count` under 5.58 and `Pitch` under 13.7 mm for the arc.
+    In OrcaSlicer set the count to 3: each Design body has the volume that Fusion has at `Count` 3 (3848, 8648 and
+    8648 mm3). Afterwards each design is as before.

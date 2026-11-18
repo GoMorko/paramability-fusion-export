@@ -18,7 +18,8 @@ the rounds. A hole whose place follows a variable keeps its place: the copies ar
   both sides of the original is two tool bodies with their numbers fixed.
 - Mirror of features: the tool body joined with its mirror image. Mirror of the body joined to it: an Orca Mirror of
   the part (Add). A mirror or pattern of bodies that leaves separate copies does not change the part.
-- Pattern along a path: Fusion's path pattern has no Orca handler, so it is left out by its step type.
+- Pattern along a path: `repeat_path.py` writes a path of one line, arc or circle as the rectangular or circular
+  pattern it equals, or as Orca's pattern along a curve for copies that keep their direction on an arc.
 
 The copies the shape check works with (`solid.Moved`) are the ones Orca builds from the numbers written.
 """
@@ -243,7 +244,7 @@ def write(ctx, item, groups, layouts, copies, what):
     return ctx.features[start:]
 
 
-def _separate_copies(ctx, data, what):
+def separate_copies(ctx, data, what):
     """A pattern or mirror of bodies (`data`, the data of its step) that leaves its copies as separate bodies."""
     sources_ = [b for b in data.get("source_bodies") or [] if isinstance(b, dict)]
     if sources_ and not any(same_body(b, ctx.target) for b in sources_):
@@ -385,7 +386,7 @@ def _linear_copies(ctx, tool, layout, name):
 def rectangular(ctx, step):
     item, data = step.brought, step.brought_data
     if data.get("entity_type") == "bodies":
-        return _separate_copies(ctx, data, "pattern")
+        return separate_copies(ctx, data, "pattern")
     if data.get("entity_type") != "features":
         return Skip("Patterns of faces are not copied to Orca yet.", gap_hints.REPEAT_FACES)
     groups = sources(ctx, data, "pattern")
@@ -468,10 +469,13 @@ def _copy_numbers(turns, delta, count, sign, symmetric):
     return out
 
 
-def circular(ctx, step):
+def circular(ctx, step, angle_of=None):
+    """The circular pattern of the resolved step `step`. `angle_of(count value)` gives the angle of a pattern that
+    turns less than a full circle as a `Quantity` when it does not come from the step's own `total_angle_deg` (a path
+    pattern, whose angle follows its distance along an arc)."""
     item, data = step.brought, step.brought_data
     if data.get("entity_type") == "bodies":
-        return _separate_copies(ctx, data, "pattern")
+        return separate_copies(ctx, data, "pattern")
     if data.get("entity_type") != "features":
         return Skip("Patterns of faces are not copied to Orca yet.", gap_hints.REPEAT_FACES)
     groups = sources(ctx, data, "pattern")
@@ -521,7 +525,10 @@ def circular(ctx, step):
             return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
     axis_dir = vec.scale(direction, sign)
     count_value = ctx.quantity(item, "quantity", n, "scalar")
-    angle_value = ctx.quantity(item, "total_angle_deg", abs(raw), "angle").magnitude()
+    if angle_of is not None and not full:
+        angle_value = angle_of(count_value)
+    else:
+        angle_value = ctx.quantity(item, "total_angle_deg", abs(raw), "angle").magnitude()
     if not symmetric:
         layouts = [(axis_dir, n, count_value, abs(raw) if not full else FULL_TURN_DEG, angle_value)]
     else:
@@ -571,7 +578,7 @@ def mirror(ctx, step):
     entity = data.get("entity_type")
     if entity == "bodies":
         if not data.get("combine"):
-            return _separate_copies(ctx, data, "mirror")
+            return separate_copies(ctx, data, "mirror")
         if not ctx.has_body:
             return Skip("The part this mirror copies is not in the copy.", gap_hints.AFTER_GAP)
         made = _mirror_feature(ctx, label(item), plane, ctx.scope)
@@ -591,4 +598,11 @@ def mirror(ctx, step):
     return write(ctx, item, groups, [None], copies, "mirror")
 
 
-HANDLERS = {"RectangularPatternFeature": rectangular, "CircularPatternFeature": circular, "MirrorFeature": mirror}
+def path(ctx, step):
+    """A path pattern (`repeat_path.path`, which builds on the handlers of this module)."""
+    from .repeat_path import path as along_path
+    return along_path(ctx, step)
+
+
+HANDLERS = {"RectangularPatternFeature": rectangular, "CircularPatternFeature": circular, "MirrorFeature": mirror,
+            "PathPatternFeature": path}

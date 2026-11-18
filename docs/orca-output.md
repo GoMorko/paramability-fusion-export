@@ -59,7 +59,7 @@ The modules of `lib/orca_translate/`:
   parameters follow").
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`,
-  `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
+  `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer), `threads.py` and `emboss.py` (an emboss on a flat face, written by the extrude handler). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
   the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
@@ -118,6 +118,9 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | The same, on an outline whose sizes follow variables (built from plane cuts, or a rectangle whose width or height follows) | a corner tool per corner, cut from the outline's body before it goes into the part: a through all block cut by four planes (three for a chamfer), between two Transforms for a line that turns, less an Orca Hole at the arc centre, and a Boolean (see "Corner tools") | every corner and the round's size: `cut_offset`, `xf_angle_deg`, `hole_x`, `hole_y`, `hole_diameter` |
 | Rectangular pattern of features, one or two directions, to one side or both | the repeated steps as a tool body, one Pattern per direction (two tool bodies for a direction to both sides), a Boolean into the part | `pattern_count`, `pattern_spacing` |
 | Circular pattern of features | the repeated steps as a tool body, a circular Pattern about the axis, a Boolean | `pattern_count`, `pattern_angle` |
+| Path pattern of features along one straight line | the repeated steps as a tool body, a linear Pattern along the line (as a rectangular pattern of one direction), a Boolean | `pattern_count`, `pattern_spacing` |
+| Path pattern along one arc or a full circle, the copies turning with the path | a circular Pattern about the arc's axis; the angle is the distance x 180 / (pi x radius) | `pattern_count`, `pattern_angle` (only the count round a whole circle) |
+| Path pattern along one arc, the copies keeping their direction | a sketch arc from the start of the path to the last copy, Orca's pattern along that curve | `pattern_count` for a distance over the whole extent; the distance keeps its number |
 | Mirror of features | the repeated steps as a tool body joined with its Mirror, a Boolean | no |
 | Mirror of the body joined to it | Mirror of the part (Add) | no |
 | Combine: join, cut, intersect | each tool body from the steps that made it, then a Boolean (Add, Cut, Intersect) | as the tool's steps |
@@ -134,7 +137,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-path pattern, pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+pasted body, scale (Orca has no step that scales a body)...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
@@ -525,8 +528,37 @@ not judged to meet material where Orca removes nothing.
   `copiesUneven`).
 - Orca's pattern cannot leave copies out, so a pattern with suppressed copies is left out; so is one whose copies are
   turned, do not sit on an even grid, or whose direction or axis is of another component and could not be brought into
-  the part's place. Fusion's path pattern
-  has no Orca handler, so it is left out by its step type.
+  the part's place.
+- Path pattern (`repeat_path.py`): the shared reader (`design_model/steps/path_pattern.py`, `layout`) gives the plain
+  pattern that a path of one line, one arc or one circle equals (developer guide 3.17). A line becomes a rectangular
+  pattern of one direction along the line, and the rectangular handler writes it. An arc or a circle whose copies
+  turn with the path (orientation Path Direction) becomes a circular pattern about the axis of the arc, and the
+  circular handler writes it. Its `pattern_angle` is the distance times the turn per mm that the measured copies show
+  (180 / (pi x radius), within 1 part in 10 000), times the count less one for a spacing. Thus the angle follows the
+  distance and the count. A pattern round the whole circle is a full turn: the count follows, and the distance keeps
+  its number.
+- An arc whose copies keep their direction (orientation Identical) becomes Orca's pattern along a curve
+  (`pattern_curve_sketch`, `pattern_curve_entity`). Orca moves copy i, without a turn, by the point of the sketch arc
+  at i / (count - 1) of its sweep less the start of the arc (`CadDocument::apply_feature`, Pattern,
+  `sample_entity_2d`, Arc). Fusion moves each copy by the point of the path at the distance of that copy, less the
+  start of the path. The two agree when the arc starts at the start of the path and ends at the last copy, so the copy
+  draws that arc. Each measured copy must sit at its place on the arc without a turn; else the step is left out
+  (`copiesUneven`, `copiesTurned`). Orca cannot tie a sketch arc to a variable, so the distance keeps its number, and
+  the count follows only for a distance over the whole extent. A circle has no start, and Orca's `sample_entity_2d`
+  has no case for a circle, so copies that keep their direction round a circle are left out.
+- The copies must land where Fusion's measured copies are: the rectangular and circular checks above, and the faces
+  of each copy. Left out with the cause `pathPattern` (the tip "Use a rectangular or circular pattern, or a mirror."):
+  a path of another curve or of more than one curve, copies to both sides of the start point, a round path with a
+  start point other than 0 or with the flip (Fusion 2706 puts those copies off the arc, hand check PP1), copies that
+  run against the path, copies past the end of the path at the current sizes, and copies that keep their direction
+  round a whole circle. Suppressed copies leave the step out with `copiesSuppressed`, and copies that do not turn by
+  the distance with `copiesUneven`.
+- The path keeps its numbers in Orca. The sizes that may move or turn it are marked: for a line only the sizes that
+  turn it or change its length (`edges.line_sizes`), for an arc or a circle every size of its sketch and of the plane
+  under it, for an edge of the part the sizes before the step. The parameter's line of a variable that sets the count
+  or the distance tells how far it may go before the last copy passes the end of the path (`limits.guard`, cause
+  `pathEnds`), as the Paramability export cuts the range there. Past that limit Orca builds the copies off the path
+  without an error. A variable whose limit cannot be told keeps its number.
 - Mirror of features: the tool body and an Orca Mirror of it (Add), then the Boolean. Mirror of the body joined to it
   (`combine` true): an Orca Mirror of the part. A pattern or mirror of bodies that leaves its copies apart does not
   change the part and is passed by; a part that is such a copy, or a Combine that takes such a copy, is left out.
@@ -1221,6 +1253,9 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
 - A revolve angle that follows a variable is checked at the current sizes and walked down for the limit on the
   parameter's line. That walk takes about 18 tests of the angle, so a band of angles where a cut misses the part, between
   the tested angles, can be missed.
+- A path pattern's path keeps its numbers. Its count and distance follow only within the limits on the parameters'
+  lines; past them Orca puts copies past the end of the path. Copies that keep their direction on an arc keep their
+  distance as a number.
 - A pattern or mirror plane, a turning axis and a split plane keep their place: one on a face that a size moves does
   not follow it.
 - A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
@@ -1262,6 +1297,19 @@ sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi 
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.
+
+Path patterns: `tests/orca_path_patterns.py` makes three captures (`python3 -m tests.orca_path_patterns <name>
+<file>`). Each is a plate with square pegs of 6 x 6 x 6 mm (216 mm3) joined on its top face at z = 4, and the
+variables `count` and `pitch` set the count and the distance of the pattern. `pegs_line`: a 40 x 20 x 4 plate, 4 pegs
+10 mm apart along a 40 mm line from (5, 10): 4064 mm3, box 0 to 40, 0 to 20, 0 to 10; `--set pitch=12` 4064 with
+the box to x = 44; `--set count=5 pitch=9` 4280, box to x = 44; `--set count=3` 3848, box as at first. The
+parameter lines say count under 5 and pitch under 13.3 mm. `pegs_arc`: a 50 x 40 x 4 plate, 5 pegs 12 mm apart
+along a quarter arc of radius 35 about (5, 5) from (40, 5), turning with the arc: 9080 mm3, box 0 to 50, 0 to 42.84,
+0 to 10; `--set count=4` 8864, box to y = 40; `--set pitch=13` 9080, box to y = 43.12; `--set count=3` 8648, box to
+y = 40. The parameter lines say count under 5.58 and pitch under 13.7 mm. `pegs_arc_slide`: the same plate and arc,
+5 pegs over 48 mm of the arc keeping their direction: 9080 mm3, box 0 to 50, 0 to 42.31, 0 to 10; `--set count=4`
+8864 and `--set count=3` 8648, the box the same (the last peg stays at 48 mm). `pitch` keeps its number. Not yet
+built in Orca.
 
 Sketch text and embosses: the captures `orca_text_raised` (letters raised 1 mm by an extrude, 2492 mm3),
 `orca_text_cut` (cut 0.6 mm deep, 2344.8 mm3), `orca_text_emboss` (raised 1 mm by an emboss, 2492 mm3) and
