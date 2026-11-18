@@ -6,13 +6,13 @@ import math
 
 from ...capture_model import step_kinds
 from ...design_model import design
+from ...design_model.steps.thin import shape_of
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from . import material_boxes as mbox
 from .moved_placer import MovedPlacer
 from .shells import OutsideShell
 from .slabs import Slab
-from .thin_wall import shape_of
 from .tool_placer import ToolPlacer
 
 # Steps of a large angle (a draft, a sweep's taper) are not bounded.

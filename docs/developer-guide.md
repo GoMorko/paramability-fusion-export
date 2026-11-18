@@ -2699,7 +2699,7 @@ one folder per family of steps.
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
     measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
-    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), and `emboss.py` (the Emboss handler).
+    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), and `emboss.py` (the Emboss handler). The wall record, the open line, the shape of the wall and the side of the wall are in `design_model/steps/thin.py`. Both outputs read them there.
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -2729,7 +2729,7 @@ one folder per family of steps.
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
   `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `revolve_placer.py` (the faces and edges of a revolve, see 3.3), `revolve_joined.py` (the outline that the touching outlines of one revolve make together, see 3.3), `revolve_walls.py` (the inner walls a shell leaves on a revolve, see 3.19), `shells.py` (the hollow of a shell that goes inward, the outer wall of one that goes outward, see 3.19),
-  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
+  `offset_faces.py`, `end_caps.py`, `thin_wall.py` (the placer of a thin wall; the side of the wall is decided in `design_model/steps/thin.py`), `crossings.py`, `copy_counts.py`, `meets_part.py`, `floating.py`
   (joins that would float), `material_boxes.py` (the boxes around the material of written steps) and
   `added_bounds.py` (the boxes of material that written steps may add and the model does not hold).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
@@ -3181,7 +3181,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
 - `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
-  (`orca_translate/steps._sides`) read the same sides. Each output then applies its own limits.
+  (`orca_translate/steps.extrude_sides`) read the same sides. Each output then applies its own limits.
   - `start_of(data, frame, offsets)` gives a `Start`. The kind is the sketch plane, an offset, or a flat face or
     plane (`Target`). `shift` is the signed distance along the sketch normal from the sketch plane to the start. A
     start on a face that is not flat, on a tilted face, or on a curved face of another component gives a `Problem`.
@@ -5689,7 +5689,11 @@ The table entry of `ExtrudeFeature` has `PATH`. Thus the size probe follows the 
 a sweep path.
 
 The translator writes the step in `translator/extrude/thin_line.py`. `extrude/step.py` sends an extrude to it when
-the extrude is thin and its outline is a `Path`. Then:
+the extrude is thin and its outline is a `Path`. The decisions that do not write the recipe are in the shared layer,
+`design_model/steps/thin.py`: `line_of`, `line_problem`, `band`, `fits` and `line_side` (the side of the wall). They
+give a `Problem` when they cannot read the wall. The translator changes the `Problem` to a refusal. The Orca output
+uses the same decisions (`orca_translate/thin.py`, see "Thin extrudes" in `docs/orca-output.md`). It uses
+`closed_side` and `area_fits` for a closed outline too. Then:
 
 1. `line_of` reads the line. The path must be one open chain of sketch lines of one sketch. Each line must start
    where the line before it ends. No line can be `opposed`. The add-in leaves out a line with an arc or a free
@@ -5698,8 +5702,8 @@ the extrude is thin and its outline is a `Path`. Then:
    direction of the line. When the probe followed the path, each point follows its sizes (the keys of
    `sketch_values.keys.path`). When the probe did not follow the path, the loop keeps its numbers, and the sizes of
    its sketch are marked.
-3. `wall_step` checks the line alone (`line_problem` with no wall). Then `decide` finds the side of the wall. Then
-   `line_problem` checks the wall on that side.
+3. `wall_step` checks the line alone (`line_problem` with no wall). Then `decide` finds the side of the wall
+   (`line_side` of the shared layer). Then `line_problem` checks the wall on that side.
 
 The side of the wall. The app puts an `inside` wall on the left of the line. You look along the line from its start,
 and you look from the front of the sketch (along its normal). An `outside` wall is on the right. A `middle` wall has

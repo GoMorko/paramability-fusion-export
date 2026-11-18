@@ -5,31 +5,22 @@ The recipe writes it as an extrude whose outline is an `open` loop, with `thin` 
 direction of the line. The app puts an `inside` wall on the left of that direction (seen from the front of the
 sketch, along its normal), an `outside` wall on the right, and a `middle` wall half on each side.
 
-Fusion gives the line as a `Path` (`data.path`): its lines in path order, each with `opposed` (the path runs against
-the line). The copy takes a path of one sketch whose lines run one after the other, each from the end of the one
-before, none of them against the path. Arcs and free curves, and lines that run against the path, are refused: the
-side Fusion puts the wall on is measured for lines that run along the path only.
-
-The side. Fusion names it side one, side two or center. Side one is the left of the path direction and side two the
-right (`RULE`), whichever way the extrude goes: measured along the sketch normal, against it and both ways. Fusion
-lists no start or end faces for such an extrude, so the copy also reads the wall from the faces it made
-(`wall_faces`): each face must be flat and lie on a face of the wall that a side and a direction give (`fits`). A
-face whose point lies off the wall counts only when Fusion merged it with a face of the part (`merged`), as for a wall
-flush with the edge of a plate. Exactly one side that Fusion's location allows, and one direction, must fit. It must
-be the direction the extrude reader found and the side `RULE` names. Else the step is left out.
+The shared layer (`design_model/steps/thin.py`) reads the line (`line_of`: lines of one sketch that run one after the
+other along the path), its shape (`line_problem`, `band`) and the side of the wall from the faces Fusion made
+(`line_side`). This module writes the loop, the `thin` record and the placer.
 
 The line at other sizes. Its points follow the probe's values for the path (`sketch_values.keys.path`). The wall
 must keep its shape over the size ranges (`keep_line_valid`): each line longer than what its corners take from it,
-no corner sharper than `MAX_TURN_DEG`, and no two lines that do not meet nearer than twice the farthest the wall
+no corner sharper than `thin.MAX_TURN_DEG`, and no two lines that do not meet nearer than twice the farthest the wall
 reaches from its line. The ranges are cut where it stops, or the sizes are marked.
 """
-import math
-
 from ...capture_model import gap_hints
+from ...design_model.problem import is_problem
 from ...design_model.reach import sketch_sizes
+from ...design_model.steps import thin
+from ...design_model.steps.thin import SWAPPED, band, band_profile, is_line, line_problem, reaches
 from ...geometry import vec
-from ...geometry.footprint import Footprint
-from ...package.numbers import is_number, round9
+from ...package.numbers import round9
 from ...sketch_values import keys
 from .. import values
 from ..ranges import kept_ranges, range_check
@@ -37,76 +28,9 @@ from ..result import Refusal
 from ..sketch import sketch_motion
 from ..sketch.written_loops import curves_at, value, written_reads
 
-# Two points this close (mm) are one: where a line ends and the next starts.
-JOIN_TOL = 1e-4
-# A line must be longer than this (mm) after its corners took their part of it.
-LENGTH_TOL = 1e-3
-# A corner turns by at most this: Fusion was seen to keep corners of 90 and 135 degrees sharp, one tip where the outer
-# sides meet, as the app does. A sharper corner is left out until Fusion is seen to keep it sharp too
-# (docs/hand-checks.md, T2-open). The tolerance allows for the rounding of the captured points.
-MAX_TURN_DEG = 135.0
-_TURN_TOL_DEG = 1e-3
-# A face Fusion made lies on a face of the wall within this (mm), and its normal within this sine.
-FACE_TOL = 1e-3
-NORMAL_TOL = 1e-4
 _FAILURES = (ArithmeticError, ValueError, KeyError, TypeError)
 
-# The side of a wall along the sketch normal for side one and side two of Fusion (left of the path is the app's
-# `inside`). For center the wall is `middle` either way.
-RULE = {"side1": "inside", "side2": "outside"}
-SIDES = {"center": ("middle",), "side1": ("inside", "outside"), "side2": ("inside", "outside")}
-SWAPPED = {"inside": "outside", "outside": "inside", "middle": "middle"}
-
-UNREADABLE = "The line of this thin extrude could not be read."
-NOT_MATCHING = ("The wall Fusion made does not match the line, side and length of this thin extrude, so it is not "
-                "copied.")
-UNSURE = ("The side the wall of this thin extrude stands on could not be told from what Fusion made, so it is not "
-          "copied.")
 FOLDS = "the wall of %s would fold or its line cross itself"
-
-
-class Line:
-    """The open line of a thin extrude: `path` the capture record and `points` the 2D corners in its sketch frame, from
-    the start of the line to its end."""
-
-    def __init__(self, path, points):
-        self.path, self.points = path, points
-        self.frame = path["frame"]
-        self.sketch = path.get("sketch") or ""
-
-
-def is_line(profiles):
-    """True when the outline of an extrude is an open line (Fusion's `Path`)."""
-    return len(profiles) == 1 and isinstance(profiles[0], dict) and profiles[0].get("type") == "Path"
-
-
-def line_of(data):
-    """The `Line` of a thin extrude's path record, or a Refusal."""
-    path = data.get("path")
-    curves = path.get("curves") if isinstance(path, dict) else None
-    if not isinstance(curves, list) or not curves or not isinstance(path.get("frame"), dict):
-        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
-    if any(not isinstance(c, dict) for c in curves) or path.get("closed") is None:
-        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
-    if path.get("kind") != "sketch" or path.get("foreign") or path.get("truncated") or path["closed"]:
-        return Refusal("The line of this thin extrude is not one open line of one sketch, so it is not copied.",
-                       cause=gap_hints.THIN_OUTLINE)
-    flats = [c.get("flat") for c in curves]
-    if any(c.get("kind") != "line" for c in curves):
-        return Refusal("A thin extrude of a line with arcs or curves is not copied yet.", cause=gap_hints.THIN_OUTLINE)
-    if any(not isinstance(f, dict) or f.get("kind") != "line" for f in flats) or any(
-            c.get("opposed") is None for c in curves):
-        return Refusal(UNREADABLE, cause=gap_hints.THIN_OUTLINE)
-    if any(c["opposed"] for c in curves):
-        return Refusal("The lines of this thin extrude do not all run the same way along it, so the side of its wall "
-                       "is not known.", cause=gap_hints.THIN_OUTLINE)
-    points = [list(flats[0]["start"])]
-    for flat in flats:
-        if math.dist(flat["start"], points[-1]) > JOIN_TOL:
-            return Refusal("The lines of this thin extrude do not run one after the other, so it is not copied.",
-                           cause=gap_hints.THIN_OUTLINE)
-        points.append(list(flat["end"]))
-    return Line(path, points)
 
 
 def open_loop(points):
@@ -143,194 +67,22 @@ def outline(ctx, item, line):
     return loop, sketch_motion.Outline(ctx, frame, [loop], [raw_loop], plane, line.sketch)
 
 
-# ---- the wall as a closed outline -------------------------------------------------------------------------------
-
-def reaches(side, thickness):
-    """(left, right): how far the wall of `side` reaches to the left and the right of its line, mm."""
-    return {"inside": (thickness, 0.0), "outside": (0.0, thickness),
-            "middle": (thickness / 2.0, thickness / 2.0)}[side]
+def _refusal(problem):
+    return Refusal(problem.words, cause=problem.cause)
 
 
-def _unit(a, b):
-    d = [b[0] - a[0], b[1] - a[1]]
-    size = math.hypot(*d)
-    return [d[0] / size, d[1] / size]
-
-
-def _side_points(points, offset):
-    """The line moved `offset` to its left (negative: to its right), each corner where the moved lines meet."""
-    dirs = [_unit(a, b) for a, b in zip(points, points[1:])]
-    normals = [[-d[1], d[0]] for d in dirs]
-    out = [[points[0][i] + offset * normals[0][i] for i in range(2)]]
-    for k in range(1, len(points) - 1):
-        n1, n2 = normals[k - 1], normals[k]
-        bend = 1.0 + n1[0] * n2[0] + n1[1] * n2[1]
-        out.append([points[k][i] + offset * (n1[i] + n2[i]) / bend for i in range(2)])
-    out.append([points[-1][i] + offset * normals[-1][i] for i in range(2)])
-    return out
-
-
-def line_problem(points, left, right):
-    """Why a wall reaching `left` and `right` of the line through `points` does not keep its shape, or None: a line
-    no longer than what its corners take from it, a corner sharper than MAX_TURN_DEG, or two lines that do not meet
-    nearer than twice the farthest the wall reaches from its line (at a corner, the outer side's sharp tip reaches its
-    side's reach divided by the cosine of half the turn)."""
-    lengths = [math.dist(a, b) for a, b in zip(points, points[1:])]
-    if any(length <= LENGTH_TOL for length in lengths):
-        return "a line of it is too short"
-    dirs = [_unit(a, b) for a, b in zip(points, points[1:])]
-    taken = [0.0] * (len(points) + 1)
-    spread = max(left, right)
-    for k in range(1, len(points) - 1):
-        a, b = dirs[k - 1], dirs[k]
-        turn = math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])
-        if math.degrees(abs(turn)) > MAX_TURN_DEG + _TURN_TOL_DEG:
-            return "a corner of it is too sharp"
-        inner, outer = (left, right) if turn > 0 else (right, left)
-        # The side of the wall on the inside of a turn is cut short on both lines of the corner; the outer side meets
-        # in a tip past the corner.
-        taken[k] = inner * math.tan(abs(turn) / 2.0)
-        spread = max(spread, outer / math.cos(abs(turn) / 2.0))
-    if any(length - taken[k] - taken[k + 1] <= LENGTH_TOL for k, length in enumerate(lengths)):
-        return "a line of it is shorter than its corners take"
-    reach = 2.0 * spread
-    for i in range(len(points) - 1):
-        for j in range(i + 2, len(points) - 1):
-            if _segment_gap(points[i], points[i + 1], points[j], points[j + 1]) <= reach + LENGTH_TOL:
-                return "two of its lines come too near"
-    return None
-
-
-def _segment_gap(a, b, c, d):
-    """The least distance between the segments a-b and c-d (zero when they cross)."""
-    def side(p, q, r):
-        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-
-    if side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0:
-        return 0.0
-
-    def to_segment(p, q, r):
-        dx, dy = r[0] - q[0], r[1] - q[1]
-        size = dx * dx + dy * dy
-        t = max(0.0, min(1.0, ((p[0] - q[0]) * dx + (p[1] - q[1]) * dy) / size)) if size > 0 else 0.0
-        return math.hypot(p[0] - q[0] - t * dx, p[1] - q[1] - t * dy)
-
-    return min(to_segment(a, c, d), to_segment(b, c, d), to_segment(c, a, b), to_segment(d, a, b))
-
-
-def band(points, left, right):
-    """The corners of the wall as one closed outline (not repeating its first corner): along the left side from the
-    start of the line, across its end, back along the right side."""
-    return _side_points(points, left) + _side_points(points, -right)[::-1]
-
-
-def band_profile(frame, corners):
-    """A capture profile of the closed outline through `corners` in `frame`."""
-    ring = corners + corners[:1]
-    return {"frame": frame, "loops": [{"outer": True, "curves": [
-        {"kind": "line", "start": list(a), "end": list(b)} for a, b in zip(ring, ring[1:])]}]}
-
-
-# ---- the side, from the faces Fusion made -------------------------------------------------------------------------
-
-def _vector(v):
-    return isinstance(v, list) and len(v) == 3 and all(is_number(c) for c in v)
-
-
-def _on_wall(footprint, face, frame, start, span):
-    """True when a flat face (a `wall_faces` record) lies on the wall whose outline is `footprint` in `frame`, running
-    `span` (low, high, mm) along the sketch normal from `start`: across the normal at an end of the span on the
-    outline, or along the normal on a side of the outline."""
-    point, normal = face["point"], face["normal"]
-    z = vec.unit(frame["z"])
-    low, high = span
-    h = vec.dot(vec.sub(point, start), z)
-    if not low - FACE_TOL <= h <= high + FACE_TOL:
-        return False
-    uv = vec.frame_to_local(frame, point)[:2]
-    along = vec.dot(vec.unit(normal), z)
-    if abs(abs(along) - 1.0) <= NORMAL_TOL:
-        on_end = min(abs(h - low), abs(h - high)) <= FACE_TOL
-        return on_end and (footprint.covers(uv) or footprint.nearest_curve(uv)[1] <= FACE_TOL)
-    if abs(along) > NORMAL_TOL:
-        return False
-    n, gap = footprint.nearest_curve(uv)
-    curve = footprint.curves[n]
-    d = _unit(curve["start"], curve["end"])
-    across = [vec.dot(normal, frame["x"]), vec.dot(normal, frame["y"])]
-    return gap <= FACE_TOL and abs(across[0] * d[0] + across[1] * d[1]) <= NORMAL_TOL
-
-
-def _flat(face):
-    return (isinstance(face, dict) and face.get("surface") == "Plane" and _vector(face.get("point"))
-            and _vector(face.get("normal")))
-
-
-def _same_plane(face, point, normal):
-    """True when the flat `face` lies on the plane through `point` with the unit outward `normal`, facing the same
-    way."""
-    return (vec.dot(vec.unit(face["normal"]), normal) >= 1.0 - NORMAL_TOL
-            and abs(vec.dot(vec.sub(face["point"], point), normal)) <= FACE_TOL)
-
-
-def _wall_planes(footprint, frame, start, span):
-    """`(point, unit outward normal)` of each face of the wall: one per side of its outline, and both ends."""
-    z = vec.unit(frame["z"])
-    out = [(vec.add(start, vec.scale(z, span[0])), vec.scale(z, -1.0)),
-           (vec.add(start, vec.scale(z, span[1])), z)]
-    for n, curve in enumerate(footprint.curves):
-        middle = [(curve["start"][i] + curve["end"][i]) / 2.0 for i in range(2)]
-        outward = footprint.outward(n, middle)
-        if outward is not None:
-            out.append((vec.frame_apply(frame, middle + [0.0]),
-                        vec.unit([outward[0] * frame["x"][i] + outward[1] * frame["y"][i] for i in range(3)])))
-    return out
-
-
-def merged(footprint, face, frame, start, span, before):
-    """True when a flat face Fusion lists for the wall, whose point lies off the wall, is a face of the wall that
-    Fusion merged with a face of the part: it lies on the plane of a face of the target body before the step
-    (`before`, `target_faces_before`) and on the plane of a face of the wall, both facing the way it faces."""
-    normal = vec.unit(face["normal"])
-    if not any(_flat(other) and _same_plane(other, face["point"], normal) for other in before or []):
-        return False
-    return any(_same_plane(face, point, outward) for point, outward in _wall_planes(footprint, frame, start, span))
-
-
-def fits(footprint, faces, frame, start, span, before=None):
-    """True when each face of `faces` (`wall_faces` records) is flat and lies on the wall (`_on_wall`), or is a face
-    of the wall merged with a face of the part (`merged`), and at least one lies on the wall."""
-    if not all(_flat(face) for face in faces):
-        return False
-    on = [_on_wall(footprint, face, frame, start, span) for face in faces]
-    return any(on) and all(ok or merged(footprint, face, frame, start, span, before) for ok, face in zip(on, faces))
+def line_of(data):
+    """The `thin.Line` of a thin extrude's path record, or a Refusal."""
+    found = thin.line_of(data)
+    return _refusal(found) if is_problem(found) else found
 
 
 def decide(line, location, thickness, faces, start, entry, before=None):
-    """The side of the wall in the line's own sketch frame (`inside`, `outside` or `middle`), or a Refusal. `faces`
-    are the `wall_faces` Fusion measured, `start` where the extrude starts, `entry` its planned `RecipeSide` and
-    `before` the faces of the target body before the step (`target_faces_before`), for faces Fusion merged."""
-    if not isinstance(faces, list) or not faces:
-        return Refusal("The wall of this thin extrude could not be measured, so it is not copied.",
-                       cause=gap_hints.THIN_OUTLINE)
-    length = entry.distance
-    if entry.extent == "symmetric":
-        ways = [(1, (-length / 2.0, length / 2.0))]
-    else:
-        ways = [(1, (0.0, length)), (-1, (-length, 0.0))]
-    found = []
-    for side in SIDES[location]:
-        corners = band(line.points, *reaches(side, thickness))
-        footprint = Footprint(band_profile(line.frame, corners))
-        found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
-    if len(found) > 1:
-        return Refusal(UNSURE, cause=gap_hints.THIN_OUTLINE)
-    if not found:
-        return Refusal(NOT_MATCHING, cause=gap_hints.THIN_OUTLINE)
-    side, way = found[0]
-    if (entry.extent != "symmetric" and way != entry.sign) or RULE.get(location, side) != side:
-        return Refusal(NOT_MATCHING, cause=gap_hints.THIN_OUTLINE)
-    return side
+    """The side of the wall in the line's own sketch frame (`thin.line_side`), or a Refusal. `entry` is the extrude's
+    planned `RecipeSide`."""
+    found = thin.line_side(line, location, thickness, faces, start, entry.distance, entry.extent == "symmetric",
+                           entry.sign, before)
+    return _refusal(found) if is_problem(found) else found
 
 
 class LineWall:

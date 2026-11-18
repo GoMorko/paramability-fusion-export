@@ -1,5 +1,6 @@
 """The outlines of an extrude as the recipe writes them: sketch outlines and flat faces, merged and checked."""
 from ...capture_model import gap_hints
+from ...design_model.steps.thin import outer_curves
 from ...geometry import outlines, vec
 from .. import notes, values
 from ..faces import thin_wall
@@ -34,7 +35,7 @@ def _parts(profile, sources):
 def thin_wall_step(ctx, item, data, wall, profile):
     """`(side, thickness Quantity)` of a thin extrude's wall, or a Refusal when the measured end face does not fit the
     outline and thickness. The thickness follows its parameter and must stay above zero."""
-    decided = thin_wall.decide(thin_wall.outer_curves(profile), wall, data.get("end_area"))
+    decided = thin_wall.decide(outer_curves(profile), wall, data.get("end_area"))
     if isinstance(decided, Refusal):
         return decided
     side, rounded = decided

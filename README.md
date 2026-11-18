@@ -64,7 +64,8 @@ For some steps the add-in measures the shape that Fusion made, for example the r
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
 A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
 A thin extrude of an open line (a fence or a divider) is copied only when the faces that Fusion made show on which
-side of the line the wall stands.
+side of the line the wall stands. Export for Orca copies a thin wall along one rectangle, one circle or one line of
+straight lines; the side of the wall comes from what Fusion measured, as for the other export.
 Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
 tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
