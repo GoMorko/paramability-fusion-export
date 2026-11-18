@@ -1347,7 +1347,8 @@ built with these volumes in OrcaSlicer 2.5.1 on 2026-11-18, also after the `--se
   is.
 
 A Press Pull of a whole round face has captures in `tests/orca_press_round.py`. Save one with `python3 -m
-tests.orca_press_round <name> <file>` and give the file to `write`. The volumes are exact:
+tests.orca_press_round <name> <file>` and give the file to `write`. The volumes are exact. All three built with these
+volumes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set` changes:
 
 - `pin_grown`: a 40 x 40 x 5 plate (box -20 to 20 in x and y, 0 to 15 in z with the pin) and a pin of radius 5, 10
   high on its top, grown by `grow_mm` (1) to radius 6: 8000 + 360 pi = 9130.97 mm3. `--set grow_mm=2` gives
