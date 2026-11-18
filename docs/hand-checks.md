@@ -990,13 +990,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the XY plane sketch an 80 x 40 mm rectangle from the origin and extrude it `Height` up as a new body. On its top
     face sketch a 20 x 20 mm square from (10, 10) mm and extrude it 10 mm up as a join (the boss). On the plate top
     face sketch a slot 30 mm long and 10 mm wide with round ends, centred at (55, 20) mm along X, and cut it 5 mm deep.
-    Make one Fillet with three sets (rows): set 1 picks the top face of the boss, radius `Round`; set 2 picks one
+    Make one Fillet with three sets (rows): set 1 picks the top face of the boss with Tangent Chain off, radius
+    `Round` (Fusion 2706 cannot list the edges of a set picked by a face with Tangent Chain on, and the export then
+    copies the steps only: check that too, once, and expect "This step could not be read from Fusion"); set 2 picks one
     straight edge of the slot rim with Tangent Chain on, radius 1 mm; set 3 picks the vertical edge of the plate at
     (80, 40) mm with Tangent Chain off, radius 3 mm.
     Second design: the same, but set 3 picks the vertical edge of the boss at (30, 30) mm, which meets the top face of
     the boss at a corner.
     Third design: the first one, but set 3 is a variable radius on the same plate edge, 1 mm at the bottom and 3 mm at
-    the top, with one more radius of 2 mm in the middle.
+    the top. Make it a second time with one more radius of 2 mm in the middle.
     Fourth design: the first one with a Chamfer of 1 mm on the same three sets instead of the Fillet.
     Fifth design: an 80 x 40 x 10 mm plate with a hole of 10 mm diameter through it, its centre at (10, 7) mm, so its
     rim is 2 mm from the front edge. One Fillet: set 1 picks the top rim of the hole with Tangent Chain on, radius
@@ -1015,8 +1017,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     where the boss edge meets the boss top matches Fusion.
     Third design: sets 1 and 2 are copied, the result window lists the fillet once, as left out with "Set 3 of 3 of
     this step is left out", and the tip about a changing radius; `gaps.json` has a gap for the fillet whose data holds
-    one set.
+    one set. With the middle radius the reach of set 3 is not known, so the whole fillet is left out as before.
     Fourth design: three bevel steps.
     Fifth design: one round step (the hole rim comes 2 mm from the plate edge, nearer than twice the two radii).
     Sixth design: one round step (`turn_deg` of the groove edge near 150, so its round reaches 3.7 times its radius).
-    Afterwards each design is as before.
+    Afterwards each design is as before. Checked in Fusion 2706 with 0.14.3 plus this change, except the views in
+    Paramability.
+
