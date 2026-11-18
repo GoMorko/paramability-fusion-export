@@ -22,6 +22,15 @@ def _warning_state():
         return 1
 
 
+def _index_of(obj):
+    """`TimelineObject.index` of `obj`, or None when it cannot be read."""
+    try:
+        index = obj.index
+    except Exception:
+        return None
+    return index if isinstance(index, int) and not isinstance(index, bool) and index >= 0 else None
+
+
 class DesignParameterStore:
     """User parameters and timeline health of one design, shaped for export_plan.
 
@@ -89,22 +98,53 @@ class DesignParameterStore:
     def _unsuppress_items(self):
         """Turn the items `suppress_items` suppressed back on, last first, then rebuild once. Items that were
         suppressed before are never touched. Returns the names that still read suppressed."""
-        left = []
+        pending = []
         for name, obj in reversed(self._suppressed):
-            try:
-                obj.isSuppressed = False
-            except Exception:
-                pass
-            try:
-                off = obj.isSuppressed
-            except Exception:
-                off = True
-            if off:
-                left.append(name)
+            if self._set_on(obj):
+                pending.append((name, obj, _index_of(obj)))
+        left = self._on_with_marker_rolled(pending)
         had = bool(self._suppressed)
         self._suppressed = []
         if had:
             self._rebuild()
+        return left
+
+    @staticmethod
+    def _set_on(obj):
+        """Set `obj` to not suppressed. True when it still reads suppressed or cannot be read."""
+        try:
+            obj.isSuppressed = False
+        except Exception:
+            pass
+        try:
+            return bool(obj.isSuppressed)
+        except Exception:
+            return True
+
+    def _on_with_marker_rolled(self, pending):
+        """Turn on the `(name, object, index)` items of `pending` that a plain set could not turn on. Turning an item
+        on makes Fusion rebuild the steps after it, and a later step that was already in error makes the set fail.
+        With the marker held at the first of the items, Fusion does not rebuild past them. The marker goes back to
+        where it was in every case; when it does not, the later marker check says so (`return_marker`). Returns the
+        names that still read suppressed."""
+        if not pending:
+            return []
+        start = read_marker(getattr(self.design, "timeline", None))
+        indexes = [index for _, _, index in pending if index is not None]
+        if start is None or not indexes or min(indexes) >= start["position"]:
+            return [name for name, _, _ in pending]
+        lowest = min(indexes)
+        left = []
+        try:
+            self.design.timeline.markerPosition = lowest
+        except Exception:
+            pass
+        try:
+            left = [name for name, obj, _ in pending if self._set_on(obj)]
+        finally:
+            back = self._put_marker(start, "turn on")
+        trail.line("turned on %d of %d timeline items with the marker held at step %d%s" % (
+            len(pending) - len(left), len(pending), lowest, "" if back else "; the marker did not go back"))
         return left
 
     def turn_on(self, steps):
@@ -115,18 +155,18 @@ class DesignParameterStore:
     def _turn_on(self, steps):
         """Unsuppress the timeline items `steps` ((index, name) pairs) that read suppressed, skipping an index that now
         holds another name. Returns the names that still read suppressed. The caller rebuilds."""
-        left = []
+        left, pending = [], []
         for index, name in steps:
             try:
                 obj = self.design.timeline.item(index)
                 if obj.name != name or not obj.isSuppressed:
                     continue
-                obj.isSuppressed = False
-                if obj.isSuppressed:
-                    left.append(name)
             except Exception:
                 left.append(name)
-        return left
+                continue
+            if self._set_on(obj):
+                pending.append((name, obj, index))
+        return left + self._on_with_marker_rolled(pending)
 
     def _keep_marker(self):
         if self.marker is not None:
