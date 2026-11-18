@@ -1822,7 +1822,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `pipePartOfPath` | a pipe along a part of its path | Let the pipe run along the whole path. |
 | `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
-| `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
+| `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`, with the checks of `design_model/steps/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
@@ -2830,7 +2830,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`agrees`), and the check that the places do not repeat and fill the count (`listed_places`, `grid_places`).
   `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
   circle equals (`layout`), how far its copies can run before they pass an end of the path (`room`), and which way a
-  measured copy runs along the path (`run_of`, `turn_deg`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
+  measured copy runs along the path (`run_of`, `turn_deg`). `steps/offset_round.py`: a whole round face that a
+  Press Pull moves (a pin, a boss or a bore): its axis, its ends and its side of the material (`Ring`), the room
+  between the other edges of its end faces (`whole`, `room`), and the checks of one move (`problem`,
+  `radius_problem`). See 3.20. `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
@@ -6306,8 +6309,10 @@ the normal points towards the axis. The move changes the radius:
 So a Press Pull of -0.2 mm on the wall of a bore of radius 2.5 mm gives a bore of radius 2.7 mm. This is the usual way
 to tune a hole for a fit.
 
-The app (recipe version 17) moves a round face only when these conditions are true. `offset_round.py` checks each
-condition before the step is written:
+The app (recipe version 17) moves a round face only when these conditions are true. The shared layer checks each
+condition (`design_model/steps/offset_round.py`, `problem`), so the recipe and the Orca output use the same rules. The
+recipe translator (`translator/finishes/offset_round.py`, `refusal`) turns the `Problem` into a refusal before the step
+is written:
 
 1. The face goes all the way round. The reader gives one entry for each edge loop of the face (`ends`). A whole
    cylinder has two loops, and each loop has one circle edge. Part of a circle, or a face with a seam edge, has other
@@ -6317,9 +6322,9 @@ condition before the step is written:
    step is left out.
 3. The ring does not run into other faces. The reader gives the outline of each end face. The circle of the round
    face is one curve of that outline. Each other curve of the outline must stay clear of the ring between the old
-   radius and the new radius (`_limits`, with a margin of 0.01 mm). A curve inside the circle sets the lowest radius,
-   and a curve outside the circle sets the highest radius. A curve that touches or crosses the circle leaves the step
-   out.
+   radius and the new radius (`whole` and `radius_problem`, with a margin of 0.01 mm, `CLEAR_MM`). A curve inside the
+   circle sets the lowest radius (`Whole.low`), and a curve outside the circle sets the highest radius (`Whole.high`).
+   `room` gives the two radii with the margin. A curve that touches or crosses the circle leaves the step out.
 4. The face does not touch another face that the same item moves (`meets_offset`).
 5. The new radius stays above zero.
 6. Fusion left a cylinder on the same axis with the new radius (`rounds_after`). This checks the sign rule on the real
@@ -6334,14 +6339,15 @@ Fusion gave for the face (`pointOnFace`).
 The distance can follow a size. Then the translator checks the size range:
 
 - The distance must not reach zero.
-- For each round face, the new radius must stay between the lowest and the highest radius of step 3 over the whole
-  range (`clear_over_range`).
+- For each round face, the new radius must stay between the lowest and the highest radius of step 3 (`room`) over
+  the whole range (`clear_over_range`, in the recipe translator, because the size range is a rule of the recipe).
 
 If one of these checks fails, the distance is written as a number. The size then gets the reason "the round face
 that ... moves could close or run into other faces".
 
-The step adds a `MovedFaces` placer (`lib/translator/faces/offset_faces.py`). This placer knows the material that the
-move added or removed, and the faces after the move:
+The step adds a `MovedFaces` placer (`lib/translator/faces/offset_faces.py`). This placer uses the `Ring` of the
+shared layer for each round face. This placer knows the material that the move added or removed, and the faces after
+the move:
 
 - A later pick on a moved flat face moves back along the normal of the face by the distance.
 - A later pick on a moved round face moves back along the radius by the distance. Then it follows the step that made

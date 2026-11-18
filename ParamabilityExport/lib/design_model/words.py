@@ -377,3 +377,13 @@ THIN_NOT_MATCHING = ("The wall Fusion made does not match the line, side and len
                      "copied.")
 THIN_UNSURE = ("The side the wall of this thin extrude stands on could not be told from what Fusion made, so it is "
                "not copied.")
+
+# Press Pull of a whole round face (`steps/offset_round.py`).
+OFFSET_ROUND_UNREAD = "The round face of this offset could not be read, so it is not copied."
+OFFSET_ROUND_NOT_WHOLE = ("A round face is copied only when it goes all the way round and both its ends are flat faces "
+                          "square to its axis.")
+OFFSET_ROUND_MEETS = "This offset also moves a face next to the round face, so it is not copied."
+OFFSET_ROUND_CLOSES = "This offset would close the round face, so it is not copied."
+OFFSET_ROUND_RUNS_INTO = ("The round face of this offset would run into other edges of the faces at its ends, so it is "
+                          "not copied.")
+OFFSET_NOT_MEASURED = "The offset of this step could not be measured, so it is not copied."
