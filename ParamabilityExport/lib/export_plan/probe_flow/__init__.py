@@ -17,8 +17,9 @@ motion file says so (`Motion.refs`).
 The modules: `size_probe` (`SizeProbe`: the states of one part, the rows it plans, the discovery rows and the motion),
 `probe_group` (`ProbeGroup`: several parts over shared rows), `interface` (`Probe`: what the try runner and the
 pipelines call; both classes have every member), `row_schedule` (the row phases), `borrowed_view` (the borrowed
-sketches and the view of the capture), `shared_reads`, `states` (comparing states), `sizes` (`sizes_to_try`: which
-sizes to probe), `reasons` (the texts of untried sizes) and `shadow` (the `derived` block).
+sketches and the view of the capture), `shared_reads`, `states` (comparing states), `restore_check` (the gap to E0
+after the tries), `sizes` (`sizes_to_try`: which sizes to probe), `reasons` (the texts of untried sizes) and `shadow`
+(the `derived` block).
 This package re-exports what the rest of the add-in reads as `probe_flow.<name>`.
 """
 from .borrowed_view import borrowed_sketches, covers_a_sketch, probe_view

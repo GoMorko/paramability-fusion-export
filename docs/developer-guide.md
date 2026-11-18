@@ -2206,6 +2206,8 @@ alphabetical order by module.
   - `interface.py` holds `Probe`, the interface that `ProbeRun` and both pipelines call. `SizeProbe` and `ProbeGroup`
     both have every member.
   - `row_schedule.py` holds `RowSchedule` (the row phases, see 1.8).
+  - `restore_check.py` holds `restore_gap`: how far the followed sketches and the measured references read after the
+    tries are from E0 (`SizeProbe.measure_restore`).
   - `sizes.py` holds `kept_sizes`, `extra_sizes` and `sizes_to_try`, the one place that decides which sizes get tries.
   - `borrowed_view.py` (`probe_view`, `borrowed_sketches`, `covers_a_sketch`, `with_borrowed`), `shared_reads.py`,
     `states.py` (compare states), `reasons.py` (the texts of untried sizes) and `shadow.py` (`shadow_of`).
