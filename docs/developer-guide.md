@@ -2201,6 +2201,8 @@ alphabetical order by module.
   - `parts.py` holds `run_parts_pipeline` and `PartsPipeline` for several bodies, `PartsPort` (its port, with the body
     index in each call) and `shared_cuts`.
   - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
+  - `walk_backs.py` holds `WalkBacks`, the part of `ProbeRun` that brings a followed sketch back the way the rows took
+    it away (`_walk_rows` before a row, `_walk_back` after the tries, see 1.8, "Solver flips and put backs").
   - `try_summary.py` holds the timing summary of the tries for `report.json` (`summary`, `timing.probe`) and
     `with_try_seconds`.
   - `far_phase.py` holds the rules of the far phase: which sizes get their far rows last from the rows so far
@@ -2217,6 +2219,8 @@ alphabetical order by module.
   - `interface.py` holds `Probe`, the interface that `ProbeRun` and both pipelines call. `SizeProbe` and `ProbeGroup`
     both have every member.
   - `row_schedule.py` holds `RowSchedule` (the row phases, see 1.8).
+  - `differences.py` holds `read_differences`: what differs between two reads of the design, for the discovery rows
+    and the report (`SizeProbe.differences`).
   - `restore_check.py` holds `restore_gap`: how far the followed sketches and the measured references read after the
     tries are from E0 (`SizeProbe.measure_restore`).
   - `sizes.py` holds `kept_sizes`, `extra_sizes` and `sizes_to_try`, the one place that decides which sizes get tries.

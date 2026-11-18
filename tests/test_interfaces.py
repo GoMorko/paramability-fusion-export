@@ -24,6 +24,7 @@ FUSION_PORTS = os.path.join(COMMANDS, "ExportForParamability", "export_flow.py")
 PROBE_FLOW = os.path.join(LIB, "export_plan", "probe_flow")
 PIPELINE = os.path.join(LIB, "export_plan", "pipeline")
 PROBE_RUNNER = os.path.join(PIPELINE, "probe_run.py")
+WALK_BACKS = os.path.join(PIPELINE, "walk_backs.py")  # the walks back of the try runner
 DESIGN_MODEL = os.path.join(LIB, "design_model")
 CONTEXTS = (os.path.join(LIB, "translator", "context.py"), os.path.join(LIB, "orca_translate", "context.py"))
 
@@ -354,8 +355,9 @@ class DeclaredInterfaceTest(unittest.TestCase):
             self.assertEqual(missing, set(), probe.__name__)
 
     def test_the_try_runner_asks_the_probe_only_for_declared_members(self):
-        asked = _asked_in(PROBE_RUNNER, PROBE_NAMES)
+        asked = _asked_in(WALK_BACKS, PROBE_NAMES, _asked_in(PROBE_RUNNER, PROBE_NAMES))
         self.assertIn(("probe", "far_pair_rows"), asked)
+        self.assertIn(("probe", "off_start"), _asked_in(WALK_BACKS, PROBE_NAMES))
         self.assertEqual(_undeclared(asked), {})
 
     def test_every_declared_probe_member_is_asked_for_by_the_runner_or_both_pipelines(self):

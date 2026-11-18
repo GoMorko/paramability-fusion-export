@@ -15,12 +15,13 @@ from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
+from .differences import comparable, read_differences, sketch_names
 from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, UNREADABLE, UNTRIED,
                       WARNED_TRY, not_built_try, watched_why)
 from .restore_check import restore_gap
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
-from .states import (BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, moves_others,
+from .states import (BODY_REQUEST, body_changed, body_compared, body_difference, marked_states, moves_others,
                      same_numbers)
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
@@ -463,50 +464,13 @@ class SizeProbe:
                 entry.update(changed=changed, unread=unread)
                 if changed:
                     entry["moved"] = True
-                elif self._comparable(base):
+                elif comparable(base):
                     entry["moved"] = False
             self.discovery.append(entry)
 
-    def _names(self):
-        """Sketch token to the name a reason uses."""
-        named = dict(plan.scan(self.capture).named)
-        for token, hint in self.watch.items():
-            named[token] = "%s of %s" % (hint["sketch"], hint["component"]) if hint.get("component") else (
-                hint.get("sketch") or named.get(token, ""))
-        return named
-
-    def _comparable(self, read):
-        """True when `read` holds anything the discovery compares."""
-        return isinstance(read, dict) and bool(read.get("sketches") or read.get("refs") or box_numbers(read))
-
     def differences(self, base, read):
-        """`(changed, unread)` between two reads of the design: names of the sketches, hole points, axis lines and
-        measured references the probe follows, and "the body" (its box and volume), that read differently in `read`,
-        and of those that one of the two reads does not hold. Sketches are compared as read (frame and curves within
-        1e-4 mm), so a sketch on another outline in both reads is the same."""
-        changed, unread = [], []
-        names = self._names()
-
-        def sort(name, a, b, same):
-            if a is None or b is None:
-                unread.append(name)
-            elif not same(a, b):
-                changed.append(name)
-
-        for token in self.request.get("sketches") or []:
-            sort(names.get(token) or "a sketch", ((base or {}).get("sketches") or {}).get(token),
-                 ((read or {}).get("sketches") or {}).get(token), match.same_read)
-        for kind in ("points", "lines"):
-            for token in self.request.get(kind) or []:
-                sort("a sketch %s" % kind[:-1], ((base or {}).get(kind) or {}).get(token),
-                     ((read or {}).get(kind) or {}).get(token), same_numbers)
-        for ref in self.refs:
-            sort(ref["key"], ref_fit.state_values(ref, base)[0], ref_fit.state_values(ref, read)[0], same_numbers)
-        if box_numbers(base) is None or box_numbers(read) is None:
-            unread.append("the body")
-        elif body_changed(base, read):
-            changed.append("the body")
-        return list(dict.fromkeys(changed)), list(dict.fromkeys(n for n in unread if n not in changed))
+        """`(changed, unread)` between two reads of the design (`differences.read_differences`)."""
+        return read_differences(self.request, self.refs, sketch_names(self.capture, self.watch), base, read)
 
     @property
     def also_changes(self):
