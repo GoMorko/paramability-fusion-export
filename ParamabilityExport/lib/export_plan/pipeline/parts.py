@@ -343,7 +343,7 @@ class PartsPipeline:
                                     lambda: group.matches_start(group.read_now()))
         run = ProbeRun(self.port, self.tmp, group, before_discovery=self.put_back.end_trim,
                        time_limit=self.request.probe_time_limit, clock=self.timing.clock,
-                       captures=[self.captures[i] for i in self.probed])
+                       captures=[self.captures[i] for i in self.probed], parts=list(self.captures))
         tries = self._tries()
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)

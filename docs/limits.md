@@ -16,15 +16,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   took it away: the sizes set a little past their values on the other side and back, or walked back in small steps.
   The tries walked back are those made since the sketch last read as it was, not only the last one. At the end of the
   tries, each size those tries changed is walked back alone, at most 16 times in all.
-  When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop
-  there; only the tries before it are used, and the sizes not tried yet are marked. When that step belongs to another
+  When a try leaves a step in a new warning or error that does not go away with the values back, the tries stop there;
+  only the tries before it are used, and the sizes not tried yet are marked. When that step belongs to another
   component and the part does not need it, and the part reads as before, only the tries of the sizes behind it end
-  (the size of that try, and every size that changes that component); the other sizes are tried in full. The sizes
+  (the size of that try, and every size that changes that component); the other sizes are tried on. The sizes
   whose tries ended keep only the values tried before, and their reasons say that the values after them were not
-  tried. Your design is changed then, so the export is undone at its end (with "Lighter on memory" ticked the add-in
-  cannot undo it, and the window says so). When the sketch still reads
-  another outline after the export, or the body has another volume or size than before, the result window says that
-  your design is changed, and the add-in asks Fusion to undo the export. A very small difference of the body with
+  tried. Your design is changed then, so the export is undone at its end. With "Lighter on memory" ticked, after the
+  add-in let Fusion forget Undo data, every try stops there as before, since the export could not be undone. When the
+  sketch still reads another outline after the export, or the body has another volume or size than before, the result
+  window says that your design is changed, and the add-in asks Fusion to undo the export. A very small difference of the body with
   nothing else changed, or one that appears only after the add-in rebuilt the whole design at the end, means the
   add-in could not confirm the design; the export is undone then too. Fusion sometimes gives a projected curve a new name, or one curve two names, when it
   recomputes; the add-in then compares the curves themselves, so this is not taken for another outline.

@@ -906,7 +906,12 @@ fillet of the holder turns to a warning and stays so with the values back. Such 
 full stop would cut the tries of every size that was not tried yet, and those sizes would lose their measurements.
 
 Thus, when steps stay worse after the attempts of step 5 above, the job first asks `contain(worse, row)`. The try
-runner gives `ProbeRun._contain`. It uses `OutsideDamage.judge` (`lib/export_plan/pipeline/outside_damage.py`).
+runner gives `ProbeRun._contain` (`lib/export_plan/pipeline/ended_sizes.py`). It uses `OutsideDamage.judge`
+(`lib/export_plan/pipeline/outside_damage.py`).
+
+First, `_contain` looks at the undo data. When "Lighter on memory" dropped undo data before this row
+(`UndoSteps.record["applied"]`), the answer is no, and the tries stop as before. The reason: the export cannot be
+undone then, so the tries must not go on over a changed design.
 
 The rule for "outside what the tries need". Every step that stays worse must agree with all of these points:
 
@@ -917,8 +922,10 @@ The rule for "outside what the tries need". Every step that stays worse must agr
    export). These items are: an item that may change a part, a sketch that the steps use, an item of another
    component that a sketch link or a measured reference depends on, an assembly item that is not an occurrence, and an
    item of an unknown type. When one capture cannot tell (`needed_items` gives None), the answer is no.
-3. No part is built from the item (`counts_warning`, `tried_ranges.part_step` over every part). The item has
-   `in_target_component` false.
+3. No part of the export is built from the item (`tried_ranges.part_step` of every capture of the export). In an
+   export of several bodies, this includes the parts whose sketches the tries do not follow: `PartsPipeline._measure`
+   gives `parts`, every capture, beside `captures`, the captures of the probed parts. When the read of a part failed
+   (its entry is not a capture), the answer is no. The item has `in_target_component` false.
 4. The item names its component (`component`, a token).
 
 The row must also have moved at least one size (`varied`). Then the try runner reads the whole design with the
@@ -934,7 +941,10 @@ points are true, `judge` gives `{ components, sizes, params }`:
 
 - `components`: the names of the components of the worse steps. The capture names a component only in some records
   (the target, the sketch links, the measured references). Another component is "another component".
-- `sizes`: the sizes that the row moved, and the tried sizes among `params`.
+- `sizes`: the sizes that the row moved, and the tried sizes among `params`. `_contain` adds the sizes that a walk back
+  moved before this row (`ProbeRun._walked`, filled by `WalkBacks._walk` from `_walk_rows` in `_before_row`). Such a
+  walk sets sizes of earlier rows, and it can be the cause of the change. The check after the row cannot tell the two
+  causes apart, so both end.
 - `params`: every user parameter that drives a step or a sketch of those components (`geometry_links.acts`, the
   components of its `Reach`). A ticked size among them can damage that component again. An unticked parameter among
   them has discovery rows that can do the same.
@@ -953,7 +963,10 @@ What the job and the try runner do then:
 5. `ProbeRun.try_rows` runs the rest of the batch without the rows that move a name of `ended_names`
    (`_without_ended`). This also removes a pair row, a check row, a far pair row, a discovery row or a row run again
    that moves an ended size together with other sizes. The probe is told of the rows that did not run. A discovery
-   row among them is kept as "not tried: a try left a step of its component worse than before".
+   row among them is kept as "not tried: a try left a step of another component worse than before, and this
+   parameter changes that component". A row that would run again (`_again`, in `run_rows`) and moves an ended size
+   does not run again, and it does not go into `redone`. Thus its first run stays in the states, as for a row that the
+   room left out.
 6. Every later plan gets only the sizes whose tries did not end (`ProbeRun._live`): the pair rows, the nearer rows
    (`_retry`), the far order and the far rows (`_far_by_size`), the far pair rows, the check rows and the time limit
    marks (`_note_unplanned`). An ended size is left at its value in these rows.
@@ -970,15 +983,21 @@ Thus the export is always undone (`executeFailed`), or, after "Lighter on memory
 `undo_unavailable` with the advice to reopen the saved version. The result window has one line for each such try
 (`health._ended_line`): "The tries of Width ended early: after trying Width at 80 mm, these steps of another
 component stayed changed even with your values back: Fillet1 (now a warning). The other sizes were tried in full.
-Since your design changed, the add-in undoes the export when it ends." Without undo data, the last sentence is not
-there.
+Since your design changed, the add-in undoes the export when it ends." The sentence "The other sizes were tried in
+full" is there only when no later stop, no time limit and no row limit cut the tries (`others_full`, from
+`ProbeRun.ended_records`). Without undo data, the last sentence is not there.
 
 A try runner without captures (`ProbeRun` made without `captures`) has no `contain`: every lasting change stops the
-tries. Both pipelines give the captures of the parts that are probed.
+tries. Both pipelines give the captures of the parts that are probed, and the export of several bodies also gives
+every capture of the export (`parts`).
 
 Tests: `tests/test_size_only_stop.py` (only the size behind the change ends and the other sizes get their far rows;
-a size that drives a step of that component ends too; a row planned before the end that moves an ended size does not
-run; "Lighter on memory" gives `undo_unavailable`; a worse step that the tries need stops all tries). Hand check OC1
+a size that drives a step of that component ends too; a size walked back before the row ends too; a row planned
+before the end that moves an ended size does not run, and a row that would run again keeps its first run; a time
+limit after the end clears `others_full`). These cases stop all tries: undo data dropped by "Lighter on memory"; a
+part that reads otherwise (its body or a followed sketch); a step that a part is built from; a step of another part
+of the export; a step without a position, or with a position that does not match an item of that name; a step that
+the tries need. Hand check OC1
 in `docs/hand-checks.md` tests this in Fusion.
 
 #### What a state holds

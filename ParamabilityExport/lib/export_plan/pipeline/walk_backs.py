@@ -73,6 +73,7 @@ class WalkBacks:
         kept = len(self.job.walks)
         if not self.job.walk_back(row, attempt, at):
             return False
+        self._walked.extend(row.get("varied") or list(row.get("values") or {}))
         read = self._try_read()
         if read is not None and len(self.job.walks) > kept:
             self.job.walks[-1]["back"] = not set(tokens) & set(self.probe.off_start(read))

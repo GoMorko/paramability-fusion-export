@@ -114,7 +114,8 @@ class ProbeRun(EndedSizes, WalkBacks):
 
     MAX_PUT_BACK_MISSES = 2
 
-    def __init__(self, port, tmp, probe, before_discovery=None, time_limit=None, clock=None, captures=()):
+    def __init__(self, port, tmp, probe, before_discovery=None, time_limit=None, clock=None, captures=(),
+                 parts=None):
         self.port, self.tmp, self.probe = port, tmp, probe
         self.before_discovery = before_discovery
         self.time_limit = time_limit  # seconds the tries may take from now on, or None for no limit
@@ -138,7 +139,8 @@ class ProbeRun(EndedSizes, WalkBacks):
         self.keeper = self._keeper()
         self.end = None  # `EndRead` of the put back after the tries (`settle`)
         self.undo = port.undo_steps
-        self.damage = OutsideDamage(captures, self.probe.counts_warning) if captures else None
+        self.damage = OutsideDamage(captures, parts) if captures else None
+        self._walked = []  # Fusion names of the sizes walked back before the row run last (`_before_row`)
         self.ended = []  # the records of the tries after which the tries of some sizes ended (`_take_ended`)
         self.ended_names = []  # Fusion names of the sizes and parameters whose tries ended, in order
         self._tried = set()  # Fusion names of the sizes `measure` was given
@@ -230,6 +232,7 @@ class ProbeRun(EndedSizes, WalkBacks):
         design is known to be as at the start (`_drop_undo`). Before the first row the body is read for the end check
         (`Probe.keep_body_start`)."""
         self._home()
+        self._walked = []
         key = row_key(row)
         previous, self._previous = self._previous, key
         if previous is None and self.read_failure is None:
@@ -494,7 +497,10 @@ class ProbeRun(EndedSizes, WalkBacks):
             last = self.rows[-1][0]
             self._tails[row_key(last)] = self._try_read()
             self._check_reads()
-        again = self._again(done)
+        # A row that moves a size whose tries ended does not run again: it keeps its first run, as a row the room
+        # left out does.
+        ended = set(self.ended_names)
+        again = [(key, row) for key, row in self._again(done) if not ended & set(row.get("varied") or ())]
         if again:
             self.redone.extend(key for key, _ in again)
             self._note()

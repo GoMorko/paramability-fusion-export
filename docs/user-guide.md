@@ -51,8 +51,8 @@ Nothing is typed in Fusion.
      a step changed and the add-in could not bring it back, it says that the tries stopped early, after which try,
      and which step. When that step belongs to another component and the part was not changed, only the tries of the
      sizes behind it end: the window names these sizes, the steps and their component, and the other sizes are tried
-     in full. The add-in then asks Fusion to undo the export. Use Undo in Fusion when this section says your design is
-     changed.
+     on. The add-in then asks Fusion to undo the export. With "Lighter on memory" ticked, once Fusion forgot Undo data,
+     all tries stop there instead. Use Undo in Fusion when this section says your design is changed.
 
    Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
    box.
