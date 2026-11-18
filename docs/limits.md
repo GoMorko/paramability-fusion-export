@@ -191,7 +191,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   length is marked; a size that only moves the line is not. These are left out: a path of another curve or of more than one
   curve, copies on both sides of the start point, copies that keep their direction on a round path, copies on a round
   path that start part way along it or run against it (Fusion can put them off the path), and copies past the end of
-  the path. A path pattern is not copied to Orca.
+  the path. Export for Orca copies the same path patterns, and also an arc whose copies keep their direction (then
+  the distance keeps its number); the parameter's line says how far the count and the distance may go before the
+  copies leave the path.
 - Fusion does not always say correctly where the copies of a pattern are: in Fusion 2706 it gives the copies of a
   circular pattern one step too far round. The add-in places the copies of a circular pattern by their order and
   checks every copy against its faces. A pattern is left out when a copy's faces are not where Fusion says the copy

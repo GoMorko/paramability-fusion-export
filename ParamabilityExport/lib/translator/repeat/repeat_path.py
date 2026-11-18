@@ -37,9 +37,7 @@ from .repeat_rectangular import rectangular
 
 # Distance (mm) the copies may reach past an end of the path, for numbers rounded in the capture.
 END_TOL_MM = 1e-3
-# Share of the turn between copies by which the measured turn may differ from the one the distance and the rounded
-# radius give.
-TURN_SHARE = 1e-4
+TURN_SHARE = path_pattern.TURN_SHARE
 # A start point (a share of the path's length) up to this counts as the start of the path.
 START_TOL = 1e-9
 # The keys of the data that the plain pattern takes over as they are.
@@ -184,18 +182,8 @@ def _rewritten(step, built):
 
 
 def _measured_turn(found, data, ctx, way, delta):
-    """The turn between neighbour copies that the measured copies show when they turn `way` along a round path, or
-    None when they do not sit on whole steps of `delta`, the turn the distance and the radius give (within TURN_SHARE
-    of it). The radius is read rounded, so the measured turn is the one written."""
-    best, steps = delta, 0
-    for element in _kept(data, ctx):
-        turn = (way * path_pattern.turn_deg(found, element["frame"])) % FULL_TURN_DEG
-        k = round(turn / delta)
-        if k < 1 or abs(turn / k - delta) > TURN_SHARE * delta:
-            return None
-        if k > steps:
-            best, steps = turn / k, k
-    return best
+    """The turn between neighbour copies that the measured copies show (`path_pattern.measured_turn`)."""
+    return path_pattern.measured_turn(found, [e["frame"] for e in _kept(data, ctx)], way, delta)
 
 
 def _as_round(ctx, step, data, found, way, distance_q):

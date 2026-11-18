@@ -78,6 +78,7 @@ TAPER_CLOSES = "taperCloses"
 ROUND_NO_ROOM = "roundNoRoom"
 THREAD_NO_FIT = "threadNoFit"
 REVOLVE_MISSES = "revolveMisses"
+PATH_ENDS = "pathEnds"
 CAUSES = {
     SHAPE_ZERO: "a size of the shape reaches zero",
     OUTLINE_MEETS: "two sides of the outline meet or cross",
@@ -97,6 +98,7 @@ CAUSES = {
     ROUND_NO_ROOM: "the rounds or chamfers no longer fit on the part",
     THREAD_NO_FIT: "the thread no longer fits",
     REVOLVE_MISSES: "a cut or intersect of the revolve no longer meets the part",
+    PATH_ENDS: "the copies run past the end of the path",
 }
 
 

@@ -2830,7 +2830,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`agrees`), and the check that the places do not repeat and fill the count (`listed_places`, `grid_places`).
   `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
   circle equals (`layout`), how far its copies can run before they pass an end of the path (`room`), and which way a
-  measured copy runs along the path (`run_of`, `turn_deg`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
+  measured copy runs along the path (`run_of`, `turn_deg`). It also gives the turn between neighbour copies on a round
+  path that the measured copies show (`measured_turn`). With `layout(data, slides=True)`, copies that keep their
+  direction on a round path give a layout with `turns` false, for an output that can slide copies along an arc.
+  `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
@@ -6062,7 +6065,44 @@ out. A refusal that has no cause of its own gets the cause `pathPattern`, unless
 The step kind table gives the path pattern `sketches=(PATH,)`. Thus the size probe follows the path sketch as it
 follows a sweep path. The probe does not read the copies again (no `pattern` value): a pattern with copies on both
 sides is not copied. A path pattern of bodies or faces is refused by the pattern handler, as for the other patterns.
-The Orca output has no handler for a path pattern, so it leaves the step out.
+
+The Orca output copies a path pattern in `orca_translate/repeat_path.py`, `path`. `orca_translate/repeat.py` gives
+the step to it (`path`, in `HANDLERS`). It reads the layout with `slides=True` and does these steps:
+
+1. It leaves out the problems of `layout` with their words and the cause `pathPattern`.
+2. It does the checks of steps 2 and 3 of the recipe handler: the way the copies run, a start point other than 0 or
+   the flip on a round path, and a travel that is longer than the room. Each of these leaves the step out with the
+   cause `pathPattern`.
+3. It marks the sizes that may move or turn the path, because the path stays as numbers in Orca. For a sketch path,
+   these are the sizes of `reach.sketch_line_sizes`. For a line, only the sizes of `edges.line_sizes` stay, because
+   a line gives only its direction and its length. For an edge of the part, these are the sizes of
+   `reach.reference_sizes`. The Orca output has no size probe, so it does not remove more sizes.
+4. A line goes to the rectangular handler (`repeat.rectangular`) as a pattern of one direction, with the data that
+   the recipe handler writes. The handler writes an Orca linear pattern.
+5. A round path whose copies turn with it goes to the circular handler (`repeat.circular`). The handler gets the axis
+   (marked `fixed`), the count and the total angle. The total angle comes from the measured turn between copies
+   (`path_pattern.measured_turn`). Each measured copy must turn by a whole number of steps, and no copy can turn by
+   more steps than the count less one. Else the step is left out. The circular handler takes a function for the
+   angle (`angle_of`). The function writes the angle as a formula of the distance (and of the count for a `spacing`
+   distance). A pattern round the whole circle is a full turn. Its distance then stays a number, and its sizes are
+   marked.
+6. A round path whose copies keep their direction must be an arc. The handler writes a sketch with one arc. The arc
+   starts at the start of the path and ends at the last copy. Then it writes Orca's pattern along that arc
+   (`pattern_curve_sketch`, `pattern_curve_entity`). Orca moves copy i by the point of the arc at i / (count - 1) of
+   its sweep, less the start of the arc, and it does not turn the copy. Each measured copy must be a move without a
+   turn to one of these places, and the places must not repeat and must fill the count (`listed_places`). The faces
+   of each copy must agree with its place (`agrees`). Else the step is left out. The arc is numbers, so the distance
+   stays a number and its sizes are marked. For a `spacing` distance, the count also stays a number, because the last
+   copy moves with the count. A circle has no start point, so copies that keep their direction on a circle are left
+   out.
+7. After the handler writes the pattern, `limits.guard` tells how far the count or the distance may go before the
+   last copy passes the end of the path (cause `pathEnds`). For a line, the check is (count - 1) x spacing, which must
+   stay within the room. For an arc, the check is the angle, which must stay within the room in degrees. For a
+   circle, the angle must stay under a full turn, because Orca spreads the copies evenly at exactly 360 degrees. Orca
+   builds copies past the end of the path without an error, so a variable whose limit cannot be told keeps its
+   number.
+
+A Skip that has no cause of its own (`REFUSED`) gets the cause `pathPattern`.
 
 Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and a spacing of 15 mm. The recipe gets a
 `pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
