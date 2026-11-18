@@ -1276,8 +1276,10 @@ pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline
 2. `probe.finish(read_now(), labels)` builds the motion file from the states (`probe/build.py`). It also lists the
    sizes the probe cannot follow: sizes left without rows by the cap (`untried`), sizes that the time limit left
    without a try (`timed_out`, also in `untried`), sizes that change a borrowed sketch it could not follow, and sizes
-   that changed the body but moved nothing the probe follows (`body_moved`). The motion file also keeps, for each
-   size that a try set alone, whether the body changed at that try (`body_changes`, `probe/build.py`).
+   that changed the body but moved nothing the probe follows (`body_moved`). A size whose body change the values of
+   the part's own steps explain is not in `body_moved` (see "A size that another component shares" below). The
+   motion file also keeps, for each size that a try set alone, whether the body changed at that try (`body_changes`,
+   `probe/build.py`).
 3. `finish` compares the sketches read after the restore with E0 (`measure_restore`). The largest difference is
    `restore_gap_mm`. A sketch whose profile does not match E0 by its tokens is compared by its curves
    (`same_shape.shape_gap`). When the curves pair, their gap counts. When they do not pair, or the plane turned, the
@@ -1293,6 +1295,50 @@ A probe that fails (an exception other than a cancel) does not stop the export. 
 without a motion file, and every size behind a sketch is marked with "it changes a sketch, which could not be tried at
 other values". `health.probe` says `failed`, and the restore gap is still measured, so `health.sketch_drift` says when
 a sketch stayed off its first solution.
+
+#### A size that another component shares
+
+Many projects keep several parts in one file. The parts share user parameters, for example a box and its lid share
+`Width`, `Wall` and a print tolerance. When you export one part, such a size also changes steps of the other
+components.
+
+A size gets tries when it can move a sketch that the probe follows. A size that a sketch dimension of the part reads
+gets tries. A size that acts on another component also gets tries when a sketch of the part is drawn around that
+component, for example when the lid projects an edge of the box (a geometry link, `params.geometry_links`). The link
+tells only that the size can move the sketch. The tries tell if it does.
+
+A try of such a size can change the body of the part also when no followed sketch moves. Example: `Wall` sets the
+thickness of the lid (an extrude distance) and the shell of the box. The lid projects the outer edge of the box, and
+`Wall` does not move that edge. A try of `Wall` makes the lid thicker. The projected sketch stays where it is. The
+copy writes the extrude distance as the formula `Wall`, so it follows the change.
+
+`SizeProbe._body_only` lists the sizes that changed the body in a try of their own and moved no followed sketch or
+measured reference (`body_moved`). The translator marks each of them with "it changes this part in a way the copy
+does not follow". Before it lists a size, `_body_only` asks `explained` (`lib/export_plan/probe_flow/body_routes.py`).
+A size is explained when all of these points are true:
+
+1. A value of a step that builds the part reads the size (`body_scope.body_items` and `reach.value_sizes`, the
+   `data.params` of the steps). Examples are an extrude distance, a taper angle and a fillet radius. The copy writes
+   this value as a formula of the size.
+2. The capture says where the size acts: its user parameter has the list `dependents`.
+3. The size acts on no item that can place an occurrence (`step_links.placing`). A joint or a Move can move the part.
+4. Each model parameter of the size table behind the size is a step value (`feature`) or a dimension of a sketch that
+   the probe follows (`reach.makers_of`). A construction plane, a joint or a maker that the capture does not name can
+   move the part without a sketch that shows it.
+5. The probe follows each sketch of the part that is tied to another component (`body_scope.tied_body_sketches`).
+   This includes a sketch that is tied only through references that the reader could not read. Thus a move through
+   the geometry of the other component shows in the followed sketch.
+6. The probe reads each measured reference that a geometry link of the size names (`ref` of the link, in
+   `SizeProbe.refs`).
+
+When one point is not true, the size is not explained, and the mark stays. A size that changes the part through the
+geometry of another component is followed when the probe measured the move: the outline of the tied sketch, or the
+place of the reference, becomes a formula of the size. When the probe could not measure the move, the size is marked
+with the reason of the sketch or the reference.
+
+Tests: `tests/test_shared_sizes.py` (a shared size that changes the part through its own values is not in
+`body_moved`; a shared size that no value of the part reads stays in it; each point above that is not true keeps the
+mark). Hand check SH1 in `docs/hand-checks.md` tests this in Fusion.
 
 ### 1.9 The final translation
 
@@ -2385,6 +2431,8 @@ alphabetical order by module.
   - `restore_check.py` holds `restore_gap`: how far the followed sketches and the measured references read after the
     tries are from E0 (`SizeProbe.measure_restore`).
   - `sizes.py` holds `kept_sizes`, `extra_sizes` and `sizes_to_try`, the one place that decides which sizes get tries.
+  - `body_routes.py` holds `explained`: the sizes whose body change in a try of their own the values of the part's
+    steps explain, so `SizeProbe._body_only` does not list them (see "A size that another component shares" in 1.8).
   - `borrowed_view.py` (`probe_view`, `borrowed_sketches`, `covers_a_sketch`, `with_borrowed`), `shared_reads.py`,
     `states.py` (compare states), `reasons.py` (the texts of untried sizes) and `shadow.py` (`shadow_of`).
   - The package re-exports what the rest of the add-in reads as `probe_flow.<name>`.
@@ -3266,6 +3314,7 @@ Tests of the layout and of the order:
 | `test_interfaces.py` | That the real classes, the shared fakes and both probes have every declared member, and that the pure code asks a store, a port or a probe only for a declared member. |
 | `test_put_back_order.py` | The order of the calls an export makes to put the design back, on every way it ends. |
 | `test_probe_row_schedule.py` | The row phases and the nearer and check rows of a probe or a group. |
+| `test_shared_sizes.py` | A size shared with another component: a body change that the part's own step values explain, and the doubts that keep the mark. |
 | `test_far_phase.py` | The far rows one size at a time: the same rows for a clean export, the sizes that go last, the share of the nearer rows. |
 | `test_probe_state_record.py` | The `ProbeState` record and its `report.json` form. |
 | `test_step_kinds.py` | The step kind table, its handlers and the readers. |
@@ -6289,7 +6338,11 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    - "<step> reads it, and the copy does not follow it": the audit. A handler did not deal with a `data.params` path.
      This is a gap in the handler, not in the design.
    - "it changes this part in a way the copy does not follow": the probe saw the body change in the size's own row,
-     but no followed sketch or reference moved (`probe.motion.body_moved`).
+     but no followed sketch or reference moved (`probe.motion.body_moved`). A value of the part's own steps that
+     reads the size does not cause this mark when every other way of the size to the part is followed
+     (`body_routes.explained`, see "A size that another component shares" in 1.8). Thus look for a route that the
+     probe does not follow: a tied sketch that is not followed, construction geometry, a joint, or a reference that
+     was not read.
    - "Fusion uses it only in Extrude5, a step the export could not copy": only a gap reads it. Expected.
    - "it was followed between A and B": the rows covered less than the range.
    - "it moves a joint": a joint reads it.

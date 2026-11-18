@@ -2216,7 +2216,11 @@ that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
 sketch plane, or its only use is the distance of an offset plane a step places (`sizes.construction_only`): it feeds
-step values, which follow it or mark it. The translator treats it as doubtful
+step values, which follow it or mark it. A size that a value of the part's own steps reads is not kept either when
+every other way it reaches the part is followed: the capture lists its `dependents`, it places no occurrence, every
+model parameter behind it is a step value or a dimension of a followed sketch, every sketch of the part tied to
+another component is followed, and every measured reference its geometry links name is read
+(`export_plan/probe_flow/body_routes.py`). The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
 `used` true. It is never reported as changing nothing.
 

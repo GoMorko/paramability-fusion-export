@@ -1,6 +1,7 @@
 """Which ticked sizes the model parameters of the design reach: the dimensions of a sketch, a construction plane or
-axis, a joint, the height of a sketch text, an offset plane whose own distance one size sets, and the sizes a step
-reads through its own parameters. `reach` gives these names too and adds what moves the places a step uses.
+axis, a joint, the height of a sketch text, an offset plane whose own distance one size sets, the sizes a step
+reads through its own parameters, and the makers of the model parameters behind one size (`makers_of`). `reach`
+gives these names too and adds what moves the places a step uses.
 """
 # model parameter created_by kind -> what it moves, for the reason text
 STATIC_KINDS = {
@@ -52,6 +53,19 @@ def probed_sizes(table):
     for link in table.links:
         reached |= table.depends(link["param"])
     return [name for name in table.ticked if name in reached]
+
+
+def makers_of(table, name):
+    """`{(kind, sketch)}` of the model parameters of the table that read the free size `name`, at any depth: the kind
+    of each one's maker (`feature`, `sketchDimension`, `constructionPlane`, `joint`, `other` and so on) and, for a
+    sketch dimension, the name of its sketch ("" for the other kinds)."""
+    out = set()
+    for param in table.model_params.values():
+        if name in table.depends(param["name"]):
+            kind = _kind(param) or "other"
+            sketch = ((param.get("created_by") or {}).get("sketch") or "") if kind == "sketchDimension" else ""
+            out.add((kind, sketch))
+    return out
 
 
 def placed_offsets(table, capture):

@@ -12,6 +12,7 @@ and are only compared with each other. Captures without component tokens match b
 from ..capture_model import lineage
 from ..capture_model.capture import same_body
 from ..design_model import design, step_links
+from ..params import geometry_links
 from ..params.defaults import reads_of
 
 QUANTITY_PATHS = ("quantity", "quantity_one", "quantity_two")
@@ -163,6 +164,17 @@ def body_links(capture):
     if capture.get("sketch_links"):
         found = step_links.reach(capture, _body_sketch_names(capture))
     return found + step_links.reference_links(capture, _own_items(capture))
+
+
+def tied_body_sketches(capture):
+    """Names of the sketches the picked body's own steps use that are tied to another component
+    (`params.geometry_links.tied_sketches`), also those tied only through references that did not say what they point
+    at. Every sketch the capture records as tied when it does not say which body is picked."""
+    if not isinstance(capture, dict):
+        return []
+    items = _own_items(capture)
+    names = None if items is None else {name for _, name in _sketches_of(items)}
+    return list(geometry_links.tied_sketches(capture, names))
 
 
 def body_outside(capture):

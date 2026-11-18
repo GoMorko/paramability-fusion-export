@@ -14,6 +14,7 @@ from ...sketch_values.motion import ENDED_STOPPED, ENDED_TIME, SHAPE
 from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...design_model.reach import probed_sizes
 from ...translator.sizes import construction_only
+from .body_routes import explained
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
 from .differences import comparable, read_differences, sketch_names
 from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_ENDED, NOT_TRIED_STOPPED, NOT_TRIED_TIME,
@@ -685,7 +686,11 @@ class SizeProbe:
             elif body_changed(self.e0, read) and varied[0] not in body:
                 body.append(varied[0])
         # A size tried only for a sketch plane, or only for the distance of an offset plane a step places, feeds
-        # step values: those follow it (or mark it), so its body change is explained.
+        # step values: those follow it (or mark it), so its body change is explained. So does a size that a value of
+        # the part's own steps reads, when every other way it reaches the part is followed (`body_routes.explained`).
         placed = (set(plane_sizes.plane_driven(self.capture, self.table)) - set(probed_sizes(self.table))
                   | set(construction_only(self.table, self.capture)))
+        if any(n not in followed and n not in skip and n not in placed for n in body):
+            placed |= explained(self.capture, self.table, {t["sketch"] for t in targets if t.get("sketch")},
+                                {r["key"] for r in self.refs})
         return [n for n in body if n not in followed and n not in skip and n not in placed]

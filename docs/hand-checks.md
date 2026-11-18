@@ -930,3 +930,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
     The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
     marker held. Afterwards the design is as before.
+81. SH1, a box and a lid that share sizes. Add user parameters `Width` = 60 mm, `Depth` = 40 mm, `Height` = 30 mm
+    and `Wall` = 2 mm. Make two components, `Box` and `Lid`. In `Box`, sketch a `Width` x `Depth` rectangle on the XY
+    plane from the origin, extrude it `Height` up as a new body, and shell it with the top face open and a thickness
+    of `Wall`. Make the lid in three versions, one at a time:
+    A. In `Lid`, sketch its own `Width` x `Depth` rectangle on the XY plane from the origin and extrude it `Wall` up as
+       a new body.
+    B. In `Lid`, sketch on the XY plane, project the four outer bottom edges of the box, and extrude the projected
+       rectangle `Wall` up as a new body.
+    C. As B, but replace the projected left edge by a fit point spline through three points that bulges 5 mm out.
+    Export: pick the body of `Lid` and tick `Width`, `Depth` and `Wall`. In A and B, expect all three as sizes with
+    no "may give unexpected results", and `probe.motion.body_moved` empty in `report.json`. In B, `probe.states` has
+    tries of `Wall`, and the lid outline follows `Width` and `Depth` in Paramability. In C, expect `Width`, `Depth`
+    and `Wall` marked "may give unexpected results", since the tries do not follow a sketch with a spline. Afterwards
+    the design is as before.

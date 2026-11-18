@@ -29,7 +29,10 @@ learning only.
    component with the same name (two components can each have a "Chamfer1") does not hide it. The add-in tries the
    range ends one size at a time, and finds the last value that builds for that size before it goes to the next size.
    A size that also changes steps of another component gets its range ends after the other sizes (your favourites
-   still come first), since its tries are the most likely to break the design.
+   still come first), since its tries are the most likely to break the design. Such a size (a width or a wall that a
+   box and its lid share) is a normal size of the part when it changes the part only through the part's own steps,
+   for example the length of an extrude, and the sketches drawn around the other component stay where they are in
+   its tries.
    When the tries end early, the range stops at the last value that built, and its note says that the values after it
    were not tried. This is also true for a size whose range ends were not tried yet: its range stops at the values
    that built in its first tries. A range end that you typed is kept.
