@@ -1,4 +1,4 @@
-"""The dialog shown after a recipe is saved: the sections of `dialog_model.result_rows` (reopen, what to check,
+"""The dialog shown after a recipe is saved: the sections of `dialog_model.result_rows` (reopen steps, what to check,
 result, sizes, steps left out, more sizes). Each section is a group with the section title, and its lines are a
 read only text box that scrolls when the lines are many. The groups of `OPEN_SECTIONS` start open and the others
 start folded, so the window is short. When Fusion cannot make a group the sections are text boxes, each with a
@@ -11,25 +11,19 @@ the id of the export command that runs now. When Fusion reports that this comman
 window starts at once. A view that never got its window is dropped when the next export starts (`drop_pending`). When
 the window cannot start, a short summary goes to a message box; the window and the box never both show.
 
-A view with `reopen` (`dialog_model.result_rows`, `export_plan.rollback.reopen_offered`) gets the button "Reopen the
-design from its last save" under its `reopen` section, the first section. A click hands the reopen to
-`reopen.request`; the reopen runs when this window's command has ended (`on_terminated` calls `reopen.window_ended`).
-The dialog never reopens on its own: only that click starts it.
+The dialog only shows text. It never closes or opens a design: Fusion does not support that inside a command event
+(see `docs/developer-guide.md`). A view with `reopen` has the steps to get the design back as it was saved in its first
+section.
 """
 import adsk.core
 
 from ..dialog_model.dialog_rows import escape, text_rows
-from ..export_plan.rollback import REOPEN_BUTTON
-from . import reopen
-from .handlers import HandlerList, on_command_created, on_command_terminated, on_input_changed
+from .handlers import HandlerList, on_command_created, on_command_terminated
 from .log import log, message_box
 from .notice import status_notice
 
 COMMAND_ID = "ParamabilityExportResultCommand"
 COMMAND_NAME = "Saved for Paramability"
-REOPEN_ID = "pm_result_reopen_button"
-REOPEN_NOTE_ID = "pm_result_reopen_note"
-REOPEN_NOTE = "The design reopens when you close this window."
 MAX_ROWS = 12
 OPEN_SECTIONS = ("reopen", "check", "result", "next")
 DIALOG_SIZE = (560, 480)
@@ -40,7 +34,6 @@ _end_handlers = HandlerList()
 _listening = {}
 _pending = {}  # `view` and `command`: the result that waits for the end of the command `command`
 _ready = {}  # `view`: the result of the window that is being made
-_note = {}  # `box`: the text box that says when the design reopens
 
 
 def start():
@@ -112,12 +105,9 @@ def _fallback():
 
 
 def on_terminated(args):
-    """A command has ended. The command the pending result waits for starts the window; the result window itself
-    starts the reopen when the button asked for it. Other commands change nothing."""
-    command_id = args.commandId
-    if command_id == COMMAND_ID:
-        reopen.window_ended()
-    elif "view" in _pending and command_id == _pending.get("command"):
+    """A command has ended. The command the pending result waits for starts the window. Other commands change
+    nothing."""
+    if "view" in _pending and args.commandId == _pending.get("command"):
         _open()
 
 
@@ -155,8 +145,6 @@ def remove():
     _handlers.clear()
     _pending.clear()
     _ready.clear()
-    _note.clear()
-    reopen.remove()
 
 
 def _on_created(args):
@@ -166,37 +154,13 @@ def _on_created(args):
         return
     try:
         build(command, view)
-        if view.get("reopen"):
-            on_input_changed(command.inputChanged, lambda a: on_input(a.input.id), _handlers)
     except Exception as error:
         log("building the result dialog failed: %s" % error)
         message_box(summary(view))
 
 
-def on_input(input_id):
-    """A click in the result dialog: the reopen button asks for the reopen (`reopen.request`) and shows when it runs;
-    nothing else acts."""
-    if input_id == REOPEN_ID and reopen.request(COMMAND_ID):
-        try:
-            _note["box"].isVisible = True
-        except Exception as error:
-            log("showing the reopen note failed: %s" % error)
-
-
-def add_button(inputs, input_id, text):
-    """A button with `text` on it. A Fusion button without an icon shows its `text`, not its name, so both are set;
-    without `text` the button is an empty space."""
-    button = inputs.addBoolValueInput(input_id, text, False, "", False)
-    try:
-        button.text = text
-    except Exception as error:
-        log("setting the button text failed: %s" % error)
-    return button
-
-
 def build(command, view):
     """Add the inputs of the result dialog. view comes from dialog_model.result_rows.result_view."""
-    _note.clear()
     command.isOKButtonVisible = False
     try:
         command.cancelButtonText = "Close"
@@ -209,11 +173,6 @@ def build(command, view):
     for section in view["sections"]:
         inputs, grouped = _section_inputs(command.commandInputs, section)
         add_text(inputs, "pm_result_" + section["key"], section["title"], section["lines"], heading=not grouped)
-        if section["key"] == "reopen" and view.get("reopen"):
-            add_button(inputs, REOPEN_ID, REOPEN_BUTTON)
-            note = inputs.addTextBoxCommandInput(REOPEN_NOTE_ID, "", REOPEN_NOTE, 1, True)
-            note.isVisible = False
-            _note["box"] = note
 
 
 def _section_inputs(inputs, section):

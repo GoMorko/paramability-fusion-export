@@ -23,9 +23,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   whose tries ended keep only the values tried before, and their reasons say that the values after them were not
   tried. Your design is changed then, so the export is undone at its end. With "Lighter on memory" ticked, after the
   add-in let Fusion forget Undo data, every try stops there as before, since the export could not be undone. The
-  result window then offers to reopen the design from its last save when the design was saved in the cloud. When
-  Fusion showed unsaved changes when the export dialog opened, the window says that a reopen loses every change since
-  that save: Fusion also counts the add-in's own marker moves of an earlier export or dialog as unsaved changes, so the
+  result window then gives the steps to get the design back as it was saved when the design was saved in the cloud:
+  close it without saving and open it again from the Data Panel. The add-in does not close or open the design
+  itself, because Fusion does not support that inside a command event. When
+  Fusion showed unsaved changes when the export dialog opened, the window says that closing without saving loses every
+  change since that save: Fusion also counts the add-in's own marker moves of an earlier export or dialog as unsaved changes, so the
   add-in cannot tell them from yours, and you decide. A design that was never saved gets the advice to close it
   without saving instead. When the
   sketch still reads another outline after the export, or the body has another volume or size than before, the result

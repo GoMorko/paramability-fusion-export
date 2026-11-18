@@ -27,11 +27,10 @@ def big_view():
 
 
 class GroupsTest(unittest.TestCase):
-    def test_the_reopen_group_is_first_with_its_button_and_the_rest_follow(self):
+    def test_the_reopen_group_is_first_and_the_rest_follow(self):
         command = fakes.FakeCommand()
         result_dialog.build(command, offered_view())
         self.assertEqual(group_ids(command)[:3], ["pm_group_reopen", "pm_group_check", "pm_group_result"])
-        self.assertIn(result_dialog.REOPEN_ID, command.commandInputs.items)
 
     def test_without_the_reopen_the_result_comes_first(self):
         command = fakes.FakeCommand()
@@ -66,7 +65,7 @@ class GroupsTest(unittest.TestCase):
         result_dialog.build(command, shown)
         for found in shown["sections"]:
             self.assertIn("# " + found["title"], command.commandInputs.itemById("pm_result_" + found["key"]).formattedText)
-        self.assertIn(result_dialog.REOPEN_ID, command.commandInputs.items)
+        self.assertIsNotNone(command.commandInputs.itemById("pm_result_reopen"))
 
 
 class SummaryTest(unittest.TestCase):

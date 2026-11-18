@@ -51,8 +51,8 @@ def _on_created(args):
         recipe_dialog.build_blocked(command, export_flow.PENDING_POSITION_MESSAGE)
         return
 
-    # Read before anything moves the marker: whether the design is its last save decides if a design the export
-    # cannot undo may be reopened from that save (`export_plan.rollback.reopen_offered`).
+    # Read before anything moves the marker: whether the design has a saved cloud version decides if the result
+    # gives the steps to get back a design the export cannot undo (`export_plan.rollback.reopen_offered`).
     saved_start = read_saved_start(_document_of(design))
     # Read before the capture below moves the marker: the export compares the steps with this at its end.
     timeline_start = read_timeline(DesignParameterStore(design))

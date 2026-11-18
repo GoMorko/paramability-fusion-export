@@ -930,19 +930,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     step of `Holder` turned off, no step in `steps_changed` that is off, and the marker at the end of the timeline.
     The fillet is in error again, as at the start. In `export-trail.log` a line says that steps were turned on with the
     marker held. Afterwards the design is as before.
-81. RO1, the reopen of a design that the export could not undo. Build the model of OC1 (two components, `Box` and
-    `Holder`, and the pocket that cuts through the filleted edge at `Width` = 90 mm). Save the design, and make no
+81. RO1, the steps to get back a design that the export could not undo. Build the model of OC1 (two components, `Box`
+    and `Holder`, and the pocket that cuts through the filleted edge at `Width` = 90 mm). Save the design, and make no
     change after the save.
     Export: pick the body of `Box`, tick `Width` with a range of 20 to 90 mm, tick "Lighter on memory", then click OK.
     Expect the result window to say that the add-in could not undo the export, and to show the part "Reopen the
-    design" with the button "Reopen the design from its last save". Click the button. Expect the result window to
-    close (or to say that the design reopens when you close it; then close it), the design to close without a question and open again in about 2 s, with no unsaved changes, the fillet of
-    the holder as it was before the export, and the timeline marker where it was. The `.paramability` file stays
-    saved. Repeat with one change after the save (for example move the timeline marker one step and back): the
-    result window still has the reopen button, and the line above it says that every change since the last save is
-    lost. Repeat with the
-    network off before you click: expect the reopen to work, or a message that the saved version was not found with
-    the design still open as the export left it. The design must never stay closed without a message.
+    design" first and open, with three steps: close the design, click Don't Save, open it again from the Data Panel
+    with the project, the file name and the version. Expect no button in that part, and no unsaved changes line.
+    Fusion must not close or open the design by itself, and must stay stable after you close the window. Follow the
+    steps: the fillet of the holder is as it was before the export, and the timeline marker is where it was. The
+    `.paramability` file stays saved. Repeat with one change after the save (for example move the timeline marker one
+    step and back): the part shows one more line before the steps, which says that every change since the last save is
+    lost. Repeat with a design that was never saved to the cloud: expect no "Reopen the design" part.
 82. SZ1, a box and a lid that share sizes. Add user parameters `Width` = 60 mm, `Depth` = 40 mm, `Height` = 30 mm
     and `Wall` = 2 mm. Make two components, `Box` and `Lid`. In `Box`, sketch a `Width` x `Depth` rectangle on the XY
     plane from the origin, extrude it `Height` up as a new body, and shell it with the top face open and a thickness
@@ -1053,11 +1052,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     has ended. Right after the export command ends, the window "Saved for Paramability" opens once, with no long
     message box after it. The Text Commands window says "the result window opens when ParamabilityExportCommand has
     ended"; when it says "opening the result window now" instead, note the command it names. The first section "Reopen the design" is open and
-    its button, with the words "Reopen the design from its last save" on it, is visible without scrolling. "Check your design" and "Result" are open too; "Sizes", "Left out" and
+    shows its three steps without scrolling, and has no button. "Check your design" and "Result" are open too; "Sizes", "Left out" and
     "More sizes" are folded and open when their title is clicked. A long list scrolls inside its box. Close and
-    open the window again from a second export: it still opens. Afterwards the design is as it was; do not click the
-    button unless you want to test the reopen. When you do click it, the window closes by itself or says "The design
-    reopens when you close this window", and the design reopens only after the window is closed.
+    open the window again from a second export: it still opens. Afterwards the design is as it was.
 88. PW1, one progress window. Use a design with several sizes that move sketches, so that the tries run in many batches.
     Export: tick all sizes.
     One window "Measuring how your sketches follow each size ..." shows from the first try to the end. It does not
