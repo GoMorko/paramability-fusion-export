@@ -1278,14 +1278,14 @@ The volumes are exact (a loop of area A whose centre lies at radius R makes 2 pi
 8240.43), `ring_on_rod` (that ring joined onto a rod of radius 12, 30 high: 6880 pi - 120 pi^2 = 20429.80),
 `two_rings_on_rod` (two separate outlines joined onto that rod in one revolve: 6160 pi = 19352.21),
 `groove_both_sides` (one Revolve Cut of a full turn with a groove from radius 9 to 12, z 10 to 14, drawn on both
-sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi = 12780.0; not yet built in Orca) and
+sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi = 12780.0, built so in Orca) and
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.
 
 A hole up to a plane and extrudes that start at a distance from a face have captures in `tests/orca_to_faces.py`. Save
-one with `python3 -m tests.orca_to_faces <name> <file>` and give the file to `write`. The volumes are exact. Not yet
-built in OrcaSlicer (run them with `check <file> --set ...` and write the result here):
+one with `python3 -m tests.orca_to_faces <name> <file>` and give the file to `write`. The volumes are exact. All three
+built with these volumes in OrcaSlicer 2.5.1 on 2026-11-18, also after the `--set` changes:
 
 - `hole_to_plane`: a 40 x 40 x 20 block (box -20 to 20 in x and y, 0 to 20 in z) with a hole of diameter 5 from the
   middle of its top down to Plane1 at `lift_mm` 8, so 12 deep: 32000 - 75 pi = 31764.38 mm3. The depth is
