@@ -57,14 +57,28 @@ def pair_rows(sizes, moved, states, room, extra=()):
     return rows
 
 
-def far_rows(sizes, moved, room, extra=(), states=()):
+def far_order(sizes, moved, extra=(), late=()):
+    """The Fusion names of the tried sizes in the order their far rows run, one size after the other: as `probe_rows`
+    tries them, with the sizes in `late` moved to the end in that same order. `late` are the sizes whose near tries
+    showed trouble outside the part (`ProbeRun`): a far try of such a size is the likeliest to leave the design broken
+    and stop the tries, so the other sizes get their far tries first."""
+    names = [s["param"] for s in tried_sizes(sizes, moved, extra)]
+    late = set(late)
+    return [n for n in names if n not in late] + [n for n in names if n in late]
+
+
+def far_rows(sizes, moved, room, extra=(), states=(), only=None):
     """The far rows (step 3 of the module docstring), at most `room` of them: every tried size at the range ends that
     differ from its value and from its near values, so the measured span grows. An end is left out when `states` (the
     probe states so far, marked as for `nearer_rows`) hold a row of that size alone that did not build at a value on
-    that side. Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer
-    tries."""
+    that side. `only`, when given, are the Fusion names of the sizes to plan (in the order of `far_order`); every row
+    still sets all sizes. Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and
+    their nearer tries."""
     rows = []
     tried = tried_sizes(sizes, moved, extra)
+    if only is not None:
+        chosen = set(only)
+        tried = [s for s in tried if s["param"] in chosen]
     states = as_states(states)
     for size in tried:
         wanted = [end for end in _far_ends(size, near_values(size)) if not fails_by(states, size, end)]

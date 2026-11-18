@@ -202,6 +202,9 @@ START_ONE = ["store.saved_expressions", "store.timeline_health", "read(full)", "
              "store.suppress_items([6, 7])", "read(full)"]
 START_TWO = ["store.saved_expressions", "store.timeline_health", "read(full)", "read(full)", "store.roll_marker(9)",
              "read(full)", "read(full)", "store.suppress_items([6, 7])", "read(full)", "read(full)"]
+# The batches of tries of a clean export: the near rows, the near pair rows, the far rows of each of the three sizes
+# (one batch per size), the far pair rows.
+TRY_BATCHES = ["rows"] * 6
 # The end check with nothing changed: the marker back, then the steps compared with the start.
 END_CHECK = ["store.unroll_marker", "store.return_marker", "store.timeline_health"]
 # The same with a probe: the body is read once the marker is back, before the steps are compared (once per body).
@@ -221,7 +224,7 @@ class SingleBodyOrderTest(unittest.TestCase):
     def test_a_clean_export_puts_everything_back_then_drops_the_last_undo_step(self):
         calls, health = export(order_port(OrderStore()))
         self.assertEqual(calls, START_ONE + [
-            "rows", "rows", "rows", "rows",
+            *TRY_BATCHES,
             "read(full)",  # the discovery base
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",  # tries done
             "read(full)",  # the probe's last read
@@ -233,7 +236,7 @@ class SingleBodyOrderTest(unittest.TestCase):
     def test_a_sketch_put_back_an_end_rebuild_and_a_step_left_off(self):
         calls, health = export(order_port(OrderStore(changed="Fillet1", stuck=["Lid sketch"]), flip=True))
         self.assertEqual(calls, START_ONE + [
-            "rows", "rows", "rows", "rows",
+            *TRY_BATCHES,
             "read(full)", "keeper.put_back", "store.recompute", "read(full)",
             "store.current_expressions", "store.unsuppress_items", "log(steps still turned off)", "read(outline)",
             "undo.drop",
@@ -248,7 +251,7 @@ class SingleBodyOrderTest(unittest.TestCase):
     def test_a_step_that_stays_changed_gets_the_values_again_and_keeps_the_undo_data(self):
         calls, health = export(order_port(OrderStore(changed="Fillet1", heals=False)))
         self.assertEqual(calls, START_ONE + [
-            "rows", "rows", "rows", "rows",
+            *TRY_BATCHES,
             "read(full)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
             "read(full)",
@@ -361,7 +364,7 @@ class SeveralBodiesOrderTest(unittest.TestCase):
     def test_a_clean_export_of_two_bodies(self):
         calls, health = export(order_parts_port(OrderStore(changed="Fillet1")), parts=True)
         self.assertEqual(calls, START_TWO + [
-            "rows", "rows", "rows", "rows",
+            *TRY_BATCHES,
             "read(full)", "read(full)",
             "store.current_expressions", "store.unsuppress_items", "read(outline)", "read(outline)", "undo.drop",
             "read(full)", "read(full)",

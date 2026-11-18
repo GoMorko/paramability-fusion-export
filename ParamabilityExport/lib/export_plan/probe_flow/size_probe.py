@@ -18,7 +18,8 @@ from .reasons import (CLEARED_TRY, NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, N
                       UNREADABLE, UNTRIED, WARNED_TRY, not_built_try, watched_why)
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
-from .states import BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, same_numbers
+from .states import (BODY_REQUEST, body_changed, body_compared, body_difference, box_numbers, marked_states, moves_others,
+                     same_numbers)
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
 OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
@@ -351,14 +352,25 @@ class SizeProbe:
         moved, extra = planned
         return plan.pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
-    def far_rows(self, sizes, room, states=None):
-        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`), and
-        then the far pair rows (`far_pair_rows`) once."""
-        planned = self.schedule.take(NEAR, then=FAR)
+    def far_order(self, sizes, late=()):
+        """The Fusion names of the sizes `probe_rows` tried, in the order their far rows run (`plan.far_order`): the
+        sizes in `late` and those whose tries so far moved a reference of another component (`moves_others`) last."""
+        planned = self.schedule.take(NEAR)
+        if planned is None:
+            return []
+        late = set(late) | set(moves_others(self.states, self.refs, {e.name: e.value for e in self.table.entries}))
+        return plan.far_order(sizes, *planned, late=late)
+
+    def far_rows(self, sizes, room, states=None, only=None):
+        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`): of the
+        sizes in `only` (Fusion names), or of every size whose far rows were not planned yet, and then the far pair rows
+        (`far_pair_rows`) once (`RowSchedule.far_sizes`)."""
+        planned = self.schedule.take(NEAR)
         if planned is None:
             return []
         moved, extra = planned
-        return plan.far_rows(sizes, moved, room, extra=extra, states=self._marked() if states is None else states)
+        names = self.schedule.far_sizes(plan.far_order(sizes, moved, extra), only)
+        return plan.far_rows(sizes, moved, room, extra, self._marked() if states is None else states, only=names)
 
     def far_pair_rows(self, sizes, room, states=None):
         """Once, after the far rows: all sizes at their minimum, then at their maximum (`plan.far_pair_rows`)."""
@@ -368,11 +380,12 @@ class SizeProbe:
         moved, extra = planned
         return plan.far_pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
-    def nearer_rows(self, sizes, room):
+    def nearer_rows(self, sizes, room, only=None):
         """The next rows that try the sizes nearer to their value now where rows did not build or changed a followed
-        outline (`plan.nearer_rows`), within `room` rows and the export's `plan.MAX_NEARER_ROWS`."""
+        outline (`plan.nearer_rows`; only the sizes in `only` when given), within `room` rows and the export's
+        `plan.MAX_NEARER_ROWS`."""
         rows = plan.nearer_rows(sizes, marked_states(self.states, self.outline_changes()), self.moving_sizes(),
-                                self.schedule.nearer_room(room))
+                                self.schedule.nearer_room(room), only)
         self.schedule.count_nearer(rows)
         return rows
 

@@ -898,3 +898,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `Diameter` and `Height`. In Paramability set `Height` to 50 and `Diameter` to 80, then to 30 and 40: the cup stays
     open at the top, and the round stays on the outer rim, as in Fusion at the same values. Afterwards the design is
     as before.
+78. FS1, far tries one size after the other. Add user parameters `Round` = 2 mm and `Cut` = 5 mm and star `Round` as
+    a favourite. On the XY plane sketch a 40 x 30 mm rectangle and extrude it 10 mm up as a new body. Fillet its four
+    vertical edges with `Round`. Add a construction plane offset from the bottom face by `Cut`, Split Body with it and
+    Remove the upper piece.
+    Export: tick `Round` with a range of 1 to 20 mm and `Cut` with a range of 2 to 20 mm. Expect the result window to
+    say that the tries stopped early after a try of `Cut`, and name the Remove step. The range of `Round` stops less
+    than 2 mm below the largest round Fusion builds on the 30 mm side (about 15 mm), not at 2.5 mm. In `report.json`,
+    `probe.states` has the tries of `Round` near 15 mm before the far tries of `Cut`. Afterwards the design is as
+    before.

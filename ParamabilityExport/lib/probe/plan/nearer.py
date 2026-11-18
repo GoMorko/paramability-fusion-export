@@ -95,7 +95,7 @@ def nearer_left(sizes, states, moved=()):
     return out
 
 
-def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
+def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS, only=None):
     """The next rows that try sizes nearer to their value now, after rows that did not build.
 
     `states` are the probe states so far (`values`, `built` and `changed`, a row that changed a followed outline
@@ -106,9 +106,9 @@ def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
     sketch or a measured place) with only one row that built and nothing left to try gets one more row half way to
     that value, so the fit has two readings to tell a straight line from a curve. Sizes that no row built come
     first. At most `limit` rows; the export calls this again after each batch, so each call gives one step per
-    side."""
+    side. `only`, when given, are the Fusion names of the sizes to plan; every row still sets all sizes."""
     states = as_states(states)
-    plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes]
+    plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes if only is None or size["param"] in only]
     unbuilt = {size["param"] for size in sizes
                if not any(ok for _, ok in tried_alone(states, size["param"], size["value"]))}
     plans.sort(key=lambda entry: entry[0]["param"] not in unbuilt)

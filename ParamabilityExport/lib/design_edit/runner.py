@@ -235,7 +235,8 @@ class RowExport:
         then set every parameter it needs. A row that builds with timeline items in warning that were not in warning
         or in error in the baseline (`apply.new_warnings`) also gives 'warned': `(timeline position, name)` of each,
         in timeline order. A row that builds a step that was in error in the baseline (`apply.cleared_errors`) gives
-        'cleared': `(timeline position, name)` of each.
+        'cleared': `(timeline position, name)` of each. The new warnings that `counts_warning` does not count give
+        'others_warned', from the same read.
         A row without a STEP gives 'step_file': None as well.
         """
         if self._saved is None:
@@ -284,6 +285,8 @@ class RowExport:
                     result["warned"] = warned
                 if cleared:
                     result["cleared"] = cleared
+                if others:
+                    result["others_warned"] = others
                 if row.get("step") is False:
                     self.export_step(None)
                     results.append(result)

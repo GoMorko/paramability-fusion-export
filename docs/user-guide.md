@@ -171,7 +171,10 @@ unexpected results" (or "not a size", when only a sketch reads them), with the r
 a tip: pick a longer time, or untick sizes that do not need to change. The result window says that the tries stopped
 and how many sizes were left out. The tries start with the sizes you marked as favourites in Fusion, then the others, so
 a limit cuts the sizes least likely to matter first; the extra tries (the far ends of the ranges, the sizes together,
-the checks of other components) come after the near tries of every size. `report.json` keeps the limit, whether it was
+the checks of other components) come after the near tries of every size. The far ends are tried one size after the
+other, and each size gets its tries for the last value that builds before the next size starts. So a later try that
+stops the tries does not cut the range of a size tried before it. A size whose near tries changed a step of another
+component gets its far ends last. `report.json` keeps the limit, whether it was
 reached and the sizes left out (`probe.time_limit`, `timing.probe.time_limit`).
 
 A try that reads a flat face a step uses as its outline (see `docs/limits.md`) leaves the timeline marker before that step
