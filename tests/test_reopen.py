@@ -10,7 +10,8 @@ from tests.test_result_rows import view as plain_view
 from lib.design_edit.saved_start import SavedStart, reopen
 from lib.dialog_model.result_rows import reopen_view, result_view, section
 from lib.export_plan.health import HealthInputs, make_health
-from lib.export_plan.rollback import REOPEN_BUTTON, ExportOutcome, decide, reopen_offered
+from lib.export_plan.rollback import (REOPEN_BUTTON, REOPEN_LINE, REOPEN_LINE_UNSAVED, ExportOutcome, decide,
+                                      reopen_line, reopen_offered)
 from lib.fusion_reader.saved_design import FusionReopen, read_saved_start
 from lib.params import size_table
 
@@ -104,9 +105,16 @@ class OfferTest(unittest.TestCase):
         self.assertTrue(NO_UNDO.undo_unavailable)
         self.assertTrue(reopen_offered(SAVED, NO_UNDO))
 
-    def test_unsaved_changes_at_the_start_or_an_unknown_state_never_offer_it(self):
-        for start in (SavedStart(True, True, FILE_ID, 4), SavedStart(True, None, FILE_ID, 4),
-                      SavedStart(False, False), SavedStart(True, False, "", 4), None):
+    def test_unsaved_changes_at_the_start_still_offer_it_with_the_line_that_changes_since_the_save_are_lost(self):
+        # Fusion counts the add-in's own marker moves as unsaved changes, so the person decides.
+        for start in (SavedStart(True, True, FILE_ID, 4), SavedStart(True, None, FILE_ID, 4)):
+            self.assertTrue(reopen_offered(start, NO_UNDO), start)
+            self.assertEqual(reopen_line(start), REOPEN_LINE_UNSAVED)
+        self.assertEqual(reopen_line(SAVED), REOPEN_LINE)
+
+    def test_a_design_without_a_saved_cloud_version_is_never_offered_it(self):
+        for start in (SavedStart(False, False), SavedStart(True, False, "", 4), SavedStart(True, False, FILE_ID),
+                      None):
             self.assertFalse(reopen_offered(start, NO_UNDO), start)
 
     def test_a_design_that_is_back_or_that_fusion_undoes_is_not_offered_it(self):
@@ -120,10 +128,13 @@ class StartReadTest(unittest.TestCase):
         self.assertEqual(start, SavedStart(True, False, FILE_ID, 7, "Box", "Prints"))
         self.assertTrue(start.can_reopen)
 
-    def test_a_design_with_changes_not_in_the_cloud_or_unreadable_cannot_be_reopened(self):
-        unreadable = types.SimpleNamespace(dataFile=FakeDataFile(7))
-        for document in (FakeDocument(FakeDataFile(7), modified=True), FakeDocument(None), unreadable, None):
+    def test_a_design_not_in_the_cloud_cannot_be_reopened_and_unsaved_changes_are_kept(self):
+        for document in (FakeDocument(None), None):
             self.assertFalse(read_saved_start(document).can_reopen)
+        unreadable = read_saved_start(types.SimpleNamespace(dataFile=FakeDataFile(7)))
+        changed = read_saved_start(FakeDocument(FakeDataFile(7), modified=True))
+        self.assertTrue(unreadable.unsaved_at_start and changed.unsaved_at_start)
+        self.assertFalse(read_saved_start(FakeDocument(FakeDataFile(7))).unsaved_at_start)
 
 
 class ReopenTest(unittest.TestCase):

@@ -254,12 +254,13 @@ def position_pending(design):
 
 
 def _offer_reopen(design, saved_start, undo):
-    """True when the result offers to reopen the design from its last save (`rollback.reopen_offered`); the document
-    and `saved_start` are then kept for the button (`fusion_ui.reopen`). Never raises."""
+    """The line above the reopen button when the result offers to reopen the design from its last save
+    (`rollback.reopen_offered`, `rollback.reopen_line`), else False; the document and `saved_start` are then kept for
+    the button (`fusion_ui.reopen`). Never raises."""
     try:
         if rollback.reopen_offered(saved_start, undo):
             reopen.keep(design.parentDocument, saved_start)
-            return True
+            return rollback.reopen_line(saved_start)
     except Exception as exc:
         log(f"offering the reopen failed: {exc!r}")
     reopen.forget()
@@ -293,7 +294,7 @@ def _show_result(file_name, result, ticked, parts=False, undo=rollback.NO_ROLLBA
         message_box(rollback.with_lines(text, health, undo), error=health_module.design_changed(health) or undo.says)
         status_notice(notice)
         if offer:
-            result_dialog.show(reopen_view(), config.EXPORT_COMMAND_ID)
+            result_dialog.show(reopen_view(offer), config.EXPORT_COMMAND_ID)
     else:
         if health_module.design_changed(health) or undo.says:
             message_box("\n\n".join(rollback.check_lines(health, undo)), error=True)
@@ -366,4 +367,4 @@ def _run_export(design, parameters, model_params, design_unit, form, captures, t
     elif undo.says:
         export_common.tell_undone(undo)
         if offer:
-            result_dialog.show(reopen_view(), config.EXPORT_COMMAND_ID)
+            result_dialog.show(reopen_view(offer), config.EXPORT_COMMAND_ID)

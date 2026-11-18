@@ -35,9 +35,16 @@ class SavedStart:
 
     @property
     def can_reopen(self):
-        """True when the open design was its saved version: in the cloud, read as not modified, with a known file and
-        version. A value that could not be read counts as no."""
-        return bool(self.in_cloud and self.modified is False and self.file_id and isinstance(self.version, int))
+        """True when the design has a saved version to reopen: in the cloud, with a known file and version. A value
+        that could not be read counts as no."""
+        return bool(self.in_cloud and self.file_id and isinstance(self.version, int))
+
+    @property
+    def unsaved_at_start(self):
+        """True when Fusion showed unsaved changes when the export started, or this could not be read. Fusion also
+        counts the add-in's own marker moves of an earlier export or dialog as unsaved changes, so this does not prove
+        that the person changed the design; a reopen then loses every change since the last save."""
+        return self.modified is not False
 
 
 NOT_SAVED = SavedStart()
