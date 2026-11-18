@@ -4,12 +4,15 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
+from tests.orca_revolves import caps, ring_on_rod, ring_with_hole, rect, symmetric_ring, two_rings_on_rod
 from tests.orca_sized import fixture, revolve_sized, table_of
+from tests.test_orca_finishes import finish_item
 from tests.probe_helpers import user
 
 from lib.capture_model import gap_hints
 from lib.orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from lib.orca_translate import FIXED, causes, translate
+from lib.orca_translate.solid import Solid, Turned, seamed
 from lib.orca_translate.place import plane_point
 
 
@@ -140,15 +143,141 @@ class RevolveTest(unittest.TestCase):
     def test_what_orca_cannot_turn_is_left_out_with_its_cause(self):
         across = fixture("revolve_full")
         across["items"][1]["data"]["axis"]["point"] = [7, 0, 0]
-        holed = fixture("revolve_full")
-        holed["items"][1]["data"]["profiles"][0]["loops"].append(
-            {"outer": False, "curves": [{"kind": "circle", "center": [7.5, 10], "radius": 1}]})
         cases = {"axis off the plane": (fixture("revolve_axis_off_plane"), causes.REVOLVE_AXIS),
-                 "across the axis": (across, causes.REVOLVE_ACROSS_AXIS),
-                 "outline with holes": (holed, causes.OUTLINE_HOLES)}
+                 "across the axis": (across, causes.REVOLVE_ACROSS_AXIS)}
         for name, (capture, cause) in cases.items():
             with self.subTest(name):
                 self.assertEqual([(g["index"], g["cause"]) for g in translate(capture).left_out], [(1, cause)])
+
+
+def revolves(result):
+    return [f for f in result.recipe.features if f.type == FeatureType.REVOLVE]
+
+
+def modes(result):
+    """(type, mode) of each feature that builds or joins bodies, in order."""
+    return [(f.type, f.mode) for f in result.recipe.features if f.type in (FeatureType.REVOLVE, FeatureType.BOOLEAN)]
+
+
+def sized_result(capture):
+    return translate(capture, table_of(capture))
+
+
+class HolesAndOutlinesTest(unittest.TestCase):
+    def test_a_first_body_with_a_hole_turns_the_hole_and_cuts_it_away(self):
+        result = translate(ring_with_hole())
+        self.assertEqual(result.left_out, [])
+        self.assertEqual(modes(result), [(FeatureType.REVOLVE, BooleanMode.NEW), (FeatureType.REVOLVE, BooleanMode.CUT)])
+        # Orca turns one closed loop per sketch: the hole has a sketch of its own.
+        hole = result.recipe.features[revolves(result)[1].sketch_ref]
+        self.assertEqual([e.type for e in hole.entities if not e.construction], [EntityType.CIRCLE])
+
+    def test_a_holed_outline_on_the_part_is_a_tool_body_joined_by_a_boolean(self):
+        result = translate(ring_on_rod())
+        self.assertEqual(result.left_out, [])
+        self.assertEqual(modes(result), [(FeatureType.REVOLVE, BooleanMode.NEW), (FeatureType.REVOLVE, BooleanMode.CUT),
+                                         (FeatureType.BOOLEAN, BooleanMode.ADD)])
+        made = result.recipe.features[-1]
+        self.assertEqual((made.target_body, made.bool_tool_body), (0, 1))
+
+    def test_a_holed_cut_is_a_tool_body_cut_from_the_part(self):
+        capture = ring_on_rod()
+        capture["items"][-1]["data"]["operation"] = "cut"
+        self.assertEqual(modes(translate(capture))[-1], (FeatureType.BOOLEAN, BooleanMode.CUT))
+
+    def test_several_outlines_are_turned_one_by_one(self):
+        result = translate(two_rings_on_rod())
+        self.assertEqual(result.left_out, [])
+        self.assertEqual(modes(result), [(FeatureType.REVOLVE, BooleanMode.ADD)] * 2)
+
+    def test_an_intersect_of_several_outlines_joins_them_first(self):
+        capture = two_rings_on_rod()
+        capture["items"][-1]["data"]["operation"] = "intersect"
+        self.assertEqual(modes(translate(capture)), [(FeatureType.REVOLVE, BooleanMode.NEW),
+                                                     (FeatureType.REVOLVE, BooleanMode.ADD),
+                                                     (FeatureType.BOOLEAN, BooleanMode.INTERSECT)])
+
+    def test_a_cut_outline_that_misses_the_part_is_left_out_of_the_step(self):
+        capture = two_rings_on_rod()
+        data = capture["items"][-1]["data"]
+        data["operation"] = "cut"
+        data["profiles"][1]["loops"] = [{"outer": True, "curves": rect(10, 40, 16, 45)}]
+        result = translate(capture)
+        self.assertEqual((result.left_out, modes(result)), ([], [(FeatureType.REVOLVE, BooleanMode.CUT)]))
+
+    def test_a_new_body_of_separate_outlines_is_left_out(self):
+        capture = two_rings_on_rod()
+        capture["items"] = capture["items"][:1] + capture["items"][2:]
+        item = capture["items"][-1]
+        item["data"]["operation"] = "newBody"
+        item["bodies_after"].append({"token": "t2", "name": "Body2"})
+        self.assertEqual([g["index"] for g in translate(capture).left_out], [item["index"]])
+
+    def test_outlines_that_turn_different_ways_are_left_out_unless_the_turn_is_full(self):
+        capture = ring_with_hole()
+        item = capture["items"][-1]
+        item["data"]["profiles"].append(dict(item["data"]["profiles"][0], loops=[
+            {"outer": True, "curves": rect(-20, 0, -10, 10)}]))
+        self.assertEqual(translate(capture).left_out, [])
+        item["data"].update(extent={"kind": "angle", "angle_deg": 90, "symmetric": False},
+                            start_face_normal=[0, -1, 0])
+        self.assertEqual([g["cause"] for g in translate(capture).left_out], [causes.REVOLVE_OUTLINE_SIDES])
+
+
+class SymmetricSizedTest(unittest.TestCase):
+    def test_a_symmetric_angle_that_follows_sizes_is_two_halves_from_the_sketch(self):
+        result = sized_result(symmetric_ring())
+        halves = revolves(result)
+        self.assertEqual([(f.flip, f.revolve_angle, f.expr) for f in halves],
+                         [(flip, 45.0, {"revolve_angle": "min(half_deg, 180)"}) for flip in (False, True)])
+        # The sketch stays on the XZ plane.
+        self.assertAlmostEqual(abs(result.recipe.features[halves[0].sketch_ref].plane.normal[1]), 1.0)
+        self.assertEqual(result.parameters[0]["outcome"], "variable")
+
+    def test_an_intersect_keeps_the_angle_as_a_number(self):
+        capture = ring_on_rod()
+        capture["items"][-1] = symmetric_ring()["items"][1]
+        capture["items"][-1].update(index=3)
+        capture["items"][-1]["data"]["operation"] = "intersect"
+        capture["parameters"] = symmetric_ring()["parameters"]
+        result = sized_result(capture)
+        self.assertEqual([(f.revolve_angle, f.expr) for f in revolves(result)], [(90.0, {})])
+        self.assertEqual(result.parameters[0]["outcome"], FIXED)
+
+    def test_a_cut_whose_half_misses_the_part_keeps_the_angle_as_a_number(self):
+        capture = ring_on_rod()
+        cut = symmetric_ring()["items"][1]
+        cut.update(index=3)
+        start, end = caps(45.0, cut=True)
+        cut["data"].update(operation="cut", start_face_normal=start, end_face_normal=end)
+        cut["data"]["profiles"][0]["loops"] = [{"outer": True, "curves": rect(10, 5, 14, 9)}]
+        capture["items"][-1] = cut
+        capture["parameters"] = symmetric_ring()["parameters"]
+        both = sized_result(capture)
+        self.assertEqual([f.flip for f in revolves(both)], [False, True])
+        # A block on one side of the sketch plane only: the other half would cut nothing.
+        capture["items"][1]["data"]["profiles"][0]["loops"] = [{"outer": True, "curves": rect(0, 0, 30, 30)}]
+        capture["items"][1]["data"]["side_one"]["distance"] = 30.0
+        capture["items"][1]["data"]["profiles"][0]["frame"]["origin"] = [-15, 0, 0]
+        one = sized_result(capture)
+        self.assertEqual([(f.revolve_angle, f.expr) for f in revolves(one)], [(90.0, {})])
+        self.assertEqual(one.parameters[0]["outcome"], FIXED)
+
+    def test_a_round_on_halves_joined_together_is_left_out_for_the_seam(self):
+        top = [[15 * math.cos(math.radians(a)), 15 * math.sin(math.radians(a)), 10] for a in (-30, 0, 30)]
+        for capture, cause in ((symmetric_ring(), causes.REVOLVE_SEAM),
+                               (fixture("revolve_symmetric"), causes.EDGES_UNKNOWN)):
+            capture["items"].append(finish_item(2, "FilletFeature", top, 1.0))
+            result = sized_result(capture) if capture.get("parameters") else translate(capture)
+            self.assertEqual([g["cause"] for g in result.left_out], [cause])
+
+    def test_seamed_finds_a_seam_inside_bodies(self):
+        frame = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+        shape = Turned(frame, [rect(5, 0, 10, 5)], [0, 0, 0], [0, 1, 0], 90)
+        body = Solid([("add", Solid([("add", shape)]))])
+        self.assertFalse(seamed(body))
+        shape.seam = True
+        self.assertTrue(seamed(body))
 
 
 if __name__ == "__main__":

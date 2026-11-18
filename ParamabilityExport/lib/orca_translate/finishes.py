@@ -26,6 +26,7 @@ from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, corner_hosts, finish_body, limits, outline_rounds
 from .skip import Skip
+from .solid import seamed
 
 _ROUND_KINDS = {
     "variable": "Rounds with a changing radius are not copied to Orca.",
@@ -196,6 +197,10 @@ def _finish(ctx, item, kind, records, value, notes):
     if any(done["pieces"] != len(ctx.solid.pieces) for done in earlier):
         return Skip("%s changed after an earlier round or chamfer, and the Orca copy cannot tell its edges "
                     "any more, so this %s is left out." % (named, kind.noun), causes.EDGES_CHANGED)
+    if seamed(ctx.solid):
+        return Skip("Orca builds %s from revolves joined together, and the faces where they meet stay split, so "
+                    "Orca's groups of edges hold edges Fusion does not have, and this %s is left out."
+                    % (body_words, kind.noun), causes.REVOLVE_SEAM)
     body = finish_body.body_of(ctx.solid)
     if isinstance(body, str):
         return Skip("Orca can %s only whole groups of edges, and the Orca copy cannot tell the edges of %s "
