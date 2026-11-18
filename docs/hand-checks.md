@@ -1052,9 +1052,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     has ended. Right after the export command ends, the window "Saved for Paramability" opens once, with no long
     message box after it. The Text Commands window says "the result window opens when ParamabilityExportCommand has
     ended"; when it says "opening the result window now" instead, note the command it names. The first section "Reopen the design" is open and
-    its button, with the words "Reopen the design from its last save" on it, is visible without scrolling. When
-    you click OK in the export dialog, its contents disappear and only an empty frame stays behind the progress
-    window until the export ends. "Check your design" and "Result" are open too; "Sizes", "Left out" and
+    its button, with the words "Reopen the design from its last save" on it, is visible without scrolling. "Check your design" and "Result" are open too; "Sizes", "Left out" and
     "More sizes" are folded and open when their title is clicked. A long list scrolls inside its box. Close and
     open the window again from a second export: it still opens. Afterwards the design is as it was; do not click the
     button unless you want to test the reopen. When you do click it, the window closes by itself or says "The design
