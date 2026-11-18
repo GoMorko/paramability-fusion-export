@@ -345,3 +345,27 @@ class ToolStop:
         else:
             where = "its step %s" % self.step if self.step else "one of its steps"
         return ("The tool body %s cannot be copied because of %s. %s" % (self.tool, where, self.why)).rstrip()
+
+
+# Thin extrudes (`steps/thin.py`).
+THIN_UNREADABLE = "A setting of this thin extrude could not be read from Fusion."
+THIN_LOCATION = "The wall of this thin extrude sits in a way that is not copied."
+THIN_NO_THICKNESS = "This thin extrude has no wall thickness."
+THIN_TWO_WAYS = "A thin extrude that goes two ways is not copied."
+THIN_REACHES = "A thin extrude that reaches to a face or goes through is not copied."
+THIN_TAPER = "A thin extrude with a taper is not copied."
+THIN_UNMEASURED_AREA = "The size of the wall of this thin extrude could not be measured, so it is not copied."
+THIN_NOT_ONE_OUTLINE = "The outline of this thin extrude is not one closed outline of lines and arcs."
+THIN_SIDE_UNSURE = "The side the wall of this thin extrude sits on could not be told, so it is not copied."
+THIN_AREA_DIFFERS = "The wall of this thin extrude does not match its outline and thickness, so it is not copied."
+THIN_LINE_UNREADABLE = "The line of this thin extrude could not be read."
+THIN_NOT_ONE_LINE = "The line of this thin extrude is not one open line of one sketch, so it is not copied."
+THIN_LINE_CURVES = "A thin extrude of a line with arcs or curves is not copied."
+THIN_LINE_OPPOSED = ("The lines of this thin extrude do not all run the same way along it, so the side of its wall is not "
+                     "known.")
+THIN_LINE_APART = "The lines of this thin extrude do not run one after the other, so it is not copied."
+THIN_WALL_UNMEASURED = "The wall of this thin extrude could not be measured, so it is not copied."
+THIN_NOT_MATCHING = ("The wall Fusion made does not match the line, side and length of this thin extrude, so it is not "
+                     "copied.")
+THIN_UNSURE = ("The side the wall of this thin extrude stands on could not be told from what Fusion made, so it is "
+               "not copied.")
