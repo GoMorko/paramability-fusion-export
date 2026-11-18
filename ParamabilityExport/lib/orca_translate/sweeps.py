@@ -74,7 +74,7 @@ _CLOSED_FREE_CURVE = ("The path of this sweep is a closed loop with a free curve
 _SHARP = "The path of this sweep has a sharp corner, which the Orca copy does not build the way Fusion does."
 _HOLES = "Orca's sweep cannot carry an outline with holes along a bent path, so this sweep is left out."
 _NOT_SQUARE = "The outline of this sweep is not square to its path, which the Orca copy cannot build the same way."
-_PATH_FIXED = "%s: Orca cannot tie the path of a sweep to a variable, so the path keeps its drawn numbers"
+_PATH_FIXED = "%s: Orca cannot tie the path of a %s to a variable, so the path keeps its drawn numbers"
 
 
 def _profile_problem(profile):
@@ -92,7 +92,7 @@ def _profile_problem(profile):
     return None
 
 
-def _path_problem(path):
+def path_problem(path):
     if not isinstance(path, dict):
         return Skip(shared.SWEEP_PATH_UNREAD)
     if path.get("foreign"):
@@ -135,9 +135,28 @@ def sweep(ctx, step):
     if abs(data["twist_deg"]) > _ZERO or abs(data["taper_deg"]) > _ZERO:
         return Skip(_TWIST, causes.SWEEP_SHAPE)
     path = data.get("path")
-    problem = _path_problem(path)
+    problem = path_problem(path)
     if problem is not None:
         return problem
+    found = plan_path(item, data, profiles, path)
+    if isinstance(found, Skip):
+        return found
+    if found.kind == "line":
+        made = _as_extrude(ctx, item, data, profiles, found)
+    elif found.kind in ("arc", "circle"):
+        made = _as_revolve(ctx, item, data, profiles, found)
+    else:
+        made = _as_sweep(ctx, item, data, profiles, found)
+    if not isinstance(made, Skip):
+        mark_path(ctx, item, path)
+    return made
+
+
+def plan_path(item, data, profiles, path):
+    """The `PathPlan` of a sweep's path (`path`, read with `path_problem` first) for its outlines, or a Skip: the path
+    planned as for a recipe and checked for what the Orca copy builds (one plane, splines Orca draws exactly, no sharp
+    corner, the outline square to the path), and a new body's measured volume and end face against the outline and
+    path. `data` holds the sweep's operation, orientation and measures (`design_model.steps.sweep`)."""
     frame = profiles[0]["frame"]
     if any(abs(abs(vec.dot(vec.unit(p["frame"]["z"]), vec.unit(frame["z"]))) - 1.0) > _ZERO
            or abs(vec.dot(vec.sub(p["frame"]["origin"], frame["origin"]), vec.unit(frame["z"]))) > 1e-4
@@ -160,7 +179,7 @@ def sweep(ctx, step):
         return Skip(_NOT_SQUARE)
     if found.kind == "flat" and _sharp(found):
         return Skip(_SHARP, gap_hints.SHARP_CORNER)
-    combine = _COMBINE[operation]
+    combine = _COMBINE[data.get("operation")]
     for profile in profiles:
         if len(profiles) == 1:
             problem = volume_problem(item, data, combine, profile, found)
@@ -169,15 +188,7 @@ def sweep(ctx, step):
         problem, _ = end_check(data, combine, profile, found, profile_points(profile), False, False)
         if problem is not None:
             return Skip.of(problem)
-    if found.kind == "line":
-        made = _as_extrude(ctx, item, data, profiles, found)
-    elif found.kind in ("arc", "circle"):
-        made = _as_revolve(ctx, item, data, profiles, found)
-    else:
-        made = _as_sweep(ctx, item, data, profiles, found)
-    if not isinstance(made, Skip):
-        _mark_path(ctx, item, path)
-    return made
+    return found
 
 
 def _sharp(found):
@@ -220,7 +231,7 @@ def _as_revolve(ctx, item, data, profiles, found):
         step = "join" if n and operation == "newBody" else operation
         # The start face's outward normal points against the turn for new material and along it for a cut.
         start = vec.scale(found.direction, 1.0 if step == "cut" else -1.0)
-        # The axis is the centre of the path arc: `_mark_path` marks the sizes that move the path.
+        # The axis is the centre of the path arc: `mark_path` marks the sizes that move the path.
         turned = {"operation": step, "profiles": [profile], "axis": dict(found.axis, fixed=True),
                   "extent": {"kind": "angle", "angle_deg": found.angle_deg}, "start_face_normal": start,
                   "params": {}}
@@ -234,14 +245,15 @@ def _as_revolve(ctx, item, data, profiles, found):
 
 # ---- a flat chain: an Orca sweep -------------------------------------------------------------------------------
 
-def _path_frame(found):
-    """The frame of the path's plane at its start: x along the path, z the plane's normal."""
-    normal = vec.unit(found.recipe["on"]["normal"])
+def path_frame(found, normal=None):
+    """The frame of the path's plane at its start: x along the path, z the plane's normal (`normal`, by default the
+    normal of a flat path's plane)."""
+    normal = vec.unit(normal or found.recipe["on"]["normal"])
     x = vec.unit(found.direction)
     return {"origin": list(found.start), "x": x, "y": vec.cross(normal, x), "z": normal}
 
 
-def _flat_curve(curve, frame):
+def flat_curve(curve, frame):
     """A path curve in the 2D frame of the path's plane, as a capture curve; None for a spline Orca cannot draw
     exactly."""
     def local(p):
@@ -257,11 +269,12 @@ def _flat_curve(curve, frame):
             "center": local(curve["center"]), "radius": float(curve["radius"])}
 
 
-def carried(frame, loops, found):
-    """The shape of the outline (`loops` of capture curves in `frame`) swept along the flat path `found`, turning
-    with it: a `solid.Solid` that adds a prism along each line, the outline turned about the centre of each arc and a
-    chain of prisms along each spline (`sweep_splines.chain`)."""
-    normal = vec.unit(found.recipe["on"]["normal"])
+def carried(frame, loops, found, normal=None):
+    """The shape of the outline (`loops` of capture curves in `frame`) swept along the path `found` in one plane
+    (`normal`, by default the normal of a flat path's plane), turning with it: a `solid.Solid` that adds a prism
+    along each line, the outline turned about the centre of each arc and a chain of prisms along each spline
+    (`sweep_splines.chain`)."""
+    normal = vec.unit(normal or found.recipe["on"]["normal"])
     first = vec.unit(found.direction)
 
     def placed(direction, at):
@@ -307,8 +320,8 @@ def _arc_angle(curve, centre, axis):
 
 def _as_sweep(ctx, item, data, profiles, found):
     operation = data.get("operation")
-    frame = _path_frame(found)
-    flat = [_flat_curve(c, frame) for c in found.curves]
+    frame = path_frame(found)
+    flat = [flat_curve(c, frame) for c in found.curves]
     entities = entities_of([flat]) if all(c is not None for c in flat) else None
     if entities is None:
         return Skip(_FREE_CURVE, causes.SWEEP_PATH)
@@ -400,9 +413,9 @@ def _across(outline_plane, path_plane, uv):
 
 # ---- sizes that move the path ----------------------------------------------------------------------------------
 
-def _mark_path(ctx, item, path):
-    """Mark the sizes that move the path: the dimensions of its sketch and what its plane sits on, or for body edges
-    every size read before the step."""
+def mark_path(ctx, item, path, what="sweep"):
+    """Mark the sizes that move the path of a sweep or pipe (`what`): the dimensions of its sketch and what its plane
+    sits on, or for body edges every size read before the step."""
     if ctx.table is None:
         return
     items = ctx.capture.get("items") or []
@@ -411,7 +424,7 @@ def _mark_path(ctx, item, path):
     else:
         names = (reach.profile_sizes(ctx.table, path, graph_for(ctx.capture, path))
                  + reach.placement_sizes(ctx.table, items, path, item.get("index")))
-    ctx.doubt(list(dict.fromkeys(names)), _PATH_FIXED % label(item))
+    ctx.doubt(list(dict.fromkeys(names)), _PATH_FIXED % (label(item), what))
 
 
 HANDLERS = {"SweepFeature": sweep}

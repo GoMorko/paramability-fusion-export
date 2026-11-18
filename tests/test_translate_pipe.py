@@ -184,8 +184,8 @@ class LeftOutTest(unittest.TestCase):
         cause = self.refused(lambda data, _: data.update(operation="newComponent"))
         self.assertEqual(cause, gap_hints.NEW_COMPONENT)
 
-    def test_the_orca_output_leaves_the_pipe_out_with_a_tip(self):
-        (gap,) = orca_translate.translate(pipe()).left_out
+    def test_the_orca_output_leaves_a_square_pipe_out_with_a_tip(self):
+        (gap,) = orca_translate.translate(pipe(lambda data, _: data.update(section="square"))).left_out
         self.assertEqual((gap["index"], gap["cause"]), (ITEM, gap_hints.PIPE))
         self.assertIn("hint", gap)
 
