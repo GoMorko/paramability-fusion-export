@@ -258,9 +258,13 @@ def _line(ctx, item, data, wall):
     shift, side = found
     frame = _frame_at(line.frame, shift)
     thickness = wall["thickness"]
-    side_name = facts.line_side(line, wall["location"], thickness, data.get("wall_faces"), frame["origin"],
-                                side.distance.n, side.end == ExtrudeEnd.SYMMETRIC, -1 if side.flip else 1,
-                                _faces_of_part(ctx, data))
+    if wall.get("decided") in facts.SWAPPED:
+        # A step written as a thin extrude (a rib or web) whose side its own handler found from what Fusion made.
+        side_name = wall["decided"]
+    else:
+        side_name = facts.line_side(line, wall["location"], thickness, data.get("wall_faces"), frame["origin"],
+                                    side.distance.n, side.end == ExtrudeEnd.SYMMETRIC, -1 if side.flip else 1,
+                                    faces_of_part(ctx, data))
     if is_problem(side_name):
         return Skip.of(side_name)
     problem = facts.line_problem(line.points, *facts.reaches(side_name, thickness))
@@ -297,7 +301,7 @@ def _line(ctx, item, data, wall):
     return out
 
 
-def _faces_of_part(ctx, data):
+def faces_of_part(ctx, data):
     """The faces of the part before the step (`target_faces_before`) when they are the faces of the body the copy
     builds, else None: while a tool body is built, a face of the part proves nothing about a face of the tool."""
     body = data.get("target_faces_body")

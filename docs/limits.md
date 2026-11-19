@@ -234,7 +234,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   unexpected results.
   These steps are left out of the copy (see "When a step cannot be copied"):
   thin extrudes of an open line with arcs or curves, of several outlines, of an outline with holes, that go two ways,
-  reach to a face or have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
+  reach to a face or have a taper, ribs and webs with a draft or a fillet, along arcs or curves, or that the faces or
+  the volume Fusion measured do not show as a whole wall (see above), an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
   a tilted or curved surface, extrudes that end on a tilted or curved surface with two sides, a taper or an offset
   past it, on such a face of another body or after a left out step, or on such a face that a size may move when no
   copied extrude made it, extrudes that end on a flat face that Fusion joins with the faces next to it (Chain Faces
@@ -439,6 +440,19 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
   leaves the step out, and so does a corner that turns more than 135 degrees (a V sharper than 45 degrees). A range
   stops before a corner takes a whole line, turns past 135 degrees, or two lines come too near.
+- A Rib or a Web along straight sketch lines drawn one after the other, with no draft and no fillet, is copied as a
+  thin wall along each line, the way a thin extrude of an open line is. For a rib, the depth is the width of the wall
+  in the sketch plane and the thickness its length along the sketch normal. For a web, the thickness is the width and
+  the depth the length. Fusion does not say which side or way it builds the wall, so the faces that Fusion made decide
+  it, as for a thin extrude. Fusion stops the wall where it meets the part, also for a depth that you type. So the
+  step is copied only when the part grew by the whole wall. These are left out: a wall that runs into the part (a rib
+  drawn into a corner with a depth), a rib that Fusion fills up to the part (a gusset with To Next in a corner), and a
+  web whose lines Fusion stretches to the part (Extend on, lines that stop short of the faces). To Next is copied when
+  the wall reaches one flat face of the part all along its line (a rib across a channel down to its floor, a divider
+  web down to the floor of a tray). Its depth keeps the number that Fusion measured, and every size that the steps
+  before it read may give unexpected results. A wall inside the box of the part could run into the part at a larger
+  depth, so its depth, the thickness of a web and the sizes before it may give unexpected results too. A wall that
+  grows away from the part (a rib standing on a plate, a web up from a plate) follows all of its sizes.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - A hole "To" a face or plane is copied as a hole of the depth Fusion made, in both exports. Its end must lie on that

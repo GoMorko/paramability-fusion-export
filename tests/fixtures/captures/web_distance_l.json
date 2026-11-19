@@ -1,0 +1,1345 @@
+{
+ "_comment": "A tray as in web_tonext_grid and Web1 of one L line (3, 15) to (30, 15) to (30, 37) on z = 20, depth wd = 8 mm down, wt = 2 mm on one side, not extended. Saved from a Fusion export of a test design.",
+ "capture": 3,
+ "fusion": "2706.1.17",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "parameters": {
+  "user": [
+   {
+    "name": "wt",
+    "expression": "2 mm",
+    "value": 0.2,
+    "display_value": 2.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "",
+    "dependent_parameters": [
+     "d9"
+    ],
+    "dependents": [
+     {
+      "name": "d9",
+      "kind": "feature",
+      "component": "tok1",
+      "feature": "Web1"
+     }
+    ]
+   },
+   {
+    "name": "wd",
+    "expression": "8 mm",
+    "value": 0.8,
+    "display_value": 8.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "",
+    "dependent_parameters": [
+     "d10"
+    ],
+    "dependents": [
+     {
+      "name": "d10",
+      "kind": "feature",
+      "component": "tok1",
+      "feature": "Web1"
+     }
+    ]
+   }
+  ],
+  "model": [
+   {
+    "name": "d3",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok2",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d4",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok2",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d5",
+    "expression": "-17 mm",
+    "value": -1.7000000000000002,
+    "display_value": -17.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok3",
+     "name": "Extrude2",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d6",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok3",
+     "name": "Extrude2",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d7",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "constructionPlane",
+     "token": "tok4",
+     "name": "Plane1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d8",
+    "expression": "0.00 mm",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "ExtraOffset",
+    "created_by": {
+     "kind": "constructionPlane",
+     "token": "tok4",
+     "name": "Plane1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d9",
+    "expression": "wt",
+    "value": 0.2,
+    "display_value": 2.0,
+    "unit": "mm",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "wt"
+    ],
+    "role": "Thickness",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok5",
+     "name": "Web1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d10",
+    "expression": "wd",
+    "value": 0.8,
+    "display_value": 8.0,
+    "unit": "mm",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "wd"
+    ],
+    "role": "Depth",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok5",
+     "name": "Web1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d11",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "DraftAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok5",
+     "name": "Web1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d12",
+    "expression": "0.00 mm",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "FilletRadius",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok5",
+     "name": "Web1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   }
+  ]
+ },
+ "target": {
+  "token": "tok6",
+  "name": "Tray",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    60.0,
+    40.0,
+    20.0
+   ]
+  },
+  "volume_mm3": 17604.0,
+  "component": {
+   "token": "tok1",
+   "name": "(Unsaved)",
+   "root": true
+  },
+  "placement": null
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "target_before": null,
+   "target_after": null,
+   "data": {},
+   "bodies_before": []
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ],
+   "target_changed": true,
+   "target_before": null,
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 48000.0
+   },
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0.0,
+           40.0
+          ],
+          "end": [
+           0.0,
+           0.0
+          ],
+          "entity": "tok7"
+         },
+         {
+          "kind": "line",
+          "start": [
+           0.0,
+           0.0
+          ],
+          "end": [
+           60.0,
+           0.0
+          ],
+          "entity": "tok8"
+         },
+         {
+          "kind": "line",
+          "start": [
+           60.0,
+           0.0
+          ],
+          "end": [
+           60.0,
+           40.0
+          ],
+          "entity": "tok9"
+         },
+         {
+          "kind": "line",
+          "start": [
+           60.0,
+           40.0
+          ],
+          "end": [
+           0.0,
+           40.0
+          ],
+          "entity": "tok10"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok11",
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "tok12",
+       "origin": true
+      }
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 20.0,
+    "profile_area": 2400.0,
+    "end_area": 2400.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "20 mm",
+      "value": 20.0
+     },
+     "side_one.taper_deg": {
+      "name": "d4",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok11",
+     "name": "Sketch1"
+    }
+   ],
+   "bodies_before": []
+  },
+  {
+   "index": 2,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 48000.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 48000.0
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ]
+  },
+  {
+   "index": 3,
+   "name": "Extrude2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ],
+   "target_changed": true,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 48000.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "data": {
+    "operation": "cut",
+    "profiles": [
+     {
+      "sketch": "Sketch2",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        20.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           3.0,
+           37.0
+          ],
+          "end": [
+           3.0,
+           3.0
+          ],
+          "entity": "tok13"
+         },
+         {
+          "kind": "line",
+          "start": [
+           3.0,
+           3.0
+          ],
+          "end": [
+           57.0,
+           3.0
+          ],
+          "entity": "tok14"
+         },
+         {
+          "kind": "line",
+          "start": [
+           57.0,
+           3.0
+          ],
+          "end": [
+           57.0,
+           37.0
+          ],
+          "entity": "tok15"
+         },
+         {
+          "kind": "line",
+          "start": [
+           57.0,
+           37.0
+          ],
+          "end": [
+           3.0,
+           37.0
+          ],
+          "entity": "tok16"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok17"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": -17.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "tok6",
+      "name": "Tray"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "end_offset": -17.0,
+    "profile_area": 1836.0,
+    "end_area": 1836.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d5",
+      "expression": "-17 mm",
+      "value": -17.0
+     },
+     "side_one.taper_deg": {
+      "name": "d6",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok17",
+     "name": "Sketch2"
+    }
+   ],
+   "bodies_before": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ]
+  },
+  {
+   "index": 4,
+   "name": "Plane1",
+   "type": "ConstructionPlane",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ]
+  },
+  {
+   "index": 5,
+   "name": "WebLines",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ]
+  },
+  {
+   "index": 6,
+   "name": "Web1",
+   "type": "WebFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ],
+   "target_changed": true,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 16788.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 17604.0
+   },
+   "data": {
+    "kind": "web",
+    "operation": "join",
+    "thickness": 2.0,
+    "symmetric": false,
+    "extent": "distance",
+    "depth": 8.0,
+    "flipped": false,
+    "draft_deg": 0.0,
+    "fillet": 0.0,
+    "participants": [],
+    "target_box_before": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      60.0,
+      40.0,
+      20.0
+     ]
+    },
+    "volume_before": 16788.0,
+    "volume_after": 17604.0,
+    "wall_faces": [
+     {
+      "surface": "Plane",
+      "point": [
+       32.0,
+       25.0,
+       16.0
+      ],
+      "normal": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "vertices": [
+       [
+        32.0,
+        37.0,
+        20.0
+       ],
+       [
+        32.0,
+        13.0,
+        20.0
+       ],
+       [
+        32.0,
+        13.0,
+        12.0
+       ],
+       [
+        32.0,
+        37.0,
+        12.0
+       ]
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       17.5,
+       14.0,
+       12.0
+      ],
+      "normal": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "vertices": [
+       [
+        3.0,
+        13.0,
+        12.0
+       ],
+       [
+        3.0,
+        15.0,
+        12.0
+       ],
+       [
+        30.0,
+        15.0,
+        12.0
+       ],
+       [
+        30.0,
+        37.0,
+        12.0
+       ],
+       [
+        32.0,
+        37.0,
+        12.0
+       ],
+       [
+        32.0,
+        13.0,
+        12.0
+       ]
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       17.5,
+       13.0,
+       16.0
+      ],
+      "normal": [
+       0.0,
+       -1.0,
+       0.0
+      ],
+      "vertices": [
+       [
+        32.0,
+        13.0,
+        20.0
+       ],
+       [
+        3.0,
+        13.0,
+        20.0
+       ],
+       [
+        3.0,
+        13.0,
+        12.0
+       ],
+       [
+        32.0,
+        13.0,
+        12.0
+       ]
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       26.0,
+       16.0
+      ],
+      "normal": [
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "vertices": [
+       [
+        30.0,
+        37.0,
+        20.0
+       ],
+       [
+        30.0,
+        37.0,
+        12.0
+       ],
+       [
+        30.0,
+        15.0,
+        12.0
+       ],
+       [
+        30.0,
+        15.0,
+        20.0
+       ]
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       16.5,
+       15.0,
+       16.0
+      ],
+      "normal": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "vertices": [
+       [
+        30.0,
+        15.0,
+        20.0
+       ],
+       [
+        30.0,
+        15.0,
+        12.0
+       ],
+       [
+        3.0,
+        15.0,
+        12.0
+       ],
+       [
+        3.0,
+        15.0,
+        20.0
+       ]
+      ]
+     }
+    ],
+    "extended": false,
+    "path": {
+     "closed": false,
+     "kind": "sketch",
+     "curves": [
+      {
+       "kind": "line",
+       "start": [
+        3.0,
+        15.0,
+        20.0
+       ],
+       "end": [
+        30.0,
+        15.0,
+        20.0
+       ],
+       "flat": {
+        "kind": "line",
+        "start": [
+         3.0,
+         15.0
+        ],
+        "end": [
+         30.0,
+         15.0
+        ]
+       },
+       "entity": "tok18",
+       "opposed": false,
+       "check": null
+      },
+      {
+       "kind": "line",
+       "start": [
+        30.0,
+        15.0,
+        20.0
+       ],
+       "end": [
+        30.0,
+        37.0,
+        20.0
+       ],
+       "flat": {
+        "kind": "line",
+        "start": [
+         30.0,
+         15.0
+        ],
+        "end": [
+         30.0,
+         37.0
+        ]
+       },
+       "entity": "tok19",
+       "opposed": false,
+       "check": null
+      }
+     ],
+     "edges": [],
+     "sketch": "WebLines",
+     "sketch_token": "tok20",
+     "frame": {
+      "origin": [
+       0.0,
+       0.0,
+       20.0
+      ],
+      "x": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "y": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "z": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "reference": {
+      "kind": "constructionPlane",
+      "token": "tok4",
+      "made_by": 4,
+      "definition": "ConstructionPlaneOffsetDefinition",
+      "built_on": [
+       {
+        "origin": true
+       }
+      ]
+     },
+     "projected": false
+    },
+    "target_faces_body": {
+     "token": "tok6",
+     "name": "Tray"
+    },
+    "target_faces_before": [
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       3.0,
+       11.5
+      ],
+      "normal": [
+       0.0,
+       1.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       57.0,
+       20.0,
+       11.5
+      ],
+      "normal": [
+       -1.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       37.0,
+       11.5
+      ],
+      "normal": [
+       0.0,
+       -1.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       3.0,
+       20.0,
+       11.5
+      ],
+      "normal": [
+       1.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       20.0,
+       3.0
+      ],
+      "normal": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       40.0,
+       10.0
+      ],
+      "normal": [
+       0.0,
+       1.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       60.0,
+       20.0,
+       10.0
+      ],
+      "normal": [
+       1.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       0.0,
+       10.0
+      ],
+      "normal": [
+       0.0,
+       -1.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       0.0,
+       20.0,
+       10.0
+      ],
+      "normal": [
+       -1.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       1.5,
+       20.0
+      ],
+      "normal": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     {
+      "surface": "Plane",
+      "point": [
+       30.0,
+       20.0,
+       0.0
+      ],
+      "normal": [
+       0.0,
+       0.0,
+       -1.0
+      ]
+     }
+    ],
+    "params": {
+     "thickness": {
+      "name": "d9",
+      "expression": "wt",
+      "value": 2.0
+     },
+     "depth": {
+      "name": "d10",
+      "expression": "wd",
+      "value": 8.0
+     }
+    }
+   },
+   "bodies_before": [
+    {
+     "token": "tok6",
+     "name": "Tray"
+    }
+   ]
+  }
+ ],
+ "marker": {
+  "position": 7,
+  "count": 7
+ }
+}

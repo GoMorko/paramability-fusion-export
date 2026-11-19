@@ -2225,6 +2225,25 @@ Emboss tests of section 10 and read the capture in `report.json`.
   at the marker before and after the item.
 - `SketchText.parentSketch` for the sketch of a text item (X1).
 
+## Capture reader calls to watch (rib and web)
+
+These members were read in the API reference of Fusion 2706 through the Fusion MCP tool, and they ran in Fusion 2706
+on test designs (hand check 100 in `docs/hand-checks.md`). The API stubs that older Fusion builds install list no
+members of `RibFeature` and `WebFeature`. A member that cannot be read gives `null`, and the step is left out.
+
+- `RibFeature.curves` and `WebFeature.curves` with the marker just before the item: a `SketchCurveVector` (len and
+  indexing). With the marker anywhere else Fusion raises "Didn't roll editing feature back". The curves come in any
+  order and direction, and their `geometry` is in sketch space.
+- `thickness` and `depth` as `ModelParameter`s; `depth` is null for To Next. `extentType` as an integer of
+  `RibWebExtentTypes` (0 To Next, 1 Distance).
+- `isSymmetric`, `isFlipped` and, for a web, `isExtended` as booleans. The reference does not say which side
+  `isFlipped` and a thickness on one side pick; the faces decide it.
+- `draftAngle` and `filletRadius` are null when there is no draft or fillet (a draft or fillet needs the Plastic
+  Design Tools).
+- `faces` with the marker just after the item, and `BRepFace.vertices` of each face (`BRepVertex.geometry`). Check in
+  `report.json` that `wall_faces` lists the faces of the wall with their corners, and that a face that Fusion merged
+  with the part is missing or merged.
+
 ## Capture reader calls to watch (sweep and loft)
 
 These members were written from the API reference and never run. A member that cannot be read, or that the running

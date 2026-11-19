@@ -1642,6 +1642,55 @@ it there: the step is written with `within`, the face's `outline` (holes include
 so the extrude acts only on the face. That needs a lone input face with its `outline`, no flat tangent neighbour while
 Tangent Chain is on, and edges the copy can write; otherwise the refusal says why ("reaches past the face it sits on").
 
+**RibFeature** and **WebFeature** (`curves`, `thickness`, `isSymmetric`, `extentType`, `depth`, `isFlipped`,
+`draftAngle`, `filletRadius`, and `isExtended` for a web, read before the item; `faces` after it;
+`lib/fusion_reader/read_rib.py`). These members are new in the API: the API stubs of older Fusion builds list none of
+them. `curves` can be read only with the marker just before the feature:
+
+```json
+{
+  "kind": "rib",
+  "operation": "join",
+  "thickness": 2.0, "symmetric": true, "extent": "distance", "depth": 8.0, "flipped": false,
+  "draft_deg": 0.0, "fillet": 0.0,
+  "path": { "closed": false, "kind": "sketch", "sketch": "RibLine", "sketch_token": "...", "frame": FRAME,
+            "curves": [ ... ] },
+  "participants": [],
+  "target_box_before": { "min": [..], "max": [..] },
+  "volume_before": 21120.0, "volume_after": 21952.0,
+  "target_faces_body": { "token": "...", "name": "Bracket" },
+  "target_faces_before": [{ "surface": "Plane", "point": [..], "normal": [..] }],
+  "wall_faces": [{ "surface": "Plane", "point": [..], "normal": [..], "vertices": [[..], ..] }]
+}
+```
+
+- `kind`: `rib` or `web`. `operation` is always `join`: Fusion builds the wall on its target body.
+- `thickness` and `depth` in mm; `depth` is null for To Next (`extent` `toNext`; `distance` for a depth, `other` for
+  an extent type the reader does not know). `symmetric` is `isSymmetric`, `flipped` is `isFlipped`. The API does not
+  say which side or way they choose, so the translator does not use `flipped`: the faces decide.
+- `draft_deg` and `fillet`: 0 when Fusion gives no parameter for them (no draft, no fillet), the value otherwise, null
+  when the member cannot be read. A web also has `extended` (`isExtended`: Fusion stretches the curves to the nearest
+  faces of the part).
+- The curves: `geometry/chains.py` groups the curves whose ends meet into chains and orders each chain from a free
+  end. Each chain is a path record like the open line of a thin extrude (`read_sweep.chain_record`, the `path` of an
+  ExtrudeFeature): `opposed` is true for a curve drawn against the chain, and `check` is null. One chain is `path`, so
+  the size probe follows it (`sketches` holds `PATH`); two or more are `paths`, which the probe does not follow.
+  `paths` is null when the curves cannot be read, are not curves of their sketch plane, or do not make open chains
+  (three curve ends at one point, a closed chain).
+- `wall_faces`: each face in `faces` as `{ surface, point, normal, vertices }`, `vertices` the corners
+  (`BRepFace.vertices`; null for more than `MAX_FACE_VERTICES`). Null when the faces cannot be read or there are more
+  than `MAX_WALL_FACES`. `target_faces_body` and `target_faces_before` are read as for a thin extrude of an open line.
+  `volume_before` and `volume_after` are the target's volume around the item.
+
+The shared layer (`design_model/steps/rib_web.py`) and the handlers (`lib/translator/extrude/rib_web.py`,
+`lib/orca_translate/rib_web.py`) write each chain as the thin extrude of an open line it is (`rib_web.as_extrude`):
+for a rib the depth is the wall thickness (`thin.thickness`) and the thickness the length (`side_one.distance` or
+`symmetric.distance`), for a web the other way round. `thin_wall.decided` carries the side the shared layer found.
+It refuses a draft or fillet that is not zero, a setting that cannot be read, curves that are not open chains of
+straight lines of one sketch, faces without corners, faces that fit no wall or more than one (side and way), and a
+part that did not grow by the whole wall. To Next also needs the far end on a flat face of the part. A rib with To
+Next takes one straight line.
+
 **SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep/step.py` and
 `lib/translator/loft/step.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
 
@@ -1952,6 +2001,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | PathPatternFeature | `quantity`, `distance` (on a round path the distance gives the angle; on a whole circle it is not followed) |
 | CoilFeature | `diameter`, `section_size`, `taper_deg`, `revolutions`, `height`, `pitch` (each followed only where its formula gives the measured number; the taper is not followed) |
 | EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (not followed: the copy needs them to be zero, and a size behind them is pinned) |
+| RibFeature, WebFeature | `thickness`, `depth` (followed as the paths of the thin extrude they are written as; marked where the wall may run into the part), `draft_deg`, `fillet` (pinned: the copy needs them to be zero) |
 
 Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose
 `created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`. The full list of kinds is
@@ -2987,6 +3037,15 @@ null for a feature that is not parametric), `BRepFace` (no member names the feat
 matched through `body` and `bodies_after`), `CoincidentConstraint` (`point`, `entity`), `ConcentricConstraint`
 (`entityOne`, `entityTwo`), `EqualConstraint` and `TangentConstraint` (`curveOne`, `curveTwo`), `ModelParameter`
 (`component`, `dependentParameters`, `createdBy`).
+
+Read in the API reference of Fusion 2706 on 2026-11-19 through the Fusion MCP read tool (the installed API stubs
+list no members): `RibFeature` and `WebFeature` (`curves`, `thickness`, `isSymmetric`, `isThicknessFromTop`,
+`extentType`, `depth`, `isFlipped`, `draftAngle`, `draftPullDirection` (rib only), `isDraftDirectionFlipped` (rib
+only), `filletRadius`, `isExtended` (web only)), `RibWebExtentTypes` (`ToNextRibWebExtentType` 0,
+`DistanceRibWebExtentType` 1), `RibFeatures.createInput(curves, thickness, targetBody)`. `draftAngle` and
+`filletRadius` return null when no draft or fillet is applied. Seen in Fusion: `isFlipped` turns the side of the depth,
+Fusion stops the wall where it meets the part, also for a set depth, and a rib whose depth runs away from the face its
+line lies on is filled down to that face past the ends of its line (`docs/hand-checks.md`, 100).
 
 Read in the API reference on 2026-11-10 for the tool body readers: `CombineFeature`, `MoveFeature`,
 `MoveFeatureDefinition` and its translate, rotate and free move classes, `CopyPasteBody`, `PatternElement`,

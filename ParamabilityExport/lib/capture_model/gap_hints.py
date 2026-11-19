@@ -109,7 +109,8 @@ HINTS = {
     MOVE_UNMEASURED: "Draw the sketch of the body where the body should be, instead of moving the body.",
     OFFSET_CURVED: "Press Pull flat faces only, or change the size of the curved face in its sketch.",
     REPLACE_FACE: "Cut the shape with an extrude, or extrude the face up to the shape you want.",
-    RIB_WEB: "Draw the rib or web outline in a sketch and extrude it.",
+    RIB_WEB: ("Draw the rib or web along straight lines, with no draft or fillet, or draw its outline in a sketch "
+              "and extrude it."),
     PATH_PATTERN: "Use a rectangular or circular pattern, or a mirror.",
     REVOLVE_SIDES: "Make two revolves, one to each side of the sketch.",
     REVOLVE_AXIS_SIDE: "Type size ranges that keep the outline on one side of the axis, or leave the ranges to the "
