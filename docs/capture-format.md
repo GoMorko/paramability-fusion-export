@@ -759,15 +759,20 @@ against `samples`.
   entity and no `path`; the translator refuses those. The probe follows the path like a sweep path (`PATH` in the
   step kind table). The translator copies a chain of sketch lines of one sketch, each starting where the one before
   ends and none `opposed`, as an `open` loop from the first point to the last, with `thin.ends` square and
-  `thin.corners` sharp (recipe version 17; `translator/extrude/thin_line.py`).
+  `thin.corners` sharp (recipe version 17; `translator/extrude/thin_line.py`). A chain of lines and arcs (an arc may
+  be `opposed`) with a tangent joint at each arc is copied as a plain extrude of the closed outline of its wall, with
+  numbers, when the part's volume (`target_before` and `target_after`) changed by its area times the length
+  (`design_model/steps/thin_arc.py`).
 - `wall_faces` (only with `path`, after the item; null when `faces` cannot be read or it has more than 64 faces):
   `[{ "surface", "point", "normal" }]` for each face of `ExtrudeFeature.faces`: `surface` as for a face record
   (`Plane`, `Cylinder`, `Cone` or `other`), `point` its `pointOnFace` (mm) and `normal` the unit normal there (null
   when unreadable). Fusion lists no `startFaces` and no `endFaces` for a thin extrude of an open line (Fusion 2706),
   so `end_offset` and `end_area` stay null. The translator builds the wall for each side Fusion's location allows
-  and each direction, and copies the step only when exactly one of them holds every face: each face flat, between
+  and each direction, and copies the step only when exactly one of them holds every face: each face flat (or a
+  cylinder on an arc), between
   the two ends of the wall, a face across the sketch normal at an end and on the wall's outline, a face along it on
-  a side of the outline and square to that side (within 1e-3 mm and a sine of 1e-4). A face that is not so counts
+  a side of the outline and square to that side (within 1e-3 mm and a sine of 1e-4), a `Cylinder` face on an arc of
+  the outline with its normal along the radius. A face that is not so counts
   when it lies on the plane of a face in `target_faces_before` and of a face of the wall, both facing its way (a face
   Fusion merged), and at least one face must be on the wall. That direction must be the one the extrude reader found,
   and side one must be the left of the line and side two its right, whichever way the extrude goes (Fusion 2706).

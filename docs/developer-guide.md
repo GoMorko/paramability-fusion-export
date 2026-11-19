@@ -1796,7 +1796,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `extrudeWay` | an extrude whose measured faces and body do not show which way it goes (`WAY_UNSURE` of `design_model/steps/extrude.py`) | End the extrude on a flat face or plane, or give it a distance. |
 | `throughAllAdds` | a join or a new body extruded through all that the add-in cannot copy: both ways, with a taper or a thin wall, a new body, one in the walk of a tool body or of a body before a split, or an end that the capture does not show on the far side of the body (`extrude/through.py`, "A join through all"; the Orca output gives the same cause for every join or new body through all) | Give the extrude a distance, or end it on a face or plane. |
 | `throughAllBodies` | a join through all that joins other bodies too, so the add-in cannot tell where Fusion ends it (`extrude/through.py`) | Let the extrude join only this body, or give it a distance. |
-| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (arcs, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines, or of an open line that the copy cannot hold (free curves, a corner next to an arc, a wall along arcs whose volume is not the wall alone, lines that run against it or do not join, a corner past 135 degrees, a wall that does not keep its shape, faces that do not show the side of the wall) | Draw one closed outline for the wall, or shell a solid body. |
 | `roundKind` | a round of a kind the copy does not write, a round by chord length whose faces turn along the edge, a changing radius that does not change evenly | Use a fillet with one radius. |
 | `roundChanging` | a changing radius on more than one edge, with other sets in its fillet that are not apart from it (see "Sets of one step copied one after the other"), with radii between the ends, or on an edge that is not straight or an arc (`finishes/measured_rounds.py`) | Give the changing radius a fillet of its own with one edge and no radii between the ends. |
 | `setUnread` | a set of a round or chamfer whose inputs Fusion does not give (a face with Tangent Chain on and no tangent neighbours, see "A set whose edges Fusion does not give") | Pick the edges of that set, or turn Tangent Chain off for its face, or remove the set if it changes nothing. |
@@ -5975,9 +5975,12 @@ give a `Problem` when they cannot read the wall. The translator changes the `Pro
 uses the same decisions (`orca_translate/thin.py`, see "Thin extrudes" in `docs/orca-output.md`). It uses
 `closed_side` and `area_fits` for a closed outline too. Then:
 
-1. `line_of` reads the line. The path must be one open chain of sketch lines of one sketch. Each line must start
-   where the line before it ends. No line can be `opposed`. The add-in leaves out a line with an arc or a free
-   curve, a line that runs against the path, a chain with a gap, a closed chain and a path of body edges.
+1. `line_of` reads the line. The path must be one open chain of sketch lines and arcs of one sketch. Each piece
+   must start where the piece before it ends. No line can be `opposed`. An arc can be `opposed`: a sketch arc always
+   turns left from its start, so an arc that turns right goes against the path. `line_of` turns each piece so that
+   it goes along the path (`Line.pieces`). The add-in leaves out a line with a free curve, a line that runs against
+   the path, a chain with a gap, a closed chain and a path of body edges. A line with arcs goes on as in "A line with
+   arcs" below.
 2. `outline` writes the `open` loop from the first point of the line to the last point. Thus the loop keeps the
    direction of the line. When the probe followed the path, each point follows its sizes (the keys of
    `sketch_values.keys.path`). When the probe did not follow the path, the loop keeps its numbers, and the sizes of
@@ -5996,11 +5999,13 @@ The add-in does not use the rule alone. It compares the wall with the faces that
 that the location in Fusion permits, and for each direction, it makes the outline of the wall (`band`). Then each
 measured face must agree with that wall:
 
-- The face must be flat.
+- The face must be flat. Along an arc of the wall, the face must be round (a cylinder).
 - The point of the face must be between the two ends of the wall.
 - A face across the sketch normal must be at one end of the wall, and its point must be on the outline of the wall
   or in it.
 - A face along the sketch normal must be on a side of the outline, and its normal must be square to that side.
+- A round face must be on an arc of the outline, and its normal must point to the centre of the arc or away from
+  it.
 - At least one face must agree in this way.
 
 A face that does not agree in this way can be a face that Fusion merged (`merged`). The add-in accepts it only when
@@ -6063,6 +6068,67 @@ degrees, so it takes 2 mm of the line (2 times tan 45 degrees). The range of the
 The material of the wall. A later step can ask if a point is in the wall (`material_at`). The add-in gives the wall
 as the closed outline that it fills (`band_profile`), in a `ThinWall` with the side `inside`. The faces of the wall
 are not placed.
+
+A line with arcs. Many walls for 3D printing go along a line with arcs: a curved fence, a U clip, an L with a round
+corner. `design_model/steps/thin_arc.py` makes the wall of such a line. `thin.shape_problem` and `thin.wall_curves`
+send a line with arcs to it.
+
+What Fusion makes. Fusion moves each piece of the line to each side by the reach of the wall on that side. A line
+becomes a parallel line. An arc becomes an arc about the same centre. Its radius is less on the inner side of the turn
+and more on the outer side, by the reach. Two lines that meet still meet in a sharp corner, as for a line of lines
+only. The ends of the wall are square to the line.
+
+The joints. Where an arc meets a line or another arc, the add-in copies only a tangent joint (the two pieces go in the
+same direction at the joint, within 0.001 degrees, `TANGENT_TOL_DEG`). At a tangent joint the moved pieces meet end to
+end, so the wall is smooth there. At a joint that is not tangent, Fusion can fill the corner or round it. That was not
+seen in Fusion yet. Thus the add-in leaves such a step out. Hand check 103 asks Fusion for the shape of the joints and
+the ends.
+
+`thin_arc.problem` gives a problem in these conditions:
+
+- A line or an arc is 0.001 mm long or shorter.
+- An arc turns more than half a circle (`MAX_SWEEP_DEG`). With arcs of half a circle or less, two pieces that meet at
+  a tangent joint are on the two sides of the line square to the path at the joint. Thus their walls touch only along
+  that line.
+- A joint next to an arc is not tangent.
+- A corner of two lines turns more than 135 degrees, as for a line of lines only.
+- On the inner side of an arc, the wall is as thick as the radius of the arc or thicker. The moved arc then has no
+  radius (it must keep more than 0.001 mm).
+- A moved line is shorter than its corners take, or turns the other way.
+- Two pieces that do not meet come nearer than two times the farthest reach of the wall. For an arc, the add-in
+  measures on 64 points along the arc and takes off the most that a chord can be from the arc. Thus the distance is
+  never more than the true distance.
+
+The outline of the wall (`band_curves`). The add-in moves the pieces to the left side and to the right side of the
+line (`side_of`). Two moved lines meet where they cross. A piece after an arc or before an arc starts where the piece
+before it ends. Then the outline goes along the left side from the start of the line, across the end, back along
+the right side, and across the start.
+
+The side of the wall. `line_side` finds the side from the faces that Fusion made, as for a line of lines only. A side
+on which an arc has no radius is not a candidate.
+
+The size of the wall. Fusion lists no end face for this wall. Thus the add-in also checks the volume of the part
+(`size_problem`). It calculates the exact area of the outline (`band_area`): the area of the polygon of the ends of
+the pieces, plus the segment of each arc, `r^2 / 2 * (a - sin a)` with `a` the signed turn of the arc. The volume of
+the part must change by this area times the length, within 0.01 % plus 0.01 mm3 (as for a rib). A new body and a join
+must grow by it, and a cut must take it away. The volume comes from `volume_before` and `volume_after` of the step
+data when the walk reads them on its own body (`roles.seen_on`). Else it comes from the `target_before` and
+`target_after` of the item. A new body that did not exist before the step starts from zero. When the volume was not
+measured, when it is different, or for an intersect, the add-in leaves the step out. Thus a join or a cut that
+overlaps the part (a wall that runs into another wall) is left out too.
+
+Example. The line goes from (0, 0) to (30, 0), then a quarter arc of radius 10 about (30, 10) to (40, 10), then to
+(40, 30). The wall is 2 mm thick on side one, 15 mm high, a new body. Side one is on the left, inside the turn. The
+inner arc has a radius of 8 mm. The area is 30 x 2 + 20 x 2 + pi / 4 x (10^2 - 8^2) = 100 + 9 pi = 128.274 mm2. The
+volume must be 1924.115 mm3.
+
+What the translator writes. The recipe has no wall along an open line with arcs. Thus `thin_line.arc_wall` writes a
+plain extrude of the closed outline of the wall (`ArcWall`, a `profile` loop of lines and arcs from `loops.loop_of`),
+with numbers. `outline` marks the sizes of the sketch, and `arc_wall` marks the sizes of the thickness. The distance
+of the extrude follows its size. The material placer holds the outline as a slab (`SlabMaker`).
+
+Ribs and webs along arcs stay out (`rib_web.lines_of`): their checks use the corners of flat faces, and a wall along an
+arc has round faces.
 
 #### A rib or a web
 

@@ -119,6 +119,10 @@ def lines_of(data):
         return LINES
     lines = []
     for chain in chains:
+        # The rib code proves walls along straight lines only.
+        curves = chain.get("curves")
+        if isinstance(curves, list) and any(isinstance(c, dict) and c.get("kind") == "arc" for c in curves):
+            return CURVES
         line = thin.line_of({"path": chain})
         if is_problem(line):
             return _LINE_PROBLEMS.get(line.code, LINES)

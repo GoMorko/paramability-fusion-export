@@ -233,7 +233,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
   These steps are left out of the copy (see "When a step cannot be copied"):
-  thin extrudes of an open line with arcs or curves, of several outlines, of an outline with holes, that go two ways,
+  thin extrudes of an open line with free curves or with a corner next to an arc, of several outlines, of an outline with holes, that go two ways,
   reach to a face or have a taper, ribs and webs with a draft or a fillet, along arcs or curves, or that the faces or
   the volume Fusion measured do not show as a whole wall (see above), an extrude of a curved face, of several faces or of a face together with sketch outlines on another plane, a text or spline outline that is too big or too complex (see below), extrudes that start on
   a tilted or curved surface, extrudes that end on a tilted or curved surface with two sides, a taper or an offset
@@ -438,9 +438,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   ends and sharp corners, as Fusion builds it. The wall thickness and the sizes that move the line are sizes. The side
   of the wall is checked against the faces that Fusion made, also where a face of the wall merged with a face of the
   part (a wall flush with the edge of a plate). When they do not show one side, the step is left out. Draw
-  the lines one after the other, each from the end of the one before. A line drawn the other way, an arc or a curve
+  the lines one after the other, each from the end of the one before. A line drawn the other way or a free curve
   leaves the step out, and so does a corner that turns more than 135 degrees (a V sharper than 45 degrees). A range
   stops before a corner takes a whole line, turns past 135 degrees, or two lines come too near.
+- A thin extrude of an open line with arcs (a curved fence, a U clip) is copied as the outline of its wall, lines and
+  arcs, with the numbers it has now: the line and the wall thickness are marked, and only the height follows its
+  size. Each arc must meet the line or arc next to it smoothly (tangent), and turn by at most half a circle. A corner
+  next to an arc, an arc on whose inner side the wall is as thick as its radius or thicker, and a wall whose volume
+  is not exactly its outline times its height leave the step out. So a join or a cut that overlaps the part (a wall
+  that runs into another wall) is left out too.
 - A Rib or a Web along straight sketch lines drawn one after the other, with no draft and no fillet, is copied as a
   thin wall along each line, the way a thin extrude of an open line is. For a rib, the depth is the width of the wall
   in the sketch plane and the thickness its length along the sketch normal. For a web, the thickness is the width and

@@ -1281,3 +1281,20 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: Export for Orca, tick no size. When Fusion lists one body, the step is copied as a tool body of two
     extrudes and a Boolean Intersect, and the copy is two discs 16 mm across, 10 high, in one body (2010.6 mm3 each).
     When Fusion lists two bodies, the step is left out because it splits the part. Afterwards the design is as before.
+
+103. TW3, thin walls along a line with arcs, for both exports. Units mm, Z up. Add a user parameter `Wall` = 2 mm. On
+    the XY plane draw an open line: a line (0, 0) to (30, 0), a tangent arc of radius 10 about (30, 10) to (40, 10),
+    and a line (40, 10) to (40, 30), each from the end of the one before. Use Create > Extrude with the open line as
+    the profile: Thin Extrude on, Wall Location "Side 1", Thickness `Wall`, distance 15 mm, New Body. Make two more
+    designs the same with "Side 2" and "Center". A fourth design: a line (0, 0) to (30, 0), a tangent half arc of
+    radius 10 about (30, 10) to (30, 20), and a line back to (0, 20), "Center". A fifth design: the L of the first,
+    mirrored so it turns right (the arc about (30, -10) to (40, -10), the last line to (40, -30)), "Side 2". A sixth
+    design: the first, with the last line from (40, 10) to (33.16, 28.79), 20 degrees off the end of the arc.
+    Export: In the Text Commands window (Python) list, for the first five designs, each face of the extrude
+    (`surfaceType`, `pointOnFace`) and the body volume; note whether the ends are square to the line and whether the
+    joints of the arc and the lines are smooth on both sides of the wall. In the sixth, note the shape of the corner
+    next to the arc on each side (sharp, filled or rounded). Export for Paramability and Export for Orca with `Wall`
+    ticked. The first five are copied: 1924.115, 2018.363 and 1971.239 mm3 for Side 1, Side 2 and Center, 2742.478
+    mm3 for the U and 1924.115 mm3 for the right turn (its wall inside the turn), as in Fusion; `Wall` is marked in
+    both. The sixth is left out with the reason that it has a corner next to an arc. Afterwards each design is as
+    before.

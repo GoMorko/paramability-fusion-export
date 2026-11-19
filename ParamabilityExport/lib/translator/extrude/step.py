@@ -124,6 +124,8 @@ def handle(ctx, step):
         base["origin"] = drawn.origin(ctx, shift_q) if drawn is not None else sketch_origin(frame, shift_q)
         if drawn is not None:
             outer, inner = drawn.written(ctx)
+        if isinstance(thin_step, thin_line.ArcWall):
+            outer = thin_step.loop
         reverse = entry.sign < 0
         on = placement.reversed_of(base) if reverse else base
         pick = flip_y if reverse else (lambda loop: loop)
@@ -146,6 +148,12 @@ def handle(ctx, step):
             recipe_step["thin"] = thin_step.written(reverse)
             placers.append(ThinWallMaker(on, entry.extent, entry.q or Quantity(entry.distance), thin_step.profile,
                                          "inside", thin_step.thickness.n))
+            out.add(recipe_step, placers, repeatable=False)
+            continue
+        if isinstance(thin_step, thin_line.ArcWall):
+            # A wall along a line with arcs is written as a plain extrude of its closed outline.
+            placers.append(SlabMaker(on, entry.extent, entry.q or Quantity(entry.distance), thin_step.profile,
+                                     Quantity(0.0), None))
             out.add(recipe_step, placers, repeatable=False)
             continue
         if thin_step is not None:

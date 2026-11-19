@@ -10,12 +10,13 @@ and side two is the inside. The measured faces decide it:
   corner that opens a gap on the moved side (a convex corner going outward, a concave one going inward) adds a round
   sector when the corner is rounded and a sharp wedge when it is kept sharp, and a corner that overlaps removes a
   kite. Both corner kinds are tried; `rounded` says only the sharp reading fits.
-- Open line (`line_side`): the line is a `Path` of lines that run one after the other along it (`line_of`). Side one
-  is the left of the path direction and side two the right (`RULE`), seen from the front of the sketch, whichever way
-  the extrude goes. Fusion lists no start or end faces for such an extrude, so each face it made (`wall_faces`) must
-  be flat and lie on a face of the wall that a side and a direction give (`fits`). A face whose point lies off the
-  wall counts only when Fusion merged it with a face of the part (`merged`). Exactly one side that Fusion's location
-  allows, and one direction, must fit. It must be the extrude's direction and the side `RULE` names.
+- Open line (`line_side`): the line is a `Path` of lines and arcs that run one after the other along it (`line_of`;
+  the wall of a line with arcs is in `thin_arc.py`). Side one is the left of the path direction and side two the
+  right (`RULE`), seen from the front of the sketch, whichever way the extrude goes. Fusion lists no start or end
+  faces for such an extrude, so each face it made (`wall_faces`) must be flat (round on an arc of the wall) and lie on
+  a face of the wall that a side and a direction give (`fits`). A face whose point lies off the wall counts only when
+  Fusion merged it with a face of the part (`merged`). Exactly one side that Fusion's location allows, and one
+  direction, must fit. It must be the extrude's direction and the side `RULE` names.
 
 Side names: `inside` is left of the line (inward of a closed outline), `outside` right of it (outward), `middle` half
 each way. A `Problem` says why a wall cannot be read; each output turns it into its own answer. Pure.
@@ -236,11 +237,15 @@ UNSURE = Problem("unsure", words.THIN_UNSURE, gap_hints.THIN_OUTLINE)
 
 
 class Line:
-    """The open line of a thin extrude: `path` the capture record and `points` the 2D corners in its sketch frame, from
-    the start of the line to its end."""
+    """The open line of a thin extrude: `path` the capture record, `pieces` its lines and arcs in the sketch frame,
+    each turned to run along the path (`thin_arc.py`), and `points` the 2D points where they meet, from the start of
+    the line to its end. `curved` is True when the line has an arc."""
 
-    def __init__(self, path, points):
+    def __init__(self, path, points, pieces=None):
         self.path, self.points = path, points
+        self.pieces = pieces if pieces is not None else [
+            {"kind": "line", "start": list(a), "end": list(b)} for a, b in zip(points, points[1:])]
+        self.curved = any(piece["kind"] == "arc" for piece in self.pieces)
         self.frame = path["frame"]
         self.sketch = path.get("sketch") or ""
 
@@ -250,10 +255,34 @@ def is_line(profiles):
     return len(profiles) == 1 and isinstance(profiles[0], dict) and profiles[0].get("type") == "Path"
 
 
+def _point(p):
+    return isinstance(p, (list, tuple)) and len(p) == 2 and all(is_number(c) for c in p)
+
+
+def _readable(flat, kind):
+    if not isinstance(flat, dict) or flat.get("kind") != kind:
+        return False
+    keys = ("start", "end") if kind == "line" else ("start", "mid", "end", "center")
+    return all(_point(flat.get(k)) for k in keys) and (kind == "line" or (
+        is_number(flat.get("radius")) and flat["radius"] > 0))
+
+
+def _piece(flat, opposed):
+    """A line or arc of the path in its sketch frame, turned to run along the path."""
+    piece = {k: list(flat[k]) for k in ("start", "end", "mid", "center") if k in flat}
+    piece["kind"] = flat["kind"]
+    if flat["kind"] == "arc":
+        piece["radius"] = flat["radius"]
+    if opposed:
+        piece["start"], piece["end"] = piece["end"], piece["start"]
+    return piece
+
+
 def line_of(data):
-    """The `Line` of a thin extrude's path record, or a Problem. The copy takes a path of one sketch whose lines run
-    one after the other, each from the end of the one before, none of them against the path: the side Fusion puts the
-    wall on is measured for lines that run along the path only."""
+    """The `Line` of a thin extrude's path record, or a Problem. The copy takes a path of one sketch whose lines and
+    arcs run one after the other, each from the end of the one before, no line against the path: the side Fusion puts
+    the wall on is measured for lines that run along the path only. A sketch arc always turns left from its start, so
+    an arc that turns right runs against the path; it is turned, and the faces Fusion made prove the side."""
     path = data.get("path")
     curves = path.get("curves") if isinstance(path, dict) else None
     if not isinstance(curves, list) or not curves or not isinstance(path.get("frame"), dict):
@@ -263,19 +292,20 @@ def line_of(data):
     if path.get("kind") != "sketch" or path.get("foreign") or path.get("truncated") or path["closed"]:
         return NOT_ONE_LINE
     flats = [c.get("flat") for c in curves]
-    if any(c.get("kind") != "line" for c in curves):
+    if any(c.get("kind") not in ("line", "arc") for c in curves):
         return LINE_CURVES
-    if any(not isinstance(f, dict) or f.get("kind") != "line" for f in flats) or any(
+    if any(not _readable(f, c["kind"]) for c, f in zip(curves, flats)) or any(
             c.get("opposed") is None for c in curves):
         return LINE_UNREADABLE
-    if any(c["opposed"] for c in curves):
+    if any(c["opposed"] and c["kind"] == "line" for c in curves):
         return LINE_OPPOSED
-    points = [list(flats[0]["start"])]
-    for flat in flats:
-        if math.dist(flat["start"], points[-1]) > JOIN_TOL:
+    pieces = [_piece(f, c["opposed"]) for c, f in zip(curves, flats)]
+    points = [list(pieces[0]["start"])]
+    for piece in pieces:
+        if math.dist(piece["start"], points[-1]) > JOIN_TOL:
             return LINE_APART
-        points.append(list(flat["end"]))
-    return Line(path, points)
+        points.append(list(piece["end"]))
+    return Line(path, points, pieces)
 
 
 def reaches(side, thickness):
@@ -371,14 +401,40 @@ def band_profile(frame, corners):
         {"kind": "line", "start": list(a), "end": list(b)} for a, b in zip(ring, ring[1:])]}]}
 
 
+def shape_problem(line, left, right):
+    """Why a wall reaching `left` and `right` of the `Line` does not keep its shape, or None (`line_problem`, or
+    `thin_arc.problem` for a line with arcs)."""
+    if line.curved:
+        from . import thin_arc  # thin_arc imports this module
+        return thin_arc.problem(line.pieces, left, right)
+    return line_problem(line.points, left, right)
+
+
+def wall_curves(line, side, thickness):
+    """The closed outline of the wall on `side` of the `Line` as capture curves, or None when an arc of the line would
+    not keep a radius."""
+    if line.curved:
+        from . import thin_arc  # thin_arc imports this module
+        return thin_arc.band_curves(line.pieces, *reaches(side, thickness))
+    corners = band(line.points, *reaches(side, thickness))
+    return band_profile(line.frame, corners)["loops"][0]["curves"]
+
+
+def wall_profile(line, side, thickness):
+    """A capture profile of the wall on `side` of the `Line` (`wall_curves`), or None."""
+    curves = wall_curves(line, side, thickness)
+    return None if curves is None else {"frame": line.frame, "loops": [{"outer": True, "curves": curves}]}
+
+
 def _vector(v):
     return isinstance(v, list) and len(v) == 3 and all(is_number(c) for c in v)
 
 
 def on_wall(footprint, face, frame, start, span):
-    """True when a flat face (a `wall_faces` record) lies on the wall whose outline is `footprint` in `frame`, running
-    `span` (low, high, mm) along the sketch normal from `start`: across the normal at an end of the span on the
-    outline, or along the normal on a side of the outline."""
+    """True when a flat or round face (a `wall_faces` record) lies on the wall whose outline is `footprint` in
+    `frame`, running `span` (low, high, mm) along the sketch normal from `start`: a flat face across the normal at an
+    end of the span on the outline, a flat face along the normal on a line of the outline and square to it, or a round
+    face on an arc of the outline whose normal points to the arc's centre or away from it."""
     point, normal = face["point"], face["normal"]
     z = vec.unit(frame["z"])
     low, high = span
@@ -394,13 +450,25 @@ def on_wall(footprint, face, frame, start, span):
         return False
     n, gap = footprint.nearest_curve(uv)
     curve = footprint.curves[n]
-    d = _unit(curve["start"], curve["end"])
     across = [vec.dot(normal, frame["x"]), vec.dot(normal, frame["y"])]
-    return gap <= FACE_TOL and abs(across[0] * d[0] + across[1] * d[1]) <= NORMAL_TOL
+    if gap > FACE_TOL or (curve["kind"] == "arc") != (face.get("surface") == "Cylinder"):
+        return False
+    if curve["kind"] == "arc":
+        radial = [uv[0] - curve["center"][0], uv[1] - curve["center"][1]]
+        size = math.hypot(*radial)
+        return size > 0 and abs(across[0] * radial[1] - across[1] * radial[0]) / size <= NORMAL_TOL
+    d = _unit(curve["start"], curve["end"])
+    return abs(across[0] * d[0] + across[1] * d[1]) <= NORMAL_TOL
 
 
 def flat_face(face):
     return (isinstance(face, dict) and face.get("surface") == "Plane" and _vector(face.get("point"))
+            and _vector(face.get("normal")))
+
+
+def round_face(face):
+    """True for a face of a cylinder (the wall along an arc) whose point and normal were read."""
+    return (isinstance(face, dict) and face.get("surface") == "Cylinder" and _vector(face.get("point"))
             and _vector(face.get("normal")))
 
 
@@ -417,6 +485,8 @@ def _wall_planes(footprint, frame, start, span):
     out = [(vec.add(start, vec.scale(z, span[0])), vec.scale(z, -1.0)),
            (vec.add(start, vec.scale(z, span[1])), z)]
     for n, curve in enumerate(footprint.curves):
+        if curve["kind"] != "line":
+            continue
         middle = [(curve["start"][i] + curve["end"][i]) / 2.0 for i in range(2)]
         outward = footprint.outward(n, middle)
         if outward is not None:
@@ -428,7 +498,10 @@ def _wall_planes(footprint, frame, start, span):
 def merged(footprint, face, frame, start, span, before):
     """True when a flat face Fusion lists for the wall, whose point lies off the wall, is a face of the wall that
     Fusion merged with a face of the part: it lies on the plane of a face of the target body before the step
-    (`before`, `target_faces_before`) and on the plane of a face of the wall, both facing the way it faces."""
+    (`before`, `target_faces_before`) and on the plane of a face of the wall, both facing the way it faces. A round
+    face is never taken as merged."""
+    if not flat_face(face):
+        return False
     normal = vec.unit(face["normal"])
     if not any(flat_face(other) and _same_plane(other, face["point"], normal) for other in before or []):
         return False
@@ -436,9 +509,9 @@ def merged(footprint, face, frame, start, span, before):
 
 
 def fits(footprint, faces, frame, start, span, before=None):
-    """True when each face of `faces` (`wall_faces` records) is flat and lies on the wall (`on_wall`), or is a face
-    of the wall merged with a face of the part (`merged`), and at least one lies on the wall (`on_wall`)."""
-    if not all(flat_face(face) for face in faces):
+    """True when each face of `faces` (`wall_faces` records) is flat or round and lies on the wall (`on_wall`), or
+    is a face of the wall merged with a face of the part (`merged`), and at least one lies on the wall (`on_wall`)."""
+    if not all(flat_face(face) or round_face(face) for face in faces):
         return False
     on = [on_wall(footprint, face, frame, start, span) for face in faces]
     return any(on) and all(ok or merged(footprint, face, frame, start, span, before) for ok, face in zip(on, faces))
@@ -457,7 +530,10 @@ def line_fits(line, sides, thickness, faces, start, ways, before=None):
     measured `faces` (`fits`)."""
     found = []
     for side in sides:
-        footprint = Footprint(band_profile(line.frame, band(line.points, *reaches(side, thickness))))
+        profile = wall_profile(line, side, thickness)
+        if profile is None:
+            continue
+        footprint = Footprint(profile)
         found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
     return found
 

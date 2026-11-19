@@ -107,7 +107,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Extrude "From" a flat face or plane square to the extrude, at an offset from it or not | the sketch plane moved to that plane, and by the offset (the way the measured start face shows) | no |
 | Thin extrude of one rectangle or one circle, one way or symmetric, no taper (see "Thin extrudes") | the outer outline as a new body less the inner outline cut through all; on a part, as a tool body and a Boolean with the step's operation | `width`, `height`, `radius` (the drawn size plus or minus the thickness), `distance` |
 | Thin extrude of one straight line, the wall centred on it | simple rectangle centred on the line | `width` (the length of the line), `height` (the thickness), `distance` |
-| Thin extrude of any other open line of straight lines | the outline of the wall as sketch lines | `distance`; the line and the thickness keep their numbers |
+| Thin extrude of any other open line of straight lines, or of lines and arcs that meet tangent at each arc | the outline of the wall as sketch lines and arcs | `distance`; the line and the thickness keep their numbers |
 | Rib or web along straight lines, no draft, no fillet (see "Ribs and webs") | one thin extrude of an open line per line | as the thin extrude: `distance`, and `height` for a straight line with the wall centred on it |
 | Extrude of a flat face of the body (the face as the outline) | sketch entities of the face where it is now | no |
 | Extrude of sketch text: one side, symmetric, or a cut through all; no taper (see "Sketch text and embosses") | a sketch of its own with each letter as an imported region (polygons within 0.005 mm of the letter), Extrude | `distance` (the text keeps its size and place) |
@@ -1207,6 +1207,12 @@ What the copy writes:
 - Any other open line of straight lines (an L, a U, a wall on one side of one line): the outline of the wall
   (`thin.band`, sharp corners as in Fusion) as sketch lines with numbers, extruded with the step's operation. The
   line and the thickness keep their numbers, and the sizes that move them are marked.
+- An open line of lines and arcs where each arc meets the piece next to it tangent: the outline of the wall
+  (`thin.wall_curves`, from `thin_arc.band_curves`) as sketch lines and arcs with numbers. Each arc of the line gives
+  an arc about the same centre, its radius less or more by the thickness. The line and the thickness keep their
+  numbers, and the sizes that move them are marked. Fusion lists no end face for this wall, so the volume of the part
+  must have changed by the exact area of the outline times the length (`thin_arc.size_problem`), else the step is
+  left out.
 
 A cut or intersect that does not meet the part is left out (cause `missesPart`). A pattern or mirror cannot repeat a
 thin wall, since its first extrude starts a new body (cause `notRepeatable`), or a revolve that the copy builds from
@@ -1214,8 +1220,10 @@ several turns or a tool body (cause `repeatBuiltTurns`).
 
 Left out:
 
-- several outlines, an outline with holes, an open line with arcs, lines that do not run one after the other or
-  against the line, a wall that folds, and a side that the faces do not show (cause `thinOutline`);
+- several outlines, an outline with holes, an open line with free curves, a corner next to an arc, an arc that
+  turns more than half a circle, lines that do not run one after the other or against the line, a wall that folds,
+  a side that the faces do not show, and a wall along arcs whose volume is not that of its outline (cause
+  `thinOutline`);
 - a closed outline that is not one rectangle or one circle, and a face of the part as the outline (cause
   `thinShape`);
 - two ways, To a face, through all, a taper, a wall setting that could not be read, a side that the end face does
@@ -1236,6 +1244,15 @@ python3 scripts/orca_live_check.py check /tmp/thin/orca_thin_divider.json --set 
 | `orca_thin_ell` | an L shaped line (0, 0) to (30, 0) to (30, 20), the wall 2 thick inside the corner, 20 high | 1920 (96 mm2 x 20) | none: the line and the thickness keep their numbers |
 | `orca_thin_frame` | a wall 2 thick outside a centred 80 x 50 rectangle, 30 high | 16080 | `wall=3`: 24480 |
 | `orca_thin_ring` | a wall 2 thick inside a centred circle 40 across, 10 high | 2387.61 (760 pi) | `wall=3`: 3487.17 (1110 pi) |
+
+`tests/orca_thin_arcs.py` writes the walls along lines with arcs, one capture per call
+(`python3 -m tests.orca_thin_arcs thin_arc_ell /tmp/thin_arc_ell.json`). Both were built in the test OrcaSlicer with
+the box and the volume the capture expects:
+
+| Capture | What it is | Volume (mm3) | Box (mm) |
+| --- | --- | --- | --- |
+| `thin_arc_ell` | (0, 0) to (30, 0), a quarter arc of radius 10 about (30, 10) to (40, 10), then to (40, 30); the wall 2 thick inside the turn, 15 high | 1924.115 ((100 + 9 pi) mm2 x 15) | 40 x 30 x 15 |
+| `thin_arc_u` | (0, 0) to (30, 0), a half arc of radius 10 about (30, 10) to (30, 20), then back to (0, 20); the wall 2 thick centred, 15 high | 2742.478 ((120 + 20 pi) mm2 x 15) | 41 x 22 x 15 |
 
 ### Ribs and webs
 
