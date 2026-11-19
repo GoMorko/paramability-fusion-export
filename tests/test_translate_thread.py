@@ -350,6 +350,46 @@ class HoleUpToTest(unittest.TestCase):
                     end_points=[[8, 6, 2], [20, 10, 3], [32, 14, 2]], end_face_types=["plane"] * 3)
         self.assertIsNotNone(left_out(translate(capture)))
 
+    def test_a_hole_whose_measured_end_is_off_the_face_it_goes_up_to_is_left_out(self):
+        # Fusion ended the hole on another face (one next to the picked face, for example).
+        self.assertIsNotNone(left_out(self.up_to(end_points=[[10, 10, 3]])))
+
+
+def _sized_up_to(extent, end_z):
+    """The plate of `hole_blind_flat`, 10 mm thick as `wall_mm * 5`, with its hole going up to `extent`."""
+    def edit(data):
+        data.update(extent=dict(extent, kind="toEntity"), end_points=[[10, 10, end_z]], end_face_types=["plane"],
+                    tip_angle_deg=None)
+
+    capture, ticked = on_fixture("hole_blind_flat", edit)
+    capture["items"][1]["data"]["params"] = {"side_one.distance": param("d1", "wall_mm * 5", 10.0)}
+    return capture, ticked
+
+
+class HoleUpToSizedTest(unittest.TestCase):
+    def test_sizes_that_move_a_face_fusion_may_join_with_the_faces_next_to_it_are_marked(self):
+        # The bottom face of the plate stays, but at other sizes the faces next to it may end the hole first. Which
+        # value of `matchShape` chains the face is not settled, so the reader gives null.
+        bottom = {"entity_type": "BRepFace", "plane": {"point": [30, 15, 0], "normal": [0, 0, 1]},
+                  "face_point": [30, 15, 0], "body": {"token": "t1", "name": "Body1"}, "token": "f0"}
+        for chained, marked in ((None, ["wall_mm"]), (True, ["wall_mm"]), (False, [])):
+            with self.subTest(chained):
+                result, _ = run(*_sized_up_to(dict(bottom, chained=chained), 0))
+                self.assertEqual(sorted({d["name"] for d in result.loose + result.fixed}), marked)
+                self.assertEqual([h["depth"] for h in steps_of(result.recipe, "hole")], [10.0])
+
+    def test_a_hole_up_to_an_offset_plane_follows_the_plane(self):
+        plane = {"entity_type": "ConstructionPlane", "token": "cp1", "plane": {"point": [0, 0, 2], "normal": [0, 0, 1]},
+                 "definition": "ConstructionPlaneOffsetDefinition", "built_on": [{"origin": True}], "made_by": 2,
+                 "chained": None}
+        capture, ticked = _sized_up_to(plane, 2)
+        capture["parameters"]["model"].append({
+            "name": "d9", "expression": "wall_mm", "value": 0.2, "unit": "mm", "kind": "derived", "role": "",
+            "dependency_parameters": [], "created_by": {"kind": "constructionPlane", "token": "cp1", "name": "Plane1"}})
+        result, _ = run(capture, ticked)
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual(evaluate(hole["depth"]["expr"], {"wall_mm": 4.0}), 6.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5286,32 +5286,67 @@ Fusion does not give reads as null, and the hole then stays a gap with a reason.
 #### A hole that ends at a face or at a body
 
 A Hole whose extent is "To" a face or a body is written as a blind hole of the measured depth, with a flat end only
-(`hole.step._up_to_depth`). Fusion gives a Hole made through the API (`HoleFeatureInput.setOneSideToExtent`) a
-`OneSideToExtentDefinition`, not a `ToEntityExtentDefinition`. It has the face or plane as `toEntity` (the other class
-has `entity`) and `matchShape`, and it has no offset. The reader takes the face or plane from either class
-(`read_extent.to_entity`). It reads `matchShape` as `chained`: false when Fusion extends the face, true when it keeps
-the face and uses the faces next to it. We checked this on Fusion 2706: with true, a hole whose face does not lie under
-it fails, and with false it ends on the extended plane. If a hole has a `ToEntityExtentDefinition`, the reader also reads
-its `offset`. A hole up to a face or plane with an offset that is not zero, or that could not be read, is left out with a
-reason, since the copy follows only the measured end. We could not check how a Hole "To" made in the Fusion dialog
-reports, as only the API was used. Fusion also gives such a hole no `endFaces`. The reader then takes the faces that the
-hole made (`feature.faces`) less its `sideFaces`, told apart by their tokens; if a face has no token, no end is given and
-the hole is left out because the end was not measured. The depth is the distance from the entry to the end point that the
-reader measured (`end_points`; the reader keeps only a flat end or a drill point along the hole). All holes of the step must end at the
-same depth, and the end faces must be planes. A hole that ends in a
-drill point on such a face is left out with a reason. The depth follows the face or body that the hole goes up to
-(`follow.target_shift`) and the entry, as the length of an extrude up to an entity does. When the depth could be zero or
-negative at some sizes, those sizes are marked.
+(`hole.step._up_to_depth`).
 
-The Orca output (`orca_translate/hole_reach.py`) reads the same facts. The face or plane must be flat and square to the
-hole, with `reach_depth` for the measured depth. The distance from each position to the plane of the face must be that
-depth, else the hole is left out. A face of another component, a tilted or curved face, and a hole with a drill point
-or an end that was not measured are left out with the reasons of an extrude up to a face. The depth is the measured
-depth plus the move of the face along the drilling direction (`extents.plane_move`, which also decides the move of an
-extrude "To" a face). Orca keeps the plane that the hole sits on as a number, so only the move of the face counts, and
-the entry does not. The reader reads whether Fusion may chain the face to the faces next to it (`chained`, from `matchShape`). When it
-is true or not read, the sizes that may move the face are marked. The variables behind the depth are walked down to where the depth reaches
-zero (`hole_reach.guard`).
+Fusion gives a Hole made through the API (`HoleFeatureInput.setOneSideToExtent`) a `OneSideToExtentDefinition`, not a
+`ToEntityExtentDefinition`. The API reference marks this class as retired, but Fusion 2706 still gives it. The class
+has the face or plane as `toEntity` (the other class has `entity`) and `matchShape`, and it has no offset. The reader
+takes the face or plane from either class (`read_extent.to_entity`). The reader reads both members through
+`geo.safe`, so a member that Fusion does not give reads as null.
+
+`matchShape` tells Fusion how to end the hole when the face is smaller than the hole's reach. Fusion can extend the
+face to its whole surface, or it can use the faces next to the face. The API reference does not say clearly which value
+gives which result. The page of `HoleFeatureInput.setOneSideToExtent` says that true makes the hole "match the shape of
+the entity as if it extended beyond its current boundaries", that is, true extends the face. One check on Fusion 2706
+with a construction plane gave the opposite result: with true, a hole whose plane does not lie under it failed, and
+with false the hole ended on the extended plane. A construction plane has no faces next to it, so this check does not
+show what Fusion does with a face. Thus the reader keeps the value as `match_shape` and gives `chained` as null
+(unknown). Hand check 93 has the open check on a face. Until that check is done, both exports treat a face with
+`chained` null as a face that Fusion may join with the faces next to it.
+
+If a hole has a `ToEntityExtentDefinition`, the reader reads its `offset` and its `isChained` as `chained`. A hole up
+to a face or plane with an offset that is not zero, or that could not be read, is left out with a reason, since the
+copy follows only the measured end. We could not check how a Hole "To" made in the Fusion dialog reports, as only the
+API was used.
+
+Fusion also gives such a hole no `endFaces`. The reader then takes the faces that the hole made (`feature.faces`) less
+its `sideFaces`. The reader compares the faces as entities (`read_geometry.same_entity`), not by their tokens, because
+Fusion can give one face different tokens. The depth is the distance from the entry to the end point that the reader
+measured (`end_points`; the reader keeps only a flat end or a drill point along the hole). All holes of the step must
+end at the same depth, and the end faces must be planes. A hole that ends in a drill point on such a face is left out
+with a reason.
+
+The two exports use the same checks for the end (`design_model/steps/hole.py`, `to_face_depth`):
+
+- If the hole goes up to a face or a construction plane, the face must be flat and square to the hole. A tilted face,
+  a curved face and a face whose plane was not read are left out, with the cause of an extrude up to a face.
+- Each measured end must lie on the plane of that face. Fusion can end the hole on another face, for example on a
+  face next to the picked face. A copy that follows the picked face then drills to the wrong depth at other sizes, so
+  such a hole is left out.
+- For a face or plane of another component, the plane is its measured reference (`ref`), in the coordinates of the
+  target.
+- A body or a point as the end has no plane to check. The Paramability copy follows such an end as a face it cannot
+  place, so the sizes are marked. The Orca copy leaves such a hole out.
+
+The depth follows the face or body that the hole goes up to (`follow.target_shift`) and the entry, as the length of an
+extrude up to an entity does. `target_shift` follows the picked face only. If Fusion may join that face with the faces
+next to it (`chained` true or null, `extrude.joins_next_faces`), the faces next to it can stop the hole first at other
+sizes. Thus the sizes that may move the face are marked (`hole.end_face_sizes`, from `reach.reach_sizes`), as for an
+extrude "up to" a face (`extrude/up_to.keep_on_face`). A construction plane has no faces next to it, so its sizes are
+not marked for this reason. When the depth could be zero or negative at some sizes, those sizes are marked.
+
+The Orca output (`orca_translate/hole_reach.py`) uses the same facts and the same checks. It also leaves out a face of
+another component, a body and a point as the end. The depth is the measured depth plus the move of the face along the
+drilling direction (`extents.plane_move`, which also decides the move of an extrude "To" a face). Orca keeps the plane
+that the hole sits on as a number, so only the move of the face counts, and the entry does not. The sizes that may
+move a face that Fusion may join with the faces next to it are marked, as in the Paramability copy.
+
+The variables behind the depth are walked down to where the depth reaches zero (`hole_reach.guard`). If the hole has a
+counterbore or a countersink, the depth must also stay deeper than the counterbore or the countersink cone. If it does
+not, Orca drills only the recess and gives no error. The guard tells this limit on the line of the parameter (cause
+`limits.HOLE_SHALLOW`). The guard does this for a hole "To" a face and for a hole of a given depth. The Paramability
+copy has its own range check (`hole.step._keep_fit`). It keeps the depth deeper than a counterbore. It checks the cone
+of a countersink only in a hole with a drill tip.
 
 ### 3.13 How a coil is translated
 

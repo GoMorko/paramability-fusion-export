@@ -441,6 +441,12 @@ What the copy can and cannot do, step by step. The README lists only the main li
   stops before a corner takes a whole line, turns past 135 degrees, or two lines come too near.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
+- A hole "To" a face or plane is copied as a hole of the depth Fusion made, in both exports. Its end must lie on that
+  face or plane: a hole that Fusion ended on another face (a face next to the picked one) is left out. When the face
+  is smaller than the hole, Fusion can extend the face or use the faces next to it, and the export cannot tell which
+  one it did yet. So the sizes that may move such a face are marked "may give unexpected results". A construction
+  plane has no faces next to it and follows its sizes. In the Orca copy, the depth of a hole with a counterbore or
+  countersink must stay deeper than the recess; the parameter's line says how far the size may go.
 - The modeled thread of a tapped hole through all runs to where the hole comes out of the part. The add-in measures
   that point from the wall of the hole, so an export made with an earlier version leaves such a hole out: export
   again. The thread is left out, with the tip to make it cosmetic, when the thread Fusion made does not reach that

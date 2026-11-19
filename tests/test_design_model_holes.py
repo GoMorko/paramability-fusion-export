@@ -212,6 +212,29 @@ class HoleDirectionTest(unittest.TestCase):
         for data in (pointed, uneven, missing):
             self.assertIsInstance(hole.reach_depth(data, [0.0, 0.0, -1.0]), Problem)
 
+    def test_the_measured_end_must_lie_on_the_flat_face_or_plane_square_to_the_hole(self):
+        down = [0.0, 0.0, -1.0]
+
+        def to(record, end_z=2):
+            return hole_data(extent=dict(record, kind="toEntity"), end_points=[[0, 0, end_z], [10, 0, end_z]],
+                             end_face_types=["plane"])
+
+        face = {"entity_type": "BRepFace", "plane": {"point": [5, 5, 2], "normal": [0, 0, 1]}}
+        self.assertAlmostEqual(hole.to_face_depth(to(face), down), 8.0)
+        refused = {"end off the face": (to(face, 3), None),
+                   "tilted": (to(dict(face, plane={"point": [5, 5, 2], "normal": [0, 0.3, 1]})),
+                              gap_hints.EXTRUDE_END_FACE),
+                   "curved": (to(dict(face, surface="Cylinder")), gap_hints.EXTRUDE_END_FACE),
+                   "plane not read": (to({"entity_type": "ConstructionPlane"}), gap_hints.EXTRUDE_END_FACE),
+                   "other component without its place": (to(dict(face, foreign=True)), gap_hints.EXTRUDE_END_FACE)}
+        for name, (data, cause) in refused.items():
+            with self.subTest(name):
+                found = hole.to_face_depth(data, down)
+                self.assertEqual((isinstance(found, Problem), getattr(found, "cause", "none")), (True, cause))
+        placed = dict(face, foreign=True, ref={"point": [0, 0, 2], "normal": [0, 0, -1]})
+        self.assertAlmostEqual(hole.to_face_depth(to(placed), down), 8.0)
+        self.assertAlmostEqual(hole.to_face_depth(to({"entity_type": "BRepBody"}), down), 8.0)
+
 
 def bore(position, span, radius=2.5, origin_shift=0.0, axis=(0, 0, -1)):
     """A measured side cylinder on the axis line of a hole at `position`, its origin moved along the line."""

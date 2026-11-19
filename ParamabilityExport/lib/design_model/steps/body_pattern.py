@@ -132,11 +132,13 @@ def _listed(body, tools):
 
 
 def _made_copy(timeline, tool, before, component):
-    """The pattern or mirror of bodies whose `result_bodies` list `tool`, among the items that made it before
-    `before`, else None."""
+    """The pattern or mirror of bodies whose `result_bodies` list `tool` as a copy, among the items that made it before
+    `before`, else None. Fusion may list a pattern's source among its bodies too; a source is no copy of that pattern,
+    so a Combine that takes only the source takes it as a plain tool."""
     for item in tool_chains.made_by(timeline, tool, before, component):
         data = design.as_read(item).brought_data
-        if of_bodies(data) and roles.copies_bodies(item) and _listed(tool, data.get("result_bodies") or []):
+        if (of_bodies(data) and roles.copies_bodies(item) and _listed(tool, data.get("result_bodies") or [])
+                and not _listed(tool, data.get("source_bodies") or [])):
             return item
     return None
 

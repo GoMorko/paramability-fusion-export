@@ -7,6 +7,12 @@ the cylinders of the made hole with where each starts and ends (`side_cylinders`
 reads those without a destination. Where the stored and the measured values disagree, the measured ones win and the
 reader says so as a fact (`Direction.flipped`, `size_differs`).
 
+A hole that goes up to a face or plane takes its depth from its measured end (`to_face_depth`): the end must lie on
+the plane of that face, else Fusion ended the hole on another face (one next to the picked face, for example) and a
+copy that follows the picked face would drill to the wrong depth at other sizes. Where Fusion may end the hole on the
+faces next to the picked face, the sizes that may move that face are named (`end_face_sizes`), so that each
+destination marks them.
+
 A reader returns its record, or a `Problem` when the hole cannot be read. How a destination cuts the hole, places it
 on a sketch or follows sizes is not here. The thread of a tapped hole is in `steps/thread.py`.
 """
@@ -15,13 +21,17 @@ from typing import NamedTuple
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ..problem import Problem
+from ..reach import reach_sizes
 from . import thread
+from .extrude import CURVED_SURFACES, LENGTH_TOL, joins_next_faces, parallel
 from .. import words
 
 SIMPLE, COUNTERBORE, COUNTERSINK = "simple", "counterbore", "countersink"
 PLAIN, TAPPED, TAPERED = "plain", "tapped", "taperTapped"
 DISTANCE, THROUGH_ALL, TO_ENTITY = "distance", "throughAll", "toEntity"
 CONE, PLANE, MIXED = "cone", "plane", "mixed"
+# The kinds of entity a hole up to an entity can end on whose plane the end must lie on.
+FLAT_TARGETS = ("BRepFace", "ConstructionPlane")
 # A measured end counts as behind its position when it is further back than this along the direction, mm.
 BEHIND_TOL = 1e-3
 # How far a measured cylinder may differ from the stored diameter, mm.
@@ -227,6 +237,53 @@ def reach_depth(data, unit):
     if any(abs(d - depths[0]) > DEPTH_TOL for d in depths) or depths[0] <= 0:
         return Problem("endsDiffer", words.HOLE_ENDS_DIFFER)
     return depths[0]
+
+
+def target_plane(record):
+    """`(point, unit normal)` of the face or plane `record` that a hole goes up to, in the target's coordinates, or
+    None when it is not read or the face is curved. A face or plane of another component gives its measured reference
+    (`ref`), whose `plane` is in its own component's coordinates."""
+    if record.get("surface") in CURVED_SURFACES:
+        return None
+    place = (record.get("ref") or {}) if record.get("foreign") or record.get("assembly") else (record.get("plane") or {})
+    point, normal = place.get("point"), place.get("normal")
+    if not (isinstance(point, (list, tuple)) and isinstance(normal, (list, tuple)) and len(point) == 3
+            and len(normal) == 3 and vec.length(list(normal)) > 0):
+        return None
+    return list(point), vec.unit(list(normal))
+
+
+def to_face_depth(data, unit):
+    """The measured depth of a hole that goes up to an entity (`reach_depth`), in mm along `unit`, or a Problem. For
+    a face or construction plane, that face must be flat and square to `unit`, and every measured end must lie on its
+    plane: Fusion may end the hole on another face (a face next to the picked one), and a copy that follows the
+    picked face would then drill to the wrong depth at other sizes. Another kind of entity (a body, a point) has no
+    plane to check here."""
+    measured = reach_depth(data, unit)
+    if isinstance(measured, Problem):
+        return measured
+    record = data.get("extent") or {}
+    if record.get("entity_type") not in FLAT_TARGETS:
+        return measured
+    plane = target_plane(record)
+    if plane is None:
+        return Problem("holeFaceNotFlat", words.HOLE_FACE_NOT_FLAT, gap_hints.EXTRUDE_END_FACE)
+    point, normal = plane
+    if not parallel(normal, unit):
+        return Problem("holeFaceTilted", words.HOLE_FACE_TILTED, gap_hints.EXTRUDE_END_FACE)
+    if any(abs(vec.dot(vec.sub(list(end), point), normal)) > LENGTH_TOL for end in _ends(data)):
+        return Problem("holeEndOffFace", words.HOLE_END_OFF_FACE)
+    return measured
+
+
+def end_face_sizes(table, timeline, item, record):
+    """The ticked sizes that may end the hole of step `item` on another face at other values: those that may move the
+    face `record` it goes up to (`reach.reach_sizes`) when Fusion may join that face with the faces next to it
+    (`extrude.joins_next_faces`: `chained` true or not read), else none. The measured end lies on the face, but at
+    other sizes the faces next to it may stop the hole first, which a copy that follows the face alone does not do."""
+    if not joins_next_faces(record):
+        return []
+    return reach_sizes(table, timeline, item, record)
 
 
 def tapped_bore(data, what, pitches=None):

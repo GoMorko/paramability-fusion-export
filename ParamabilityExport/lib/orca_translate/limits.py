@@ -81,6 +81,7 @@ REVOLVE_MISSES = "revolveMisses"
 PATH_ENDS = "pathEnds"
 RING_TURNS = "ringTurns"
 RING_MEETS = "ringMeets"
+HOLE_SHALLOW = "holeShallow"
 CAUSES = {
     SHAPE_ZERO: "a size of the shape reaches zero",
     OUTLINE_MEETS: "two sides of the outline meet or cross",
@@ -103,6 +104,7 @@ CAUSES = {
     PATH_ENDS: "the copies run past the end of the path",
     RING_TURNS: "the round face moves the other way",
     RING_MEETS: "the round face reaches another edge of the faces at its ends",
+    HOLE_SHALLOW: "the hole gets no deeper than its counterbore or countersink",
 }
 
 
