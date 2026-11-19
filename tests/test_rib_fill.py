@@ -4,6 +4,7 @@ part and the volume, else the step is left out. The gusset fixture is saved from
 the other cases edit it or build the faces by hand."""
 import copy
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.orca_cuts import Section
@@ -107,6 +108,14 @@ class FillProofTest(unittest.TestCase):
                 data = gusset_capture(edit)["items"][-1]["data"]
                 self.assertTrue(is_problem(fill_of(data)))
 
+    def test_more_than_one_line_keeps_the_problem(self):
+        data = gusset_capture()["items"][-1]["data"]
+        lines = rib_web.lines_of(data)
+        before = data["target_faces_before"]
+        walls = rib_web.walls(data, before)
+        with mock.patch.object(rib_web, "lines_of", return_value=lines * 2):
+            self.assertIs(rib_fill.fill(data, before, walls), walls)
+
     def test_a_distance_rib_that_runs_into_the_corner_is_not_filled(self):
         data = copy.deepcopy(load_capture("rib_into_corner")["items"][-1]["data"])
         self.assertEqual(fill_of(data), rib_web.MEETS_PART)
@@ -131,8 +140,9 @@ class FillRecipeTest(unittest.TestCase):
                              for n in range(len(points))))
         data = capture["items"][-1]["data"]
         self.assertAlmostEqual(area * 2.0, data["volume_after"] - data["volume_before"], places=6)
-        # The outline keeps its numbers: the sizes before the step are marked.
-        self.assertEqual(sorted(e["name"] for e in result.loose), ["bt"])
+        # The outline keeps its numbers, so the sizes before the step are marked; so is the thickness, which Fusion
+        # filled at one value only.
+        self.assertEqual(sorted(e["name"] for e in result.loose), ["bt", "rt"])
 
     def test_a_gusset_whose_volume_differs_is_left_out(self):
         def more_volume(data):
@@ -149,7 +159,7 @@ class FillOrcaTest(unittest.TestCase):
         verdicts = {i["name"]: i["verdict"] for i in result.items}
         self.assertEqual(verdicts["Rib1"], "copied")
         outcomes = {p["name"]: p["outcome"] for p in result.parameters}
-        self.assertEqual(outcomes["rt"], "variable")
+        self.assertEqual(outcomes["rt"], "partly")
         self.assertNotEqual(outcomes["bt"], "variable")
         inside = Section(result.recipe).bodies[0]
 

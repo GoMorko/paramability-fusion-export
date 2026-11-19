@@ -7,7 +7,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests import orca_text as tx
 from tests.orca_cuts import Section
-from tests.orca_extents import UP, at, profile, rect, side
+from tests.orca_extents import UP, at, extrude, profile, rect, side
 from tests.test_orca_extents import outcome, run
 from tests.translator_helpers import load_capture
 
@@ -104,6 +104,17 @@ class TextExtrudeTest(unittest.TestCase):
     def test_letters_of_a_cut_that_miss_the_part_are_left_out(self):
         result = run(tx.text_extrude(-0.6, operation="cut", profiles=tx.letters(at(10.0))))
         self.assertEqual(left_out(result)["cause"], causes.MISSES_PART)
+
+    def test_a_later_cut_sees_the_material_that_separate_letters_keep_in_an_intersect(self):
+        capture = tx.text_extrude(-2.0, operation="intersect")
+        capture["items"].append(extrude(4, "Slot", [profile("Sketch3", at(2.0), rect(-22, -4, -16, 4))],
+                                        operation="cut", side_one=side(-1.0), end_offset=-1.0,
+                                        target_box_before={"min": [-20.0, -5.0, 0.0], "max": [5.0, 5.0, 2.0]}))
+        result = run(capture)
+        self.assertEqual(result.left_out, [])
+        self.assertTrue(solid_at(result, IN_RING, 1.5))
+        self.assertFalse(solid_at(result, IN_L, 1.5))
+        self.assertTrue(solid_at(result, IN_L, 0.5))
 
     def test_a_size_that_places_the_text_keeps_its_number_with_a_reason(self):
         capture = tx.text_extrude(1.0)

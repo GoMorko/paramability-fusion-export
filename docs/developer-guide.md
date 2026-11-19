@@ -6197,7 +6197,9 @@ The profile is `measured`. Thus the Orca output does not give it the formulas of
 (`translator/sketch/sketch_motion.outline`), so it keeps its numbers too. The handlers give these data to the extrude handler of each output. The parameter of the thickness goes
 to the distance of the extrude, so the thickness follows its size. The edges on the part stand square to the sketch
 plane, so a thicker rib fills the same outline while the faces of the part go that far. `rib_fill.marks` marks each
-size that the steps before it read, because the line, the corners and the faces of the part keep their numbers.
+size that the steps before it read, because the line, the corners and the faces of the part keep their numbers. It
+marks the thickness too: Fusion filled the gusset at one thickness, and a much thicker one may reach past the faces
+of the part that it rests on.
 
 What the add-in leaves out. A gusset whose faces or volume do not prove the outline. A rib with a depth into the
 part: the band goes into the part. The add-in does not use the outline check for a rib with a depth (Distance). The

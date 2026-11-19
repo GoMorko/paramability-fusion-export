@@ -189,8 +189,7 @@ class HolesAndOutlinesTest(unittest.TestCase):
         capture["items"].append(pattern)
         result = translate(capture)
         (gap,) = [g for g in result.left_out if g["type"] == "RectangularPatternFeature"]
-        self.assertEqual(gap["cause"], causes.NOT_REPEATABLE)
-        self.assertNotIn("separate body", gap["reason"])
+        self.assertEqual(gap["cause"], causes.REPEAT_BUILT_TURNS)
         self.assertEqual([f for f in result.recipe.features if f.type == FeatureType.PATTERN], [])
 
     def test_a_holed_cut_is_a_tool_body_cut_from_the_part(self):

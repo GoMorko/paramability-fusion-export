@@ -439,6 +439,10 @@ def extrude(ctx, step):
         kept = [w for w in written if ctx.solid.meets(w[3])]
         if not kept:
             return Skip(*misses_reason(ctx, "cut" if operation == "cut" else "intersect"))
+        if operation == "intersect":
+            # The outlines are one tool: an outline over material that only a round or chamfer covers still shapes
+            # the result, so none is left out.
+            kept = written
         if len(kept) < len(written):
             ctx.notes.append("%s: %d of its outlines do not meet the part as the Orca copy builds it and are left "
                              "out." % (_label(item), len(written) - len(kept)))

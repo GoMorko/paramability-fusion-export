@@ -243,8 +243,8 @@ def step_mode(ctx, index):
     written = ctx.written.get(index) or ()
     if BooleanMode.NEW in modes and any(f.type == FeatureType.BOOLEAN for f in written) and any(
             f.type == FeatureType.REVOLVE for f in written):
-        return ("the Orca copy cannot repeat a revolve that it builds from several turns or from a tool body",
-                causes.NOT_REPEATABLE)
+        return ("the Orca copy builds this revolve from several turns joined together, and it cannot repeat such a "
+                "step", causes.REPEAT_BUILT_TURNS)
     if BooleanMode.NEW in modes:
         return "a step that makes a separate body cannot be repeated", causes.NOT_REPEATABLE
     if BooleanMode.INTERSECT in modes:

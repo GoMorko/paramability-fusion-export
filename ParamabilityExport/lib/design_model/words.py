@@ -427,6 +427,8 @@ RIB_PART_MOVES_MARK = ("%s does not stand on the face its sketch is drawn on, so
 RIB_MEASURED_MARK = "%s reaches to the faces of the part, and the copy keeps the depth Fusion measured"
 RIB_MEETS_MARK = "%s may run into the part at other sizes, where Fusion stops it and the copy does not"
 RIB_FILL_MARK = "%s fills up to the faces of the part, and the copy keeps the outline Fusion made"
+RIB_FILL_THICKNESS_MARK = ("%s is drawn as Fusion filled it at this thickness, and a much thicker one may reach past the "
+                           "part")
 RIB_EXTENDED_MARK = "%s stretches its lines to the faces of the part, and the copy keeps them as drawn"
 RIB_MEETS_PART = ("The wall of this rib or web runs into the part, where Fusion stops it, so it is not copied. Draw its "
                   "lines so the wall only touches the part.")
