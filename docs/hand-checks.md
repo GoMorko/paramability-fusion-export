@@ -1223,3 +1223,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     design is copied. In `report.json` the coil's two `faces.flat` frames have a `z` (the face normal) square to the
     Z axis, so Fusion's end faces lie on planes through the axis. Fusion gives the first body 789.57 mm3 (Inspect >
     Properties; a round tube along the helix would be 792.06). Afterwards each design is as before.
+
+99. PB1, a pasted body that a Combine joins or cuts, for Export for Orca. Add a user parameter `PegH` = 6 mm. Model
+    a 40 x 20 x 4 mm plate with its corner at the origin (Body1). On the top face sketch a 6 x 6 mm square centred
+    at (8, 10) and extrude it `PegH` up as a new body (Body2). Select Body2 in the browser, Copy, then Paste (not
+    Paste New): the copy is Body3, in the same place. Move Body3 20 mm along X. Then Combine Join with Body1 as the
+    target and Body2 and Body3 as the tools. In a second design add `CutH` = 8 mm, model a 40 x 20 x 10 mm block with
+    its corner at the origin, sketch the same square on a plane 2 mm below the XY plane, extrude it `CutH` up as a
+    new body, Copy and Paste it, move the copy 20 mm along X, and Combine Cut both bodies from the block.
+    Export: Export for Orca each design with its parameter ticked. Nothing is left out; the result says that
+    CopyPaste1 and Move1 are copied into the tool body Body3. The Orca recipe holds the square extrude twice (the
+    second for the copy), one Transform of 20 mm and two Booleans (Add, or Cut). The volume in Orca is 3632 and 7568
+    mm3, as in Fusion (Inspect > Properties), and the box of the first is 40 x 20 x 10 mm. In OrcaSlicer set `PegH`
+    to 10: 3920 mm3, both pegs 10 mm high. Set `CutH` to 10: 7424 mm3, both pockets 8 mm deep. In Fusion change
+    `PegH` and look whether the pasted Body3 follows its source: note what it does. Afterwards each design is as
+    before.

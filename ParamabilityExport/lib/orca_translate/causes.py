@@ -65,6 +65,9 @@ SPLIT_SIDES = "splitSides"
 # part's piece, so what that step brings back would be missing.
 PIECE_USED_LATER = "pieceUsedLater"
 MOVE_MISMATCH = "moveMismatch"
+# A pasted body that does not sit where the body it copies sat (`paste`): Fusion pastes in place, and the copy does not
+# know what else put it there.
+PASTE_PLACE = "pastePlace"
 
 # Rounds, chamfers and threads.
 EDGES_UNKNOWN = "edgesUnknown"

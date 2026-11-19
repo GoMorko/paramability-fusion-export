@@ -137,7 +137,7 @@ can be.
 | Move/Copy of bodies: move, rotate, free move | Copied | - | Partly | Needs Orca | Orca: a turn about an axis follows its angle. Orca cannot tie a move distance to a variable. |
 | Move/Copy of bodies: point to point, to position, along an entity | Partly | Yes, add-in only | Partly | Needs Orca | Written as the numbers Fusion measured. |
 | Move/Copy of faces | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Copy and paste a body | Copied | - | Left out | Yes, add-in only | Paramability writes the steps of the source again. |
+| Copy and paste a body | Copied | - | Copied | - | Paramability writes the steps of the source again. Orca: the same, as a body of its own; a paste of a body of another component is left out. |
 | Align | Left out | Yes, add-in only | Left out | Yes, add-in only | A step type that the add-in does not know is left out. |
 | Remove of another body | Not read | No | Not read | No | It changes nothing in the part. |
 | Delete Face | Left out | Yes, needs an app change | Left out | Needs Orca | |

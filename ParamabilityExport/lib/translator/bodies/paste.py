@@ -3,11 +3,13 @@
 A pasted body starts here: its steps are those of its source, as the source stood at the paste, written again with ids
 of their own (`tool_walk.build`). A paste of a body that is itself pasted repeats this. A paste of several bodies makes
 several results, paired with their sources by their points. The first vertices of the source and of the result say
-where the result sits. In one component that is the same place; any other place is written as a
+where the result sits (`design_model/steps/paste.py`). In one component that is the same place; any other place is written as a
 `move` in plain numbers, and the sizes that could change it are marked.
 """
 from ...capture_model import tool_items
 from ...design_model import refs
+from ...design_model.problem import is_problem
+from ...design_model.steps import paste as pasted
 from ..combine import tool_walk
 from ..faces import follow
 from ..faces.moved_placer import MoveMaker
@@ -34,37 +36,6 @@ def written_again(tool):
     return out
 
 
-def _place_of(source, result):
-    """The `Motion` from the source to the result, or a Refusal."""
-    before, after = source.get("points") or [], result.get("points") or []
-    if not before or len(before) != len(after):
-        return Refusal("The corners of the pasted body could not be read, so its place cannot be checked.")
-    if move.carries(Motion(), before, after):
-        return Motion()
-    found = move.fit(before, after)
-    return found if found is not None else Refusal("The pasted body does not match the body it was copied from.")
-
-
-def _source_of(result, sources, results):
-    """The source of the pasted body `result`, or None when sources and results do not pair up one to one. A source at
-    the same place wins over one that only has the same shape."""
-    if len(sources) != len(results):
-        return None
-    if len(sources) == 1:
-        return sources[0]
-    paired = [(r, _candidates(r, sources)) for r in results]
-    if any(len(found) != 1 for _, found in paired) or len({id(found[0]) for _, found in paired}) != len(paired):
-        return None
-    return next(found[0] for r, found in paired if r is result)
-
-
-def _candidates(result, sources):
-    """The sources `result` can be a copy of: those at its place, else those of its shape."""
-    places = [(source, _place_of(source, result)) for source in sources]
-    fitting = [(source, place) for source, place in places if not isinstance(place, Refusal)]
-    return [source for source, place in fitting if place.is_identity] or [source for source, _ in fitting]
-
-
 def _mark_place(ctx, item, source, tool):
     """The result sits away from its source. Its place is a number, so the sizes that could move it are marked."""
     if tool_items.is_foreign_tool(source):
@@ -76,20 +47,16 @@ def _mark_place(ctx, item, source, tool):
 
 def handle(ctx, step):
     item, data = step.brought, step.brought_data
-    sources, results = data.get("sources") or [], data.get("result_bodies")
-    if not sources:
-        return Refusal("The body this paste copies could not be read.")
-    result = next((r for r in results if ctx.is_target(r)), None) if isinstance(results, list) else None
-    if result is None:
-        return Refusal("The body this paste makes could not be read.")
+    result = pasted.result_of(data, ctx.is_target)
+    if is_problem(result):
+        return Refusal(result.words)
     if ctx.steps:
         return Refusal("This paste lands on a body that already has steps, which is not copied yet.")
-    source = _source_of(result, sources, results)
-    if source is None:
-        return Refusal("The bodies this paste copies could not be paired with the bodies it made.")
-    motion = _place_of(source, result)
-    if isinstance(motion, Refusal):
-        return motion
+    found = pasted.pair(data, result)
+    if is_problem(found):
+        return Refusal(found.words)
+    source = found.source
+    motion = Motion() if found.move.is_identity else Motion(found.move.rows, found.move.offset)
     tool = rebuild(ctx, item, source)
     if isinstance(tool, Refusal):
         return tool

@@ -320,6 +320,13 @@ BODY_COPIES_CHANGED = "A step changes a copy made by %s on its own before this C
 # Why the count of such a pattern keeps its number (a doubt, no full stop).
 BODY_COPIES_COUNT = "%s makes more or fewer copies with it, and Fusion may not change what its Combine takes"
 
+# A pasted body (`steps/paste.py`).
+PASTE_SOURCE_UNREAD = "The body this paste copies could not be read."
+PASTE_RESULT_UNREAD = "The body this paste makes could not be read."
+PASTE_NOT_PAIRED = "The bodies this paste copies could not be paired with the bodies it made."
+PASTE_CORNERS_UNREAD = "The corners of the pasted body could not be read, so its place cannot be checked."
+PASTE_NO_MATCH = "The pasted body does not match the body it was copied from."
+
 # Splits and tool bodies.
 SPLIT_BODY_UNLISTED = "This split does not list the body it cuts."
 SPLIT_PIECE_LOST = "The piece of this split that the part comes from was not found."

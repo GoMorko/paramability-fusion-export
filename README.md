@@ -21,8 +21,10 @@ The add-in adds three buttons to Fusion:
   its circle, solid or hollow, and its diameter and wall follow your parameters. A pattern or mirror of bodies
   whose copies one Combine joins to the part or cuts from it copies too; its spacing and angle follow, and its
   count keeps its number. A hole "To" a face or plane copies to the depth Fusion made, in both exports, and its end
-  must lie on that face or plane. A coil is left out: Orca's sweep along a helix keeps the wire square to its turns, so the
-  ends and the thickness of the wire would not be as in Fusion.
+  must lie on that face or plane. A body made by Copy and Paste copies as its source was at the paste, also when
+  you move it and join it to the part or cut it from the part; the sizes of the source follow. A coil is left out:
+  Orca's sweep along a helix keeps the wire square to its turns, so the ends and the thickness of the wire would not
+  be as in Fusion.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.
