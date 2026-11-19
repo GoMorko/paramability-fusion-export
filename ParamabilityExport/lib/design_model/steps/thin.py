@@ -405,7 +405,7 @@ def shape_problem(line, left, right):
     """Why a wall reaching `left` and `right` of the `Line` does not keep its shape, or None (`line_problem`, or
     `thin_arc.problem` for a line with arcs)."""
     if line.curved:
-        from . import thin_arc  # thin_arc imports this module
+        from . import thin_arc  # imported here, as thin_arc imports this module
         return thin_arc.problem(line.pieces, left, right)
     return line_problem(line.points, left, right)
 
@@ -414,7 +414,7 @@ def wall_curves(line, side, thickness):
     """The closed outline of the wall on `side` of the `Line` as capture curves, or None when an arc of the line would
     not keep a radius."""
     if line.curved:
-        from . import thin_arc  # thin_arc imports this module
+        from . import thin_arc  # imported here, as thin_arc imports this module
         return thin_arc.band_curves(line.pieces, *reaches(side, thickness))
     corners = band(line.points, *reaches(side, thickness))
     return band_profile(line.frame, corners)["loops"][0]["curves"]

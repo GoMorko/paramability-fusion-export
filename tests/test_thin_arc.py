@@ -46,11 +46,12 @@ def band_loop(pieces, side):
 
 
 def kinked():
-    """The L with its last line turned 20 degrees off the end of the arc: a corner next to an arc."""
+    """The L with its last line turned 20 degrees off the end of the arc: a corner next to an arc. Its faces and
+    volume are those of its own band, so only the joint is wrong."""
     turn = math.radians(20.0)
     end = [40.0 - 20.0 * math.sin(turn), 10.0 + 20.0 * math.cos(turn)]
     pieces = arcs.ELL[:2] + [arcs.line((40.0, 10.0), end)]
-    return arcs.wall(pieces[:2], "side1"), pieces
+    return arcs.wall(pieces, "side1"), pieces
 
 
 class BandTest(unittest.TestCase):
@@ -62,12 +63,33 @@ class BandTest(unittest.TestCase):
                 curves = thin_arc.band_curves(pieces, *facts.reaches(side, 2.0))
                 self.assertAlmostEqual(thin_arc.band_area(curves), area, places=9)
 
-    def test_shapes_the_band_cannot_hold_are_problems(self):
-        _, pieces = kinked()
-        self.assertEqual(thin_arc.problem(pieces, 2.0, 0.0), "it has a corner next to an arc")
-        self.assertEqual(thin_arc.problem(arcs.ELL, 10.0, 0.0), "the wall is thicker than the radius of an arc of it")
-        self.assertIsNone(thin_arc.problem(arcs.ELL, 0.0, 5.0))
-        self.assertEqual(thin_arc.problem(arcs.U, 0.0, 10.0), "two of its pieces come too near")
+    def test_shapes_the_band_cannot_hold_are_problems_with_their_own_code(self):
+        _, kink = kinked()
+        short = [arcs.line((0.0, 0.0), (0.0, 0.0)), arcs.ELL[1]]
+        wide = [arcs.arc((0.0, 0.0), 10.0, 0.0, 200.0)]
+        for name, pieces, left, right, code in (
+                ("kink", kink, 2.0, 0.0, "arc_corner"), ("short", short, 2.0, 0.0, "arc_piece_too_short"),
+                ("wide", wide, 2.0, 0.0, "arc_turns_too_far"),
+                ("thick", arcs.ELL, 10.0, 0.0, "arc_wall_too_thick"),
+                ("near", arcs.U, 0.0, 10.0, "arc_pieces_too_near")):
+            with self.subTest(name):
+                found = thin_arc.check(pieces, left, right)
+                self.assertEqual(found.code, code)
+                self.assertEqual(found.cause, gap_hints.THIN_OUTLINE)
+        self.assertIsNone(thin_arc.check(arcs.ELL, 0.0, 5.0))
+
+
+class VolumeChangeTest(unittest.TestCase):
+    def test_a_new_body_grows_from_nothing_whatever_body_was_measured_before(self):
+        item = {"target_before": {"volume_mm3": 500.0}, "target_after": {"volume_mm3": 120.0}}
+        self.assertEqual(thin_arc.volume_change(item, {"operation": "newBody"}), 120.0)
+        self.assertEqual(thin_arc.volume_change(dict(item, target_before=None), {"operation": "newBody"}), 120.0)
+        self.assertEqual(thin_arc.volume_change(item, {"operation": "join"}), -380.0)
+        self.assertEqual(thin_arc.volume_change(item, {"operation": "newBody", "volume_before": 7.0,
+                                                       "volume_after": 90.0}), 90.0)
+
+    def test_a_volume_that_was_not_measured_gives_none(self):
+        self.assertIsNone(thin_arc.volume_change({"target_before": None, "target_after": None}, {"operation": "join"}))
 
 
 class ParamabilityTest(unittest.TestCase):
@@ -98,20 +120,21 @@ class ParamabilityTest(unittest.TestCase):
                                                                        {"expr": "height_mm"}))
         self.assertEqual(sorted(f["name"] for f in result.dropped), ["length_mm", "wall_mm"])
 
-    def test_a_corner_next_to_an_arc_a_volume_that_differs_or_a_radius_that_reaches_zero_is_left_out(self):
-        capture, pieces = kinked()
-        data_of(capture)["path"] = arcs.path_record(pieces)
+    def test_a_corner_next_to_an_arc_a_volume_that_differs_or_one_not_measured_is_left_out(self):
+        kink, pieces = kinked()
         grown = arcs.ell_arc()
         grown["items"][-1]["target_after"]["volume_mm3"] *= 1.01
         unmeasured = arcs.ell_arc()
         unmeasured["items"][-1]["target_after"] = None
-        thick = arcs.ell_arc()
-        data_of(thick)["thin_wall"]["thickness"] = 10.0
-        for name, case in (("kink", capture), ("volume", grown), ("unmeasured", unmeasured), ("radius", thick)):
+        for name, case, problem in (("kink", kink, thin_arc.problem(pieces, 2.0, 0.0)),
+                                    ("volume", grown, thin_arc.VOLUME_DIFFERS.words),
+                                    ("unmeasured", unmeasured, thin_arc.VOLUME_UNMEASURED.words)):
             with self.subTest(name):
                 result = translate(case)
                 self.assertIsNone(result.recipe)
                 self.assertEqual(result.refusal.get("hint"), TIP)
+                self.assertIn(problem, result.refusal["reason"])
+        self.assertEqual(len({translate(c).refusal["reason"] for c in (kink, grown, unmeasured)}), 3)
 
 
 class OrcaTest(unittest.TestCase):
@@ -126,13 +149,14 @@ class OrcaTest(unittest.TestCase):
                 self.assertNotEqual({p["name"]: p["outcome"] for p in result.parameters}["wall_mm"], VARIABLE)
 
     def test_a_corner_next_to_an_arc_or_a_volume_that_differs_is_left_out(self):
-        capture, pieces = kinked()
-        data_of(capture)["path"] = arcs.path_record(pieces)
+        kink, pieces = kinked()
         grown = arcs.u_arc()
         grown["items"][-1]["target_after"]["volume_mm3"] *= 0.99
-        for case in (capture, grown):
+        for case, problem in ((kink, thin_arc.problem(pieces, 2.0, 0.0)), (grown, thin_arc.VOLUME_DIFFERS.words)):
             with self.subTest(case["design"]):
-                self.assertEqual([g["cause"] for g in orca(case).left_out], [gap_hints.THIN_OUTLINE])
+                (gap,) = orca(case).left_out
+                self.assertEqual(gap["cause"], gap_hints.THIN_OUTLINE)
+                self.assertIn(problem, gap["reason"])
 
 
 if __name__ == "__main__":
