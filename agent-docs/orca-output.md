@@ -4,91 +4,175 @@
 a mesh, and Orca's Design tab holds a recipe of its steps, so the person can change the variables there and the part
 follows. The `.paramability` output does not change.
 
+## Contents
+
+- [What the person does](#what-the-person-does)
+- [How it is made](#how-it-is-made)
+- [What is copied](#what-is-copied)
+  - [Extents: To, From and taper](#extents-to-from-and-taper)
+  - [Rounds, chamfers and threads](#rounds-chamfers-and-threads)
+  - [Patterns, mirrors, Combine, split, move and revolve](#patterns-mirrors-combine-split-move-and-revolve)
+  - [Sweeps, lofts and splines](#sweeps-lofts-and-splines)
+  - [Pipes](#pipes)
+  - [Coils](#coils)
+  - [Which parameters follow](#which-parameters-follow)
+  - [Outlines built from plane cuts](#outlines-built-from-plane-cuts)
+  - [Corner tools](#corner-tools)
+  - [Thin extrudes](#thin-extrudes)
+  - [Ribs and webs](#ribs-and-webs)
+  - [Press Pull of a round face](#press-pull-of-a-round-face)
+  - [Other components](#other-components)
+  - [Sketch text and embosses](#sketch-text-and-embosses)
+  - [Where the part sits](#where-the-part-sits)
+- [Limits](#limits)
+- [Live check without Fusion](#live-check-without-fusion)
+
 ## What the person does
 
-1. In OrcaSlicer 2.5, turn on Preferences > General > Features > "CAD feature (experimental)", then restart Orca.
-2. Open the file. The file is marked as a shared ("published") project, so Orca keeps the person's own printer,
-   process and filament presets, and opens it without a file name (Save asks where to save).
+1. In OrcaSlicer 2.5, open Preferences > General > Features. Turn on "CAD feature (experimental)". Restart Orca.
+2. Open the file. The file is marked as a shared ("published") project. Orca keeps the person's own printer,
+   process and filament presets. Orca opens the file without a file name, so Save asks where to save.
 3. Change the variables in the Design tab. The Design body follows.
-4. Commit adds the changed body to the plate as a new object; the mesh from Fusion stays. Delete the old object.
+4. Commit adds the changed body to the plate as a new object. The mesh from Fusion stays. Delete the old object.
 
 ## How it is made
 
-The command (`commands/ExportForOrca/`) reuses the dialog of Export for Paramability (`recipe_dialog.build(...,
-orca=True)`: one body, the parameter table, the up direction) and the export pipeline with
-`ExportRequest.output = "orca"` (`export_plan/pipeline/run.py`, `_run_orca`):
+The command is in `commands/ExportForOrca/`. It reuses two things:
 
-- the mesh of the body (`port.read_mesh`, `fusion_reader/body_mesh.py`: Fusion's mesh calculator, in root
-  coordinates and mm, an STL export as the fallback) instead of the STEP;
-- the capture and the size table, as for a recipe;
-- one translation, switched at `recipe_export.translate_capture(..., output="orca")` to `orca_translate`;
-- no size tries. Min and Max, Faster tries, the time limit and Lighter on memory are not used, and a bad Min or Max
-  does not block OK;
-- the design is put back and checked as for a recipe (`PutBack`), and the result window has the same `# Title`
-  sections (`dialog_model/orca_result.py`): Check your design, Result, Variables, Left out, Next in OrcaSlicer;
-- the dialog shows a warning under the body picker, as the dialog of a recipe does: the steps that the Orca copy will
-  probably leave out, one line each with its reason and tip (`orca_result.preview`, which reads one Orca translation
-  with no sizes ticked, and `left_out_preview.find_orca`). The list is whole for the sizes that are not ticked, because
-  the Orca translation decides every step it leaves out by itself;
-- the file (`export_plan/orca_export.py`): the mesh, `Metadata/orca_cad.bin` (`orca_recipe`) and
-  `Metadata/paramability_report.json`, the report with the capture and an `orca` block (features with their bound
-  fields, variables, what each ticked parameter became, the steps left out, the plate move) and `mesh_check` (the
-  mesh's box against the part's box on the plate). When the steps cannot be read or translated, the file holds the
-  mesh and an empty recipe (`outcome: meshOnly`). The same report is written beside the file as
-  `<name>.report.json`, since Orca drops the entry inside when the person saves the project from Orca.
+- The dialog of Export for Paramability (`recipe_dialog.build(..., orca=True)`): one body, the parameter table, the
+  up direction.
+- The export pipeline, with `ExportRequest.output = "orca"` (`export_plan/pipeline/run.py`, `_run_orca`).
 
-The modules of `lib/orca_translate/`:
+The Orca export differs from the export of a recipe in these ways:
 
-- `translate.py`: the walk over the timeline. It passes by the steps that do not build the body, gives every other
-  step to the handler of its kind (`HANDLERS`, gathered from the handler modules) and keeps the verdict of each step.
-  It reads the design from the shared layer (`design_model.design.read`), the same resolved steps the recipe walk
-  reads: what each step is for the body (a sketch, an assembly item, a step of another component, a step of the body
-  or of another body) and the body before and after it (`design_model.roles`), what about it cannot be read (the
-  step, its bodies, or a step in error in Fusion), and the step with the geometry of other components brought in. A
-  left out round or chamfer is measured from the sets in the resolved step (`facts`). Each handler gets the resolved
-  step (`handler(ctx, step)`) and reads its step only through it (see "Handlers read the resolved step" in
-  `agent-docs/developer-guide.md`).
-- `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
-  keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
-  (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
-  that follows sizes is a `design_model.values.Quantity`, the same type the recipe translator uses: `Context.quantity`
-  reads it from the model parameters of the step (`design_model.design.params_of`), and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
-  writes it into the field.
+- It reads the mesh of the body instead of the STEP. The mesh comes from `port.read_mesh` and
+  `fusion_reader/body_mesh.py`: Fusion's mesh calculator, in root coordinates and mm. An STL export is the fallback.
+- It makes the capture and the size table as for a recipe.
+- It makes one translation. `recipe_export.translate_capture(..., output="orca")` switches it to `orca_translate`.
+- It runs no size tries. Min and Max, Faster tries, the time limit and Lighter on memory are not used. A bad Min or
+  Max does not block OK.
+- It puts the design back and checks it as for a recipe (`PutBack`).
+- The result window has the same `# Title` sections (`dialog_model/orca_result.py`): Check your design, Result,
+  Variables, Left out, Next in OrcaSlicer.
+- The dialog shows a warning under the body picker, as the dialog of a recipe does. The warning lists the steps that
+  the Orca copy will probably leave out, one line each with its reason and tip (`orca_result.preview` and
+  `left_out_preview.find_orca`). `orca_result.preview` reads one Orca translation with no sizes ticked. The list is
+  complete for the sizes that are not ticked, because the Orca translation decides every step it leaves out by itself.
+
+### The file
+
+The file (`export_plan/orca_export.py`) holds three things:
+
+- The mesh.
+- `Metadata/orca_cad.bin` (`orca_recipe`).
+- `Metadata/paramability_report.json`. This report holds the capture, an `orca` block and `mesh_check`.
+  - The `orca` block holds the features with their bound fields, the variables, what each ticked parameter became,
+    the steps left out and the plate move.
+  - `mesh_check` compares the mesh's box with the part's box on the plate.
+
+When the steps cannot be read or translated, the file holds the mesh and an empty recipe (`outcome: meshOnly`).
+
+The same report is also written beside the file as `<name>.report.json`. Orca drops the entry inside the file when the
+person saves the project from Orca.
+
+### The modules of `lib/orca_translate/`
+
+`translate.py` is the walk over the timeline.
+
+- It passes by the steps that do not build the body.
+- It gives every other step to the handler of its kind (`HANDLERS`, gathered from the handler modules).
+- It keeps the verdict of each step.
+- It reads the design from the shared layer (`design_model.design.read`). These are the same resolved steps that the
+  recipe walk reads. A resolved step tells:
+  - what the step is for the body: a sketch, an assembly item, a step of another component, a step of the body or a
+    step of another body. It tells the body before and after the step too (`design_model.roles`).
+  - what about the step cannot be read: the step, its bodies, or a step in error in Fusion.
+  - the step with the geometry of other components brought in.
+- It measures a left out round or chamfer from the sets in the resolved step (`facts`).
+- Each handler gets the resolved step (`handler(ctx, step)`) and reads its step only through it. See "Handlers read
+  the resolved step" in `agent-docs/developer-guide.md`.
+
+`context.py` keeps what one translation needs while it walks: the recipe so far, the formulas it bound, the sizes that
+keep their numbers and why, and the part built so far.
+
+- Its `Context` is a `design_model.recorder.Recorder` (`cache`, `motion` always None, `doubt`, `note`,
+  `follow_component`), so the shared layer can record on it.
+- A value that follows sizes is a `design_model.values.Quantity`. The recipe translator uses the same type.
+- `Context.quantity` reads the value from the model parameters of the step (`design_model.design.params_of`).
+- `Context.bind` turns the formula of the value into an Orca formula (`formulas.to_orca`) and writes it into the
+  field.
+
+Two modules hold the places that a step writes as numbers:
+
 - `other_components.py`: geometry of other components (see "Other components" below).
 - `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
   parameters follow").
-- Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
-  `revolve_parts.py`, which writes its sketches, revolves and tool bodies, and `revolve_checks.py`, which checks each cut against the part), `sweeps.py`, `pipes.py` (a round
-  pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py` (with `body_pattern.py`, the
-  copies of a pattern or mirror of bodies that a Combine takes), `paste.py` (a pasted body, built as its source stood
-  at the paste), `bodies.py` (split and move), `finishes.py` (fillet
-  and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler), `rib_web.py` (a rib or a web, each wall
-  written by the thin extrude, see "Ribs and webs") and
-  `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"), and `coils.py`, which
-  leaves every coil out (see "Coils"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
-  `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
-  the cylinder of a thread), and turn a `Problem` into a `Skip`. A handler gives the features it wrote or a `Skip` (`skip.py`) with the reason and a
-  cause (`causes.py`).
-- Helpers of the handlers: `extents.py` (To, From and taper of an extrude, as values that follow sizes), `text_regions.py` (sketch text
-  as Orca's imported regions), `hole_place.py` (where holes sit), `hole_reach.py` (the depth of a hole up to a face or plane),
-  `drilled.py` (circle holes of the first outline drilled as Orca holes), `sketch_sizes.py` (the sizes an outline
-  sketch follows or keeps),
-  `sketches.py` and `splines.py` (outlines as Orca sketches), `sweep_splines.py` (splines of a sweep path, exactly), `outline_cuts.py` and `halfplanes.py` (outlines of
-  straight lines whose corners follow sizes, built from plane cuts), `tools.py` (tool bodies for Combine, patterns and
-  mirrors, also of other components), `finish_body.py`, `outline_rounds.py` and `left_corners.py` (the edges rounds and chamfers pick, and the
-  measuring of left out rounds), `corner_tools.py` and `corner_hosts.py` (rounds and chamfers of side edges on
-  outlines whose sizes follow variables, cut as corner tools), `limits.py` (how far a
-  variable may go), `formulas.py` (formulas Orca can write) and `place.py` (where the part sits on the plate).
-- `solid.py`: the part the copy has built so far, as simple shapes, for the checks of cuts and the copy's own box.
 
-Which sizes may move a sketch, a plane or a face is not decided in `orca_translate`: it is in the shared layer
+There is one handler module for each kind of step:
+
+- `steps.py`: extrude. `thin.py` builds a thin extrude (see "Thin extrudes").
+- `holes.py`: hole.
+- `revolve.py`: revolve. `revolve_parts.py` writes its sketches, revolves and tool bodies. `revolve_checks.py` checks
+  each cut against the part.
+- `sweeps.py`: sweep.
+- `pipes.py`: a round pipe as a sweep of its circle (see "Pipes").
+- `lofts.py`: loft.
+- `repeat.py`: patterns and mirrors. `repeat_path.py`: patterns along a path.
+- `combine.py`: Combine. `body_pattern.py` gives the copies of a pattern or mirror of bodies that a Combine takes.
+- `paste.py`: a pasted body, built as its source stood at the paste.
+- `bodies.py`: split and move.
+- `finishes.py`: fillet and chamfer.
+- `threads.py`: thread.
+- `emboss.py`: an emboss on a flat face, written by the extrude handler.
+- `rib_web.py`: a rib or a web. The thin extrude writes each wall (see "Ribs and webs").
+- `press_round.py`: a Press Pull of one whole round face (see "Press Pull of a round face").
+- `coils.py`: leaves every coil out (see "Coils").
+
+Rules of the handlers:
+
+- `holes.py` and `threads.py` read the hole and the thread through the shared readers `design_model/steps/hole.py`
+  and `thread.py`. They give the kind, the direction, the measured sizes, the thread numbers and the cylinder of a
+  thread.
+- A handler turns a `Problem` of a shared reader into a `Skip`.
+- A handler gives the features it wrote, or a `Skip` (`skip.py`) with the reason and a cause (`causes.py`).
+
+Helpers of the handlers:
+
+- `extents.py`: To, From and taper of an extrude, as values that follow sizes.
+- `text_regions.py`: sketch text as Orca's imported regions.
+- `hole_place.py`: where holes sit.
+- `hole_reach.py`: the depth of a hole up to a face or plane.
+- `drilled.py`: circle holes of the first outline, drilled as Orca holes.
+- `sketch_sizes.py`: the sizes an outline sketch follows or keeps.
+- `sketches.py` and `splines.py`: outlines as Orca sketches.
+- `sweep_splines.py`: splines of a sweep path, exactly.
+- `outline_cuts.py` and `halfplanes.py`: outlines of straight lines whose corners follow sizes, built from plane cuts.
+- `tools.py`: tool bodies for Combine, patterns and mirrors, also of other components.
+- `finish_body.py`, `outline_rounds.py` and `left_corners.py`: the edges that rounds and chamfers pick, and the
+  measuring of left out rounds.
+- `corner_tools.py` and `corner_hosts.py`: rounds and chamfers of side edges on outlines whose sizes follow variables,
+  cut as corner tools.
+- `limits.py`: how far a variable may go.
+- `formulas.py`: formulas that Orca can write.
+- `place.py`: where the part sits on the plate.
+
+`solid.py` is the part that the copy has built so far, as simple shapes. The checks of cuts and the copy's own box use
+it.
+
+Which sizes may move a sketch, a plane or a face is not decided in `orca_translate`. The shared layer decides it
 (`design_model/reach.py`). The Orca output reads those sizes and decides what to do: it keeps the number and marks the
 sizes. `sketch_sizes.profile_sizes` and `translate._item_sizes` call `reach.profile_sizes` and `reach.step_sizes`.
 
-`sketch_sizes.py` gives the helpers that the handlers of outlines share: `sketch_formulas` (each sketch solved once
-per translation) and `sketch_doubts` (the sizes an outline sketch follows or keeps), and `projection_doubts` (the
-sizes that may move geometry projected into a sketch). `steps.py` also gives `misses_reason` (the reason for a cut
-that meets nothing), and for holes `toward_material` and `behind` (the side of a one way cut or hole through all).
+`sketch_sizes.py` gives the helpers that the handlers of outlines share:
+
+- `sketch_formulas`: each sketch solved once per translation.
+- `sketch_doubts`: the sizes an outline sketch follows or keeps.
+- `projection_doubts`: the sizes that may move geometry projected into a sketch.
+
+`steps.py` also gives:
+
+- `misses_reason`: the reason for a cut that meets nothing.
+- `toward_material` and `behind`, for holes: the side of a one way cut or hole through all.
 
 ## What is copied
 
@@ -1471,78 +1555,109 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
 
 ## Limits
 
-- Orca 2.5 cannot tie sketch dimensions to variables. Outlines of straight lines are built from plane cuts so that
-  their corners follow; outlines with arcs, circles that move and splines keep their numbers.
-- An outline built from cuts gives the outline only within the limits on the parameters' lines. Past a limit Orca
+### Sketches and outlines
+
+- Orca 2.5 cannot tie sketch dimensions to variables. Outlines of straight lines are built from plane cuts, so their
+  corners follow. Outlines with arcs, circles that move and splines keep their numbers.
+- An outline built from cuts gives the outline only within the limits on the parameters' lines. Past a limit, Orca
   builds another shape without an error. The limits are worked out for one variable at a time.
-- Geometry projected into a sketch keeps its place in Orca; every size read before the sketch is marked.
-- Sketch text keeps its size and place in Orca; only the depth of its extrude or emboss follows a variable. The
+- Geometry projected into a sketch keeps its place in Orca. Every size read before the sketch is marked.
+- Sketch text keeps its size and place in Orca. Only the depth of its extrude or emboss follows a variable. The
   letters are polygons within 0.005 mm of Fusion's curves.
-- A sketch whose plane Fusion does not name (Fusion 2706 does so for some sketches on a face) counts as one on a face:
-  every size read before it is marked, also a size that only changes the face's extent (a width under a boss).
-- A circular pattern whose copies Fusion places off its count and angle (Fusion 2706, hand check CP1) is left out.
-- The copy reads a distance dimension between two lines as keeping them parallel. Until hand test OR18 confirms this
-  in Fusion, the sizes that rest on it follow only partly.
-- Orca rebuilds the whole Design body from the recipe. A step that fails there (a cut that no longer meets the part
-  after a variable change, for one) fails the whole rebuild; Undo the change.
-- Orca's own "through all" goes both ways from the sketch. A one way through all cut or hole is written as Orca's
-  through all only when nothing of the part lies behind its sketch; otherwise as a 1000 mm blind cut. A join or new
-  body through all is left out: Fusion ends it at the part, and Orca would add material far past it.
-- A cut through all makes no end face, so Fusion's stored direction is all there is, and Fusion can store it toward
-  the side without material (seen on a sketch on the XZ plane of a Z up design). Such a one way cut or hole goes to
-  the side where its outline meets the copied part, with a note; when both sides meet material the stored direction
-  stays.
-- A blind hole's drill point is left flat; the result notes it. A hole up to a face with a drill point is left out.
-- A round or chamfer drawn into an outline keeps its number, and the drawn outline has numbers only. On an outline
-  with a size that follows a variable, corner tools cut the corners, and they follow within the limits on the
-  parameters' lines. The checks against other steps hold at the current sizes: a variable that later moves another
-  step into the corner's region is not checked.
-- A round, chamfer or thread is checked at the current sizes. One that Orca cannot make after a variable change (a
-  round larger than a face has become) fails the whole rebuild. The parameter's line gives the limits of a variable
-  that sets a round size or a thread length; for a part size, a note gives how far the part may shrink.
-- A thread and its lead-ins keep their place. A face that a size moves takes neither with it: a through hole whose
-  part gets thinner by more than the lead-in depth leaves the far lead-in in the air, and Orca stops the rebuild on
-  a cut that removes nothing.
-- A hole's sketch plane keeps its place: a sketch on a face that a size moves does not follow it. The sizes that may
-  move it are marked.
-- An extrude's sketch plane, and a "From" face, keep their place too; the sizes that may move them are marked. The
-  rule for a sketch on a face of the part is wide: every size read before the sketch is marked, since the copy
+- A sketch whose plane Fusion does not name counts as a sketch on a face. Fusion 2706 does not name the plane of some
+  sketches on a face. Every size read before such a sketch is marked. This includes a size that only changes the
+  face's extent (a width under a boss).
+- The copy reads a distance dimension between two lines as keeping them parallel. Hand test OR18 must still confirm
+  this in Fusion. Until then, the sizes that rest on it follow only partly.
+
+### The rebuild in Orca
+
+- Orca rebuilds the whole Design body from the recipe. A step that fails there fails the whole rebuild. One example
+  is a cut that no longer meets the part after a variable change. Undo the change.
+- A Boolean that adds or cuts nothing does not stop Orca's rebuild. A pattern whose count or spacing a variable
+  changes can put copies where the part has none. Such copies add material there or cut nothing.
+- One body per file.
+- The recipe format is Orca's internal one (version 6). It may change.
+
+### Through all, cuts and holes
+
+- Orca's own "through all" goes both ways from the sketch.
+  - A one way through all cut or hole is written as Orca's through all only when nothing of the part lies behind its
+    sketch. Otherwise it is written as a 1000 mm blind cut.
+  - A join or new body through all is left out. Fusion ends it at the part, and Orca would add material far past it.
+- A cut through all makes no end face, so Fusion's stored direction is all there is. Fusion can store the direction
+  toward the side without material (seen on a sketch on the XZ plane of a Z up design). Such a one way cut or hole
+  goes to the side where its outline meets the copied part, with a note. When both sides meet material, the stored
+  direction stays.
+- A blind hole's drill point is left flat. The result notes it. A hole up to a face with a drill point is left out.
+- A hole's sketch plane keeps its place. A sketch on a face that a size moves does not follow the face. The sizes
+  that may move it are marked.
+- A hole "To" a face, or of a given depth, with a counterbore or countersink: a variable can make the hole no deeper
+  than the recess. Then Orca gives only the recess, without an error. The parameter's line says how far the variable
+  may go.
+- A hole "To" a face that Fusion may join with the faces next to it follows only that face. This is the case for
+  Chain Faces, and for a hole whose `matchShape` is not checked yet. The sizes that may move the face are marked.
+
+### Extrudes
+
+- An extrude's sketch plane and a "From" face keep their place. The sizes that may move them are marked.
+- The rule for a sketch on a face of the part is wide. Every size read before the sketch is marked, because the copy
   cannot tell which face the sketch sits on.
-- A "To" length follows its plane, but a variable that moves the plane past where the extrude starts gives Orca a
-  length below zero, and Orca extrudes the other way where Fusion would stop with an error. The parameter's line
-  says how far the variable may go.
-- A hole "To" a face, or of a given depth, with a counterbore or countersink: a variable that makes the hole no
-  deeper than the recess gives only the recess in Orca, without an error. The parameter's line says how far the
-  variable may go.
-- A hole "To" a face that Fusion may join with the faces next to it (Chain Faces, or a hole whose `matchShape` is not
-  checked yet) follows only that face. The sizes that may move the face are marked.
-- A tapered extrude is checked at the current sizes. When a variable change shrinks a side of its outline to nothing,
-  Orca builds a straight extrude instead, without an error. The parameter's line says how far the variable may go.
-- A sweep path keeps its numbers. A swept outline that a variable grows past the tightest bend of its path runs
-  into itself; the parameter's line says how far it may grow, also when that is far from the current size. The same
-  is true for a pipe, and its line also says how thick the wall of a hollow pipe may get before it closes the hole.
-- The shape the copy keeps to check cuts (`solid.py`) does not know threads, and knows rounds and chamfers only as
-  material a later cut may not count on (on the simple parts rounds are copied on).
-- A revolve angle that follows a variable is checked at the current sizes and walked down for the limit on the
-  parameter's line. That walk takes about 18 tests of the angle, so a band of angles where a cut misses the part, between
-  the tested angles, can be missed.
-- A path pattern's path keeps its numbers. Its count and distance follow only within the limits on the parameters'
-  lines; past them Orca puts copies past the end of the path. Copies that keep their direction on an arc keep their
-  distance as a number.
-- A pattern or mirror plane, a turning axis and a split plane keep their place: one on a face that a size moves does
-  not follow it.
-- A Press Pull of a round face keeps the face's radius and its end planes as numbers. A variable that changes the
-  radius of the pin or the bore in Orca, or moves its ends, leaves the ring where it was: Orca then adds or cuts a
-  ring next to the face, without an error. The sizes that may do this are marked.
-- A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
-  changes can put copies where the part has none; they then add material there or cut nothing.
-- The count of a pattern or mirror of bodies that a Combine takes keeps its number in Orca: Fusion's Combine holds a
-  fixed list of copies.
-- A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its
-  thickness as numbers in Orca.
-- A coil is left out: Orca's sweep along its helix gives the wire other ends and another thickness than Fusion's coil
+- A "To" length follows its plane. A variable can move the plane past where the extrude starts. Then Orca gets a
+  length below zero and extrudes the other way, where Fusion would stop with an error. The parameter's line says how
+  far the variable may go.
+- A tapered extrude is checked at the current sizes. A variable change can shrink a side of its outline to nothing.
+  Then Orca builds a straight extrude instead, without an error. The parameter's line says how far the variable may
+  go.
+- A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its thickness
+  as numbers in Orca.
+
+### Rounds, chamfers and threads
+
+- A round or chamfer drawn into an outline keeps its number, and the drawn outline has numbers only.
+- On an outline with a size that follows a variable, corner tools cut the corners. They follow within the limits on
+  the parameters' lines.
+- The checks against other steps hold at the current sizes. A variable can later move another step into the corner's
+  region. That is not checked.
+- A round, chamfer or thread is checked at the current sizes. Orca may be unable to make one after a variable change
+  (a round larger than a face has become). Then the whole rebuild fails.
+  - The parameter's line gives the limits of a variable that sets a round size or a thread length.
+  - For a part size, a note gives how far the part may shrink.
+- A thread and its lead-ins keep their place. A face that a size moves takes neither with it. Example: a through hole
+  whose part gets thinner by more than the lead-in depth leaves the far lead-in in the air, and Orca stops the rebuild
+  on a cut that removes nothing.
+- The shape that the copy keeps to check cuts (`solid.py`) does not know threads. It knows rounds and chamfers only as
+  material that a later cut may not count on. On the simple parts, rounds are copied on.
+
+### Sweeps, pipes and coils
+
+- A sweep path keeps its numbers. A variable can grow a swept outline past the tightest bend of its path. Then the
+  outline runs into itself. The parameter's line says how far it may grow, also when that is far from the current
+  size.
+- The same is true for a pipe. Its line also says how thick the wall of a hollow pipe may get before it closes the
+  hole.
+- A coil is left out. Orca's sweep along its helix gives the wire other ends and another thickness than Fusion's coil
   (see "Coils").
-- One body per file. The recipe format is Orca's internal one (version 6) and may change.
+
+### Revolves, patterns and mirrors
+
+- A revolve angle that follows a variable is checked at the current sizes. It is then walked down for the limit on the
+  parameter's line. That walk takes about 18 tests of the angle. A band of angles where a cut misses the part can be
+  missed, if it lies between the tested angles.
+- A path pattern's path keeps its numbers. Its count and distance follow only within the limits on the parameters'
+  lines. Past them, Orca puts copies past the end of the path. Copies that keep their direction on an arc keep their
+  distance as a number.
+- A pattern or mirror plane, a turning axis and a split plane keep their place. One on a face that a size moves does
+  not follow the face.
+- The count of a pattern or mirror of bodies that a Combine takes keeps its number in Orca. Fusion's Combine holds a
+  fixed list of copies.
+- A circular pattern whose copies Fusion places off its count and angle is left out (Fusion 2706, hand check CP1).
+
+### Press Pull
+
+- A Press Pull of a round face keeps the face's radius and its end planes as numbers.
+- A variable can change the radius of the pin or the bore in Orca, or move its ends. Then the ring stays where it was.
+  Orca adds or cuts a ring next to the face, without an error. The sizes that may do this are marked.
 
 ## Live check without Fusion
 
