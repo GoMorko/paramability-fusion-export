@@ -170,6 +170,10 @@ def sources(ctx, data, what):
                 return Skip(shared.REPEAT_TOOL_KEEPS % (label(source), what))
             groups.append((mode, "combine", source))
             continue
+        if index in ctx.scope.pasted:
+            # The features of that step in `ctx.written` may be those of the body the paste copied (`paste`).
+            return Skip("This %s repeats %s, a step of the body that a paste copied, which is not copied to Orca yet."
+                        % (what, label(source) if source is not None else "a step"), causes.NOT_REPEATABLE)
         if not ctx.written.get(index):
             if verdict is not None and verdict.get("verdict") == SKIPPED and source is not None \
                     and source.get("suppressed"):

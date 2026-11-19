@@ -14,6 +14,10 @@ Which source a pasted body copies and where the copy sits are facts of the share
 - a pasted body that does not sit where its source sat (cause `pastePlace`): Fusion pastes in place, and the copy does
   not know what else puts it elsewhere;
 - a source that the Orca copy cannot build up to the paste (cause `afterGap`): the reason names the step that stops it.
+
+A later step of the pasted body does not look up the features of the source's steps by their timeline index
+(`Body.pasted`): a pattern of features that repeats one of them is left out (`repeat`). Rounds and chamfers find the
+outline they change by its shape, so they work on the pasted body's own features.
 """
 from ..capture_model import gap_hints
 from ..capture_model.capture import same_body
@@ -43,10 +47,11 @@ def paste(ctx, step):
     start = len(ctx.features)
     kept = dict(ctx.written), dict(ctx.shapes)
     body = build(ctx, found.source, item)
+    again = {index for index, made in ctx.written.items() if kept[0].get(index) is not made}
     _keep_earlier(ctx, *kept)
     if isinstance(body, Skip):
         return Skip(body.reason, gap_hints.AFTER_GAP, body.stop)
-    _take_over(ctx, body)
+    _take_over(ctx, body, again)
     return ctx.features[start:]
 
 
@@ -59,10 +64,13 @@ def _keep_earlier(ctx, written, shapes):
         ctx.shapes[index] = made
 
 
-def _take_over(ctx, built):
+def _take_over(ctx, built, again):
     """The body the walk builds becomes the body `tools.build` wrote: it takes its place in Orca's list of bodies and
-    its shape, so later steps work on it."""
+    its shape, so later steps work on it. `again` holds the indexes of the steps written into it: their features in
+    `ctx.written` may be those of the source (`_keep_earlier`), so a later step of the body must not look them up by
+    index (`Body.pasted`)."""
     scope = ctx.scope
+    scope.pasted |= again | built.pasted
     scope.index, scope.has_body = built.index, True
     scope.solid.pieces = list(built.solid.pieces)
     scope.solid.unsure = list(built.solid.unsure)

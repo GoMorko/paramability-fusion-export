@@ -4773,6 +4773,12 @@ steps:
    twice. The second time writes over the features that the walk keeps for each step (`ctx.written`, `ctx.shapes`).
    The handler puts back the features of the first time (`_keep_earlier`). Thus a later step of the part (a round
    drawn into an outline, a pattern of features) changes the part and not the copy.
+9. The handler records the steps that it wrote again in the body (`Body.pasted`). For these steps, `ctx.written`
+   and `ctx.shapes` can hold the features of the source and not the features of the pasted body. Thus a later step
+   of the pasted body must not find these features by their timeline index. A pattern of features of the pasted
+   body that repeats one of these steps is left out with the cause `notRepeatable` (`repeat.py`). A round or a
+   chamfer finds the outline that it changes by the shape of the outline, not by the index. Thus on the pasted body,
+   a round changes the outline of the pasted body.
 
 Example, made up: a 40 x 20 x 4 mm plate, a 6 x 6 mm peg body on the plate, `PegH` high, a paste of the peg, a Move
 of the pasted peg 20 mm along X, and a Combine that joins both pegs to the plate. The Orca recipe holds the plate, the
