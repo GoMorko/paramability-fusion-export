@@ -57,7 +57,7 @@ package may import only packages above it in this list (not every one of them). 
   a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/pattern_places.py` (where the copies of a pattern
   sit: circular copies by their ids, each place checked against the faces of its copy, places that repeat or do not
   fill the count), `steps/path_pattern.py` (the
-  plain pattern a path pattern on one line, arc or circle equals, and the room its copies have on the path), `steps/move.py` (the rigid move fitted from the corners of a body),
+  plain pattern a path pattern on one line, arc or circle equals, and the room its copies have on the path), `steps/move.py` (the rigid move fitted from the corners of a body), `steps/offset_round.py` (a whole round face that a Press Pull moves),
   `steps/paste.py` (the source of a pasted body and where the pasted body sits against it),
   `steps/body_pattern.py` (the copies of a pattern or mirror of bodies and whether a Combine takes all of them),
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:

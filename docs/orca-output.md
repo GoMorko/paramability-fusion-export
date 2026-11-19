@@ -58,7 +58,7 @@ The modules of `lib/orca_translate/`:
 - `kept_refs.py`: planes, axes and faces of the part's own component that a step writes as numbers (see "Which
   parameters follow").
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
-  `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
+  `revolve_parts.py`, which writes its sketches, revolves and tool bodies, and `revolve_checks.py`, which checks each cut against the part), `sweeps.py`, `pipes.py` (a round
   pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py` (with `body_pattern.py`, the
   copies of a pattern or mirror of bodies that a Combine takes), `paste.py` (a pasted body, built as its source stood
   at the paste), `bodies.py` (split and move), `finishes.py` (fillet
@@ -149,7 +149,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 scale (Orca has no step that scales a body)...), the pastes in "Patterns, mirrors, Combine, split, move and revolve", the Press Pulls in "Press Pull of a round
-face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", every coil (see "Coils"), the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns, and Combines that take copies of
+face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the ribs and webs in "Ribs and webs", every coil (see "Coils"), every Box, Cylinder, Sphere and Torus, the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns along other paths, and Combines that take copies of
 a pattern of bodies in a way that is not copied, among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split

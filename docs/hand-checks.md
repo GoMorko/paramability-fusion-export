@@ -1239,7 +1239,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `PegH` and look whether the pasted Body3 follows its source: note what it does. Afterwards each design is as
     before.
 
-100. RW1, ribs and webs for both exports. Add user parameters `bt` = 4 mm, `rt` = 2 mm, `rd` = 8 mm, `wt` = 2 mm and
+100. RI1, ribs and webs for both exports. Add user parameters `bt` = 4 mm, `rt` = 2 mm, `rd` = 8 mm, `wt` = 2 mm and
     `wd` = 8 mm. In a first design model a U channel: a 60 x 40 mm rectangle on the XY plane with its corner at the
     origin, extruded `bt` up, and two walls 4 x 40 mm at x = 0 and x = 56, extruded 40 mm up and joined. On a plane
     20 mm from the XZ plane (through y = 20) draw one line from (4, 30) to (56, 30) (x and height), wall to wall. Add a

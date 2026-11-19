@@ -130,7 +130,7 @@ can be.
 | Scale of sketches, or of a body and a sketch together | Left out | Yes, add-in only | Left out | Needs Orca | |
 | Combine: join, cut, intersect | Copied | - | Copied | - | The tool bodies are copied from their steps, also from other components. Orca: an intersect with several tools that the add-in cannot work out is left out. |
 | Replace Face | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Split Face | Copied | - | Left out | Yes, add-in only | Paramability passes it by when the solid stays the same, with a note: picks on the split faces may not follow. Orca leaves the step out, although the shape stays the same. |
+| Split Face | Copied | - | Copied | - | Both pass it by when the solid stays the same. Paramability adds a note: picks on the split faces may not follow. A Split Face that may have changed the solid is left out. |
 | Split Body: plane or flat face | Copied | - | Partly | Needs Orca | The part keeps its piece. Orca: the plane keeps its place. |
 | Split Body: solid body | Copied | - | Copied | - | |
 | Split Body: surface or curved face | Left out | Yes, needs an app change | Left out | Needs Orca | |
