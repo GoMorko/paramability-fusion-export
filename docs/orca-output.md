@@ -100,7 +100,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | An outline that is one rectangle that keeps its place and direction | simple rectangle, its plane at the rectangle's centre | `width`, `height` |
 | An outline of straight lines (one loop, no holes) whose corners follow sizes, of an extrude without taper: also a rectangle that moves or turns (see "Outlines built from plane cuts") | a square block on the sketch plane, extruded as the extrude, a Cut per side (between two Transforms for a side that turns), tool bodies cut away at inward corners, a Boolean into the part | every corner: `cut_offset`, `xf_angle_deg` |
 | An outline that is one circle | simple circle | `radius` |
-| Any other outline of lines, arcs, circles, full ellipses (centre, major and minor radius, major axis direction) and splines (a spline whose exact shape Fusion gives, see "Sweeps, lofts and splines"), and an outline the cuts cannot build | sketch entities at their current values | no |
+| Any other outline of lines, arcs, circles, full ellipses and elliptical arcs (centre, major and minor radius, major axis direction, and for an arc two angles, worked out from the exact curve Fusion gives and written only when its ends come out as measured to 0.000001 mm), and splines (a spline whose exact shape Fusion gives, see "Sweeps, lofts and splines"), and an outline the cuts cannot build | sketch entities at their current values | no |
 | The first body's outline with holes | the outer outline, then a cut through all per hole, so each stays a simple rectangle or circle where it is one; a circle hole whose centre moves, in a one sided extrude without taper, is an Orca Hole through all instead (see "Outlines built from plane cuts") | as above; the drilled hole: `hole_x`, `hole_y`, `hole_diameter` |
 | Extrude: one side, symmetric, two sides; new body, join, cut, intersect; a distance, or through all for a cut or intersect; a start offset | Extrude | `distance`, `distance2` |
 | Extrude side "To" a flat face or plane square to the extrude, with an offset | the measured distance (Blind, or a side of Two sides) | `distance` when the plane follows: an offset plane, or an end face of a copied extrude (see "Extents") |
@@ -152,7 +152,7 @@ scale (Orca has no step that scales a body)...), the pastes in "Patterns, mirror
 face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", every coil (see "Coils"), the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns, and Combines that take copies of
 a pattern of bodies in a way that is not copied, among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
-embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
+embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, elliptical arcs whose ends do not come out as Fusion measured them, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
 threads whose ends the copy cannot judge, holes up to a tilted or curved face, one of another component or one whose end is not flat or not on the face, a split whose other piece a later step changes together
 with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
@@ -1650,6 +1650,11 @@ also after `--set text_depth=2`.
 
 A full ellipse: the capture `extrude_ellipse_turned` (radii 10 and 5, its major axis turned 30 degrees, 2 mm
 thick) built in OrcaSlicer 2.5.1 on 2026-11-18 with a box of 18.03 x 13.23 x 2 mm and 314.2 mm3, as worked out.
+
+Elliptical arcs: the capture `orca_ellipse_arcs_slot` (`tests/orca_ellipse_arcs.py`, `python3 -m tests.orca_ellipse_arcs`
+writes it again): two straight sides joined by two half ellipses of radii 10 and 5, 2 mm thick, box 50 x 10 x 2 and
+volume 2 * (300 + 50 pi) = 914.16 mm3. Write it with `python3 scripts/orca_live_check.py write orca_ellipse_arcs_slot
+<out.3mf>`, open it in the test OrcaSlicer and run `check orca_ellipse_arcs_slot`. Not built in OrcaSlicer yet.
 
 Thin extrudes: the captures of `tests/orca_thin.py` (`python3 -m tests.orca_thin <folder>`) built in OrcaSlicer
 2.5.1 on 2026-11-18 with the volumes worked out: `orca_thin_divider` 4160 mm3 (4352 at `len` 36, 5360 with `wall`
