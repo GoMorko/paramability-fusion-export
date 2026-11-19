@@ -1654,7 +1654,10 @@ thick) built in OrcaSlicer 2.5.1 on 2026-11-18 with a box of 18.03 x 13.23 x 2 m
 Elliptical arcs: the capture `orca_ellipse_arcs_slot` (`tests/orca_ellipse_arcs.py`, `python3 -m tests.orca_ellipse_arcs`
 writes it again): two straight sides joined by two half ellipses of radii 10 and 5, 2 mm thick, box 50 x 10 x 2 and
 volume 2 * (300 + 50 pi) = 914.16 mm3. Write it with `python3 scripts/orca_live_check.py write orca_ellipse_arcs_slot
-<out.3mf>`, open it in the test OrcaSlicer and run `check orca_ellipse_arcs_slot`. Not built in OrcaSlicer yet.
+<out.3mf>`, open it in the test OrcaSlicer and run `check orca_ellipse_arcs_slot`. Built in OrcaSlicer 2.5.1 on
+2026-11-19 with the box 50 x 10 x 2 and 914.2 mm3. The capture reader writes `nurbs` only for curves whose
+geometry is a `NurbsCurve3D`; whether Fusion gives the profile curve of a sketch elliptical arc so, or as an
+`EllipticalArc3D` (which then stays left out), is still to be checked in Fusion.
 
 Thin extrudes: the captures of `tests/orca_thin.py` (`python3 -m tests.orca_thin <folder>`) built in OrcaSlicer
 2.5.1 on 2026-11-18 with the volumes worked out: `orca_thin_divider` 4160 mm3 (4352 at `len` 36, 5360 with `wall`
