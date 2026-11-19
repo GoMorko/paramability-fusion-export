@@ -466,7 +466,7 @@ export (see checklist 4.10.5).
 
 Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
 `lib/fusion_reader/` (`read_solid.py`, `read_hole.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
-`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`, `read_pipe.py`). The step kind table
+`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`, `read_pipe.py`, `read_rib.py`). The step kind table
 (`lib/capture_model/step_kinds.py`) says which module reads which type.
 
 `read_solid.py` reads the extrude, the revolve and the combine. `read_hole.py` reads the hole. Both need the same facts
@@ -662,7 +662,7 @@ at an even count are read only when that size gets rows for another reason: it m
 extra ticked sizes. Section 3.11 explains why the even count matters.
 
 What the probe follows (`plan.scan`): the sketch profiles of extrudes, revolves, sweeps, lofts and embosses, the hole
-points, a revolve axis on a sketch line, a sweep path of sketch lines and arcs, and a flat face used as an outline. The
+points, a revolve axis on a sketch line, a sweep path of sketch lines and arcs, the line of a rib or a web of one chain, and a flat face used as an outline. The
 step kind table says which records of a step the probe may follow (`sketches=` in `StepType`). A sketch token in any
 other place leaves that sketch unfollowed. A sketch with a spline or text is not followed either.
 
@@ -1641,6 +1641,7 @@ imports translator code, and only the translator reads `HANDLERS`.
 | `CopyPasteBody`, `MoveFeature` | `bodies.paste.handle`, `bodies.move.handle` |
 | `ScaleFeature` | `bodies.scale.handle` (see 3.18) |
 | `EmbossFeature` | `extrude.emboss.handle` |
+| `RibFeature`, `WebFeature` | `extrude.rib_web.handle` (see "A rib or a web" in 3.15) |
 | `SweepFeature`, `LoftFeature` | `sweep.step.handle`, `loft.step.handle` |
 | `CoilFeature` | `coil.step.handle` (see 3.13) |
 | `SplitFaceFeature` | none (skipped when the body is unchanged) |
@@ -1657,12 +1658,12 @@ types that the add-in does not copy, with the reason and the cause of the hint (
 | `OffsetFeature` (surface offset) | "Offsetting a surface is not copied." | `surface` |
 | `BoundaryFillFeature` | "Boundary Fill is not copied." | `boundaryFill` |
 | `ReplaceFaceFeature` | "Replace Face is not copied." | `replaceFace` |
-| `RibFeature`, `WebFeature` | "Rib is not copied.", "Web is not copied." | `ribWeb` |
 
 Scale, Replace Face, Rib, Web and the surface Offset also have the flag `reaches_bodies`. The Path Pattern has it too. They can change
 or take bodies of another component, so the capture walk measures the body around them also when they sit in another
-component. A coil, a modelled thread, a path pattern and a scale are copied, so they are not in this table (3.12, 3.13, 3.17 and
-3.18). A path pattern that is left out keeps the cause `pathPattern`. A scale that is left out keeps the cause `scale`.
+component. A coil, a modelled thread, a path pattern, a scale, a rib and a web are copied, so they are not in this table (3.12, 3.13, 3.17,
+3.18 and "A rib or a web" in 3.15). A path pattern that is left out keeps the cause `pathPattern`. A scale that is left out keeps the cause `scale`.
+A rib or a web that is left out keeps the cause `ribWeb`.
 
 A second table, `RECIPE_KINDS`, lists the recipe step kinds the translator writes (`extrude`, `revolve`, `hole`,
 `round`, `bevel`, `shell`, `offsetFaces`, `pattern`, `mirror`, `toolBody`, `move`, `loft`, `sweep`, `draft`, `thread`,
@@ -1824,7 +1825,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
 | `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`, with the checks of `design_model/steps/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
-| `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
+| `ribWeb` | a rib or a web that is not copied: a draft, a fillet, arcs, faces that do not show one wall, a wall that runs into the part, a To Next wall that is not one band, lines that Fusion stretches (`design_model/steps/rib_web.py`) | Draw the rib or web along straight lines, with no draft or fillet, or draw its outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
 | `revolveAxisSide` | a revolve whose outline would reach or cross its axis inside size ranges that the person typed (3.14) | Type size ranges that keep the outline on one side of the axis, or leave the ranges to the add-in. |
@@ -2733,7 +2734,7 @@ one folder per family of steps.
     start and the length to a face as values that follow sizes), `reach_motion.py` (a face or plane placed by the
     probe's measure), `taper.py`, `through.py`, `through_taper.py`, `material.py`, `checks.py` (the refusals of the
     measured checks of the shared reader), `built.py`, `order.py`, `common.py`, `up_to.py` (a side up to a tilted or
-    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), and `emboss.py` (the Emboss handler). The wall record, the open line, the shape of the wall and the side of the wall are in `design_model/steps/thin.py`. Both outputs read them there.
+    curved face, see the section "Extrudes: a tilted or curved end face, a start at a distance from a face, an intersect to two sides" in part 3), `thin_line.py` (the wall along an open line, see "A thin extrude of an open line" in the same section), `emboss.py` (the Emboss handler), and `rib_web.py` (the Rib and Web handler: each wall is a thin extrude of an open line). The wall record, the open line, the shape of the wall and the side of the wall are in `design_model/steps/thin.py`, and the walls of a rib or a web in `design_model/steps/rib_web.py`. Both outputs read them there.
   - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
     from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
     check are in `design_model/steps/sweep.py`.
@@ -3430,6 +3431,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     The recipe output (`translator/extrude/emboss.py`) and the Orca output (`orca_translate/emboss.py`) give that data
     to their extrude handler. Each output makes its own decision about an outline that Fusion trims to the face: the
     recipe output writes it with `within`, and the Orca output leaves the step out.
+  - `rib_web.py`: the walls of a rib or a web (`walls`). It finds the wall of each line from the settings and from
+    the faces that Fusion made, and it checks that the part grew by the whole wall. `as_extrude` gives the data of
+    the thin extrude of an open line that each wall is, and `marks` tells which sizes the outputs mark. See "A rib or
+    a web" in 3.15.
   - `loft.py`: the volumes of a ruled loft between two parallel outlines of straight lines, one for each pairing of
     corners that the kernel can choose (`ruled_volumes`), and the check of a measured volume against them
     (`matches`).
@@ -6047,6 +6052,99 @@ degrees, so it takes 2 mm of the line (2 times tan 45 degrees). The range of the
 The material of the wall. A later step can ask if a point is in the wall (`material_at`). The add-in gives the wall
 as the closed outline that it fills (`band_profile`), in a `ThinWall` with the side `inside`. The faces of the wall
 are not placed.
+
+#### A rib or a web
+
+A rib and a web are walls along open sketch curves. The add-in copies them as thin extrudes of an open line (see the
+part before). It does not write a new recipe kind.
+
+What Fusion makes. These facts come from the API reference and from test designs in Fusion:
+
+- A rib takes one chain of curves. The wall is in the sketch plane. It goes across the plane from the line, as far
+  as the depth. With To Next, it goes until it meets the part. The thickness of the rib is along the sketch normal.
+  The thickness is centred on the sketch plane (`isSymmetric`) or it is on one side of the plane.
+- A web takes one or more chains. The wall has the thickness in the sketch plane. The thickness is centred on each
+  line or it is on one side of the line. The wall goes along the sketch normal, as far as the depth. With To Next,
+  it goes until it meets the part.
+- `isFlipped` changes the side of the depth. The API does not say which side is which. A thickness on one side of a
+  rib or a web also has no side in the API.
+- Fusion stops the wall where it meets the part. This is also true for a depth that you type. Example: a rib goes
+  from (4, 34) to (50, 4) on the side plane of an L bracket, 5 mm into the corner. Near (50, 4), the band of the rib
+  goes through the base and out below it. Fusion does not make the part below the base.
+- A rib whose line is on a face of the part, with a depth that goes away from that face, is not a band. Fusion fills
+  the rib down to the face, also past the ends of the line.
+- A web with `isExtended` stretches its lines to the nearest faces of the part.
+- `draftAngle` and `filletRadius` give null when the rib or web has no draft and no fillet.
+
+What the reader reads (`fusion_reader/read_rib.py`):
+
+- The settings: `thickness`, `isSymmetric`, `extentType`, `depth`, `isFlipped`, `draftAngle`, `filletRadius` and,
+  for a web, `isExtended`.
+- The curves (`curves`). The reader can read them only when the marker is just before the feature. Fusion gives the
+  curves in any order and direction. `geometry/chains.open_chains` puts the curves whose ends meet into chains. It
+  starts each chain at a free end. `read_sweep.chain_record` writes each chain in the form of the path of a thin
+  extrude. One chain is `path`, and the size probe follows it. Two or more chains are `paths`, and the probe does not
+  follow them.
+- After the step: each face that the feature made (`faces`), with its surface, a point, the normal and its corners
+  (`BRepFace.vertices`), in `wall_faces`. Also the faces of the part before the step and the volume of the part
+  before and after the step.
+
+The shared layer (`design_model/steps/rib_web.py`) finds the wall of each line (`walls`). Each line gives the wall of
+a thin extrude of an open line: a band along the line that goes along the sketch normal. For a rib, the width of the
+band is the depth, and the length along the normal is the thickness. For a web, the width is the thickness, and the
+length is the depth. The shared layer does these checks:
+
+1. The settings. A draft or a fillet that is not zero, a setting that the reader could not read, and an extent of
+   another type give a problem.
+2. The lines. `thin.line_of` reads each chain. It must be a chain of straight lines of one sketch that go one after
+   the other. A rib must have one chain. `line_problem` checks the shape of each line.
+3. The candidates. A candidate is one side of the line and one way along the normal. For a rib, the side can be on
+   the left or on the right of the line. For a web, the side is `middle` when the thickness is centred, else left or
+   right. The way is +1 or -1, or centred for a rib that is symmetric. With To Next, the length is not known. Then
+   the add-in uses the corners of the faces. For a web, the length is the farthest corner along the normal. For a
+   rib, the depth is the farthest corner from the line. A rib with To Next must have one straight line.
+4. The faces. For each candidate, each face must be flat. It must be on a face of the wall, or it must be a face of
+   the wall that Fusion merged with a face of the part (`thin.fits`, `thin.merged`). Each line must have one face on
+   its wall. Each corner of each face must be on the wall. Thus Fusion did not stretch a line and did not add other
+   material. Exactly one candidate must agree. For a web with `isExtended`, no candidate agrees when Fusion stretched
+   the lines.
+5. The whole band. The part must grow by the volume of the band (`_whole_band`). The area of the band comes from its
+   pieces, one piece for each line (`thin.band_pieces`). Pieces that cross count one time
+   (`geometry/convex_union.union_area`). When the volume is less, the band went into the part, and Fusion stopped
+   it. The add-in leaves the step out. With To Next, the far end of the wall must also be on a flat face of the part
+   that faces the wall.
+
+Example. A web of three lines in a tray 60 x 40 x 20 mm with walls of 3 mm goes down to the floor (To Next). The
+lines go from wall to wall: one along y = 20, two across at x = 15 and x = 30. The wall is 2 mm thick. The corners of
+the faces go down 17 mm. The bands have the areas 108, 68 and 68 mm2. The two crossings share 4 mm2 each. The area is
+108 + 68 + 68 - 8 = 236 mm2, and the volume is 236 x 17 = 4012 mm3. The part grew from 16788 to 20800 mm3, which is
+4012 mm3. The floor of the tray is a flat face at 17 mm that faces up. Thus the web is copied.
+
+What the add-in writes. `as_extrude` makes the data of a thin extrude for each wall. The thickness of the thin wall
+is the width. The distance is the length, along the way of the wall (`side_one.direction`), or symmetric.
+`thin_wall.decided` holds the side that the shared layer found. `thin_line.wall_step` and the thin line of the Orca
+output (`orca_translate/thin.py`) use that side. They do not compare the faces again. The parameters go to the paths
+of the extrude: for a rib, `depth` goes to `thin.thickness` and `thickness` to the distance. For a web, it is the
+other way round. The handlers (`translator/extrude/rib_web.py`, `orca_translate/rib_web.py`) give each wall to the
+extrude handler. A web of several lines writes one step for each line.
+
+The sizes. The thickness and a depth that you type follow their sizes. A line follows its sizes when the probe
+followed it. `marks` tells the sizes that the outputs mark:
+
+- With To Next, the depth keeps the number that Fusion measured. Each size that the steps before it read is marked.
+  These sizes can move the faces that the wall reaches.
+- A wall that is not `clear` can go into the part at other sizes. Then Fusion stops it, and the copy does not. A
+  wall is clear when the band and all the room that it grows into are on the outer side of one face of the box of
+  the part before the step. Example: a web that goes up from the top of a plate is clear. A rib across a channel is
+  not clear. For a wall that is not clear, the outputs mark the depth, the thickness of a web, and each size that
+  the steps before it read.
+- A web with `isExtended` marks each size that the steps before it read. At other sizes, Fusion can stretch its lines
+  to faces that moved.
+
+What the add-in leaves out. A gusset in the corner of a bracket with To Next: Fusion fills the triangle between the
+line and the part. That is not a band, so the volume does not agree. A rib with a depth into the part: the band goes
+into the part. A web whose lines Fusion stretched. A rib or a web with a draft or a fillet, or along arcs. Each
+refusal has the cause `ribWeb`.
 
 ### 3.16 How a round by chord length or with a changing radius is translated
 

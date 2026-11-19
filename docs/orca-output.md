@@ -62,7 +62,8 @@ The modules of `lib/orca_translate/`:
   pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py` (with `body_pattern.py`, the
   copies of a pattern or mirror of bodies that a Combine takes), `paste.py` (a pasted body, built as its source stood
   at the paste), `bodies.py` (split and move), `finishes.py` (fillet
-  and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler) and
+  and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler), `rib_web.py` (a rib or a web, each wall
+  written by the thin extrude, see "Ribs and webs") and
   `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"), and `coils.py`, which
   leaves every coil out (see "Coils"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
@@ -107,6 +108,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Thin extrude of one rectangle or one circle, one way or symmetric, no taper (see "Thin extrudes") | the outer outline as a new body less the inner outline cut through all; on a part, as a tool body and a Boolean with the step's operation | `width`, `height`, `radius` (the drawn size plus or minus the thickness), `distance` |
 | Thin extrude of one straight line, the wall centred on it | simple rectangle centred on the line | `width` (the length of the line), `height` (the thickness), `distance` |
 | Thin extrude of any other open line of straight lines | the outline of the wall as sketch lines | `distance`; the line and the thickness keep their numbers |
+| Rib or web along straight lines, no draft, no fillet (see "Ribs and webs") | one thin extrude of an open line per line | as the thin extrude: `distance`, and `height` for a straight line with the wall centred on it |
 | Extrude of a flat face of the body (the face as the outline) | sketch entities of the face where it is now | no |
 | Extrude of sketch text: one side, symmetric, or a cut through all; no taper (see "Sketch text and embosses") | a sketch of its own with each letter as an imported region (polygons within 0.005 mm of the letter), Extrude | `distance` (the text keeps its size and place) |
 | Emboss on a flat face: raised or sunk, text or other outlines (see "Sketch text and embosses") | the extrude from the face it stands for | `distance` (the depth) |
@@ -1215,6 +1217,34 @@ python3 scripts/orca_live_check.py check /tmp/thin/orca_thin_divider.json --set 
 | `orca_thin_ell` | an L shaped line (0, 0) to (30, 0) to (30, 20), the wall 2 thick inside the corner, 20 high | 1920 (96 mm2 x 20) | none: the line and the thickness keep their numbers |
 | `orca_thin_frame` | a wall 2 thick outside a centred 80 x 50 rectangle, 30 high | 16080 | `wall=3`: 24480 |
 | `orca_thin_ring` | a wall 2 thick inside a centred circle 40 across, 10 high | 2387.61 (760 pi) | `wall=3`: 3487.17 (1110 pi) |
+
+### Ribs and webs
+
+Orca's Design tab has a Rib, but how it ends its wall was not compared with Fusion. So the copy builds each wall as
+the thin extrude of an open line it is (`rib_web.py`). The
+shared layer (`design_model/steps/rib_web.py`) finds the wall along each line, with the same rules as the
+Paramability output (see `docs/limits.md`): straight lines drawn one after the other, no draft, no fillet, the side
+and the way from the faces Fusion made, and a part that grew by the whole wall. For a rib, the depth is the width of
+the wall in the sketch plane and the thickness its length along the sketch normal; for a web, the other way round.
+Each wall then goes to the thin extrude of an open line (see "Thin extrudes"): a straight line with the wall centred
+on it is a rectangle whose width follows, any other line is the outline of its wall with numbers. The length of the
+extrude follows its variable. A web of several lines writes the features of one thin extrude per line.
+
+A depth that Fusion found (To Next) keeps its number, and the sizes read before the step are marked. A wall inside
+the box of the part may run into the part at a larger depth, so its depth, the thickness of a web and the sizes
+before it are marked too. A web whose lines Fusion stretches to the part is left out, and so is every wall that the
+faces or the volume do not show (cause `ribWeb`).
+
+Checked in OrcaSlicer 2.5.1 on 2026-11-19 with exports of test designs built in Fusion (the volume Fusion measured in
+brackets):
+
+| Design | What it is | Volume (mm3) | After `--set` |
+| --- | --- | --- | --- |
+| web on a plate | two crossing lines on a 60 x 40 x 4 plate, `wt` 2 centred, `wd` 10 up | 11160 (11160) | `wt=4`: 12640 (12640), then `wd=20`: 15680 (15680) |
+| web L in a tray | one L line in a 60 x 40 x 20 tray, `wt` 2 on one side, `wd` 8 down | 17604 (17604) | `wd=16`: 18420 (18420) |
+| web grid To Next | three lines from wall to wall in the tray, down to the floor, `wt` 2 | 20800 (20800) | `wt=4`: 24540 (24540) |
+| rib in a channel | a line from wall to wall of a U channel, `rd` 8 down, `rt` 2 on one side | 21952 (21952) | `rt=4`: 22784 (22784) |
+| rib To Next | the same line down to the floor of the channel, `rt` 2 centred | 23824 (23824) | `rt=4`: 26528 (26528) |
 
 ### Press Pull of a round face
 

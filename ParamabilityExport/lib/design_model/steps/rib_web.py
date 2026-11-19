@@ -401,8 +401,8 @@ def as_extrude(data, wall):
 
 
 def paths_of(data, wall):
-    """`(width path, length path)`: the extrude's paths that the rib or web values `depth` and `thickness` went to
-    (`as_extrude`), as {value path of the rib or web: extrude path}."""
+    """{value path of the rib or web: path of the thin extrude}: where `as_extrude` put the values `depth` and
+    `thickness`."""
     length_path = "symmetric.distance" if wall.symmetric else "side_one.distance"
     if data["kind"] == RIB:
         return {"depth": "thin.thickness", "thickness": length_path}

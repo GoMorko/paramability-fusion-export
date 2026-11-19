@@ -74,6 +74,9 @@ A shell that grows outward or has rounded corners is copied only when the volume
 A thin extrude of an open line (a fence or a divider) is copied only when the faces that Fusion made show on which
 side of the line the wall stands. Export for Orca copies a thin wall along one rectangle, one circle or one line of
 straight lines; the side of the wall comes from what Fusion measured, as for the other export.
+A Rib or a Web along straight lines is copied in both exports as a thin wall along each line. It is copied only when
+the faces that Fusion made show the wall and the part grew by the whole wall. Fusion stops a rib or a web where it
+meets the part, so a gusset that Fusion fills into a corner, or a wall that runs into the part, is left out.
 Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
 tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
 For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a

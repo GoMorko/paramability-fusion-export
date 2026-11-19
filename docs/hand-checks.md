@@ -116,12 +116,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    give; the edge loft names what Fusion gave for the section.
 
 6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it together with a sketch; on a
-   second box add a Rib (a sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern
-   on Path along a sketch spline, and Boundary Fill between two bodies.
+   second box use Replace Face with a surface, Pattern on Path along a sketch spline, and Boundary Fill between two
+   bodies.
    Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
    ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
-   ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
-   Offset) OffsetFeature; any other name gets the generic reason.
+   ScaleFeature, ReplaceFaceFeature, PathPatternFeature, BoundaryFillFeature and (surface Offset) OffsetFeature; any
+   other name gets the generic reason.
 
 7. CC5, a lid that follows a box not in the file. Make component Box with user parameter `Width`. In component Lid,
    sketch on the box top face, project the box outline, offset it 0.2 mm inwards and extrude 3 mm.
@@ -1238,3 +1238,23 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     to 10: 3920 mm3, both pegs 10 mm high. Set `CutH` to 10: 7424 mm3, both pockets 8 mm deep. In Fusion change
     `PegH` and look whether the pasted Body3 follows its source: note what it does. Afterwards each design is as
     before.
+
+100. RW1, ribs and webs for both exports. Add user parameters `bt` = 4 mm, `rt` = 2 mm, `rd` = 8 mm, `wt` = 2 mm and
+    `wd` = 8 mm. In a first design model a U channel: a 60 x 40 mm rectangle on the XY plane with its corner at the
+    origin, extruded `bt` up, and two walls 4 x 40 mm at x = 0 and x = 56, extruded 40 mm up and joined. On a plane
+    20 mm from the XZ plane (through y = 20) draw one line from (4, 30) to (56, 30) (x and height), wall to wall. Add a
+    Rib along it with thickness `rt` on one side of the plane and depth `rd` down toward the base. Copy the design and
+    set the rib to To Next, thickness centred. In a second design model a tray: a 60 x 40 x 20 mm block with a 54 x
+    34 mm pocket 17 mm deep, centred. On a plane at the top of the tray draw one L line (3, 15) to (30, 15) to
+    (30, 37) and add a Web with thickness `wt` on one side, depth `wd` down, Extend off. Copy it, draw three lines
+    from inner wall to inner wall (y = 20, x = 15, x = 30) and make the web To Next, thickness centred. In a third
+    design model an L bracket (the channel without the wall at x = 56) and a Rib along the diagonal (4, 34) to
+    (50, 4), To Next into the corner.
+    Export: Export for Paramability and Export for Orca, each design with its parameters ticked. Both channel
+    ribs, the L web and the grid web are copied, each line as a thin wall; the volumes are 21952, 23824 (To Next), 17604
+    and 20800 mm3 as in Fusion. To Next marks `bt` or `wt` "may give unexpected results"; the rib and the L web in
+    the channel and the tray also mark their depth. The gusset is left out with the tip "Draw the rib or web along
+    straight lines, with no draft or fillet, or draw its outline in a sketch and extrude it.", and `rt` is marked.
+    In Paramability and in OrcaSlicer set `rt` to 4: the channel rib is 22784 mm3. Set `wd` to 16: the L web is
+    18420 mm3. In Fusion turn Extend on for the L web with its line shortened to start at x = 10: that web is left
+    out with a reason that says Fusion stretches its lines. Afterwards each design is as before.
