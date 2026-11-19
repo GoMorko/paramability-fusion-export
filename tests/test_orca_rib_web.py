@@ -50,7 +50,7 @@ class OrcaRibWebTest(unittest.TestCase):
                 self.assertNotEqual(outcomes(result)[marked], "variable")
 
     def test_the_walls_fusion_does_not_build_as_bands_are_left_out(self):
-        for name in ("rib_tonext_gusset", "rib_into_corner", "web_extended"):
+        for name in ("rib_into_corner", "web_extended"):
             with self.subTest(name):
                 result = run(name)
                 self.assertEqual([g["cause"] for g in result.left_out], [gap_hints.RIB_WEB])

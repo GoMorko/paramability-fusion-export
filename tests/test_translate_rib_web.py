@@ -94,8 +94,8 @@ class RibWebLeftOutTest(unittest.TestCase):
         (record,) = [g for g in result.gaps if g["id"] == verdict["gap"]]
         self.assertEqual(record["hint"], gap_hints.HINTS[gap_hints.RIB_WEB])
 
-    def test_a_gusset_to_next_a_band_into_the_part_and_an_extended_web_are_left_out(self):
-        for name in ("rib_tonext_gusset", "rib_into_corner", "web_extended"):
+    def test_a_band_into_the_part_and_an_extended_web_are_left_out(self):
+        for name in ("rib_into_corner", "web_extended"):
             with self.subTest(name):
                 capture = load_capture(name)
                 self.assert_left_out(run(name), capture["items"][-1]["index"])

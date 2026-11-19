@@ -83,7 +83,7 @@ class WallsTest(unittest.TestCase):
         found = walls(data_of("web_tonext_grid"))
         self.assertEqual([(w.side, w.length, w.measured) for w in found], [("middle", 17.0, True)] * 3)
 
-    def test_fusion_filling_a_gusset_up_to_the_part_is_not_a_band(self):
+    def test_fusion_filling_a_gusset_up_to_the_part_is_not_a_band_of_one_depth(self):
         self.assertEqual(walls(data_of("rib_tonext_gusset")), rib_web.NEXT_SHAPE)
 
     def test_a_band_that_runs_into_the_part_where_fusion_stops_it_is_refused(self):
