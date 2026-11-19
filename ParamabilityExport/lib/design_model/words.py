@@ -416,6 +416,11 @@ RIB_UNSURE = ("The side the wall of this rib or web stands on could not be told 
 RIB_NEXT_SHAPE = ("This rib or web reaches the part in a shape that is not a wall of one depth (Fusion fills up to "
                   "the faces it meets), so it is not copied.")
 RIB_NEXT_LINE = "A rib that reaches to the part is copied only along one straight line."
+RIB_MEASURED_MARK = "%s reaches to the faces of the part, and the copy keeps the depth Fusion measured"
+RIB_MEETS_MARK = "%s may run into the part at other sizes, where Fusion stops it and the copy does not"
+RIB_EXTENDED_MARK = "%s stretches its lines to the faces of the part, and the copy keeps them as drawn"
+RIB_MEETS_PART = ("The wall of this rib or web runs into the part, where Fusion stops it, so it is not copied. Draw its "
+                  "lines so the wall only touches the part.")
 
 # Press Pull of a whole round face (`steps/offset_round.py`).
 OFFSET_ROUND_UNREAD = "The round face of this offset could not be read, so it is not copied."

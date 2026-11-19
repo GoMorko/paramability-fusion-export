@@ -6,9 +6,9 @@ the line, the side, the corners and the sizes go the way of a thin extrude of an
 several lines writes one thin extrude per line, in the order of its lines.
 
 What follows sizes: the thickness, a depth set as a distance, and the line when the size probe followed it (a rib or
-a web of one line). A depth that Fusion finds (To Next) is written as measured, and every size read before the step
-is marked: it may move the faces the wall reaches. A web that Fusion extends to the part (`isExtended`) marks them
-too: at other sizes Fusion may stretch its lines to faces that moved.
+a web of one line). The shared layer says which sizes to mark (`marks`): every size read before the step, and the
+values that make the wall longer, when a To Next depth is measured, when the wall may run into the part at other sizes
+(it is not `clear`), or when Fusion extends the lines of a web to the part.
 """
 from ...design_model import design, reach
 from ...design_model.problem import is_problem
@@ -34,9 +34,7 @@ def handle(ctx, step):
         out.extend(outcome.entries)
     for path, same in shared.paths_of(data, walls[0]).items():
         values.handled(ctx, item, path, same_as=same)
-    if walls[0].measured or data.get("extended"):
-        why = ("%s reaches to the faces of the part, and the copy keeps the depth Fusion measured" % name
-               if walls[0].measured else "%s stretches its lines to the faces of the part, and the copy keeps them as "
-                                          "drawn" % name)
-        ctx.doubt(reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item), why)
+    for names, why in shared.marks(data, walls[0], name):
+        ctx.doubt(tuple(reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item))
+                  + tuple(n for path in names for n in values.reads(ctx, item, path)), why)
     return out

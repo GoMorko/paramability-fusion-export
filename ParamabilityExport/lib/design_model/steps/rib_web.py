@@ -19,10 +19,16 @@ The API gives no side or direction for `isFlipped` or for a thickness on one sid
 part (`thin.fits`), and every corner of every face lies on the wall, so Fusion did not stretch a line or add other
 material. Exactly one candidate must fit.
 
-To Next stores no depth. The depth is then as far as the corners reach, and the wall is copied only when it is the
-whole band of that depth: the part's volume grew by the volume of the wall (so the wall met the part only on its
-faces), and its far end lies on a flat face of the part that faces the wall. A rib that reaches to the part takes one
-straight line, so that its far end is one face along the line.
+Fusion stops the wall where it meets the part, also for a depth set as a distance: a wall that runs into the part
+and out of it again ends where it met the part, not at its depth. So a wall is copied only when it is the whole band:
+the part's volume grew by the volume of the band (`_whole_band`), so the band met the part only on its faces. To Next
+stores no depth. The depth is then as far as the corners reach, and the far end must also lie on a flat face of the
+part that faces the wall. A rib that reaches to the part takes one straight line, so that its far end is one face
+along the line.
+
+At other sizes a longer or moved wall may run into the part, where Fusion stops it and the copy does not. `Wall.clear`
+says the wall cannot: the band and all of the room it grows into lie outside the box of the part before the step
+(`target_box_before`). The outputs mark the sizes of a wall that is not clear.
 """
 from ...capture_model import gap_hints
 from ...geometry import vec
@@ -48,6 +54,7 @@ NOT_MATCHING = Problem("not_matching", words.RIB_NOT_MATCHING, gap_hints.RIB_WEB
 UNSURE = Problem("unsure", words.RIB_UNSURE, gap_hints.RIB_WEB)
 NEXT_SHAPE = Problem("next_shape", words.RIB_NEXT_SHAPE, gap_hints.RIB_WEB)
 NEXT_LINE = Problem("next_line", words.RIB_NEXT_LINE, gap_hints.RIB_WEB)
+MEETS_PART = Problem("meets_part", words.RIB_MEETS_PART, gap_hints.RIB_WEB)
 
 # The shared line problems of `thin.line_of`, in the words of a rib or web.
 _LINE_PROBLEMS = {thin.LINE_CURVES.code: CURVES, thin.LINE_OPPOSED.code: OPPOSED}
@@ -57,6 +64,8 @@ TOL = 1e-3
 # The part's volume grew by the wall's volume within this share of it plus this (mm3).
 VOLUME_RELATIVE_TOL = 1e-4
 VOLUME_ABSOLUTE_TOL = 1e-2
+# How far (mm) the room a wall grows into is followed past its far end.
+GROWTH_MM = 1e5
 # The sketch-frame location `thin.line_side` reads for each side, so a thin extrude of the wall finds the same side.
 LOCATION_OF = {"inside": "side1", "outside": "side2", "middle": "center"}
 
@@ -116,11 +125,12 @@ def lines_of(data):
 class Wall:
     """The wall along one `thin.Line`: a band on `side` of the line (`inside`, `outside` or `middle`, in the line's
     own sketch frame) `width` wide, that runs `length` along the sketch normal from the sketch plane, one `way` (+1
-    or -1) or centred on the plane (way 0). `measured` is True when the depth is the one measured for To Next."""
+    or -1) or centred on the plane (way 0). `measured` is True when the depth is the one measured for To Next.
+    `clear` is True when a longer wall cannot meet the part (see the module text)."""
 
-    def __init__(self, line, side, width, way, length, measured):
+    def __init__(self, line, side, width, way, length, measured, clear=False):
         self.line, self.side, self.width, self.way, self.length = line, side, width, way, length
-        self.measured = measured
+        self.measured, self.clear = measured, clear
 
     @property
     def symmetric(self):
@@ -262,16 +272,49 @@ def _ends_on_part(lines, candidate, kind, before):
     return False
 
 
-def _whole_band(data, lines, candidate, before):
-    """True when the part grew by the whole wall of `candidate` and its far end lies on a flat face of the part."""
+def _whole_band(data, lines, candidate):
+    """True when the part grew by the whole wall of `candidate`: the band met the part only on its faces."""
     before_volume, after_volume = data.get("volume_before"), data.get("volume_after")
     area = _wall_area(lines, candidate)
     if not is_number(before_volume) or not is_number(after_volume) or area is None:
         return False
     expected = area * (candidate.span[1] - candidate.span[0])
-    if abs(after_volume - before_volume - expected) > VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL:
+    return abs(after_volume - before_volume - expected) <= VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
+
+
+def _growth_points(lines, candidate, kind):
+    """The 3D corners of the walls of `candidate` and of the room they grow into as the depth grows: along the sketch
+    normal for a web, across the plane away from each line for a rib."""
+    low, high = candidate.span
+    if kind == WEB:
+        low, high = (low - GROWTH_MM, high) if candidate.way < 0 else (low, high + GROWTH_MM)
+    left, right = thin.reaches(candidate.side, candidate.width)
+    out = []
+    for line in lines:
+        for k, piece in enumerate(thin.band_pieces(line.points, left, right)):
+            corners = list(piece)
+            if kind == RIB:
+                a, b = line.points[k], line.points[k + 1]
+                d = vec.unit([b[0] - a[0], b[1] - a[1], 0.0])
+                across = [-d[1], d[0]] if candidate.side == "inside" else [d[1], -d[0]]
+                corners += [[p[0] + across[0] * GROWTH_MM, p[1] + across[1] * GROWTH_MM] for p in piece]
+            out += [vec.frame_apply(line.frame, [p[0], p[1], h]) for p in corners for h in (low, high)]
+    return out
+
+
+def _clear(data, lines, candidate):
+    """True when the walls of `candidate` and the room they grow into lie on the outer side of one face of the box of
+    the part before the step, so a longer wall cannot meet the part."""
+    box = data.get("target_box_before")
+    if not isinstance(box, dict) or not all(isinstance(box.get(k), list) and len(box[k]) == 3 for k in ("min", "max")):
         return False
-    return _ends_on_part(lines, candidate, data["kind"], before)
+    points = _growth_points(lines, candidate, data["kind"])
+    for axis in range(3):
+        if all(p[axis] >= box["max"][axis] - TOL for p in points):
+            return True
+        if all(p[axis] <= box["min"][axis] + TOL for p in points):
+            return True
+    return False
 
 
 def walls(data, before=None):
@@ -306,10 +349,13 @@ def walls(data, before=None):
         if reason:
             return Problem("folds", words.RIB_FOLDS % reason, gap_hints.RIB_WEB)
     measured = data["extent"] == TO_NEXT
-    if measured and not _whole_band(data, lines, chosen, before):
+    if measured and not (_whole_band(data, lines, chosen) and _ends_on_part(lines, chosen, data["kind"], before)):
         return NEXT_SHAPE
+    if not measured and not _whole_band(data, lines, chosen):
+        return MEETS_PART
     length = chosen.span[1] - chosen.span[0]
-    return [Wall(line, chosen.side, chosen.width, chosen.way, length, measured) for line in lines]
+    clear = not measured and _clear(data, lines, chosen)
+    return [Wall(line, chosen.side, chosen.width, chosen.way, length, measured, clear) for line in lines]
 
 
 def as_extrude(data, wall):
@@ -359,3 +405,18 @@ def paths_of(data, wall):
     if data["kind"] == RIB:
         return {"depth": "thin.thickness", "thickness": length_path}
     return {"thickness": "thin.thickness", "depth": length_path}
+
+
+def marks(data, wall, name):
+    """[(value paths, why)]: the reasons to mark the sizes of a rib or web written as `wall`. Each output marks every
+    size read before the step with `why`, and the sizes the values at the paths read (the rib or web's own `depth`
+    and, for a web, `thickness`). Empty when the wall follows its sizes as written."""
+    out = []
+    grows = ("depth",) if data["kind"] == RIB else ("depth", "thickness")
+    if wall.measured:
+        out.append((grows, words.RIB_MEASURED_MARK % name))
+    elif not wall.clear:
+        out.append((grows, words.RIB_MEETS_MARK % name))
+    if data.get("extended"):
+        out.append(((), words.RIB_EXTENDED_MARK % name))
+    return out

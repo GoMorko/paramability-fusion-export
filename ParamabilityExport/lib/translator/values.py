@@ -47,6 +47,13 @@ def _reads_of(ctx, ref):
     return tuple(tr.reads) or _unread(ctx, ref, tr)
 
 
+def reads(ctx, item, path):
+    """Fusion names of the sizes the parameter behind the value at `path` reads; none when no parameter is behind
+    it."""
+    ref = _param(item, path)
+    return _reads_of(ctx, ref) if ref is not None else ()
+
+
 def handled(ctx, item, path, same_as=None):
     """The value at `path` needs nothing here (the step kind or its settings do not use it), so the audit does not
     expect it to follow the sizes it reads. With `same_as`, only when that other path of the item was dealt with:
