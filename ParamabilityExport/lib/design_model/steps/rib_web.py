@@ -26,9 +26,12 @@ stores no depth. The depth is then as far as the corners reach, and the far end 
 part that faces the wall. A rib that reaches to the part takes one straight line, so that its far end is one face
 along the line.
 
-At other sizes a longer or moved wall may run into the part, where Fusion stops it and the copy does not. `Wall.clear`
-says the wall cannot: the band and all of the room it grows into lie outside the box of the part before the step
-(`target_box_before`). The outputs mark the sizes of a wall that is not clear.
+At other sizes a longer or moved wall may run into the part, where Fusion stops it and the copy does not, and a size
+that moves the part may move it into the wall or away from it. `Wall.clear` says the wall's own sizes cannot run it
+into the part: the band and all of the room it grows into lie outside the box of the part before the step
+(`target_box_before`). `Wall.stands` says the wall starts on the face of the part its sketch is drawn on, so that face
+moves the sketch with it. `marks` marks the sizes read before the step unless the wall is clear and stands, and the
+wall's own depth (and a web's thickness) unless it is clear.
 """
 from ...capture_model import gap_hints
 from ...geometry import vec
@@ -56,6 +59,8 @@ NEXT_SHAPE = Problem("next_shape", words.RIB_NEXT_SHAPE, gap_hints.RIB_WEB)
 NEXT_LINE = Problem("next_line", words.RIB_NEXT_LINE, gap_hints.RIB_WEB)
 MEETS_PART = Problem("meets_part", words.RIB_MEETS_PART, gap_hints.RIB_WEB)
 EXTENDED = Problem("extended", words.RIB_EXTENDED, gap_hints.RIB_WEB)
+BODY_UNMEASURED = Problem("body_unmeasured", words.RIB_BODY_UNMEASURED, gap_hints.RIB_WEB)
+FLUSH = Problem("flush", words.RIB_FLUSH, gap_hints.RIB_WEB)
 
 # The shared line problems of `thin.line_of`, in the words of a rib or web.
 _LINE_PROBLEMS = {thin.LINE_CURVES.code: CURVES, thin.LINE_OPPOSED.code: OPPOSED}
@@ -127,11 +132,12 @@ class Wall:
     """The wall along one `thin.Line`: a band on `side` of the line (`inside`, `outside` or `middle`, in the line's
     own sketch frame) `width` wide, that runs `length` along the sketch normal from the sketch plane, one `way` (+1
     or -1) or centred on the plane (way 0). `measured` is True when the depth is the one measured for To Next.
-    `clear` is True when a longer wall cannot meet the part (see the module text)."""
+    `clear` is True when a longer wall cannot meet the part, and `stands` True when the wall stands on the face of
+    the part its sketch is drawn on (see the module text)."""
 
-    def __init__(self, line, side, width, way, length, measured, clear=False):
+    def __init__(self, line, side, width, way, length, measured, clear=False, stands=False):
         self.line, self.side, self.width, self.way, self.length = line, side, width, way, length
-        self.measured, self.clear = measured, clear
+        self.measured, self.clear, self.stands = measured, clear, stands
 
     @property
     def symmetric(self):
@@ -225,19 +231,22 @@ def _corner_on_wall(footprints, frame, span, point):
     return any(f.covers(uv) or f.nearest_curve(uv)[1] <= TOL for f in footprints)
 
 
-def _fits(lines, candidate, faces, corners, before):
+def _fits(lines, candidate, faces, before, merged_corners=True):
     """True when the faces Fusion made fit the walls of `candidate` along all lines: each face flat and on a wall or
-    merged with the part, at least one face on each wall, and every corner on a wall."""
+    merged with the part, at least one face on each wall, and every corner on a wall. Without `merged_corners`, the
+    corners of a face that lies off every wall (a face Fusion merged with the part) are not checked."""
     frame = lines[0].frame
+    start = frame["origin"]
     footprints = _footprints(lines, candidate)
     if not all(thin.flat_face(face) for face in faces):
         return False
     if not all(_on_some_wall(footprints, face, frame, candidate.span, before) for face in faces):
         return False
-    start = frame["origin"]
     if not all(any(thin.on_wall(f, face, frame, start, candidate.span) for face in faces) for f in footprints):
         return False
-    return all(_corner_on_wall(footprints, frame, candidate.span, p) for p in corners)
+    checked = faces if merged_corners else [
+        face for face in faces if any(thin.on_wall(f, face, frame, start, candidate.span) for f in footprints)]
+    return all(_corner_on_wall(footprints, frame, candidate.span, p) for p in _corners(checked))
 
 
 def _wall_area(lines, candidate):
@@ -318,6 +327,22 @@ def _clear(data, lines, candidate):
     return False
 
 
+def _stands(lines, candidate, before):
+    """True when the wall starts on the face of the part its sketch is drawn on and runs away from it: the sketch of
+    every line sits on a face (`reference`), and a flat face of the part before the step lies on the sketch plane
+    with its outward normal along the way of the wall. A size that moves that face then moves the sketch and the wall
+    with it."""
+    if candidate.way == 0 or not before:
+        return False
+    for line in lines:
+        if (line.path.get("reference") or {}).get("kind") != "face":
+            return False
+    frame = lines[0].frame
+    normal = vec.scale(vec.unit(frame["z"]), float(candidate.way))
+    return any(thin.flat_face(face) and vec.dot(vec.unit(face["normal"]), normal) >= 1.0 - thin.NORMAL_TOL
+               and abs(vec.dot(vec.sub(face["point"], frame["origin"]), normal)) <= TOL for face in before)
+
+
 def walls(data, before=None):
     """The `Wall` of each chain of a rib or web, or a Problem. `before` holds the faces of the part before the step
     (`target_faces_before`) when they are faces of the body the copy builds, else None: a face merged with the part,
@@ -339,17 +364,24 @@ def walls(data, before=None):
     candidates = _candidates(data, lines, corners)
     if is_problem(candidates):
         return candidates
-    found = [c for c in candidates if _fits(lines, c, faces, corners, before)]
+    found = [c for c in candidates if _fits(lines, c, faces, before)]
     if len(found) > 1:
         return UNSURE
     if not found:
         # A web that Fusion extends to the part has faces past the ends of its lines.
-        return EXTENDED if data.get("extended") else NOT_MATCHING
+        if data.get("extended"):
+            return EXTENDED
+        # The corners of a face merged with the part lie on the part's face too: such a wall is not proven.
+        if any(_fits(lines, c, faces, before, merged_corners=False) for c in candidates):
+            return FLUSH
+        return NOT_MATCHING
     chosen = found[0]
     for line in lines:
         reason = thin.line_problem(line.points, *thin.reaches(chosen.side, chosen.width))
         if reason:
             return Problem("folds", words.RIB_FOLDS % reason, gap_hints.RIB_WEB)
+    if not is_number(data.get("volume_before")) or not is_number(data.get("volume_after")):
+        return BODY_UNMEASURED
     measured = data["extent"] == TO_NEXT
     if measured and not (_whole_band(data, lines, chosen) and _ends_on_part(lines, chosen, data["kind"], before)):
         return NEXT_SHAPE
@@ -357,7 +389,8 @@ def walls(data, before=None):
         return MEETS_PART
     length = chosen.span[1] - chosen.span[0]
     clear = not measured and _clear(data, lines, chosen)
-    return [Wall(line, chosen.side, chosen.width, chosen.way, length, measured, clear) for line in lines]
+    stands = _stands(lines, chosen, before)
+    return [Wall(line, chosen.side, chosen.width, chosen.way, length, measured, clear, stands) for line in lines]
 
 
 def as_extrude(data, wall):
@@ -390,11 +423,13 @@ def as_extrude(data, wall):
         "target_faces_body": data.get("target_faces_body"),
         "target_faces_before": data.get("target_faces_before"),
     }
+    # A To Next depth is measured: no parameter is behind it.
+    given = {k: v for k, v in params.items() if k != "depth" or data.get("extent") == DISTANCE}
     mapped = {}
-    if width_from in params:
-        mapped["thin.thickness"] = params[width_from]
-    if length_from in params:
-        mapped[length_path] = params[length_from]
+    if width_from in given:
+        mapped["thin.thickness"] = given[width_from]
+    if length_from in given:
+        mapped[length_path] = given[length_from]
     if mapped:
         built["params"] = mapped
     return built
@@ -419,6 +454,8 @@ def marks(data, wall, name):
         out.append((grows, words.RIB_MEASURED_MARK % name))
     elif not wall.clear:
         out.append((grows, words.RIB_MEETS_MARK % name))
+    elif not wall.stands:
+        out.append(((), words.RIB_PART_MOVES_MARK % name))
     if data.get("extended"):
         out.append(((), words.RIB_EXTENDED_MARK % name))
     return out

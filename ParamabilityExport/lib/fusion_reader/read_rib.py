@@ -65,10 +65,12 @@ def chains_of(curves, ctx):
     return [chain_record([(curves[n], reverse) for n, reverse in chain], ctx) for chain in chains]
 
 
-def _params(feature):
+def _params(feature, extent):
+    """The parameters behind the values; `depth` only for a depth set as a distance."""
     found = Params()
     found.add("thickness", lambda: feature.thickness)
-    found.add("depth", lambda: feature.depth)
+    if extent == "distance":
+        found.add("depth", lambda: feature.depth)
     found.add("draft_deg", lambda: feature.draftAngle, "angle")
     found.add("fillet", lambda: feature.filletRadius)
     return found.found
@@ -103,7 +105,7 @@ def _before(feature, ctx, kind):
     else:
         data["paths"] = chains
     data["target_faces_body"], data["target_faces_before"] = target_faces(ctx)
-    return with_params(data, _params(feature))
+    return with_params(data, _params(feature, extent))
 
 
 def rib_before(feature, ctx):

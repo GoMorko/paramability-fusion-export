@@ -64,6 +64,21 @@ class RibWebCopyTest(unittest.TestCase):
         self.assertEqual([s["distance"] for s in found], [17.0] * 3)
         self.assertEqual(loose(result), ["wt"])
 
+    def test_a_plate_size_is_marked_when_the_web_sketch_is_not_on_the_plate(self):
+        # The plate of the fixture made `T` thick, and the web sketched on a plane at its top that `T` does not move.
+        capture = copy.deepcopy(load_capture("web_on_plate"))
+        user = dict(capture["parameters"]["user"][0], name="T", expression="4 mm", value=0.4, dependent_parameters=[],
+                    dependents=[])
+        capture["parameters"]["user"].append(user)
+        model = next(p for p in capture["parameters"]["model"] if p["name"] == "d3")
+        model.update(expression="T", kind="derived", dependency_parameters=["T"])
+        capture["items"][1]["data"]["params"]["side_one.distance"]["expression"] = "T"
+        for path in capture["items"][-1]["data"]["paths"]:
+            path["reference"] = {"kind": "constructionPlane", "token": "p1", "built_on": [{"origin": True}]}
+        result = translate(capture, size_table=table_for(capture))
+        self.assertEqual(len(walls_of(result)), 2)
+        self.assertEqual(loose(result), ["T"])
+
     def test_a_web_of_one_line_on_one_side_follows_its_line_as_drawn(self):
         result = run("web_distance_l")
         (step,) = walls_of(result)

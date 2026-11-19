@@ -92,7 +92,8 @@ class RibReaderTest(unittest.TestCase):
         self.assertNotIn("path", data)
 
     def test_to_next_has_no_depth(self):
-        data = read_feature("RibFeature", lines(((0, 0, 0), (30, 0, 0))), extentType=0, depth=None)
+        # A parameter that Fusion still gives for the depth is not read: To Next does not use it.
+        data = read_feature("RibFeature", lines(((0, 0, 0), (30, 0, 0))), extentType=0)
         self.assertEqual((data["extent"], data["depth"]), ("toNext", None))
         self.assertNotIn("depth", data["params"])
 

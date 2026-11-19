@@ -1238,8 +1238,11 @@ extrude follows its variable. A web of several lines writes the features of one 
 
 A depth that Fusion found (To Next) keeps its number, and the sizes read before the step are marked. A wall inside
 the box of the part may run into the part at a larger depth, so its depth, the thickness of a web and the sizes
-before it are marked too. A web whose lines Fusion stretches to the part is left out, and so is every wall that the
-faces or the volume do not show (cause `ribWeb`).
+before it are marked too. A wall that grows away from the part marks the sizes before it unless it stands on the face
+of the part that its sketch is drawn on, since a size that moves the part can move the part into the wall or away from
+it. A web whose lines Fusion stretches to the part is left out, and so is every wall that the faces or the volume do
+not show, a wall flush with a side of the part, and a wall on a body whose volume was not measured (cause
+`ribWeb`).
 
 Checked in OrcaSlicer 2.5.1 on 2026-11-19 with exports of test designs built in Fusion (the volume Fusion measured in
 brackets):

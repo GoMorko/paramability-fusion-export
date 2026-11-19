@@ -448,12 +448,16 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it, as for a thin extrude. Fusion stops the wall where it meets the part, also for a depth that you type. So the
   step is copied only when the part grew by the whole wall. These are left out: a wall that runs into the part (a rib
   drawn into a corner with a depth), a rib that Fusion fills up to the part (a gusset with To Next in a corner), and a
-  web whose lines Fusion stretches to the part (Extend on, lines that stop short of the faces). To Next is copied when
+  web whose lines Fusion stretches to the part (Extend on, lines that stop short of the faces). A wall flush with a
+  side of the part (Fusion merges their faces) and a wall on a body whose volume was not measured are left out too,
+  since the copy cannot check them. To Next is copied when
   the wall reaches one flat face of the part all along its line (a rib across a channel down to its floor, a divider
   web down to the floor of a tray). Its depth keeps the number that Fusion measured, and every size that the steps
   before it read may give unexpected results. A wall inside the box of the part could run into the part at a larger
   depth, so its depth, the thickness of a web and the sizes before it may give unexpected results too. A wall that
-  grows away from the part (a rib standing on a plate, a web up from a plate) follows all of its sizes.
+  grows away from the part (a rib standing on a plate, a web up from a plate) follows its own sizes. The sizes before
+  it are marked too, unless the wall stands on the face of the part that its sketch is drawn on: a size that moves
+  the part can otherwise move the part into the wall (where Fusion stops it) or away from it (the wall floats).
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - A hole "To" a face or plane is copied as a hole of the depth Fusion made, in both exports. Its end must lie on that

@@ -6087,7 +6087,7 @@ What Fusion makes. These facts come from the API reference and from test designs
 What the reader reads (`fusion_reader/read_rib.py`):
 
 - The settings: `thickness`, `isSymmetric`, `extentType`, `depth`, `isFlipped`, `draftAngle`, `filletRadius` and,
-  for a web, `isExtended`.
+  for a web, `isExtended`. The reader keeps the parameter of `depth` only for the Distance extent.
 - The curves (`curves`). The reader can read them only when the marker is just before the feature. Fusion gives the
   curves in any order and direction. `geometry/chains.open_chains` puts the curves whose ends meet into chains. It
   starts each chain at a free end. `read_sweep.chain_record` writes each chain in the form of the path of a thin
@@ -6146,13 +6146,23 @@ followed it. `marks` tells the sizes that the outputs mark:
   the part before the step. Example: a web that goes up from the top of a plate is clear. A rib across a channel is
   not clear. For a wall that is not clear, the outputs mark the depth, the thickness of a web, and each size that
   the steps before it read.
+- A wall that is clear marks each size that the steps before it read, unless it `stands`. Its own sizes are not
+  marked. A size that moves the part can move the part into the wall, where Fusion stops it, or away from the wall,
+  where the wall floats. Example: a plate is extruded `T` up from the XY plane, and a web is sketched on a plane at
+  z = 4 that is not the top face of the plate. At `T` = 6 the plate goes into the web. At `T` = 3 the web floats.
+- A wall `stands` when the sketch of each line is on a face of the part (`reference` has the kind `face`), a flat
+  face of the part before the step is on the sketch plane, and the outward normal of that face points along the way
+  of the wall. A size that moves that face then also moves the sketch and the wall.
 - A web with `isExtended` marks each size that the steps before it read. At other sizes, Fusion can stretch its lines
   to faces that moved.
 
 What the add-in leaves out. A gusset in the corner of a bracket with To Next: Fusion fills the triangle between the
 line and the part. That is not a band, so the volume does not agree. A rib with a depth into the part: the band goes
-into the part. A web whose lines Fusion stretched. A rib or a web with a draft or a fillet, or along arcs. Each
-refusal has the cause `ribWeb`.
+into the part. A web whose lines Fusion stretched. A rib or a web with a draft or a fillet, or along arcs. A wall
+flush with a side of the part: Fusion merges a face of the wall with a face of the part, and the corners of that face
+are also on the face of the part. The add-in cannot prove that such a wall is the band, so it leaves the step out with
+the reason `FLUSH`. A wall whose body has no measured volume (`BODY_UNMEASURED`): this occurs in the walk of a tool
+body when the reader did not measure that body. Each refusal has the cause `ribWeb`.
 
 ### 3.16 How a round by chord length or with a changing radius is translated
 
