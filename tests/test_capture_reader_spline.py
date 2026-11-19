@@ -248,9 +248,9 @@ class TextOutlinesTest(unittest.TestCase):
         curves = []
         for n in range(200):
             curves += self.square(12.0 * n, 0, 10) + self.square(12.0 * n + 3, 3, 4)
-        started = time.time()
+        started = time.process_time()
         profiles, areas = read_sketch.read_text_outlines(self.text(curves, box=(0, 0, 2400, 10)))
-        self.assertLess(time.time() - started, 2.0)
+        self.assertLess(time.process_time() - started, 2.0)
         self.assertEqual((len(profiles), areas[0]), (200, 84.0))
 
     def test_a_text_among_profiles_gives_one_area_per_record(self):

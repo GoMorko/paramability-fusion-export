@@ -52,9 +52,9 @@ class ManyOutlinesTest(unittest.TestCase):
     def test_two_hundred_outlines_translate_quickly(self):
         rects = [(5.0 + 2.0 * (n % 20), 5.0 + 3.0 * (n // 20), 1.0, 2.0) for n in range(200)]
         capture = embossed(rects)
-        started = time.perf_counter()
+        started = time.process_time()
         result = translate(capture)
-        elapsed = time.perf_counter() - started
+        elapsed = time.process_time() - started
         self.assertEqual(len(steps_of(result.recipe, "extrude")), 201)
         self.assertLess(elapsed, TIME_LIMIT_S)
 

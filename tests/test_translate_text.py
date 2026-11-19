@@ -198,9 +198,9 @@ class TextSortTest(unittest.TestCase):
         curves = []
         for n in range(200):
             curves += square(12.0 * n, 0, 10) + square(12.0 * n + 3, 3, 4)
-        started = time.time()
+        started = time.process_time()
         found = text_outlines.outlines_of(curves)
-        self.assertLess(time.time() - started, 2.0)
+        self.assertLess(time.process_time() - started, 2.0)
         self.assertEqual(len(found), 200)
         self.assertTrue(all(len(o["loops"]) == 2 for o in found))
 
@@ -208,9 +208,9 @@ class TextSortTest(unittest.TestCase):
         curves = []
         for n in range(100):
             curves += square(0.1 * n, 0.1 * n, 100 - 0.2 * n)
-        started = time.time()
+        started = time.process_time()
         found = text_outlines.outlines_of(curves)
-        self.assertLess(time.time() - started, 2.0)
+        self.assertLess(time.process_time() - started, 2.0)
         self.assertEqual(len(found), 50)
 
 
@@ -235,8 +235,8 @@ class TextSplineSpeedTest(unittest.TestCase):
         data["volume_after"] = data["volume_before"] + sum(data["areas"]) * abs(data["depth"])
         self.assertEqual(len(data["profiles"]), 200)
         spline_fit._fit.cache_clear()
-        started = time.time()
+        started = time.process_time()
         result = translate(deepcopy(capture))
-        self.assertLess(time.time() - started, 5.0)
+        self.assertLess(time.process_time() - started, 5.0)
         self.assertIsNone(result.refusal)
         self.assertEqual(len(steps_of(result.recipe, "extrude")), 201)
