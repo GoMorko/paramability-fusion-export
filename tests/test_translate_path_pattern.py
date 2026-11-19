@@ -10,6 +10,8 @@ from tests.test_translate_sized import table_of
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, translate_fixture
 
 from lib.capture_model import gap_hints
+from lib.design_model import words as shared
+from lib.geometry import vec
 from lib.design_model.problem import is_problem
 from lib.design_model.steps import path_pattern
 from lib.params.expressions import evaluate
@@ -166,6 +168,42 @@ class OpposedArcTest(unittest.TestCase):
     def test_a_start_point_part_way_along_the_arc_leaves_the_step_out(self):
         # Fusion has been seen to put such copies off the arc.
         self.assertEqual(left_out(self.opposed(0.25))["index"], 5)
+
+
+SOURCE_FACES = [{"center": [5.0, 5.0, 5.0], "area": 30.0}, {"center": [8.0, 5.0, 5.0], "area": 20.0}]
+
+
+def with_faces(data, moves=None, source=SOURCE_FACES):
+    """Give the original its faces and each copy the faces its frame puts them at. `moves` maps a copy id to the
+    frame whose places the faces take instead."""
+    data["source_faces"] = source
+    for element in data["elements"]:
+        frame = (moves or {}).get(element["id"], element["frame"])
+        element["faces"] = [{"center": vec.frame_apply(frame, f["center"]), "area": f["area"]} for f in source]
+
+
+class PathPatternFacesTest(unittest.TestCase):
+    """The faces of the copies check the places that the transforms give, as for the plain patterns."""
+
+    def test_faces_that_sit_where_the_transforms_put_them_copy(self):
+        result = translate(capture_of(LINE, with_faces))
+        self.assertEqual(len(steps_of(result.recipe, "pattern")), 1)
+
+    def test_a_copy_whose_faces_sit_off_its_place_leaves_the_step_out(self):
+        def shifted(data):
+            moved = {"origin": [30.0 + 3.0, 0.0, 0.0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+            with_faces(data, {3: moved})
+        result = translate(capture_of(LINE, shifted))
+        self.assertEqual(left_out(result)["index"], 5)
+        self.assertEqual(gap_of(result)["reason"], shared.PATTERN_FACES_DISAGREE)
+
+    def test_the_faces_pick_the_turn_of_a_round_path(self):
+        # The transforms turn one way and the faces the other: the faces say where Fusion put the copies.
+        def opposite(data):
+            back = dict(zip((0, 1, 2), turned_copies(-30, -60)))
+            with_faces(data, back, [{"center": [28.0, 12.0, 5.0], "area": 30.0}])
+        (pattern,) = steps_of(translate(capture_of(ARC, opposite)).recipe, "pattern")
+        self.assertEqual(pattern["polar"]["axis"], [0, 0, -1])
 
 
 class PathPatternLeftOutTest(unittest.TestCase):

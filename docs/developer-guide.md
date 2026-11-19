@@ -6160,7 +6160,10 @@ The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
      the probe could not follow (the plane turned, the sketch was not read) keeps its sizes. A size that the probe
      did not try stays.
 5. It writes the data of the plain pattern and gives it to the rectangular or the circular handler. The item keeps its
-   index and name.
+   index and name. The plain pattern takes over the sources, the bodies, the copies, the suppressed ids and the faces
+   of the original (`source_faces`). Thus the face checks of the plain pattern run for a path pattern too: on a line,
+   a copy whose faces are not where its transform puts them leaves the step out; on a round path, the faces pick the
+   way of the turn, also when the transforms turn the other way.
 
 For a line, the data has `direction_one` (the line), `quantity_one`, `distance_one` and the distance type. The
 parameters of the count and the distance go under the new names. An edge of the path goes in as
