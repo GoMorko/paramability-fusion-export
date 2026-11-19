@@ -41,7 +41,8 @@ TURN_SHARE = path_pattern.TURN_SHARE
 # A start point (a share of the path's length) up to this counts as the start of the path.
 START_TOL = 1e-9
 # The keys of the data that the plain pattern takes over as they are.
-_KEPT = ("entity_type", "sources", "source_bodies", "result_bodies", "elements", "suppressed_ids")
+_KEPT = ("entity_type", "sources", "source_bodies", "result_bodies", "elements", "suppressed_ids",
+         "source_faces")
 
 
 def _mark_path(ctx, item, data, found):
