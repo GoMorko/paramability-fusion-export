@@ -1128,9 +1128,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and a 10 x 10 mm square on the XY plane extruded 5 mm up as a join with Start "From object", the top face of the
     plate, and the offset `-Inset` (it starts 2 mm inside the plate). Make a third design the same with the offset
     `Inset` and the extrude 4 mm down (it starts 2 mm above the plate and goes into it).
-    Export: Export for Orca each design with its parameters ticked. In `report.json` the hole has `end_face_types`
-    `["plane"]` and an `end_points` entry at z = 8, and the extrudes have `start_offset` (12 for the third design, null for
-    the second). The hole is copied 12 mm deep with its depth following `Lift` (12 - (Lift - 8)); the volume in Orca is
+    Export: Export for Orca each design with its parameters ticked. In `report.json` the hole `extent` is
+    `toEntity` of a `ConstructionPlane` with `chained` false and no `offset` (Fusion 2706 gives a hole made through the
+    API a `OneSideToExtentDefinition`), and the hole has `end_face_types` `["plane"]` and an `end_points` entry at
+    z = 8, and the extrudes have `start_offset` (12 for the third design, null for the second). Export for Paramability
+    of the first design copies the hole too. The hole is copied 12 mm deep with its depth following `Lift` (12 - (Lift - 8)); the volume in Orca is
     31764.4 mm3, and with `Lift` = 5 the hole is 15 deep. The second design is copied with its sketch at z = 8 and
     the volume 16300 mm3, the third with its sketch at z = 12 and the volume 16200 mm3; `Inset` is listed as a fixed
     number with the reason that Orca cannot move a sketch plane with a variable. Afterwards each design is as before.

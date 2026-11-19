@@ -895,9 +895,15 @@ against `samples`.
   The Orca output marks the sizes that may move it; a hole sketch without it counts as one on a face of the part.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity", ... }` with the record of the face or body the hole goes up to (`entity_type`, `plane`, `face_point`,
-  `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an
+  `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side, plus `chained`), `{ "kind": "other" }`.
+  Fusion gives a hole made up to a face or plane a `OneSideToExtentDefinition` (`toEntity`, `matchShape`; no offset);
+  `chained` is `matchShape` (false: Fusion extends the face), and the record has no `offset`. A hole with a
+  `ToEntityExtentDefinition` gives `offset` (mm, null when not read) and `chained` (`isChained`, null when not read).
+  An `offset` that is not zero or is null leaves the hole out. A hole up to an
   entity is copied as a blind hole of the depth measured from `end_points` (flat ends only, all holes of the step at
-  the same depth); the depth follows the face with `translator/faces/follow.py`.
+  the same depth); the depth follows the face with `translator/faces/follow.py`. Fusion lists no `endFaces` for such a
+  hole, so `end_points` and `end_face_types` come from the faces the hole made (`faces`) that are not `sideFaces`
+  (told apart by `entityToken`; with a face that has no token, both stay empty).
 - `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`, and `span`:
   `[low, high]` in mm of the face's vertices along `axis` from `origin`, or null). The far end of the cylinders on a
   hole's axis line is where a hole through all comes out of the part (`design_model/steps/hole.py`, `through_ends`).

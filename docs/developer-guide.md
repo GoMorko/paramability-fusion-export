@@ -5232,8 +5232,18 @@ Fusion does not give reads as null, and the hole then stays a gap with a reason.
 #### A hole that ends at a face or at a body
 
 A Hole whose extent is "To" a face or a body is written as a blind hole of the measured depth, with a flat end only
-(`hole.step._up_to_depth`). The depth is the distance from the entry to the end point that the reader measured
-(`end_points`; the reader keeps only a flat end or a drill point along the hole). All holes of the step must end at the
+(`hole.step._up_to_depth`). Fusion gives a Hole made through the API (`HoleFeatureInput.setOneSideToExtent`) a
+`OneSideToExtentDefinition`, not a `ToEntityExtentDefinition`. It has the face or plane as `toEntity` (the other class
+has `entity`) and `matchShape`, and it has no offset. The reader takes the face or plane from either class
+(`read_extent.to_entity`). It reads `matchShape` as `chained`: false when Fusion extends the face, true when it keeps
+the face and uses the faces next to it. We checked this on Fusion 2706: with true, a hole whose face does not lie under
+it fails, and with false it ends on the extended plane. If a hole has a `ToEntityExtentDefinition`, the reader also reads
+its `offset`. A hole up to a face or plane with an offset that is not zero, or that could not be read, is left out with a
+reason, since the copy follows only the measured end. We could not check how a Hole "To" made in the Fusion dialog
+reports, as only the API was used. Fusion also gives such a hole no `endFaces`. The reader then takes the faces that the
+hole made (`feature.faces`) less its `sideFaces`, told apart by their tokens; if a face has no token, no end is given and
+the hole is left out because the end was not measured. The depth is the distance from the entry to the end point that the
+reader measured (`end_points`; the reader keeps only a flat end or a drill point along the hole). All holes of the step must end at the
 same depth, and the end faces must be planes. A hole that ends in a
 drill point on such a face is left out with a reason. The depth follows the face or body that the hole goes up to
 (`follow.target_shift`) and the entry, as the length of an extrude up to an entity does. When the depth could be zero or
@@ -5245,8 +5255,8 @@ depth, else the hole is left out. A face of another component, a tilted or curve
 or an end that was not measured are left out with the reasons of an extrude up to a face. The depth is the measured
 depth plus the move of the face along the drilling direction (`extents.plane_move`, which also decides the move of an
 extrude "To" a face). Orca keeps the plane that the hole sits on as a number, so only the move of the face counts, and
-the entry does not. The reader does not read whether Fusion may chain the face to the faces next to it for a hole, so
-the sizes that may move the face are marked. The variables behind the depth are walked down to where the depth reaches
+the entry does not. The reader reads whether Fusion may chain the face to the faces next to it (`chained`, from `matchShape`). When it
+is true or not read, the sizes that may move the face are marked. The variables behind the depth are walked down to where the depth reaches
 zero (`hole_reach.guard`).
 
 ### 3.13 How a coil is translated
