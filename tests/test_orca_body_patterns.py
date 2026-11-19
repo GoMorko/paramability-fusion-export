@@ -14,6 +14,7 @@ from tests.orca_sized import fixture, table_of
 from tests.translator_helpers import verdict_of
 
 from lib.capture_model import gap_hints
+from lib.design_model.steps import body_pattern
 from lib.geometry import vec
 from lib.orca_recipe.enums import BooleanMode, FeatureType
 from lib.orca_translate import causes, translate
@@ -136,6 +137,17 @@ class CopiedTest(unittest.TestCase):
                          [FeatureType.EXTRUDE, FeatureType.PATTERN])
         self.assertEqual(volume(result, capture["target"]["box"]), 1300)
 
+    def test_a_combine_that_takes_only_the_source_takes_it_as_a_plain_tool(self):
+        # Fusion may list the source among the pattern's bodies. The source is then no copy of the pattern: no group,
+        # and the tool is walked as it is, where Orca leaves out a body pattern inside a tool body.
+        capture = bp.peg_row()
+        pattern = item(capture, PATTERN)
+        pattern["data"]["result_bodies"].insert(0, dict(pattern["data"]["source_bodies"][0]))
+        pattern["bodies_after"].insert(0, dict(bp.B2))
+        combine = item(capture, COMBINE)
+        combine["data"].update(tools=combine["data"]["tools"][:1], volume_after=4800.0 + 216.0)
+        self.assertEqual(body_pattern.groups(capture["items"], combine, combine["data"]["tools"]), [])
+        self.assertEqual(left_out(run(capture))["cause"], gap_hints.REFUSED)
 
 class LeftOutTest(unittest.TestCase):
     def assert_left_out(self, capture, cause):
