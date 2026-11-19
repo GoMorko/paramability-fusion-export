@@ -264,7 +264,7 @@ def fill(data, before, problem):
         return problem
     lines = rib_web.lines_of(data)
     faces = _faces(data)
-    if is_problem(lines) or faces is None:
+    if is_problem(lines) or len(lines) != 1 or faces is None:
         return problem
     if not is_number(data.get("volume_before")) or not is_number(data.get("volume_after")):
         return problem
@@ -314,5 +314,5 @@ def as_extrude(data, found):
 
 def marks(name):
     """[(value paths, why)]: every size read before the step is marked, since the outline keeps the numbers Fusion
-    measured."""
-    return [((), words.RIB_FILL_MARK % name)]
+    measured, and so is the thickness, since the faces the wall rests on were measured at one thickness only."""
+    return [((), words.RIB_FILL_MARK % name), (("thickness",), words.RIB_FILL_THICKNESS_MARK % name)]

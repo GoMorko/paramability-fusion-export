@@ -130,10 +130,11 @@ def _stays_positive(ctx, difference):
     return not difference.sized or range_check.sweep(ctx.table, difference.text, difference.reads).above(0.0)
 
 
-def _keep_fit(ctx, item, sizes, tipped):
+def _keep_fit(ctx, item, sizes):
     """A counterbore or countersink that fits at the current values must fit at every size of the ranges: its
     diameter stays wider than the hole's, its depth shallower than the hole's (for a countersink the cone's run, in
-    a hole that stops: with a drill tip or flat). When it does not, the values involved are written as numbers and their sizes marked."""
+    a hole that stops: with a drill tip or flat). When it does not, the values involved are written as numbers and
+    their sizes marked."""
     name = item.get("name", "a hole")
     diameter, depth = sizes.diameter, sizes.depth
     bore, sink = sizes.counterbore, sizes.countersink
@@ -276,7 +277,7 @@ def hole(ctx, step):
     misfit = _misfit(sizes, tipped, through)
     if misfit:
         return Refusal(misfit)
-    _keep_fit(ctx, item, sizes, tipped)
+    _keep_fit(ctx, item, sizes)
     if tipped:
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
         steps = [_tip_step(p, direction, profile) for p in points]

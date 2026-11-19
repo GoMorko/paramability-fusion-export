@@ -49,6 +49,8 @@ COPIES_TURNED = "copiesTurned"
 COPIES_UNEVEN = "copiesUneven"
 REPEATS_FINISH = "repeatsFinish"
 NOT_REPEATABLE = "notRepeatable"
+# A pattern or mirror of a revolve that the copy builds from several turns joined together.
+REPEAT_BUILT_TURNS = "repeatBuiltTurns"
 HOLE_PLACE_IN_TOOL = "holePlaceInTool"
 # A Combine that takes the copies of a pattern or mirror of bodies (`body_pattern`): it takes only some copies, or the
 # copies without the body they copy; a step changes a copy or the source on its own before the Combine; or the

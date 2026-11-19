@@ -200,8 +200,9 @@ Orca stops the whole rebuild on a cut or hole that removes nothing, so the copy 
 against the part it has built so far (`orca_translate/solid.py`: every copied extrude and hole as an outline swept
 along its normal, tested along lines through the tool's outline). A cut or intersect that meets no material is left
 out ("does not meet the part as the Orca copy builds it", often after a left out step); of a step with several
-outlines or hole points, only those that miss are left out, with a note (for an intersect this is exact: an outline
-that meets nothing keeps nothing). The shape also holds revolves (an outline
+outlines or hole points, only those that miss are left out, with a note (of the outlines of an intersect none is left
+out, since they are one tool and an outline that meets nothing adds nothing; the step is left out when none meets).
+The shape also holds revolves (an outline
 turned about its axis, sampled along each line), tapered extrudes (the outline moved in or out with the height, read
 along each line in steps no longer than the distance to the nearest wall, so a thin slot or a thin wall is not
 stepped over; only a part of a line shorter than 1/4096 of its reach through the shape, next to a wall, can be
@@ -317,8 +318,9 @@ not judged to meet material where Orca removes nothing.
   what all of them share, so the extrudes are joined in a tool body (the first New, the others Add) and one Boolean
   Intersect applies it, as for a revolve of several outlines. One outline, also with holes, is one extrude with mode
   Intersect (Orca's `BRepAlgoAPI_Common` of the part with the extruded face). An outline that meets no material of the
-  part is left out of the tool, which is exact for an intersect; when none meets it, the step is left out (cause
-  `missesPart`). An intersect after which Fusion lists another body (the pieces fell apart) is left out, as a cut is:
+  part stays in the tool, where it adds nothing (the check cannot tell it from an outline over material that only a
+  round or chamfer covers); when none meets the part, the step is left out (cause `missesPart`). An intersect after
+  which Fusion lists another body (the pieces fell apart) is left out, as a cut is:
   the copy would keep all pieces in one body. Pieces that Fusion keeps in one body (it lists none) are one body in
   Orca too. The hand check EX7 is in `docs/hand-checks.md`.
 - Limits (`extents.guard`, `limits.guard`): Orca variables have no ranges, and past some values Orca builds these
@@ -1207,8 +1209,8 @@ What the copy writes:
   line and the thickness keep their numbers, and the sizes that move them are marked.
 
 A cut or intersect that does not meet the part is left out (cause `missesPart`). A pattern or mirror cannot repeat a
-thin wall, since its first extrude starts a new body, or a revolve that the copy builds from several turns or a tool
-body (cause `notRepeatable` for both).
+thin wall, since its first extrude starts a new body (cause `notRepeatable`), or a revolve that the copy builds from
+several turns or a tool body (cause `repeatBuiltTurns`).
 
 Left out:
 
@@ -1259,7 +1261,8 @@ A rib To Next that Fusion fills up to the part (a gusset in a corner) is the out
 (`design_model/steps/rib_fill.py`, with the same proof as the Paramability output, see `docs/developer-guide.md`). It
 goes to the extrude as a sketch of lines that keeps its numbers (the outline is `measured`, so no sketch graph gives it
 formulas) and one Extrude of the thickness, symmetric or to one side, whose distance follows the thickness variable.
-The sizes read before the step are marked.
+The sizes read before the step are marked, and so is the thickness, since the faces the wall rests on were measured at
+one thickness and a much thicker wall may reach past the part.
 
 Checked in OrcaSlicer 2.5.1 on 2026-11-19 with exports of test designs built in Fusion (the volume Fusion measured in
 brackets):
@@ -1417,6 +1420,7 @@ copy writes one side (Blind), Symmetric, and through all as for any extrude: Orc
 of the body lies behind the sketch (then it is the same as one way), else a 1000 mm one way Blind. Two sides and a
 taper are left out (cause `textExtent`). A cut or intersect is checked against the part the copy built, letter by
 letter: the letters that miss it are left out with a note, and a cut whose letters all miss is left out.
+The letters of an intersect are one tool in the copy's shape of the part: it keeps what any letter covers.
 
 Only the depth follows a variable. The size and the place of the text keep their numbers, and these sizes are marked
 with the reason: the text height (`text_params`), the dimensions of the text's sketch, the sizes that may move its

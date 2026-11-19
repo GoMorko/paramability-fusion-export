@@ -28,7 +28,7 @@ from . import causes, extents
 from .sketch_sizes import profile_sizes
 from .sketches import graph_for
 from .skip import Skip
-from .solid import ADD, CUT, INTERSECT, Prism
+from .solid import ADD, CUT, INTERSECT, Prism, Solid
 
 # How far a written polygon may leave the curve it stands for (mm).
 CHORD_TOL = 0.005
@@ -370,8 +370,13 @@ def extrude(ctx, item, profiles, sides, shift, operation):
     ctx.add(feature)
     ctx.has_body = True
     for shape in shapes:
-        ctx.solid.add(_SOLID_MODES.get(operation, ADD), shape)
         if side.end != ExtrudeEnd.THROUGH_ALL and not side.through:
             shape.ends = side.ends(feature)
+    if operation == "intersect" and len(shapes) > 1:
+        # The letters are one tool: the part keeps what any letter covers, not what all of them share.
+        ctx.solid.add(INTERSECT, Solid([(ADD, shape) for shape in shapes]))
+    else:
+        for shape in shapes:
+            ctx.solid.add(_SOLID_MODES.get(operation, ADD), shape)
     extents.guard(ctx, sketch, feature, side, shapes[0].loops[0])
     return [sketch, feature]

@@ -8,7 +8,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests import orca_intersects as oi
 from tests.orca_cuts import Section
-from tests.orca_extents import B1
+from tests.orca_extents import B1, side
+from tests.test_orca_finishes import finish_item
 from tests.test_orca_extents import run
 
 from lib.orca_recipe.enums import BooleanMode, FeatureType
@@ -48,14 +49,30 @@ class SeveralOutlinesTest(unittest.TestCase):
         self.assertEqual(result.left_out, [])
         self.assertAlmostEqual(volume(result), math.pi * (225 - 64 + 16) * 10, delta=40.0)
 
-    def test_an_outline_that_misses_the_part_adds_nothing_and_is_left_out_of_the_tool(self):
+    def test_an_outline_that_misses_the_part_adds_nothing(self):
         capture = oi.two_circles()
         far = capture["items"][-1]["data"]["profiles"][1]["loops"][0]["curves"][0]
         far["center"] = [100.0, 0.0]
         result = run(capture)
         self.assertEqual(result.left_out, [])
-        self.assertEqual(modes(result)[-1], (FeatureType.EXTRUDE, BooleanMode.INTERSECT))
         self.assertAlmostEqual(volume(result), math.pi * 64 * 10, delta=30.0)
+
+    def test_an_outline_over_material_that_only_a_round_covers_stays_in_the_tool(self):
+        # A 4 high block with its top edges rounded by 3.5: every line through the small circle at its corner
+        # runs where the round may have taken material, so the copy cannot be sure the circle meets the part.
+        capture = oi.two_circles()
+        block = capture["items"][1]["data"]
+        block.update(side_one=side(4.0), end_offset=4.0)
+        trim = capture["items"][-1]
+        trim["data"]["target_box_before"] = {"min": [-20.0, -20.0, 0.0], "max": [20.0, 20.0, 4.0]}
+        trim["data"]["profiles"][1]["loops"][0]["curves"][0].update(center=[19.0, 19.0], radius=0.5)
+        top = [[x, y, 4.0] for x, y in ((0, -20), (20, 0), (0, 20), (-20, 0))]
+        trim["index"] = 4
+        capture["items"].insert(3, finish_item(3, "FilletFeature", top, 3.5))
+        result = run(capture)
+        self.assertEqual(result.left_out, [])
+        self.assertEqual(modes(result)[-1], (FeatureType.BOOLEAN, BooleanMode.INTERSECT))
+        self.assertEqual([t for t, _ in modes(result)].count(FeatureType.EXTRUDE), 3)
 
     def test_outlines_that_all_miss_the_part_leave_the_step_out(self):
         capture = oi.two_circles()
