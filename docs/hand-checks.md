@@ -1129,13 +1129,24 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     plate, and the offset `-Inset` (it starts 2 mm inside the plate). Make a third design the same with the offset
     `Inset` and the extrude 4 mm down (it starts 2 mm above the plate and goes into it).
     Export: Export for Orca each design with its parameters ticked. In `report.json` the hole `extent` is
-    `toEntity` of a `ConstructionPlane` with `chained` false and no `offset` (Fusion 2706 gives a hole made through the
-    API a `OneSideToExtentDefinition`), and the hole has `end_face_types` `["plane"]` and an `end_points` entry at
+    `toEntity` of a `ConstructionPlane` with `match_shape` as made, `chained` null and no `offset` (Fusion 2706 gives a
+    hole made through the API a `OneSideToExtentDefinition`), and the hole has `end_face_types` `["plane"]` and an `end_points` entry at
     z = 8, and the extrudes have `start_offset` (12 for the third design, null for the second). Export for Paramability
     of the first design copies the hole too. The hole is copied 12 mm deep with its depth following `Lift` (12 - (Lift - 8)); the volume in Orca is
     31764.4 mm3, and with `Lift` = 5 the hole is 15 deep. The second design is copied with its sketch at z = 8 and
     the volume 16300 mm3, the third with its sketch at z = 12 and the volume 16200 mm3; `Inset` is listed as a fixed
     number with the reason that Orca cannot move a sketch plane with a variable. Afterwards each design is as before.
+    Open, what `matchShape` means on a face: add a user parameter `Plate` = 10 mm. Model a 40 x 40 mm plate `Plate`
+    thick, centred on the origin with its base on the XY plane, and on its top face a 10 x 10 x 5 mm block centred at
+    (10, 0) as a join. On the top of the block sketch a point at (10, 0). Make a Hole of 3 mm diameter at that point
+    with Extent "To" the top face of the plate, made through the API with `setOneSideToExtent(face, True)`, and a
+    second design the same with `False`. Under the hole the plate top face is missing (the block stands there), so
+    Fusion must either extend the face or use the faces next to it.
+    Export: Export for Orca and Export for Paramability each design with `Plate` ticked. In `report.json` note
+    `match_shape` and the `end_points` of the hole, and in Fusion where the hole ends: on the extended plane of the
+    plate top (z = 10) or on another face (or the hole fails). With true and with false the extent has `chained` null,
+    and `Plate` is marked in both exports. Record which value extends the face; then the reader may give `chained`
+    from `matchShape`. Afterwards each design is as before.
 
 94. PP2, path patterns for Export for Orca. Add user parameters `Count` = 4 and `Pitch` = 10 mm. Model a 40 x 20 x 4 mm
     plate with its corner at the origin. On the top face sketch a 6 x 6 mm square centred at (5, 10) and extrude it

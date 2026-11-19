@@ -7,6 +7,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests import orca_extents as ex
 from tests import orca_to_faces as faces
+from tests.probe_helpers import user
 from tests.test_orca_extents import at, limit_of, named, outcome, run
 
 from lib.capture_model import gap_hints
@@ -82,6 +83,48 @@ class HoleToFaceTest(unittest.TestCase):
                 capture = faces.hole_to_plane()
                 change(hole_data(capture))
                 self.assertEqual(causes_of(run(capture)), [cause])
+
+    def test_sizes_that_move_a_face_fusion_may_join_with_the_faces_next_to_it_are_marked(self):
+        # `chained` null (as the reader gives for `matchShape`) or true: at other sizes the faces next to the plate's
+        # top may end the hole first, so `h` gets one more reason than when the hole follows the face alone.
+        def reasons(chained):
+            capture = tower_and_hole()
+            hole_data(capture)["extent"]["chained"] = chained
+            result = run(capture)
+            self.assertEqual(result.left_out, [])
+            return outcome(result, "h")["reasons"]
+
+        alone = reasons(False)
+        for chained in (None, True):
+            with self.subTest(chained):
+                found = reasons(chained)
+                self.assertEqual((len(found), set(alone) <= set(found)), (len(alone) + 1, True))
+
+    def test_the_depth_must_stay_below_a_counterbore_or_countersink_and_the_limit_is_told(self):
+        # The hole is 20 - lift_mm deep: a counterbore 5 deep needs lift_mm under 15; a countersink of 11 mm on the
+        # 5 mm hole at 90 degrees reaches 3 deep, so lift_mm under 17.
+        recesses = {"counterbore": ({"diameter": 9.0, "depth": 5.0}, 15.0),
+                    "countersink": ({"diameter": 11.0, "angle_deg": 90.0}, 17.0)}
+        for kind, (recess, high) in recesses.items():
+            with self.subTest(kind):
+                capture = faces.hole_to_plane()
+                hole_data(capture).update(hole_type=kind, **{kind: recess})
+                result = run(capture)
+                self.assertEqual(result.left_out, [])
+                told = limit_of(outcome(result, "lift_mm")).high
+                self.assertTrue(high - 0.2 < told <= high, told)
+
+    def test_a_hole_of_a_given_depth_keeps_above_its_counterbore(self):
+        capture = faces.hole_to_plane()
+        capture["parameters"]["user"].append(user("deep_mm", "12 mm", 12.0))
+        capture["parameters"]["model"].append(ex.model("d30", "deep_mm", 12.0))
+        hole_data(capture).update(hole_type="counterbore", counterbore={"diameter": 9.0, "depth": 5.0},
+                                  extent={"kind": "distance", "depth": 12.0},
+                                  params={"extent.depth": ex.param("d30", "deep_mm", 12.0)})
+        result = run(capture)
+        self.assertEqual(result.left_out, [])
+        told = limit_of(outcome(result, "deep_mm")).low
+        self.assertTrue(5.0 <= told < 5.2, told)
 
     def test_a_tapped_hole_up_to_a_plane_is_drilled_to_that_depth(self):
         capture = faces.hole_to_plane()

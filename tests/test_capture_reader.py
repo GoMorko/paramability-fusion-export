@@ -849,27 +849,39 @@ class HoleThreadReadTest(unittest.TestCase):
 
     def test_a_hole_made_up_to_a_plane_reads_the_plane_and_its_bottom_face(self):
         # Fusion gives a hole made by `setOneSideToExtent` a `OneSideToExtentDefinition` (`toEntity`, `matchShape`) and
-        # no end faces: the bottom is the made face that is not a side face.
+        # no end faces: the bottom is the made face that is not a side face. Which value of `matchShape` chains the
+        # face is not settled, so `chained` stays unknown either way.
         plane = Obj("fusion::ConstructionPlane", entityToken="p1",
                     geometry=Obj("core::Plane", origin=P(0, 0, 8), normal=Obj(x=0.0, y=0.0, z=1.0)))
         wall = Obj("fusion::BRepFace", entityToken="w", geometry=Obj("core::Cylinder", origin=P(10, 10, 10),
                                                                     axis=Obj(x=0, y=0, z=-1.0), radius=0.25))
         bottom = Obj("fusion::BRepFace", entityToken="b", pointOnFace=P(10, 10, 8),
                      geometry=Obj("core::Plane", normal=P(0, 0, 1)))
-        data = self.read(extentDefinition=Obj("fusion::OneSideToExtentDefinition", toEntity=plane, matchShape=False),
-                              endFaces=Coll([]), sideFaces=Coll([wall]), faces=Coll([wall, bottom]))
-        self.assertEqual((data["extent"]["kind"], data["extent"]["entity_type"], data["extent"]["chained"]),
-                         ("toEntity", "ConstructionPlane", False))
-        self.assertNotIn("offset", data["extent"])
-        self.assertEqual((data["end_points"], data["end_face_types"]), ([[10, 10, 8]], ["plane"]))
+        for match in (False, True):
+            with self.subTest(match):
+                data = self.read(extentDefinition=Obj("fusion::OneSideToExtentDefinition", toEntity=plane,
+                                                      matchShape=match),
+                                 endFaces=Coll([]), sideFaces=Coll([wall]), faces=Coll([wall, bottom]))
+                extent = data["extent"]
+                self.assertEqual((extent["kind"], extent["entity_type"], extent["chained"], extent["match_shape"]),
+                                 ("toEntity", "ConstructionPlane", None, match))
+                self.assertNotIn("offset", extent)
+                self.assertEqual((data["end_points"], data["end_face_types"]), ([[10, 10, 8]], ["plane"]))
 
-    def test_the_bottom_is_not_guessed_when_faces_cannot_be_told_apart(self):
+    def test_side_faces_are_told_from_the_bottom_as_the_same_entity(self):
+        # Fusion gives a new object for a face in each list; a flat side face (a counterbore floor listed as a side)
+        # is left out as the same entity, and a bottom without a token is still kept.
         plane = Obj("fusion::ConstructionPlane", entityToken="p1")
+
+        def floor():
+            return Obj("fusion::BRepFace", entityToken="t", pointOnFace=P(10, 10, 9),
+                       geometry=Obj("core::Plane", normal=P(0, 0, 1)))
+
         bottom = Obj("fusion::BRepFace", pointOnFace=P(10, 10, 8), geometry=Obj("core::Plane", normal=P(0, 0, 1)))
         data = self.read(extentDefinition=Obj("fusion::OneSideToExtentDefinition", toEntity=plane), endFaces=Coll([]),
-                              sideFaces=Coll([]), faces=Coll([bottom]))
-        self.assertEqual(data["end_points"], [])
-        self.assertIsNone(data["extent"]["chained"])
+                         sideFaces=Coll([floor()]), faces=Coll([floor(), bottom]))
+        self.assertEqual(data["end_points"], [[10, 10, 8]])
+        self.assertIsNone(data["extent"]["match_shape"])
 
     def test_the_made_faces_stand_in_for_end_faces_only_for_a_hole_up_to_a_face(self):
         bottom = Obj("fusion::BRepFace", entityToken="b", pointOnFace=P(10, 10, 8),

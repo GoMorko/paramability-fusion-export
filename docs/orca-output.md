@@ -258,19 +258,28 @@ not judged to meet material where Orca removes nothing.
   (`dm.start_of(..., offsets=True)`); where it is not sure, the step is left out (cause `extrudeStartOffset`). The sizes
   that move the start (its face and its offset) also go to the end faces of this extrude (`extents.Shift.reads`,
   `solid.Prism.plane_sizes`), so a later face that follows an end of it is marked with them.
-- A hole "To" a face or plane (`hole_reach.py`): a Hole of the measured depth, from each position to its flat end. The
-  face or plane must be flat and square to the hole, and the distance from each position to its plane must be the
-  measured depth, else the hole is left out; a face of another component, a tilted or curved one, a drill point at the
-  end and an end that was not measured give the reader's reasons (cause `refused`), a tilted, curved or foreign face
-  the causes of an extrude up to a face. The depth follows the plane as the length of an extrude does (`extents.plane_move`: an offset plane
+- A hole "To" a face or plane (`hole_reach.py`): a Hole of the measured depth, from each position to its flat end.
+  The checks are shared with the Paramability copy (`design_model/steps/hole.py`, `to_face_depth`): the face or plane
+  must be flat and square to the hole, and each measured end must lie on its plane, else the hole is left out (Fusion
+  ended it on another face, for example a face next to the picked one). A face of another component, a body or a
+  point as the end, a tilted or curved face, a drill point at the end and an end that was not measured are left out;
+  a tilted or curved face and one of another component give the causes of an extrude up to a face, the others
+  `refused`. The depth follows the plane as the length of an extrude does (`extents.plane_move`: an offset plane
   with its own distance and its base, an end face of a copied extrude): Orca keeps the plane the hole sits on as a
   number, so the depth is the measured one plus how far the face moves along the drilling direction (an offset plane
   `lift` above the origin and a hole drilled down gives `depth - (lift - number)`). A face that sizes may move in any
-  other way keeps the measured depth and its sizes are marked. The capture does not say whether the hole may also end
-  on the faces next to the face (Chain Faces), so the sizes that may move the face are marked for a face. The
-  variables behind the depth are walked down to where the depth reaches zero (`hole_reach.guard`: "keep lift_mm under
-  20 mm"). A tapped hole goes up to a plane with the thread length from that depth. Orca limits of the hole stay: a
-  flat end, the counterbore and the countersink as for a depth.
+  other way keeps the measured depth and its sizes are marked. Fusion may also end the hole on the faces next to the
+  face (Chain Faces). The capture gives this as `chained`, which is null for a hole up to a face made with
+  `setOneSideToExtent` (the meaning of `matchShape` is not checked yet), so for a face with `chained` true or null the
+  sizes that may move the face are marked (`hole_facts.end_face_sizes`, the same in both exports). The variables
+  behind the depth are walked down to where the depth reaches zero (`hole_reach.guard`: "keep lift_mm under 20 mm").
+  A tapped hole goes up to a plane with the thread length from that depth. Orca limits of the hole stay: a flat end,
+  the counterbore and the countersink as for a depth.
+- The depth of a hole with a counterbore or countersink, "To" a face or of a given depth, must stay deeper than the
+  counterbore or the countersink cone (`hole_reach.guard`). Past that Orca drills only the recess, without an error.
+  The limit goes on the parameter's line ("keep lift_mm under 14.9 mm (above that, the hole gets no deeper than its
+  counterbore or countersink)"). Where the limit cannot be told, the depth and the recess keep their numbers and the
+  sizes are marked.
 - A flat face of the body as the outline: its loops and plane as they are now, as sketch entities. Every size read
   before the step is marked, since the face may move or change with it.
 - The plane a sketch sits on: Orca cannot move it with a variable, so the sizes that may move it
@@ -1409,6 +1418,11 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
 - A "To" length follows its plane, but a variable that moves the plane past where the extrude starts gives Orca a
   length below zero, and Orca extrudes the other way where Fusion would stop with an error. The parameter's line
   says how far the variable may go.
+- A hole "To" a face, or of a given depth, with a counterbore or countersink: a variable that makes the hole no
+  deeper than the recess gives only the recess in Orca, without an error. The parameter's line says how far the
+  variable may go.
+- A hole "To" a face that Fusion may join with the faces next to it (Chain Faces, or a hole whose `matchShape` is not
+  checked yet) follows only that face. The sizes that may move the face are marked.
 - A tapered extrude is checked at the current sizes. When a variable change shrinks a side of its outline to nothing,
   Orca builds a straight extrude instead, without an error. The parameter's line says how far the variable may go.
 - A sweep path keeps its numbers. A swept outline that a variable grows past the tightest bend of its path runs

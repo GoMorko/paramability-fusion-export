@@ -1,7 +1,7 @@
 """Hole and cosmetic thread handlers (HoleFeature, ThreadFeature); modeled threads are in `thread.py`.
 
 A hole with a flat end, or through all the way, is a recipe `hole`. A hole that ends at a face or body is a blind hole
-of the measured depth. A tapped hole with a modeled thread is a hole at the thread's minor diameter plus an internal
+of the measured depth, with the checks of `design_model.steps.hole.to_face_depth` that the Orca copy uses too. A tapped hole with a modeled thread is a hole at the thread's minor diameter plus an internal
 recipe `thread` for each position. A blind hole with a drill tip has no recipe
 `hole` form, so it becomes a revolve cut of the hole's profile (shank, optional step or cone, and the cone of the
 tip) turned about the hole axis. Measured `end_points` and `side_cylinders` check the stored direction and size.
@@ -308,10 +308,16 @@ def _along_shifts(points, direction):
 
 def _up_to_depth(item, ctx, data, direction, points):
     """The depth of a hole that ends at a face or body, as a Quantity, or a Refusal. It is the measured distance from
-    the entry to the flat end of the hole; it follows the face the hole reaches (`follow.target_shift`) and the entry."""
-    measured = facts.reach_depth(data, direction)
+    the entry to the flat end of the hole, which must lie on the plane of a face or plane it goes up to
+    (`facts.to_face_depth`); it follows the face the hole reaches (`follow.target_shift`) and the entry. The sizes that
+    may move a face Fusion may join with the faces next to it are marked (`facts.end_face_sizes`)."""
+    measured = facts.to_face_depth(data, direction)
     if isinstance(measured, Problem):
         return threads.refusal(measured)
+    names = facts.end_face_sizes(ctx.table, ctx.timeline, item, data["extent"])
+    if names:
+        ctx.doubt(names, "%s goes up to a face that Fusion joins with the faces next to it, and at other values the "
+                  "hole may end on another face" % item.get("name", "a hole"))
     shifts = _along_shifts(points, direction)
     if any(shift.sized and not shift.same_as(shifts[0]) for shift in shifts):
         ctx.doubt(tuple(dict.fromkeys(r for shift in shifts for r in shift.reads)),

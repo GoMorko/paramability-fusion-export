@@ -53,7 +53,7 @@ package may import only packages above it in this list (not every one of them). 
   `steps/extrude.py` (where an extrude starts, how each side ends, its direction
   and length) with `steps/extrude_checks.py` (the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
   `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
-  ThreadFeature), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
+  ThreadFeature; the end of a hole "To" a face and the sizes that may end it on another face, for both outputs), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
   a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/pattern_places.py` (where the copies of a pattern
   sit: circular copies by their ids, each place checked against the faces of its copy, places that repeat or do not
   fill the count), `steps/path_pattern.py` (the

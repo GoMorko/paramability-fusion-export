@@ -1,7 +1,8 @@
 """Hole steps of the capture as Orca Hole features. The handler returns the features it wrote, or a `Skip` with the
 reason the step is left out of the copy.
 
-Simple, counterbore and countersink holes; a depth, through all, or up to a face or plane (`hole_reach`); one Orca
+Simple, counterbore and countersink holes; a depth, through all, or up to a face or plane (`hole_reach`, which also
+tells how far the depth may go past a counterbore or countersink); one Orca
 hole per position, on a plane whose normal is the drilling direction (Orca drills along the normal): the sketch plane
 with the centre's sketch coordinates when they are known (`hole_place`), else a plane at the centre. A tapped hole is
 drilled at the drill size of a cosmetic thread, or at the minor diameter of a modeled one with an Orca thread after it
@@ -168,7 +169,7 @@ def hole(ctx, step):
         for field, words, value in extra:
             ctx.bind(feature, field, value, "%s %s" % (name, words))
         ctx.add(feature)
-        if extent.kind == hole_facts.TO_ENTITY:
+        if extent.kind == hole_facts.TO_ENTITY or (depth is not None and style):
             hole_reach.guard(ctx, feature)
         out.append(feature)
         if spec is not None:

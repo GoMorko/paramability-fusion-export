@@ -896,14 +896,19 @@ against `samples`.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity", ... }` with the record of the face or body the hole goes up to (`entity_type`, `plane`, `face_point`,
   `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side, plus `chained`), `{ "kind": "other" }`.
-  Fusion gives a hole made up to a face or plane a `OneSideToExtentDefinition` (`toEntity`, `matchShape`; no offset);
-  `chained` is `matchShape` (false: Fusion extends the face), and the record has no `offset`. A hole with a
-  `ToEntityExtentDefinition` gives `offset` (mm, null when not read) and `chained` (`isChained`, null when not read).
-  An `offset` that is not zero or is null leaves the hole out. A hole up to an
-  entity is copied as a blind hole of the depth measured from `end_points` (flat ends only, all holes of the step at
-  the same depth); the depth follows the face with `translator/faces/follow.py`. Fusion lists no `endFaces` for such a
-  hole, so `end_points` and `end_face_types` come from the faces the hole made (`faces`) that are not `sideFaces`
-  (told apart by `entityToken`; with a face that has no token, both stay empty).
+  Fusion gives a hole made up to a face or plane a `OneSideToExtentDefinition` (`toEntity`, `matchShape`; no offset;
+  a class the API reference marks as retired). The record then has no `offset`, `match_shape` is `matchShape` as
+  Fusion gives it (null when not read), and `chained` is null. The reference does not say clearly which value of
+  `matchShape` extends the face and which one uses the faces next to it, so `chained` stays unknown until hand check
+  93 settles it on a face. A reader treats `chained` null on a face as "Fusion may use the faces next to it"
+  (`design_model/steps/extrude.py`, `joins_next_faces`). A hole with a `ToEntityExtentDefinition` gives `offset` (mm,
+  null when not read) and `chained` (`isChained`, null when not read). An `offset` that is not zero or is null
+  leaves the hole out. A hole up to an entity is copied as a blind hole of the depth measured from `end_points` (flat
+  ends only, all holes of the step at the same depth, each end on the plane of the face or construction plane it goes
+  up to: `design_model/steps/hole.py`, `to_face_depth`); the depth follows the face with
+  `translator/faces/follow.py`. Fusion lists no `endFaces` for such a hole, so `end_points` and `end_face_types` come
+  from the faces the hole made (`faces`) that are not `sideFaces`, told apart as entities (`same_entity`), not by
+  their tokens.
 - `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`, and `span`:
   `[low, high]` in mm of the face's vertices along `axis` from `origin`, or null). The far end of the cylinders on a
   hole's axis line is where a hole through all comes out of the part (`design_model/steps/hole.py`, `through_ends`).
