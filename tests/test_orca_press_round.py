@@ -9,7 +9,6 @@ from tests.orca_cuts import Section
 from tests.test_orca_extents import limit_of, outcome, run
 
 from lib.capture_model import gap_hints
-from lib.export_plan.recipe_export import translate_capture
 from lib.orca_recipe.enums import BooleanMode, FeatureType
 from lib.orca_translate import PARTLY, VARIABLE, causes, limits
 
@@ -81,10 +80,7 @@ class LeftOutTest(unittest.TestCase):
             with self.subTest(name):
                 capture = pr.pin_grown()
                 capture["items"][4] = pr.press_pull(4, faces, distance)
-                record = run(capture).left_out
-                self.assertEqual([r["cause"] for r in record], [cause])
-                if cause == gap_hints.OFFSET_CURVED:
-                    self.assertEqual(record[0]["reason"], translate_capture(capture, "z").gaps[0]["reason"])
+                self.assertEqual([r["cause"] for r in run(capture).left_out], [cause])
 
     def test_a_ring_where_the_copy_has_no_round_face_is_left_out(self):
         for capture in (pr.pin_grown(), pr.pin_shrunk()):

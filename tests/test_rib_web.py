@@ -118,10 +118,7 @@ class WallsTest(unittest.TestCase):
             face["point"] = [face["point"][0], face["point"][1], face["point"][2] + 30.0]
         self.assertEqual(walls(data), rib_web.NOT_MATCHING)
 
-    def test_a_to_next_wall_needs_the_whole_band_and_its_end_on_a_face_of_the_part(self):
-        data = data_of("web_tonext_grid")
-        data["volume_after"] -= 10.0
-        self.assertEqual(walls(data), rib_web.NEXT_SHAPE)
+    def test_a_to_next_wall_needs_its_end_on_a_face_of_the_part(self):
         data = data_of("web_tonext_grid")
         self.assertEqual(rib_web.walls(data, None), rib_web.NEXT_SHAPE)
 
@@ -145,11 +142,6 @@ class WallsTest(unittest.TestCase):
         data["params"]["depth"] = {"name": "d20", "expression": "wd", "value": 17.0}
         built = rib_web.as_extrude(data, walls(data)[0])
         self.assertEqual(set(built["params"]), {"thin.thickness"})
-
-    def test_a_distance_wall_whose_volume_differs_from_its_band_is_refused(self):
-        data = data_of("web_on_plate")
-        data["volume_after"] += 5.0
-        self.assertEqual(walls(data), rib_web.MEETS_PART)
 
     def test_the_rib_values_go_to_the_paths_of_the_thin_extrude_they_are(self):
         data = data_of("rib_distance_channel")

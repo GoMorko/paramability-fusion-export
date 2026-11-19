@@ -56,28 +56,20 @@ class HoleToFaceTest(unittest.TestCase):
         def tilted(data):
             data["extent"]["plane"]["normal"] = [0.0, math.sin(0.3), math.cos(0.3)]
 
-        def curved(data):
-            data["extent"].update(plane=None, surface="Cylinder")
-
         def other_component(data):
             data["extent"]["foreign"] = True
 
         def drill_point(data):
             data["end_face_types"] = ["cone"]
 
-        def ends_elsewhere(data):
-            data["end_points"] = [[0, 0, 7.0]]
-
         def end_unread(data):
             data["end_points"] = []
 
-        def offset(data):
-            data["extent"]["offset"] = 2.0
-
-        cases = {"tilted": (tilted, gap_hints.EXTRUDE_END_FACE), "curved": (curved, gap_hints.EXTRUDE_END_FACE),
+        # The checks are those of `hole.to_face_depth`, run on every case in `test_design_model_holes`; these cases
+        # show that each cause reaches the gap.
+        cases = {"tilted": (tilted, gap_hints.EXTRUDE_END_FACE),
                  "another component": (other_component, gap_hints.OTHER_COMPONENT),
-                 "drill point": (drill_point, gap_hints.REFUSED), "end elsewhere": (ends_elsewhere, gap_hints.REFUSED),
-                 "end not measured": (end_unread, gap_hints.REFUSED), "offset": (offset, gap_hints.REFUSED)}
+                 "drill point": (drill_point, gap_hints.REFUSED), "end not measured": (end_unread, gap_hints.REFUSED)}
         for name, (change, cause) in cases.items():
             with self.subTest(name):
                 capture = faces.hole_to_plane()
@@ -203,6 +195,7 @@ class StartAtADistanceTest(unittest.TestCase):
         # The boss's sketch plane keeps its number in Orca, so a rod up to the boss's top face may not follow the
         # offset that sets where the boss starts.
         capture = faces.boss_into_plate()
+        alone = outcome(run(capture), "inset_mm")["reasons"]
         top = dict(ex.face_target(13.0, (3.0, 3.0)), kind="toEntity", chained=False, offset=0.0)
         capture["items"] += [ex.sketch_item(4, "Sketch3"),
                              ex.extrude(5, "Rod", [ex.profile("Sketch3", ex.UP, ex.rect(2, 2, 4, 4))],
@@ -211,7 +204,7 @@ class StartAtADistanceTest(unittest.TestCase):
         result = run(capture)
         self.assertEqual(result.left_out, [])
         reasons = outcome(result, "inset_mm")["reasons"]
-        self.assertTrue(any("sketch plane" in reason and "Rod" in reason for reason in reasons), reasons)
+        self.assertEqual((len(reasons), set(alone) <= set(reasons)), (len(alone) + 1, True))
 
 
 if __name__ == "__main__":

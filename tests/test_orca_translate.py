@@ -221,17 +221,15 @@ class ExtrudeTest(unittest.TestCase):
         self.assertEqual((verdicts["Extrude1"], verdicts["Hole1"], verdicts["Sketch1"]),
                          ("copied", "copied", "skipped"))
 
-    def test_a_box_cylinder_sphere_or_torus_is_left_out_with_its_tip_and_later_steps_still_copy(self):
-        for type_name in ("BoxFeature", "CylinderFeature", "SphereFeature", "TorusFeature"):
-            with self.subTest(type_name):
-                capture = box_capture()
-                capture["items"][2]["type"] = type_name
-                result = translate(capture)
-                gap = next(g for g in result.left_out if g["name"] == "Shell1")
-                self.assertEqual((gap["cause"], gap["hint"]),
-                                 (gap_hints.PRIMITIVE, gap_hints.HINTS[gap_hints.PRIMITIVE]))
-                verdicts = {i["name"]: i["verdict"] for i in result.items}
-                self.assertEqual((verdicts["Extrude1"], verdicts["Hole1"]), ("copied", "copied"))
+    def test_a_primitive_is_left_out_with_its_cause_and_later_steps_still_copy(self):
+        # The four primitives share one cause in the step table: `test_gap_hints` runs each of them.
+        capture = box_capture()
+        capture["items"][2]["type"] = "BoxFeature"
+        result = translate(capture)
+        gap = next(g for g in result.left_out if g["name"] == "Shell1")
+        self.assertEqual(gap["cause"], gap_hints.PRIMITIVE)
+        verdicts = {i["name"]: i["verdict"] for i in result.items}
+        self.assertEqual((verdicts["Extrude1"], verdicts["Hole1"]), ("copied", "copied"))
 
     def test_a_step_left_out_keeps_nothing_its_handler_wrote_first(self):
         walk = sys.modules["lib.orca_translate.translate"]
