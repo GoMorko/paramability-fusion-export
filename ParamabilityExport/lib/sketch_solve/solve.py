@@ -33,7 +33,7 @@ _MATH_ERRORS = (ExprDomainError, ZeroDivisionError, OverflowError, ValueError)
 
 
 def solve_sketch(record, settings=None, constants=(), tol=TOLERANCE, extended=False, distance_parallel=True):
-    """The `Solution` of one sketch graph record (docs/capture-format.md, "Sketch graphs").
+    """The `Solution` of one sketch graph record (agent-docs/capture-format.md, "Sketch graphs").
 
     `settings` are other size settings to check redundant rules and choices at: a list of dicts from leaf name (a
     dimension's model parameter or an input name) to number, a leaf left out keeps its value now. Without them the

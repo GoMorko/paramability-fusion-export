@@ -1,4 +1,4 @@
-"""Walks the timeline and returns the capture: one JSON-safe dict the translator reads (docs/capture-format.md).
+"""Walks the timeline and returns the capture: one JSON-safe dict the translator reads (agent-docs/capture-format.md).
 
 The walk covers the items before the timeline marker as the person left it: the design as it is at the marker. Items
 after the marker are left out. Per position k the marker is set to k once. At that position the walk finishes item

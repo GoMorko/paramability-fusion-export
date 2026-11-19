@@ -1,4 +1,4 @@
-"""Hole features as plain dicts (docs/capture-format.md): the kind, the thread of a tapped hole, the extent, where the
+"""Hole features as plain dicts (agent-docs/capture-format.md): the kind, the thread of a tapped hole, the extent, where the
 centres sit, and the faces the hole made. The pair `hole_before` and `hole_after` follows the rules of `read_solid`.
 """
 from . import read_extent

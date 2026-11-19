@@ -137,7 +137,7 @@ GAP:
 | `sizes` | Names of the recipe sizes the step reads: through its values, the sketches it names (unless the probe measured that the size does not move the sketch), its construction geometry and its measured references; at most 64 |
 | `looseSizes` | Of those, the sizes that are loose only because of this gap: no copied step reads them. They stay in the recipe `sizes` so the missing step can use them, and the reason says they change nothing in the copy yet |
 | `values` | One entry per `data.params` value: the Fusion expression (`fusion`, at most 300 characters) and, when the size table can write it, the formula of the recipe (`expr`) |
-| `bodyBefore`, `bodyAfter` | Box and volume of the part around the step, moved to the recipe's coordinates (the box of the moved corners). From the item's `target_before` and `target_after` (`docs/capture-format.md`, section 2). Left out when a side was not measured. Inside a tool body only `bodyBefore` can exist |
+| `bodyBefore`, `bodyAfter` | Box and volume of the part around the step, moved to the recipe's coordinates (the box of the moved corners). From the item's `target_before` and `target_after` (`agent-docs/capture-format.md`, section 2). Left out when a side was not measured. Inside a tool body only `bodyBefore` can exist |
 | `data` | The item's `data` as the reader wrote it, in the capture's coordinates, trimmed to 48 KiB and 32 levels (the object itself is level 1). A number that is not finite becomes null, and so does an object or list that would hold values past level 32. Item level fields such as `body_states` never go in. The app does not read into it |
 | `trimmed` | True when `data` was cut or changed |
 | `finishing` | True when the step only finishes surfaces: a round (`FilletFeature`), a bevel (`ChamferFeature`), a draft (`DraftFeature`), an emboss or deboss (`EmbossFeature`), or a thread whose data says `modeled` is false (the `finishing` trait of the step kind table, read by `translator/gaps/finishing.py`; a cosmetic thread makes no gap today). Such a step changes neither the size of the part nor which bodies exist, so when only these are missing the app shows the editable copy first. Every other type is false |
@@ -172,7 +172,7 @@ holds more gaps than it may (later picking steps count as gaps until the read cl
 1. `reach_pass.with_reach` asks Fusion (`read_gap_reach.read_reach`) which step made the faces each later picking step
    touches. It asks about the steps left out for their own reason, also inside tool bodies, and not about the steps
    left out only because they may pick faces of a gap: those are tested as picking steps. The answer is the capture's
-   `reach` (`docs/capture-format.md`, section 2).
+   `reach` (`agent-docs/capture-format.md`, section 2).
 2. The capture is translated again. A step that picks faces of a gap becomes a gap itself (reason "It picks faces of
    Extrude5, which is missing from the copy.") with `dependsOn`. A gap the read did not cover (one that only this
    translation leaves out) counts as "may pick".
@@ -197,7 +197,7 @@ another reason keeps that state.
 ## report.json and the result window
 
 `report.json` holds the same records under `gaps` (and `reach`) with the item verdict `leftOut` (section 6 of
-`docs/capture-format.md`). The result window lists each gap as "name: reason", then "Tip: " and the hint when it has
+`agent-docs/capture-format.md`). The result window lists each gap as "name: reason", then "Tip: " and the hint when it has
 one, under "N steps left out", with one line
 saying that Paramability keeps the original shape and an unfinished copy. A parts file puts the part name first and
 names its own gaps file per part.

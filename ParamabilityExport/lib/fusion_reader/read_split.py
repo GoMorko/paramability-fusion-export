@@ -1,4 +1,4 @@
-"""Split Body features as plain dicts (docs/capture-format.md).
+"""Split Body features as plain dicts (agent-docs/capture-format.md).
 
 Before the item: the bodies it splits, each with its box and volume, and what it splits with (`tool`): a plane (a
 construction plane or a flat face, with what it is built on, like a mirror plane), a body, or something else (a curved

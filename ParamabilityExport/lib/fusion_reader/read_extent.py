@@ -1,4 +1,4 @@
-"""The extents of an extrude as plain dicts (docs/capture-format.md): where it starts, how each side ends, and the
+"""The extents of an extrude as plain dicts (agent-docs/capture-format.md): where it starts, how each side ends, and the
 face or plane it starts from or reaches to. The extrude and the hole reader (`read_solid`, `read_hole`) read them here.
 A member that is missing reads as None or as an `other` entry, never as a plausible value.
 """

@@ -372,7 +372,7 @@ def _fetch(coll, count):
 
 
 def read_sketch_graph(sketch, ctx):
-    """The graph of one sketch (see docs/capture-format.md, "Sketch graphs"); `cut` names a limit that stopped the
+    """The graph of one sketch (see agent-docs/capture-format.md, "Sketch graphs"); `cut` names a limit that stopped the
     read, then the lists are empty."""
     rd = _Read(sketch)
     graph = _Graph(sketch, ctx)

@@ -1,4 +1,4 @@
-"""The copies of a pattern at one probe state (docs/capture-format.md, "Probe states").
+"""The copies of a pattern at one probe state (agent-docs/capture-format.md, "Probe states").
 
 A pattern that spreads copies to both sides of the original and whose count follows sizes is read again at each state:
 how many copies Fusion makes and where, as the capture holds them (`elements`). The translator compares the places at

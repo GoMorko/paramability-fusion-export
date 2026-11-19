@@ -1,4 +1,4 @@
-"""Rib and web features (adsk.fusion.RibFeature, WebFeature) as plain dicts (docs/capture-format.md).
+"""Rib and web features (adsk.fusion.RibFeature, WebFeature) as plain dicts (agent-docs/capture-format.md).
 
 A rib or a web is a wall along open sketch curves. Before the item: the curves as path records, one per chain of
 curves whose ends meet (`path` for one chain, `paths` for two or more; `geometry/chains.py` puts them in order), the

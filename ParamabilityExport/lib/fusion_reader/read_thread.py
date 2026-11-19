@@ -1,4 +1,4 @@
-"""Thread features (adsk.fusion.ThreadFeature) and the thread of a tapped hole as plain dicts (docs/capture-format.md).
+"""Thread features (adsk.fusion.ThreadFeature) and the thread of a tapped hole as plain dicts (agent-docs/capture-format.md).
 
 A modeled thread is read as the numbers of its `ThreadInfo` (profile name, `threadPitch`, major, minor and pitch
 diameter, `threadAngle`) and `ThreadFeature.isRightHanded`, and as the faces it sits on (`inputCylindricalFaces`): for

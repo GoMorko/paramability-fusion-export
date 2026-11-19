@@ -1,4 +1,4 @@
-"""Fillet, chamfer, shell and draft features as plain dicts (docs/capture-format.md).
+"""Fillet, chamfer, shell and draft features as plain dicts (agent-docs/capture-format.md).
 
 All four read their inputs with the timeline marker just before the item, so the edges and faces still exist in
 the shape the feature was applied to. Edge and face inputs are expanded here: a face gives its edges, and a tangent

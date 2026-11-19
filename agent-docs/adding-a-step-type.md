@@ -1,7 +1,7 @@
 # Adding a Fusion step type
 
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
-modeled thread). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+modeled thread). Read `agent-docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `extrude/emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
 and of a step that reuses another handler. The sweep handler (`sweep/step.py`, the `sweep_*.py` modules next to it and the `paths/` package) is a second example
 of that.
@@ -15,7 +15,7 @@ of that.
 4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
    plus the recipe schema copy in `tests/schema/` and support for the kind in the Paramability app.
 5. Tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
-6. The limits list in `docs/limits.md` and `docs/capture-format.md` section 5, where the reader data is described.
+6. The limits list in `agent-docs/limits.md` and `agent-docs/capture-format.md` section 5, where the reader data is described.
 
 Nothing else holds a list of step types. `tests/test_step_kinds.py` fails when a type name or a list of recipe kinds
 shows up in another module, when a reader registers a type that the table does not give to that reader module, when
@@ -68,7 +68,7 @@ ctx, data)` runs with the marker just after it and returns more keys for `data` 
 may be None.
 
 The capture must be plain data: dicts, lists, strings, numbers, booleans and null, in mm and degrees, in the target
-component's coordinates (`docs/capture-format.md` section 1). The translator runs without Fusion, in tests and on
+component's coordinates (`agent-docs/capture-format.md` section 1). The translator runs without Fusion, in tests and on
 saved `report.json` files, so it can only use what the reader wrote down. Read every value the handler needs, and
 measure what Fusion builds where a stored flag could be wrong (an end face, a side cylinder), so the handler can check
 the two against each other.
@@ -78,9 +78,9 @@ the two against each other.
 - Mark inputs that belong to another component with `mark_foreign`, so the walk refuses the step. A flat face or plane
   of another component that the translator can follow carries a measured `ref` (`design_model/refs.py`, `bring_in`, turns it into
   an `assembly` record, `ref_motion.plane_shift` and `axis_moves` give its move as a formula); see
-  `docs/capture-format.md`, "Measured references".
+  `agent-docs/capture-format.md`, "Measured references".
 - Read the parameters behind each value into `data.params` (see "Parameters behind values" in
-  `docs/capture-format.md`). The size table and the end of walk audit read them.
+  `agent-docs/capture-format.md`). The size table and the end of walk audit read them.
 - A reader that raises leaves `{"read_error": ...}` as the data; the walk refuses the step.
 
 ## 3. The handler
@@ -102,7 +102,7 @@ type in `lib/translator/handlers.py` (`"EmbossFeature": emboss.handle`); the wal
   its data from `step.brought_data`, with the geometry of other components already brought in. When the type has a
   shared reader with facts, read `step.facts` and do not call the reader again. Never read `item["data"]` or
   `item.get("data")`: `tests/test_boundary.py` fails on it. See "Handlers read the resolved step" in
-  `docs/developer-guide.md` (2.2).
+  `agent-docs/developer-guide.md` (2.2).
 - Give the data, or the part of it that a helper needs, to the helpers. A helper does not read the data from the item.
 - Read another item (a source, a Combine) through `design.as_read(item)`, its parameters through
   `design.params_of(item)`. To write the step as another kind, give the other handler
@@ -129,7 +129,7 @@ type in `lib/translator/handlers.py` (`"EmbossFeature": emboss.handle`); the wal
   part), so patterns and mirrors refuse it as a source.
 - `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist, at most 200
   characters, since it is the reason of the gap and the app shows it. The walk leaves the item out and goes on (a gap,
-  `docs/recipe-gaps.md`); only a refusal before the copy has written a first step, or in a walk of another
+  `agent-docs/recipe-gaps.md`); only a refusal before the copy has written a first step, or in a walk of another
   component's body, stops the copy and leaves the part a fixed shape. A refusal that comes from earlier gaps (a step
   that repeats or picks what a gap made) is `Refusal(reason, depends_on=[gap ids])`; `ctx.gap_of(index)` gives the gap
   of an earlier item. Doubts and notes a handler recorded before it refused are dropped with the
@@ -254,7 +254,7 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
   every item). Read the member values a person would need to redo the step: extents, distances, angles, operation, the
   inputs.
 - `data.params` for every value that a user parameter can drive (see "Parameters behind values" in
-  `docs/capture-format.md`). The gap lists them as `values` with the Fusion expression and the formula of the recipe,
+  `agent-docs/capture-format.md`). The gap lists them as `values` with the Fusion expression and the formula of the recipe,
   and the audit finds the sizes the step reads (`sizes`, `looseSizes` of the gap). A size that only this step reads
   is kept as a size and marked, so the missing step can use it.
 - Sketches by token where the step uses them (`sketches=` in the table entry), so the sizes behind those sketches are
@@ -316,7 +316,7 @@ them when the fixture needs a volume (it only has a branch per step type, and re
 ## 6. Hand tests
 
 The reader is the only code that talks to Fusion, and no tool runs it. Every new `adsk` call goes into
-`docs/hand-tests.md`, in the "Capture reader calls to watch" part: the member, what the reader expects it to return,
+`agent-docs/hand-tests.md`, in the "Capture reader calls to watch" part: the member, what the reader expects it to return,
 and what to look for in `report.json`. Add a design that shows the step, with what the part must look like in
 Paramability: to section 7 for a plain step, or to a numbered section of its own when the step has several cases to
 try (Emboss has section 10).

@@ -269,7 +269,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   add-ins where it sits or how it joins the part. Draw the shape in a sketch and extrude or revolve it instead. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
   helical edges read back as one plain helix; at most 8 coils, and 100 turns of coils and threads together in timeline order (later ones are left out), never as a tool
   with other steps (a spiral, a taper and a half-turn count of revolutions are left out). The Orca output leaves every coil out
-  (`docs/orca-output.md`, "Coils"). A draft is copied when its faces all lie on one side of its plane, with one angle
+  (`agent-docs/orca-output.md`, "Coils"). A draft is copied when its faces all lie on one side of its plane, with one angle
   under 30 degrees (or the same on both sides; it follows a size only when both sides use the same formula, and the
   size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean).
   A Symmetric draft with faces on both sides of its plane is copied the same way, as two equal angles (recipe version
@@ -327,7 +327,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the copy keeps the section where it was measured. These pipes are left out: a square or triangle section (Fusion
   does not say which way the section turns), a pipe along only part of its path, and a closed path that starts on a
   sharp corner (a closed path of lines only always does). The Orca output copies a pipe with a round section
-  as a sweep of its circle (`docs/orca-output.md`, "Pipes").
+  as a sweep of its circle (`agent-docs/orca-output.md`, "Pipes").
 - A loft is copied when it joins two closed outlines with free ends and no rails or centre line. An outline is a
   sketch outline, a closed loop of edges in one plane or a flat face; a loop of edges or a face is copied as measured,
   and the sizes that may move it are marked. It is written
@@ -497,4 +497,4 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.14.6. It writes recipe version 17 when a step needs it (a scale, an outward or closed shell, a draft with two angles, a press pull of a round face, a thin wall along an open line, or a join through all; a thread then also carries its pitch diameter). Version 17 needs Paramability 1.7.0 or newer. Version 0.13.0-preview.13 is the last version that writes at most recipe version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. The hand checks in `docs/hand-checks.md` list what was checked in Fusion.
+- This is version 0.14.6. It writes recipe version 17 when a step needs it (a scale, an outward or closed shell, a draft with two angles, a press pull of a round face, a thin wall along an open line, or a join through all; a thread then also carries its pitch diameter). Version 17 needs Paramability 1.7.0 or newer. Version 0.13.0-preview.13 is the last version that writes at most recipe version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. The hand checks in `agent-docs/hand-checks.md` list what was checked in Fusion.

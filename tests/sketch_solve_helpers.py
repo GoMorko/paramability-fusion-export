@@ -1,4 +1,4 @@
-"""Hand built sketch graph records (docs/capture-format.md, "Sketch graphs") for the sketch solver tests."""
+"""Hand built sketch graph records (agent-docs/capture-format.md, "Sketch graphs") for the sketch solver tests."""
 import math
 
 from tests import context  # noqa: F401

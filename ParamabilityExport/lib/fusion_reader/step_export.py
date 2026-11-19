@@ -12,7 +12,7 @@ COPY_TOLERANCE_MM = 1e-3
 ROUTE_TEMP_COMPONENT = "temp_component"
 ROUTE_ASK_DESIGNER = "ask_designer"
 
-# What to do when the root holds more than the picked body. Section 3 of docs/hand-tests.md says when to switch.
+# What to do when the root holds more than the picked body. Section 3 of agent-docs/hand-tests.md says when to switch.
 MULTI_BODY_ROUTE = ROUTE_TEMP_COMPONENT
 
 

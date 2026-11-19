@@ -1,6 +1,6 @@
 # Hand tests
 
-For a quick check of a release with your own projects, start with `docs/hand-checks.md`. This file is the long list.
+For a quick check of a release with your own projects, start with `agent-docs/hand-checks.md`. This file is the long list.
 
 No tool can run Fusion, so these checks are done by hand after each change to the Fusion side. Tick each one and
 note the Fusion version and system.
@@ -232,7 +232,7 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6, RV1 to RV5 and 
       extrude that the coil did not touch. Export. Expect: the fillet is copied (not left out), `reach.makers` lists
       only the extrude for it, and in Paramability the copy has the round on the same edges. This test and
       L2 decide whether `Feature.faces` gives the faces a step made for each feature type ("Reach" in the not
-      verified table of `docs/capture-format.md`). Where `reach.read` is false, `reach.error` says why; every later step that picks edges or faces is then left out.
+      verified table of `agent-docs/capture-format.md`). Where `reach.read` is false, `reach.error` says why; every later step that picks edges or faces is then left out.
 - [ ] L4, a first body that cannot be copied. Make a part whose first body comes from a step the add-in cannot copy
       (a coil as the first step). Export. Expect: the export stops as before: a fixed shape, the message
       names the step, no `gaps.json`, a `manifest.json` of `version` 1.
@@ -297,7 +297,7 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4, TH1 to TH6, RV1 to RV5 and 
       copies when a count changes) and B7 (what an intersect of several tools keeps) answer questions only Fusion can.
 - [ ] Export the bracket and the box once with this version and send the two `.paramability` files. Nothing needs
       checking by eye: each file holds a `derived` record in its `report.json` that says how well reading the sketch
-      dimensions agrees with what the tries measured ("Derived values" in `docs/capture-format.md`, section 6).
+      dimensions agrees with what the tries measured ("Derived values" in `agent-docs/capture-format.md`, section 6).
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
@@ -1295,7 +1295,7 @@ out).
 ## 14. Export for Orca (experimental)
 
 The button "Export for Orca (experimental)" in the Paramability panel saves one body as an OrcaSlicer 2.5 project
-(`docs/orca-output.md`). Use OrcaSlicer 2.5.1 with Preferences > General > Features > "CAD feature (experimental)" on
+(`agent-docs/orca-output.md`). Use OrcaSlicer 2.5.1 with Preferences > General > Features > "CAD feature (experimental)" on
 (restart Orca after turning it on). Open the `.3mf` with File > Open (or by double click). Keep the `.3mf`: its
 `Metadata/paramability_report.json` holds the report.
 
@@ -1584,7 +1584,7 @@ calls to watch (thin extrude)".
       normal: `ExtrudeFeature.profile` is a `Path` of `PathEntity` items (each `isOpposedToEntity` false),
       `startFaces` and `endFaces` are empty, side one puts the wall on the left of the path (seen from the front of
       the sketch), side two on the right, center half each way; the ends are square and the corners sharp. The copy
-      writes such a wall now (`docs/hand-checks.md`, T2-open). Against the sketch normal and both ways the side is the
+      writes such a wall now (`agent-docs/hand-checks.md`, T2-open). Against the sketch normal and both ways the side is the
       same (HC40). A join flush with the plate edges lists the merged faces in `ExtrudeFeature.faces`, one with its
       point on the plate (HC40e); the copy accepts it by the faces of the plate before the step. Still open: the side
       for a line with arcs (left out).
@@ -1789,7 +1789,7 @@ These were written from the API reference and never run:
 - The component export flow (`commands/ExportForParamability/export_flow.py`): `Design.snapshots` and
   `Snapshots.hasPendingSnapshot` (asked when the dialog opens, before the capture moves the marker, and again at OK;
   an unreadable answer counts as "nothing pending"); the capture members of "Bodies inside
-  components" in `docs/capture-format.md`.
+  components" in `agent-docs/capture-format.md`.
 - The size probe (`lib/fusion_reader/probe_state.py`, `lib/probe/`, `lib/export_plan/probe_flow/`), none of it run
   yet. Each member below is read at every state; a missing one only leaves that sketch unread, so its sizes may give
   unexpected results, and it shows in `probe.states` of `report.json`:
@@ -1869,7 +1869,7 @@ These were written from the API reference and never run:
 
 ### Sketch graph, marker roll and progress window
 
-Written from the API reference and never run (sections: "Sketch graphs" in `docs/capture-format.md`, hand tests D1 and
+Written from the API reference and never run (sections: "Sketch graphs" in `agent-docs/capture-format.md`, hand tests D1 and
 D5 to D13). Every read is guarded: a member that raises is listed in the record's `unread` or leaves the old behaviour.
 
 - Outline faces at each state (`lib/fusion_reader/read_face.py` `read_faces`, hand test K27): `Timeline.markerPosition`
@@ -2007,7 +2007,7 @@ read the capture in `report.json`.
   `threadType`, `threadDesignation`, `threadClass`, `isInternal`, `threadAngle` (degrees), `threadPitch`, `majorDiameter`,
   `minorDiameter`, `pitchDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
   and `faces` after the step (the made thread faces: their `vertices` give `made_span`). These names match the Fusion API
-  stub (July 2025); every member is optional in the reader. Hand check TD1 in `docs/hand-checks.md` lists what to look for.
+  stub (July 2025); every member is optional in the reader. Hand check TD1 in `agent-docs/hand-checks.md` lists what to look for.
 - Tapped hole thread (hand check TD2): Fusion (September 2025 and later) keeps the tap type in
   `HoleFeature.holeTapType`, the thread numbers in `HoleFeature.tappedHoleInfo` (a `ThreadInfo`) and the length in the
   hidden thread feature `HoleFeature.thread` (`threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `faces`).
@@ -2060,7 +2060,7 @@ read the capture in `report.json`.
 - `OffsetFacesFeature` on a cylinder face: `Cylinder.origin`, `axis` and `radius`; `BRepFace.loops` of a whole
   cylinder (two loops of one `Circle3D` edge each, no seam edge); `Circle3D.center`, `normal` and `radius`;
   `BRepEdge.faces` across an end circle; and `OffsetFacesFeature.faces` after the item, which must list the moved
-  cylinder with its new radius (hand check PF1 in `docs/hand-checks.md`).
+  cylinder with its new radius (hand check PF1 in `agent-docs/hand-checks.md`).
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.
@@ -2156,7 +2156,7 @@ Written from the API reference and a version 0.7.2 export, never run on the new 
       `CircularPatternFeature.isSymmetric` (a flag that fails reads as not symmetric, then the measured copies are
       refused). Which element is the identity (not always the first).
 
-Path patterns (`read_repeat.path_before`, hand check PP1 in `docs/hand-checks.md`):
+Path patterns (`read_repeat.path_before`, hand check PP1 in `agent-docs/hand-checks.md`):
 
 - [ ] Members read: `PathPatternFeature.path` (read as a sweep path), `quantity`, `distance`, `patternDistanceType`,
       `startPoint` (a number from 0 to 1), `isFlipDirection`, `isSymmetric`, `isOrientationAlongPath`,
@@ -2228,7 +2228,7 @@ Emboss tests of section 10 and read the capture in `report.json`.
 ## Capture reader calls to watch (rib and web)
 
 These members were read in the API reference of Fusion 2706 through the Fusion MCP tool, and they ran in Fusion 2706
-on test designs (hand check 100 in `docs/hand-checks.md`). The API stubs that older Fusion builds install list no
+on test designs (hand check 100 in `agent-docs/hand-checks.md`). The API stubs that older Fusion builds install list no
 members of `RibFeature` and `WebFeature`. A member that cannot be read gives `null`, and the step is left out.
 
 - `RibFeature.curves` and `WebFeature.curves` with the marker just before the item: a `SketchCurveVector` (len and
@@ -2334,7 +2334,7 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
 
 ## Capture reader calls to watch (coil)
 
-Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py`.
+Hand checks CO1 to CO3 are in `agent-docs/hand-checks.md`. The reader is `read_coil.py`.
 
 - `CoilFeature` has no type, axis, hand, section or operation member in the API. The reader uses only
   `Feature.entityToken`, `Feature.parentComponent`, `Feature.faces` and `Feature.bodies`.
@@ -2350,7 +2350,7 @@ Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py
 
 ## Capture reader calls to watch (scale)
 
-Hand check SC1 is in `docs/hand-checks.md`. The reader is `read_scale.py`. These members were written from the API
+Hand check SC1 is in `agent-docs/hand-checks.md`. The reader is `read_scale.py`. These members were written from the API
 stubs and never run. A member that cannot be read gives `null` or `other`, and the translator leaves the step out.
 
 - `ScaleFeature.inputEntities` with the marker just before the item: `BRepBody` entries for a scale of bodies; a
@@ -2368,7 +2368,7 @@ stubs and never run. A member that cannot be read gives `null` or `other`, and t
 
 ## Capture reader calls to watch (pipe)
 
-Hand checks PI1 and PI2 are in `docs/hand-checks.md`. The reader is `read_pipe.py`. Live check PI1 (Fusion 2706)
+Hand checks PI1 and PI2 are in `agent-docs/hand-checks.md`. The reader is `read_pipe.py`. Live check PI1 (Fusion 2706)
 confirmed the section place, the size as a diameter, the inward wall and `distanceOne` "1" with `distanceTwo` null on
 an open path. Live check PI2 confirmed that Fusion mitres a pipe at a sharp corner of an open path.
 

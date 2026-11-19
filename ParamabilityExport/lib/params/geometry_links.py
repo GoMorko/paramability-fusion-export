@@ -25,7 +25,7 @@ measures. A link is `{ "param", "sketch", "component", "via" }`, `via` one of "s
 "assembly".
 
 A step can also use the plane, axis, face or point of another component directly. The reader records it as a measured
-reference (`ref`, docs/capture-format.md). A parameter that acts on the component that owns such a reference may move
+reference (`ref`, agent-docs/capture-format.md). A parameter that acts on the component that owns such a reference may move
 it, so it gets a link with `via` "reference" (`reference_links`): `sketch` is empty, `step` names the step that uses the
 reference and `ref` is its key (`<item index>.<slot>`).
 

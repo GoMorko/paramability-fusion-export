@@ -1,4 +1,4 @@
-"""Scale features as plain dicts (docs/capture-format.md).
+"""Scale features as plain dicts (agent-docs/capture-format.md).
 
 `inputEntities` may hold bodies, sketches and (outside parametric modelling) components. Only bodies are copied, so
 `input_kind` is `bodies` when every input is a body, else `sketches` (some input is a sketch) or `other`. Each body

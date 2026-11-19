@@ -1,4 +1,4 @@
-"""Sketches and extrude reaches on construction planes built on the part (docs/capture-format.md, "Sketch values that
+"""Sketches and extrude reaches on construction planes built on the part (agent-docs/capture-format.md, "Sketch values that
 follow sizes"): the probe tries the sizes that move the plane, the copy follows the measured plane, and a size it
 could not measure is marked, never kept as exact."""
 import copy

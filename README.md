@@ -14,7 +14,7 @@ The add-in adds three buttons to Fusion:
 - **Export size choices** saves fixed sizes of one body, for example S, M and L. In Paramability, you select a size
   from a list.
 - **Export for Orca (experimental)** saves one body as an OrcaSlicer 2.5 project. The Design tab of OrcaSlicer
-  rebuilds the part, and your user parameters become its variables (`docs/orca-output.md`). It copies:
+  rebuilds the part, and your user parameters become its variables (`agent-docs/orca-output.md`). It copies:
   - extrudes, also with a start offset, a taper, "To" a face or a plane, and a start "From" a face, and the text and
     embosses on a flat face, where the depth follows a parameter;
   - full ellipses, with the numbers they have now;
@@ -97,7 +97,7 @@ A Pipe with a round section is copied as a sweep of a circle. A pipe with a squa
 The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
 pattern out when the two do not agree.
 A join "through all" is copied only when it joins this body alone and Fusion ended it on the far side of this body.
-The add-in marks the sizes that change the body before it "may give unexpected results" (`docs/limits.md`).
+The add-in marks the sizes that change the body before it "may give unexpected results" (`agent-docs/limits.md`).
 A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
 range of that parameter stops before the outline reaches the axis.
 A shell, round or chamfer on the faces or edges of a revolve follows the sizes of the revolve, for example the open
@@ -108,7 +108,7 @@ where they meet follows the sizes too. Where the add-in cannot be sure (the end 
 overlap, a size moves one outline so that they meet in another way), the sizes are marked.
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
-what a place is, it marks every size that the steps before it use (`docs/limits.md`).
+what a place is, it marks every size that the steps before it use (`agent-docs/limits.md`).
 The same holds when Fusion picked the edges of a round or chamfer from faces or chains of edges and the copy has to
 pick the edges one by one: at other sizes those faces or chains may hold other edges.
 One fillet or chamfer can hold several sets of edges, each picked in its own way and with its own size. When the sets
@@ -163,12 +163,12 @@ or if an error occurs.
 
 Each export writes a short trail of what it does in Fusion to the file `export-trail.log`, in the folder
 `ParamabilityExport` of your temporary folder (`%TEMP%\ParamabilityExport` on Windows). The file is kept when
-Fusion closes suddenly. Send it with your bug report (`docs/user-guide.md`, "The export trail, for a bug report").
+Fusion closes suddenly. Send it with your bug report (`agent-docs/user-guide.md`, "The export trail, for a bug report").
 
 ## Main limits
 
 - The design must have history (a parametric design).
-- The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
+- The add-in cannot copy all Fusion steps. `agent-docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
 - This is version 0.14.6. It needs Paramability 1.7.0 or newer to open its files.
 
@@ -176,16 +176,16 @@ Fusion closes suddenly. Send it with your bug report (`docs/user-guide.md`, "The
 
 | Document | Contents |
 | --- | --- |
-| `docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
-| `docs/orca-output.md` | Export for Orca: what it copies, what it leaves out, the report |
-| `docs/limits.md` | What the copy can and cannot do, step by step |
-| `docs/feature-support.md` | Which Fusion actions each export copies, and what could be copied later |
-| `docs/development.md` | Code layout and tests |
-| `docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
-| `docs/capture-format.md`, `docs/expressions.md`, `docs/recipe-gaps.md` | File formats and how formulas are copied |
-| `docs/adding-a-step-type.md` | How to copy one more kind of Fusion step |
-| `docs/hand-checks.md`, `docs/hand-tests.md`, `docs/test-projects.md` | Checks by hand in Fusion |
-| `docs/publishing.md`, `docs/create-remote.md` | Rules for sharing the add-in, releases |
+| `agent-docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
+| `agent-docs/orca-output.md` | Export for Orca: what it copies, what it leaves out, the report |
+| `agent-docs/limits.md` | What the copy can and cannot do, step by step |
+| `agent-docs/feature-support.md` | Which Fusion actions each export copies, and what could be copied later |
+| `agent-docs/development.md` | Code layout and tests |
+| `agent-docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
+| `agent-docs/capture-format.md`, `agent-docs/expressions.md`, `agent-docs/recipe-gaps.md` | File formats and how formulas are copied |
+| `agent-docs/adding-a-step-type.md` | How to copy one more kind of Fusion step |
+| `agent-docs/hand-checks.md`, `agent-docs/hand-tests.md`, `agent-docs/test-projects.md` | Checks by hand in Fusion |
+| `agent-docs/publishing.md`, `agent-docs/create-remote.md` | Rules for sharing the add-in, releases |
 
 ## Licence
 

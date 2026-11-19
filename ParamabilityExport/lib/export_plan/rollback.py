@@ -24,7 +24,7 @@ Fusion aborts the command. They say whether the file was saved (`ExportOutcome.s
 `reopen_offered` says when the result window tells the person how to get the design back as it was saved: only for
 `undo_unavailable`, and only when the design has a saved cloud version (`design_edit.saved_start.SavedStart.can_reopen`).
 `reopen_lines` are the steps: close the design without saving, then open it again from the Data Panel. The add-in does
-not close or open the design itself (see `docs/developer-guide.md`). When Fusion showed unsaved changes at the start
+not close or open the design itself (see `agent-docs/developer-guide.md`). When Fusion showed unsaved changes at the start
 (`SavedStart.unsaved_at_start`), a line before the steps says that every change since the last save is lost: Fusion
 also counts the add-in's own marker moves as unsaved changes, so the add-in cannot tell them from the person's own, and
 the person decides. After an abort Fusion undoes the export itself, so no steps are given.

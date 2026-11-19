@@ -1,4 +1,4 @@
-"""Model parameters behind feature values, read as plain dicts (docs/capture-format.md, "params").
+"""Model parameters behind feature values, read as plain dicts (agent-docs/capture-format.md, "params").
 
 A feature reader calls `ref(member, kind)` for each value that Fusion keeps as a model parameter. The result is
 `{ name, expression, value }` with `value` in mm, degrees or as is, or None when the member is not a model parameter

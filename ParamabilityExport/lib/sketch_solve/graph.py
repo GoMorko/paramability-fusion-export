@@ -1,4 +1,4 @@
-"""One sketch graph record (`capture.sketch_graphs`, docs/capture-format.md, "Sketch graphs") as plain Python objects,
+"""One sketch graph record (`capture.sketch_graphs`, agent-docs/capture-format.md, "Sketch graphs") as plain Python objects,
 with the solved geometry Fusion gave: point positions, line directions and radii in mm and degrees.
 
 `load` refuses a record that cannot be used at all (an error, a cut, a broken list) with `GraphError`. Single

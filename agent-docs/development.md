@@ -1,7 +1,7 @@
 # Development
 
 How the code is laid out and how it is tested. For how an export works from the click to the file, with worked
-examples and debugging steps, read `docs/developer-guide.md`.
+examples and debugging steps, read `agent-docs/developer-guide.md`.
 
 ## Code layout
 
@@ -17,7 +17,7 @@ package may import only packages above it in this list (not every one of them). 
   crash.
 - `orca_recipe`: the OrcaSlicer 2.5 Design tab recipe (`Metadata/orca_cad.bin`): the cereal binary values, the
   feature fields in Orca's order with its defaults, the recipe reader and writer, and a 3MF writer. Export for Orca
-  (experimental) writes it through `orca_translate`; see `docs/orca-output.md`.
+  (experimental) writes it through `orca_translate`; see `agent-docs/orca-output.md`.
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table, and the geometry links (which parameters may reach a sketch or a place of the part through another component; it does not read steps: the items that place an occurrence come from `design_model/step_links.py`).
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion, and says which projected entities no size moves (`constants.py`). Export for Orca uses its extended reading (`extended=True`), which the recipe output does not use.
@@ -71,7 +71,7 @@ package may import only packages above it in this list (not every one of them). 
 - `results`: the shape of a verdict and of the record of a step left out, for both translators and the dialogs (`verdicts.py`, `left_out.py`). It holds shapes and the words of a verdict kind, not facts about the design.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`; each handler takes the resolved step of `design_model.design`, `handler(ctx, step)`, and reads no step data from an item itself). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss, the wall along an open line, rib and web), `sweep/` (also pipe) and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/` (also the ranges that keep an outline on its side of the axis), `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, scale, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. `same_shape.py` compares two reads of a sketch by their curves alone, so a curve that Fusion only named or listed otherwise is no flip. It does not import the translator: what it reads of the recipe (the loop writer and the range cuts of its tries) is in `design_model`.
-- `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. Each handler takes the resolved step of `design_model.design` (`handler(ctx, step)`) and reads no step data from an item itself. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
+- `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. Each handler takes the resolved step of `design_model.design` (`handler(ctx, step)`) and reads no step data from an item itself. It imports neither the recipe translator nor the probe. The modules are listed in `agent-docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers, and the undo of an export that did not put the design back (`rollback.py`: the verdict, the gate of the execute event, `reopen_offered`, whether the result window gives the steps to get the design back as it was saved, and `reopen_lines`, the steps). When a try leaves only steps outside what the tries need changed, `pipeline/outside_damage.py` says which sizes end with it, and the try runner goes on with the others. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have. `probe_flow/body_routes.py` says which sizes change the part in their tries only through the values of its own steps (a size shared with another component), so the probe does not list them as changing the part in a way the copy does not follow.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).
 - `fusion_reader`: reads the design with `adsk` into a capture. `read_solid.py` reads extrude, revolve and combine, `read_hole.py` reads holes, and `read_extent.py` reads the start, the sides and the target face of an extrude (a hole reads its extent target there too). `saved_design.py` reads whether the design is saved in the cloud and whether Fusion showed unsaved changes. It only reads.
@@ -107,8 +107,8 @@ with no reason is a regression until shown otherwise.
 
 ## Tests
 
-For a quick check of a release by hand, with your own projects and a few small test models, see `docs/hand-checks.md`.
-To measure how many kinds of projects the copy covers, build the typical printing projects in `docs/test-projects.md`,
+For a quick check of a release by hand, with your own projects and a few small test models, see `agent-docs/hand-checks.md`.
+To measure how many kinds of projects the copy covers, build the typical printing projects in `agent-docs/test-projects.md`,
 export them and open each one in the Paramability app to see how much of the design it keeps.
 
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
@@ -118,7 +118,7 @@ that no module imports an underscore name from another module, that the shared l
 of an output (`Refusal`, `Skip`, `Context`) and imports no output, and that no module outside the shared layer, the
 reader and the capture model takes the data of a step from the item itself. The pattern instead (the handler gets
 the resolved step, other items go in through `as_read`, helpers get the data handed in) is in
-`docs/developer-guide.md` under `design.py` in 2.2; `translator`, `orca_translate`, `probe` and `export_plan` follow
+`agent-docs/developer-guide.md` under `design.py` in 2.2; `translator`, `orca_translate`, `probe` and `export_plan` follow
 it. A module that reads every item of
 a capture (not a walk) reads each item's data through `as_read`; `geometry` and `params`, below the shared layer, get
 the data or plain values from their caller (`design_model/step_links.py` reads the step facts the geometry links need). `tests/test_interfaces.py` checks that the Fusion
@@ -152,5 +152,5 @@ The byte check over OrcaSlicer's own sample recipes (`tests/test_orca_recipe_fil
 `v4` and `v5` from the folder in `ORCA_RECIPE_SAMPLES` (the OrcaSlicer repo's `tests/data`); without it they skip.
 The samples are not kept here.
 
-To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.
-The file that lists the steps left out of a copy is described in `docs/recipe-gaps.md`.
+To make the export copy one more kind of Fusion step, follow `agent-docs/adding-a-step-type.md`.
+The file that lists the steps left out of a copy is described in `agent-docs/recipe-gaps.md`.

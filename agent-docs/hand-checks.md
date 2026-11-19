@@ -1,7 +1,7 @@
 # Hand checks
 
 The short way to check a release by hand. Export your usual projects, compare with the last release, then look at
-the 10-second check in Fusion. The long list of single checks is `docs/hand-tests.md`; use it only when a section
+the 10-second check in Fusion. The long list of single checks is `agent-docs/hand-tests.md`; use it only when a section
 here points to it.
 
 ## After every release
@@ -66,7 +66,7 @@ features of the post extrude, the Combine and the cut: 3 copies 15 mm apart alon
 
 ## When something looks wrong
 
-Open `report.json` from the export. The field layout is in `docs/capture-format.md`, section 6 ("Report and
+Open `report.json` from the export. The field layout is in `agent-docs/capture-format.md`, section 6 ("Report and
 capture file"). Open these first:
 
 1. `health`: whether the design was put back (`restore_unverified`, `flipped`, `broken`, `tries_stopped`) and how
@@ -74,7 +74,7 @@ capture file"). Open these first:
 2. `timing`: where the time went (section 6, "Timing"). A slow export shows up as one large entry, often the tries.
 3. `refusal` (on a body saved as a fixed shape): the step that stopped the copy and why.
 4. `after_stop`: what a walk past that stop finds, so you see which later steps were not copied either.
-5. `gaps`: each left-out step with its reason. Their meaning and the gaps file are in `docs/recipe-gaps.md`.
+5. `gaps`: each left-out step with its reason. Their meaning and the gaps file are in `agent-docs/recipe-gaps.md`.
 
 Also read `probe.dropped` (sizes that did not work, with the failing step), `probe.cut` (ranges that were cut) and
 `probe.timeline` (how many items each try rebuilt).
@@ -82,7 +82,7 @@ Also read `probe.dropped` (sizes that did not work, with the failing step), `pro
 ## Small test models
 
 Only the checks your own projects do not cover. Each says what to model and, under it, what to do and watch.
-Longer wording and past results are in `docs/hand-tests.md` under the same id.
+Longer wording and past results are in `agent-docs/hand-tests.md` under the same id.
 
 1. SB2, split by a body core. Model a 100 x 100 x 20 mm plate and a cylinder body (kept) of 30 mm diameter through
    it. Split Body the plate with the cylinder, and remove the piece inside the cylinder. Second design: keep the
@@ -326,7 +326,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     with it. Add a user parameter `mirror_at` (5 mm), a construction plane offset from the XZ plane by it, and a
     small boss (5 x 5 x 5 mm) on the top face that you mirror across that plane.
     Export: Export for Orca with the piece from x 0 to 25, `cut_at` and `mirror_at` ticked (OR24 in
-    `docs/hand-tests.md` adds a circular pattern). The result window shows
+    `agent-docs/hand-tests.md` adds a circular pattern). The result window shows
     both as kept as fixed numbers, with the reasons "Split1 cuts along a plane that may move with it" and "Mirror1
     mirrors across a plane that may move with it", never as not used. The copy matches the Fusion part at the values
     of the export.

@@ -88,7 +88,7 @@ def replay(case):
     return translate(capture, size_table=table, motion=motion), motion
 
 
-@unittest.skipUnless(DATA, "skipped: no local capture file (see the test section of docs/development.md)")
+@unittest.skipUnless(DATA, "skipped: no local capture file (see the test section of agent-docs/development.md)")
 class OwnerCaptureTest(unittest.TestCase):
     def each(self, kind, check, key="package"):
         """Runs `check(case)` for every listed case whose package is present; skips when none is."""

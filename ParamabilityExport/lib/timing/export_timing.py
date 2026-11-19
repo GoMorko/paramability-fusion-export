@@ -1,5 +1,5 @@
 """The timing of one export: the phases of the export flow, the capture read and the size probe. `report()` is the
-`timing` block of `report.json` (docs/capture-format.md).
+`timing` block of `report.json` (agent-docs/capture-format.md).
 
 Phases are spans of the pipeline (`export_plan.pipeline`); one that runs more than once (a
 translation per body, the probe's start and its tries) adds up. `after_stop` is the time of the second walk after a

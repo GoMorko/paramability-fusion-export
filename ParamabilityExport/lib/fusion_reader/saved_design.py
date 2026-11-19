@@ -2,7 +2,7 @@
 
 `read_saved_start` reads, before the export changes anything, whether the design is a cloud file and whether Fusion
 showed unsaved changes (`design_edit.saved_start.SavedStart`). It only reads: the add-in never closes or opens a
-document (see `docs/developer-guide.md`).
+document (see `agent-docs/developer-guide.md`).
 
 Members used, all in the Fusion API reference and the installed stubs: `Document.dataFile`, `Document.isModified`,
 `DataFile.id`, `DataFile.versionNumber`, `DataFile.name` and `DataFile.parentProject` (`DataProject.name`). A member

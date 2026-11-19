@@ -1,5 +1,5 @@
 """One probe state of the design: the sketch geometry, points, lines, parameter values and target box that the size
-probe compares across size settings (docs/capture-format.md, "Probe states").
+probe compares across size settings (agent-docs/capture-format.md, "Probe states").
 
 Everything is read by token from the native objects of the target's component, so values are in component
 coordinates (mm), like the capture. A sketch of another component (one a step of the target borrows) is read native

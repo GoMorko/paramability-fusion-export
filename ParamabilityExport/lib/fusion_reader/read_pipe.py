@@ -1,4 +1,4 @@
-"""Pipe features (adsk.fusion.PipeFeature) as plain dicts (docs/capture-format.md).
+"""Pipe features (adsk.fusion.PipeFeature) as plain dicts (agent-docs/capture-format.md).
 
 Before the item: the section (type, size, hollow and wall thickness), how much of the path the pipe covers, the
 operation and the path as curves in the target component's coordinates (`read_sweep.path_record`). Fusion gives the

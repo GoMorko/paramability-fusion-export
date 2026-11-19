@@ -1,4 +1,4 @@
-"""Extrude, revolve and combine features as plain dicts (docs/capture-format.md).
+"""Extrude, revolve and combine features as plain dicts (agent-docs/capture-format.md).
 
 Each feature type has a pair of readers. `before(feature, ctx)` runs with the timeline marker just before the item
 and reads the inputs. `after(feature, ctx, data)` runs with the marker just after it and reads what the feature

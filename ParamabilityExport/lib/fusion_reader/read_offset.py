@@ -1,4 +1,4 @@
-"""Offset faces (press pull) as plain dicts (docs/capture-format.md).
+"""Offset faces (press pull) as plain dicts (agent-docs/capture-format.md).
 
 Before the item: the faces it moves. A flat face is an outline on its plane (the same record as a sketch profile,
 with the outward normal as z) and whether its side walls stand square to it. A round face (a cylinder) is its axis,

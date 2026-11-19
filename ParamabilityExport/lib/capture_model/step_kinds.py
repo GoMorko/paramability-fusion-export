@@ -178,7 +178,7 @@ STEP_TYPES = (
              gap_cause=gap_hints.SURFACE, reaches_bodies=True),
     StepType("CoilFeature", "coil", reader="read_coil", gap_cause=gap_hints.COIL),
     # Fusion's API gives an existing box, cylinder, sphere or torus only the members every feature has: no place,
-    # direction or operation (docs/feature-support.md). They stay left out, and may reach bodies until a live check
+    # direction or operation (agent-docs/feature-support.md). They stay left out, and may reach bodies until a live check
     # shows otherwise.
     StepType("BoxFeature", "box", unsupported=_PRIMITIVE % "box", gap_cause=gap_hints.PRIMITIVE,
              reaches_bodies=True),

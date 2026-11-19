@@ -2,9 +2,9 @@
 
 Paramability export for Autodesk Fusion: a Python add-in that copies a Fusion body, its timeline steps and its user
 parameters into a `.paramability` package. The Paramability app opens the package as a part whose sizes people can
-change. Read `README.md` first (what the add-in does and where the documents are), then `docs/development.md` (code
-layout, package layering, tests) and `docs/developer-guide.md` (how an export works, step by step).
-`docs/user-guide.md` and `docs/limits.md` describe what users see and what does not copy.
+change. Read `README.md` first (what the add-in does and where the documents are), then `agent-docs/development.md` (code
+layout, package layering, tests) and `agent-docs/developer-guide.md` (how an export works, step by step).
+`agent-docs/user-guide.md` and `agent-docs/limits.md` describe what users see and what does not copy.
 
 ## Goal
 
@@ -35,7 +35,7 @@ Be concise, impersonal and to the point. Write sub agent prompts the same way.
    the code for a later reader, not the session's work or plan.
 4. **Parallelize** independent work, each agent in its own worktree and branch from `main`. Tell each agent which
    files its siblings change. Shared files (`capture_model/step_kinds.py`, `capture_model/gap_hints.py`,
-   `translator/handlers.py`, `docs/hand-checks.md`) take only small additive edits per branch. Limit heavy commands
+   `translator/handlers.py`, `agent-docs/hand-checks.md`) take only small additive edits per branch. Limit heavy commands
    (the full suite) running at the same time.
 5. **Code review** after a large change: a strict, adversarial reviewer focused on wrong copies, the design not put
    back, Fusion API members that may not exist, layering, and tests that check wording instead of outcomes. Act on
@@ -55,7 +55,7 @@ Be concise, impersonal and to the point. Write sub agent prompts the same way.
   release that reads it first.
 - **Release zip:** `python3 scripts/make_release_zip.py` writes `dist/ParamabilityExport-<version>.zip`. Hand a zip out
   only when the released app can read what it writes.
-- **Publishing:** keep to `docs/publishing.md` (no Fusion or Autodesk in names, no Autodesk art, documented API only,
+- **Publishing:** keep to `agent-docs/publishing.md` (no Fusion or Autodesk in names, no Autodesk art, documented API only,
   leave the design as it was).
 - **This repository is public.** Never commit exports of real designs (`.paramability` files), values or geometry
   taken from them, personal paths, or links to private repositories and notes. `tests/local/` is git-ignored and holds
@@ -71,7 +71,7 @@ Be concise, impersonal and to the point. Write sub agent prompts the same way.
 - Fusion API members: check every member a reader uses against the Fusion API reference or the API stubs that Fusion
   installs, and make reader fakes use the real names. A member that may be missing reads as null and gives a gap,
   never a guess.
-- New step type: follow `docs/adding-a-step-type.md`. New gap cause: add its hint in `capture_model/gap_hints.py`.
+- New step type: follow `agent-docs/adding-a-step-type.md`. New gap cause: add its hint in `capture_model/gap_hints.py`.
 - No god modules: split a module that grows past about 700 lines or mixes jobs, as a separate commit.
 - Comments: short, standalone, for a developer opening the file cold. No notes about the current task.
 - User-facing text (dialog, result window, reasons, tips): plain words for 3D printing hobbyists, no developer
@@ -82,17 +82,17 @@ Be concise, impersonal and to the point. Write sub agent prompts the same way.
 - Full suite from the repository root: `python3 -m unittest discover -s tests -t .` (about a minute). Run single
   modules while working and the full suite before the last commit. Tests assert outcomes and causes, one case per real
   branch, no wording checks.
-- Fusion cannot run in tests. Anything only Fusion can prove goes into `docs/hand-checks.md` as a short check: what to
+- Fusion cannot run in tests. Anything only Fusion can prove goes into `agent-docs/hand-checks.md` as a short check: what to
   model, written so a Fusion AI assistant can build it, then an indented "Export:" line with what to pick, tick and
   expect.
-- `docs/test-projects.md` lists typical printing projects. Export them to see how many kinds of projects the copy
+- `agent-docs/test-projects.md` lists typical printing projects. Export them to see how many kinds of projects the copy
   covers.
 
 ## Docs to keep current
 
-Every change updates, in the same round: `README.md`, `docs/developer-guide.md` (ASD-STE100 Simplified Technical
+Every change updates, in the same round: `README.md`, `agent-docs/developer-guide.md` (ASD-STE100 Simplified Technical
 English, never condensed: one sentence must not stand in for a concept that needs five), and the other files in
-`docs/` that the change touches (development, user guide, limits, capture format, gaps, hand checks). Tips in the
+`agent-docs/` that the change touches (development, user guide, limits, capture format, gaps, hand checks). Tips in the
 docs must match `capture_model/gap_hints.py`.
 
 ## Reports to the user

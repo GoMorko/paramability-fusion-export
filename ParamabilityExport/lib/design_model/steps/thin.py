@@ -213,7 +213,7 @@ JOIN_TOL = 1e-4
 # A line must be longer than this (mm) after its corners took their part of it.
 LENGTH_TOL = 1e-3
 # A corner turns by at most this: Fusion was seen to keep corners of 90 and 135 degrees sharp, one tip where the outer
-# sides meet. A sharper corner is left out until Fusion is seen to keep it sharp too (docs/hand-checks.md, T2-open).
+# sides meet. A sharper corner is left out until Fusion is seen to keep it sharp too (agent-docs/hand-checks.md, T2-open).
 # The tolerance allows for the rounding of the captured points.
 MAX_TURN_DEG = 135.0
 _TURN_TOL_DEG = 1e-3

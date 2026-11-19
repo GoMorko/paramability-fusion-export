@@ -1,4 +1,4 @@
-"""Coil features (adsk.fusion.CoilFeature) as plain dicts (docs/capture-format.md).
+"""Coil features (adsk.fusion.CoilFeature) as plain dicts (agent-docs/capture-format.md).
 
 Fusion's API gives an existing coil only the members every feature has: no type, section, hand, axis, base plane or
 operation. The reader therefore takes what Fusion does show:

@@ -4,7 +4,7 @@ the items that may place an occurrence. Pure: it reads capture dicts only.
 `params.geometry_links` works out where user parameters act and which links follow from that. It does not read the
 data of a step. This module reads it and hands plain values down:
 
-- `item_refs` and `capture_refs`: the measured references (`ref`, docs/capture-format.md) of the steps;
+- `item_refs` and `capture_refs`: the measured references (`ref`, agent-docs/capture-format.md) of the steps;
 - `places_item`, `moves_occurrence`, `places_occurrence` and `placing`: the items that may place an occurrence (a joint,
   another assembly item, a Move whose inputs are not known to be bodies or faces), and the user parameters that act on
   one;

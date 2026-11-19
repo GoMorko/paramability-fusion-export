@@ -12,7 +12,7 @@ window starts at once. A view that never got its window is dropped when the next
 the window cannot start, a short summary goes to a message box; the window and the box never both show.
 
 The dialog only shows text. It never closes or opens a design: Fusion does not support that inside a command event
-(see `docs/developer-guide.md`). A view with `reopen` has the steps to get the design back as it was saved in its first
+(see `agent-docs/developer-guide.md`). A view with `reopen` has the steps to get the design back as it was saved in its first
 section.
 """
 import adsk.core

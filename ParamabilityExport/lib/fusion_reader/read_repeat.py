@@ -1,4 +1,4 @@
-"""Rectangular, circular and path pattern and mirror features as plain dicts (docs/capture-format.md).
+"""Rectangular, circular and path pattern and mirror features as plain dicts (agent-docs/capture-format.md).
 
 The inputs and numbers are read with the timeline marker just before the item, and with them the faces of the original
 (`source_faces`). The pattern elements (the transform of every copy and the faces it made) exist only once the feature

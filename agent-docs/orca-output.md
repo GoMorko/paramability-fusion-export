@@ -47,7 +47,7 @@ The modules of `lib/orca_translate/`:
   step, its bodies, or a step in error in Fusion), and the step with the geometry of other components brought in. A
   left out round or chamfer is measured from the sets in the resolved step (`facts`). Each handler gets the resolved
   step (`handler(ctx, step)`) and reads its step only through it (see "Handlers read the resolved step" in
-  `docs/developer-guide.md`).
+  `agent-docs/developer-guide.md`).
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
   (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
@@ -185,7 +185,7 @@ A pipe with a round section is copied as a sweep of its circle (see "Pipes"). A 
 section is left out (cause `pipe`), with the tip to draw the section on a sketch and sweep it. Every coil is left out
 (cause `coilShape`, no tip, see "Coils"). A Box, Cylinder, Sphere or Torus step is left out as in the recipe
 (cause `primitive`), with the tip to draw the shape in a sketch and extrude or revolve it, since the Fusion API gives
-no place, direction or operation of these steps (`docs/feature-support.md`).
+no place, direction or operation of these steps (`agent-docs/feature-support.md`).
 
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
 the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that
@@ -322,7 +322,7 @@ not judged to meet material where Orca removes nothing.
   round or chamfer covers); when none meets the part, the step is left out (cause `missesPart`). An intersect after
   which Fusion lists another body (the pieces fell apart) is left out, as a cut is:
   the copy would keep all pieces in one body. Pieces that Fusion keeps in one body (it lists none) are one body in
-  Orca too. The hand check EX7 is in `docs/hand-checks.md`.
+  Orca too. The hand check EX7 is in `agent-docs/hand-checks.md`.
 - Limits (`extents.guard`, `limits.guard`): Orca variables have no ranges, and past some values Orca builds these
   extrudes wrong without an error. A "To" length below zero extrudes the other way, and a taper that shrinks a side
   of its outline to nothing builds a straight extrude. So for each variable a bound length, taper or outline size
@@ -1259,7 +1259,7 @@ the box and the volume the capture expects:
 Orca's Design tab has a Rib, but how it ends its wall was not compared with Fusion. So the copy builds each wall as
 the thin extrude of an open line it is (`rib_web.py`). The
 shared layer (`design_model/steps/rib_web.py`) finds the wall along each line, with the same rules as the
-Paramability output (see `docs/limits.md`): straight lines drawn one after the other, no draft, no fillet, the side
+Paramability output (see `agent-docs/limits.md`): straight lines drawn one after the other, no draft, no fillet, the side
 and the way from the faces Fusion made, and a part that grew by the whole wall. For a rib, the depth is the width of
 the wall in the sketch plane and the thickness its length along the sketch normal; for a web, the other way round.
 Each wall then goes to the thin extrude of an open line (see "Thin extrudes"): a straight line with the wall centred
@@ -1275,7 +1275,7 @@ not show, a wall flush with a side of the part, and a wall on a body whose volum
 `ribWeb`).
 
 A rib To Next that Fusion fills up to the part (a gusset in a corner) is the outline Fusion made
-(`design_model/steps/rib_fill.py`, with the same proof as the Paramability output, see `docs/developer-guide.md`). It
+(`design_model/steps/rib_fill.py`, with the same proof as the Paramability output, see `agent-docs/developer-guide.md`). It
 goes to the extrude as a sketch of lines that keeps its numbers (the outline is `measured`, so no sketch graph gives it
 formulas) and one Extrude of the thickness, symmetric or to one side, whose distance follows the thickness variable.
 The sizes read before the step are marked, and so is the thickness, since the faces the wall rests on were measured at
@@ -1299,7 +1299,7 @@ Orca has no Press Pull. The copy builds a Press Pull (Offset Faces) of one whole
 and the new radius (`press_round.py`). Fusion moves the face along its outward normal: the radius of a pin or a boss
 becomes the radius plus the distance, and the radius of a bore the radius less the distance. The shared layer decides
 whether the face can be moved (`design_model/steps/offset_round.py`), with the same rules as the Paramability output
-(see 3.20 in `docs/developer-guide.md`):
+(see 3.20 in `agent-docs/developer-guide.md`):
 
 - the face goes all the way round, and both its ends are flat faces square to its axis;
 - no face next to it moves in the same step;

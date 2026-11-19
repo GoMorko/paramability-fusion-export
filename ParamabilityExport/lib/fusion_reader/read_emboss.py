@@ -1,4 +1,4 @@
-"""Emboss features (adsk.fusion.EmbossFeature) as plain dicts (docs/capture-format.md).
+"""Emboss features (adsk.fusion.EmbossFeature) as plain dicts (agent-docs/capture-format.md).
 
 Before the item: the outlines it raises or sinks (sketch profiles, the outlines of sketch text, flat faces), the
 faces they land on (a lone face with its edges as `outline`), the depth and the shift and turn of the outline, and the size of the part. After the item: the

@@ -202,7 +202,7 @@ stops the tries does not cut the range of a size tried before it. A size whose n
 component gets its far ends last. `report.json` keeps the limit, whether it was
 reached and the sizes left out (`probe.time_limit`, `timing.probe.time_limit`).
 
-A try that reads a flat face a step uses as its outline (see `docs/limits.md`) leaves the timeline marker before that step
+A try that reads a flat face a step uses as its outline (see `agent-docs/limits.md`) leaves the timeline marker before that step
 until the values are put back, so Fusion rebuilds the steps after it once per try instead of twice. The marker
 is always back where the tries hold it before the next read and when the tries end.
 
@@ -308,7 +308,7 @@ message box when the export stopped), with the advice to use Undo, and `report.j
 
 ## When a step cannot be copied
 
-Some steps cannot be copied yet: a spiral or tapered coil, a sweep that twists and tapers, a pipe with a square or triangle section, an extrude with a taper on a face, and others (`docs/limits.md` says
+Some steps cannot be copied yet: a spiral or tapered coil, a sweep that twists and tapers, a pipe with a square or triangle section, an extrude with a taper on a face, and others (`agent-docs/limits.md` says
 which). What the add-in does then depends on the step.
 
 Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the
@@ -403,7 +403,7 @@ This export is experimental. It copies fewer kinds of steps than Export for Para
 left out, and the result window says why. The plate always shows the body as it is in Fusion.
 
 A report is saved beside the `.3mf` file, named `<name>.report.json`. It lists the steps that were copied, the steps
-that were left out and the reasons. `docs/orca-output.md` gives the full description.
+that were left out and the reasons. `agent-docs/orca-output.md` gives the full description.
 
 ## Several bodies in one file
 
@@ -461,5 +461,5 @@ file of the picked body, and moves on. All numbers in the file are in millimetre
 When the design holds more than the picked body, the add-in copies the picked body into a temporary component,
 exports that, and deletes it. Fusion puts the copy at the timeline marker, and the add-in deletes only what the copy
 added, so the steps after the marker stay as they are. This route is a choice,
-not a proven fact: section 3 of `docs/hand-tests.md` decides it. To ask the designer to hide or move other bodies instead, set `MULTI_BODY_ROUTE`
+not a proven fact: section 3 of `agent-docs/hand-tests.md` decides it. To ask the designer to hide or move other bodies instead, set `MULTI_BODY_ROUTE`
 in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`.

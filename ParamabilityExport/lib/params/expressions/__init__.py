@@ -5,7 +5,7 @@ Fusion writes `;` between function arguments, `^` for powers, `%` for the remain
 `test ? a : b`. A formula is a number over size names with lengths in mm and angles in degrees, so every unit is
 converted away: `2 mm` becomes `2`, `1 in` becomes `25.4` and `w / mm` becomes `w`. Units are tracked as a pair of
 powers (length, angle) only to convert numbers: Fusion already refuses expressions whose units do not fit, so a mix
-of units is written as it stands. docs/expressions.md has the full table.
+of units is written as it stands. agent-docs/expressions.md has the full table.
 
 Unverified in Fusion: a number without a unit added to a length is read in the design's default length unit, a value
 without a unit in an angle position is read in degrees, and `-a ^ b` binds as `-(a ^ b)`. The value check compares

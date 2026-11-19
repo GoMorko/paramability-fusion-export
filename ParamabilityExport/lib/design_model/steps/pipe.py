@@ -1,7 +1,7 @@
 """What a pipe step is, read from the capture for any destination: its section as an outline and where that outline
 sits. Pure.
 
-Fusion builds a pipe as a sweep of a drawn section (live check PI1 in `docs/hand-checks.md`):
+Fusion builds a pipe as a sweep of a drawn section (live check PI1 in `agent-docs/hand-checks.md`):
 - the section sits at the start of the path, square to the path and centred on it. The start is the start of the
   first curve of the path, run the way the path runs (`opposed` turns the curve round);
 - `section_size` is the diameter of a circle section (the side of a square, the height of a triangle);

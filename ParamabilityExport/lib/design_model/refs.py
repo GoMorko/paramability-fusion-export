@@ -1,7 +1,7 @@
 """Planes, faces, axes, directions and points of other components that a step uses: what is known about them.
 
 The reader records each such entity with its place in the part's coordinates and a measured reference (`ref`, see
-docs/capture-format.md "Measured references"). This module states the facts every destination needs:
+agent-docs/capture-format.md "Measured references"). This module states the facts every destination needs:
 
 - which records a step can use as its own (`bring_in`): a flat face or plane of another component that an extrude
   starts from or reaches to, and the flat face or plane a hole is placed on, get their place from `ref` and the mark

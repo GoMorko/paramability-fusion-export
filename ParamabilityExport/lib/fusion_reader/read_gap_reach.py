@@ -1,4 +1,4 @@
-"""Which step made the geometry a later step picks, read from Fusion (docs/capture-format.md, `reach`).
+"""Which step made the geometry a later step picks, read from Fusion (agent-docs/capture-format.md, `reach`).
 
 When steps are left out of the copy, a later round, chamfer or shell that picks edges or faces of the left out step's
 result would pick something else in the copy. For each later step that picks geometry, the marker is moved to just

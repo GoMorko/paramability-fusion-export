@@ -1,4 +1,4 @@
-"""Move features as plain dicts (docs/capture-format.md).
+"""Move features as plain dicts (agent-docs/capture-format.md).
 
 `inputEntities` holds only bodies or only faces. The bodies are read with the timeline marker just before the item
 (`points_before`) and again just after it (`points_after`, found by token), each as the first vertex points of every

@@ -1,5 +1,5 @@
 """Whether the outlines of an extrude, moved along their sketch normal, all meet a curved face it ends on
-(`outline_hits_face`, docs/capture-format.md, `outline_hits_face`).
+(`outline_hits_face`, agent-docs/capture-format.md, `outline_hits_face`).
 
 With Chain Faces off, Fusion ends such an extrude on the surface of the face, extended past the face's edges where an
 outline reaches past them. The copy takes the face as it is, so it is copied only when every outline lands on the

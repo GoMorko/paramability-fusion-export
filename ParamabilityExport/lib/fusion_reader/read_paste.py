@@ -1,4 +1,4 @@
-"""Copy Paste Body features as plain dicts (docs/capture-format.md).
+"""Copy Paste Body features as plain dicts (agent-docs/capture-format.md).
 
 The bodies that were copied (`sourceBody`, a collection) are read with the timeline marker just before the item: Fusion
 needs it there, and some can be gone later. The bodies the paste made are read with the marker just after it. All come

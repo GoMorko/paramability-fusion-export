@@ -9,7 +9,7 @@ The guide is for a developer who knows Fusion as a user and knows Python. The de
 goal is that the developer can find and fix a problem alone.
 
 The guide describes the code as it is on `main` of the add-in repository, version 0.14.6.
-The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
+The layout of the code is in section 2. The short rules of the layout are in `agent-docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:
 
@@ -47,10 +47,10 @@ Where to find the code:
 | The add-in | `<add-in repo>/ParamabilityExport/` (the folder you load in Fusion) |
 | The add-in tests | `<add-in repo>/tests/` |
 | The add-in scripts | `<add-in repo>/scripts/`: `fixture_geometry.py` (box and volume of a capture fixture), `formula_census.py` (counts how the formulas of exports translate, see 4.5) |
-| The add-in docs | `README.md`, `docs/capture-format.md`, `docs/recipe-gaps.md`, `docs/hand-checks.md` (the short check before a release), `docs/hand-tests.md` (every hand test), `docs/adding-a-step-type.md`, `docs/expressions.md`, `docs/test-projects.md` (fifteen typical printing projects to build and export, to see how many kinds of projects the copy covers), `docs/user-guide.md` and `docs/limits.md` (what a user sees and what does not copy), `docs/development.md` (code layout and tests), `docs/publishing.md` |
+| The add-in docs | `README.md`, `agent-docs/capture-format.md`, `agent-docs/recipe-gaps.md`, `agent-docs/hand-checks.md` (the short check before a release), `agent-docs/hand-tests.md` (every hand test), `agent-docs/adding-a-step-type.md`, `agent-docs/expressions.md`, `agent-docs/test-projects.md` (fifteen typical printing projects to build and export, to see how many kinds of projects the copy covers), `agent-docs/user-guide.md` and `agent-docs/limits.md` (what a user sees and what does not copy), `agent-docs/development.md` (code layout and tests), `agent-docs/publishing.md` |
 
 The docs in the add-in repository are long and exact. This guide tells the story in order. When you need every
-detail of one field, read `docs/capture-format.md`. When the docs and this guide do not agree, the code is right.
+detail of one field, read `agent-docs/capture-format.md`. When the docs and this guide do not agree, the code is right.
 
 The guide has five parts:
 
@@ -73,7 +73,7 @@ The add-in has three buttons in the Utilities tab, in the panel "Paramability":
   values back (`commands/ExportSizeChoices/`, `lib/design_edit/runner.py`).
 - "Export for Orca (experimental)" saves one body as an OrcaSlicer 2.5 project with Design tab features. It uses the
   same reader, the same shared design layer and the same `PutBack`, but its own translator (`lib/orca_translate/`).
-  `docs/orca-output.md` tells how it works.
+  `agent-docs/orca-output.md` tells how it works.
 
 "Export for Paramability" does these stages, in this order:
 
@@ -372,7 +372,7 @@ names another parameter stays `derived`.
 
 The parser reads a unit word right after a division of two number literals as the unit of the whole fraction. So
 `3/8 in` is three eighths of an inch (`_fraction_unit` in `params/expressions/reading.py`). In every other division the
-unit word binds to its divisor only: `w / 2 mm` is `w / (2 mm)`. `docs/expressions.md` has the full grammar.
+unit word binds to its divisor only: `w / 2 mm` is `w / (2 mm)`. `agent-docs/expressions.md` has the full grammar.
 
 ### 1.4 Body scope
 
@@ -422,7 +422,7 @@ dicts, lists, strings, numbers, booleans and null. The translator reads only the
 is why the translator can run in tests and on a saved `report.json`.
 
 `read_capture(design, body)` in `lib/fusion_reader/capture.py` makes it. The format is capture number 3. The full
-format is in `docs/capture-format.md`, sections 1 to 5.
+format is in `agent-docs/capture-format.md`, sections 1 to 5.
 
 #### Units and frames
 
@@ -817,7 +817,7 @@ be one such read per size. The number of rebuilds per row does not change.
 Tests: `tests/test_far_phase.py` (the same rows for a clean export, one part and a group; the order of a size that
 warned outside the part and of a size that drives a step of another component; the favourites first in that order;
 the share of the nearer rows) and `UnfinishedRangeTest` in `tests/test_geometry_links.py` (a later size that breaks
-the design after the halving of the first size, and a time limit between the far rows of two sizes). Hand check FS1 in `docs/hand-checks.md` tests this in Fusion.
+the design after the halving of the first size, and a time limit between the far rows of two sizes). Hand check FS1 in `agent-docs/hand-checks.md` tests this in Fusion.
 
 #### The progress window of the tries
 
@@ -1096,7 +1096,7 @@ limit after the end clears `others_full`). These cases stop all tries: undo data
 part that reads otherwise (its body or a followed sketch); a step that a part is built from; a step of another part
 of the export; a step without a position, or with a position that does not match an item of that name; a step that
 the tries need. Hand check OC1
-in `docs/hand-checks.md` tests this in Fusion.
+in `agent-docs/hand-checks.md` tests this in Fusion.
 
 #### What a state holds
 
@@ -1253,7 +1253,7 @@ What the person and the report see:
   (`messages.time_note`). The step of the progress window of the port has a fourth argument for this line:
   `step(index, total, name, note)`.
 
-Hand check TL1 in `docs/hand-checks.md` tests this in Fusion.
+Hand check TL1 in `agent-docs/hand-checks.md` tests this in Fusion.
 
 #### When the tries end before a range end is found
 
@@ -1431,7 +1431,7 @@ with the reason of the sketch or the reference.
 
 Tests: `tests/test_shared_sizes.py` (a shared size that changes the part through its own values is not in
 `body_moved`; a shared size that no value of the part reads stays in it; each point above that is not true keeps the
-mark). Hand check SZ1 in `docs/hand-checks.md` tests this in Fusion.
+mark). Hand check SZ1 in `agent-docs/hand-checks.md` tests this in Fusion.
 
 ### 1.9 The final translation
 
@@ -1471,7 +1471,7 @@ timeline order.
 
 Before the walk starts, it reads the design from the shared layer: `design.read` in `lib/design_model/design.py`
 gives one resolved step (`ResolvedStep`) for each item. The walk of the Orca output reads the same steps (see
-`docs/orca-output.md`). A resolved step is a set of facts. It does not tell the walk to copy or to stop. It holds:
+`agent-docs/orca-output.md`). A resolved step is a set of facts. It does not tell the walk to copy or to stop. It holds:
 
 - the item as the walk reads it. Before the split that made the exported body, the item has the measures of the body
   that was split (`roles.seen_before_split`);
@@ -1679,7 +1679,7 @@ the plain name of the kind in the refusal "A coil cannot be part of a tool body 
 selects the hint of that refusal (`coilTool` or `threadTool`). `step_walk.tool_refusal` makes the refusal, and the code of
 a Combine and of a pattern of bodies calls it before it writes a tool step (see 3.5).
 
-`docs/adding-a-step-type.md` explains how to add a new type: a table entry, a reader in `READERS` and a handler in
+`agent-docs/adding-a-step-type.md` explains how to add a new type: a table entry, a reader in `READERS` and a handler in
 `translator/handlers.py`. Read it before you add a handler.
 
 #### 1.9.3 Gaps, stops and the cap of 256
@@ -1749,7 +1749,7 @@ float apart from the copy." It decides this from its own model of the copied par
 On any doubt the join is kept: a step of the model whose box cannot be told, a step that adds material in a way the
 check does not model (a revolve, a loft, an extrude up to a face), a thin join, or more than 20000 sample points. The
 gap of a left-out join lists in `dependsOn` the gaps it sits on (`floating.sat_on`). Its cause is `afterGap`, so its
-hint says to fix the step it builds on first. `docs/recipe-gaps.md` gives the
+hint says to fix the step it builds on first. `agent-docs/recipe-gaps.md` gives the
 order in which those gaps are picked.
 
 #### Causes and hints
@@ -1937,7 +1937,7 @@ value that a parameter may drive. It does this:
 
 1. It looks for `data.params[path]`. Without it, the value is a plain number.
 2. It translates the Fusion expression into a recipe formula over the sizes (`SizeTable.translate`). The formula
-   grammar is described in `docs/expressions.md`.
+   grammar is described in `agent-docs/expressions.md`.
 3. It checks the formula at the current values (`params/expressions/evaluation.py`: `evaluate` for the text of a
    formula, `evaluate_tree` for a parsed tree). It must give the number Fusion measured within 1e-6. Else the sizes
    are doubted: "its formula in Extrude2 does not match what Fusion measured".
@@ -2068,7 +2068,7 @@ The recipe format is published by the Paramability app as JSON schemas (copies a
 
 #### gaps.json
 
-Only when steps were left out. One record per gap. `docs/recipe-gaps.md` describes every field.
+Only when steps were left out. One record per gap. `agent-docs/recipe-gaps.md` describes every field.
 
 The file has a version. `package/gaps_file.py` always writes version 3. Version 2 allowed more gaps (256 instead of
 16). Version 3 added `finishing`. An app that does not know version 3 refuses the gaps file, and then opens the part
@@ -2330,7 +2330,7 @@ end check (`export_common.settle_steps`) gives the outcome its health, and the r
 What only a live check can prove: that Fusion undoes the whole transaction when `executeFailed` is set after a long
 export, and how long that takes; that the first event decides, and a later event does not undo the abort; which text
 Fusion shows; that the result window still opens after an abort; and that with "Lighter on memory" on Fusion shows no abort and the design stays as the put back left it.
-The hand check RB1 in `docs/hand-checks.md` covers the first four.
+The hand check RB1 in `agent-docs/hand-checks.md` covers the first four.
 
 The tests are in `tests/test_rollback.py`.
 
@@ -2409,7 +2409,7 @@ Then:
 The window has no button and no input, so the dialog never starts anything. `result_dialog.on_terminated` only opens
 the result window after the export command has ended (see 1.11).
 
-What only a live check can prove (hand check RO1 in `docs/hand-checks.md`): that the section shows first and open with
+What only a live check can prove (hand check RO1 in `agent-docs/hand-checks.md`): that the section shows first and open with
 the three steps and no button, and that Fusion stays stable when the person follows the steps.
 
 The tests are in `tests/test_reopen.py`. The groups, the summary and the moment the window opens (fakes with a
@@ -2481,7 +2481,7 @@ The check, step by step:
    `health.body_unchecked` is true. This matters only after tries that stopped on a damaged design: the end check must
    then compare the sketches and the body before the design counts as back.
 
-The hand tests TH1 to TH6 in `docs/hand-tests.md` check this in Fusion: a fillet that only just fits, a sketch with
+The hand tests TH1 to TH6 in `agent-docs/hand-tests.md` check this in Fusion: a fillet that only just fits, a sketch with
 two solutions, a chamfer that meets a fillet, a step that already shows a warning, a cancelled and a failed export,
 and the faster tries with a second component.
 
@@ -2519,7 +2519,7 @@ and the box about steps that stayed off, say to close the design without saving 
 the export (`health.NO_UNDO_ADVICE`).
 
 `report.json` keeps the record in `timing.undo` (`on`, `applied`, `steps`, `error`). The hand test UM1 in
-`docs/hand-tests.md` checks the memory in Fusion.
+`agent-docs/hand-tests.md` checks the memory in Fusion.
 
 ### 1.12 What the app does with the file
 
@@ -2809,7 +2809,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   links tell which user parameters can move the part through the geometry of another component. That module is in
   `params`, below the shared layer, and it does not read the data of a step. This module reads the data and gives
   plain values to it:
-  - `item_refs(item)` gives the measured references of one step (`ref`, see docs/capture-format.md). A step that is
+  - `item_refs(item)` gives the measured references of one step (`ref`, see agent-docs/capture-format.md). A step that is
     suppressed, that is in another component or that the reader could not read has none. `capture_refs(capture,
     items)` gives the measured references of all steps, or of the steps in `items`.
   - `places_item(item)` is true for an item that can place an occurrence: an assembly item, or a Move whose inputs are
@@ -3052,7 +3052,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - `Part` and `merge` put the edges of a step in parts of one size. A part has a size, a direction (the face of the
     first distance), the second measures and its edges. `merge` joins the parts that are equal and keeps the order of
     the first appearance. The recipe output writes one step for each part ("chamfers of different sizes are applied
-    one after the other"). The Orca output makes one round or chamfer for each part (see `docs/orca-output.md`).
+    one after the other"). The Orca output makes one round or chamfer for each part (see `agent-docs/orca-output.md`).
   The picks stay in the outputs: the recipe names edges by points that follow the sizes (`faces/`), the Orca output by
   a group of faces of the part (`finish_body`) or by the corners of an outline (`outline_rounds`).
 - `words.py`: the sentences that both outputs give for the same fact: the noun of a reference, "may move with it", the
@@ -3372,7 +3372,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     Such a reference is the place of the tool, not geometry that a step uses.
   - `sketch_by_name_only(item)`: an outline of the item gives the name of its sketch but no token. In a tool of
     another component, such a sketch can have the same name as a sketch of the part.
-  What each output does with these facts is in 3.5 (the recipe) and in `docs/orca-output.md` (the Orca output).
+  What each output does with these facts is in 3.5 (the recipe) and in `agent-docs/orca-output.md` (the Orca output).
 - `dimension_sizes.py`: the dimensions of a sketch graph as formulas of the sizes (`dimension_formulas`), the size
   settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
   setting (`size_values`, `size_env`, which takes overrides by the Fusion name of a size). The shadow check of the probe and the Orca output both read it.
@@ -4022,7 +4022,7 @@ Example. A half cylinder has the sizes `Height` (40 mm) and `Diameter` (60 mm). 
 axis to `Diameter / 2`, and from the floor to `Height`. It turns 180 degrees about the z axis, and the angle is a
 number. `Fillet1` rounds the edge where the end face in the sketch plane meets the round side, at the height 20 mm.
 The edge point lies on the side line, at one half of the line. At `Height` 50 and `Diameter` 80 the point is at
-x = 40 mm and z = 25 mm. Hand check RV10 in `docs/hand-checks.md` checks the end faces in Fusion.
+x = 40 mm and z = 25 mm. Hand check RV10 in `agent-docs/hand-checks.md` checks the end faces in Fusion.
 
 The placer does not place a point in these cases:
 
@@ -4296,7 +4296,7 @@ The handlers (`finishes/finish.py`) use `finishes/set_split.py`:
   ..., which is missing from the copy"). Its copies would lack the set that is left out.
 
 Captures of add-in 0.14.3 or older have no `box` and no `turn_deg`, so their steps stay in one piece. The hand check
-MP1 in `docs/hand-checks.md` checks the result in Fusion and in the app.
+MP1 in `agent-docs/hand-checks.md` checks the result in Fusion and in the app.
 
 #### A set whose edges Fusion does not give
 
@@ -4666,7 +4666,7 @@ that meets such a step passes it to `ToolStop.through`. The recipe walk keeps it
 beside `refusal_cause`. The cause of the inner step goes on as before, so the hint stays right. The handlers of the Orca output name the body that they work on with
 `Context.body_words`. On the part, this is "the part". While the Orca output builds a tool body, this is "the tool
 body Body3". So the reason of a round, a chamfer or a cut in a tool body names the tool body and not the part (see
-`docs/orca-output.md`).
+`agent-docs/orca-output.md`).
 
 **A gap inside a tool body.** The walk of a tool can leave a step out (a gap), as the walk of the part can. The
 Combine then looks at each gap of the tool (`tool_walk.unfinished`, `tool_walk.shaping_gap`):
@@ -5001,7 +5001,7 @@ the path length. The app builds a sharp corner of a sweep as a mitre too (`BRepB
 of a sweep apply: corners between lines in one plane, at most 160 degrees, with room for the mitres.
 
 The Orca output copies a pipe with a round section (`orca_translate/pipes.py`, see "Pipes" in
-`docs/orca-output.md`). The handler reads the same facts of `design_model/steps/pipe.py`: `section_problem`,
+`agent-docs/orca-output.md`). The handler reads the same facts of `design_model/steps/pipe.py`: `section_problem`,
 `start_of` and `section_profile`. It does these steps:
 
 1. It makes the data of a sweep with the section as its outline, as the recipe handler does. It gives these data to
@@ -5192,7 +5192,7 @@ flag is true (1.10).
   it (the wall of a hole);
 - after the step, `made_span`: the same span for the faces that the thread made.
 
-`docs/capture-format.md` has the exact fields. Every member is read on its own. A member that cannot be read is null, and
+`agent-docs/capture-format.md` has the exact fields. Every member is read on its own. A member that cannot be read is null, and
 the translator then leaves the thread out. It never guesses. Fusion keeps lengths in cm, and they leave the reader in mm.
 `threadAngle` is in degrees already.
 
@@ -5475,7 +5475,7 @@ and the `coil` kind has no repeat rule.
 #### Coils in the Orca output
 
 The Orca output leaves every coil out (`orca_translate/coils.py`, cause `coilShape`, see "Coils" in
-`docs/orca-output.md`). The reason is a fact of the source of Orca 2.5.1, not of the design:
+`agent-docs/orca-output.md`). The reason is a fact of the source of Orca 2.5.1, not of the design:
 
 1. Orca has a Helix feature. A Sweep can use the helix as its path.
 2. The Sweep builds its shape with `BRepOffsetAPI_MakePipe`. The frame that carries the section turns about the path,
@@ -5972,7 +5972,7 @@ The translator writes the step in `translator/extrude/thin_line.py`. `extrude/st
 the extrude is thin and its outline is a `Path`. The decisions that do not write the recipe are in the shared layer,
 `design_model/steps/thin.py`: `line_of`, `line_problem`, `band`, `fits` and `line_side` (the side of the wall). They
 give a `Problem` when they cannot read the wall. The translator changes the `Problem` to a refusal. The Orca output
-uses the same decisions (`orca_translate/thin.py`, see "Thin extrudes" in `docs/orca-output.md`). It uses
+uses the same decisions (`orca_translate/thin.py`, see "Thin extrudes" in `agent-docs/orca-output.md`). It uses
 `closed_side` and `area_fits` for a closed outline too. Then:
 
 1. `line_of` reads the line. The path must be one open chain of sketch lines and arcs of one sketch. Each piece
@@ -6749,10 +6749,10 @@ The shell does not place a point in these cases. It claims the point, so the siz
   An extrude gives its material (`material_at`).
 - A step before the shell places the point, or claims it.
 
-Hand check RV9 in `docs/hand-checks.md` checks these picks in Fusion.
+Hand check RV9 in `agent-docs/hand-checks.md` checks these picks in Fusion.
 
 An outward shell, a closed hollow and a rounded shell cannot be checked in Fusion's tests. They have hand checks in
-`docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).
+`agent-docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).
 
 ### 3.20 How an offset of faces (press pull) is translated
 
@@ -6929,7 +6929,7 @@ whose transforms are wrong, as in Fusion 2706, is left out, because the way of t
 design again to get the faces.
 
 Nobody has measured the transforms of rectangular, path and body patterns against their faces in Fusion yet. Hand
-checks PE1, PE2 and PE3 in `docs/hand-checks.md` do that. Until then, the checks above guard these patterns.
+checks PE1, PE2 and PE3 in `agent-docs/hand-checks.md` do that. Until then, the checks above guard these patterns.
 
 ## 4. Debugging
 
@@ -7101,7 +7101,7 @@ that Fusion could not build that value.
 
 #### timing
 
-`timing` says where the export spent its time (`lib/timing/`, `docs/capture-format.md`, "Timing"). The numbers are
+`timing` says where the export spent its time (`lib/timing/`, `agent-docs/capture-format.md`, "Timing"). The numbers are
 seconds, rounded to 0.01. A failure of the timing code drops the block and changes nothing else.
 
 ```json
@@ -7259,7 +7259,7 @@ Tests that help most when you debug:
 
 Two more tools help to measure, outside the unit tests:
 
-- `docs/test-projects.md` is a set of fifteen small, typical printing projects: an electronics box with a lid, a threaded
+- `agent-docs/test-projects.md` is a set of fifteen small, typical printing projects: an electronics box with a lid, a threaded
   jar, a hinge, a cable clip, a gear, a phone stand, a name tag, a spring, a bracket, a lamp shade and a mug, a plant pot,
   a drawer organizer, a pen cup with a name, a lid with a centred label, and a plate with a tuned hole. Build each one in
   Fusion (a Fusion AI assistant can do this from the first line of its text), export it as the "Export:" line says, start
@@ -7326,12 +7326,12 @@ Example: you want to check what the walk does with a step type it does not copy,
 
 No tool runs Fusion. The Fusion side is checked by hand. There are two pages:
 
-- `docs/hand-checks.md` is the short page for each release. Export your usual projects and compare them with the last
+- `agent-docs/hand-checks.md` is the short page for each release. Export your usual projects and compare them with the last
   release ("same or better"). Then do the 10-second check in Fusion after each export: the marker is back, no step is
   newly yellow or red, the sketches look the same, and the parameters show their formulas and old values. It also has
   a short list of small test models for cases your own projects do not cover, and the first fields of `report.json`
   to open when something looks wrong.
-- `docs/hand-tests.md` lists every hand test, with past results. Use it only when `hand-checks.md` points to a test.
+- `agent-docs/hand-tests.md` lists every hand test, with past results. Use it only when `hand-checks.md` points to a test.
   Its sections "Fusion calls to watch" and "Capture reader calls to watch (...)" list every Fusion call that was
   written from the API reference and not yet confirmed on a real design. When you add a Fusion call, add it there too.
 
@@ -7470,7 +7470,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
 3. Read `note` (the reason). Grep a piece of it (4.3) to find the handler branch that refused it.
 4. Look at the step's capture data: `capture.items[]` with the same `index`. Check that the reader gave what the
    handler needs. A `null` or `"other"` value means Fusion did not answer: the reader could not read a member. Compare
-   with `docs/capture-format.md`, section 5, for that type.
+   with `agent-docs/capture-format.md`, section 5, for that type.
 5. For `picks`: look at `reach`. Is `read` true? Does `makers["<index>"]` list the gap? If `read` is false, the reach
    read failed (`reach.error`, the log), and every later picking step is left out on the safe side. If the gap is in
    `makers`, the pick is real: fix the first gap.
@@ -7480,7 +7480,7 @@ to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your v
    When the advice is useful, give the refusal a cause and add a hint to `gap_hints.py` (and a row to the app's page
    "Steps that do not copy yet").
 7. Replay the capture (4.4) with your fix. Write a test with a small capture of the case (4.6).
-8. If the type has no handler at all, read `docs/adding-a-step-type.md`.
+8. If the type has no handler at all, read `agent-docs/adding-a-step-type.md`.
 
 #### 4.10.2 "A size is marked" (may give unexpected results)
 
@@ -7802,7 +7802,7 @@ the named test after each.
 
 #### A new step type
 
-Follow `docs/adding-a-step-type.md` in the add-in repository. The short version:
+Follow `agent-docs/adding-a-step-type.md` in the add-in repository. The short version:
 
 1. Add one entry to the step kind table, `lib/capture_model/step_kinds.py`. A step that writes a new recipe kind also
    needs a `RecipeKind` entry in the same file. Set `finishing` when a missing step of the type only finishes surfaces

@@ -131,7 +131,7 @@ class Setup:
                     if parent in vectors and child in vectors and g.curves[child].kind == "line":
                         self.dirs.join(parent, child)
         if self.distance_parallel:
-            # Fusion keeps the two lines of a distance dimension parallel (hand test OR18 in docs/hand-tests.md).
+            # Fusion keeps the two lines of a distance dimension parallel (hand test OR18 in agent-docs/hand-tests.md).
             for _, shape in self.used_dims:
                 if shape.kind == "line_line" and shape.line in vectors and shape.other in vectors:
                     if not self.dirs.same_class(shape.line, shape.other):

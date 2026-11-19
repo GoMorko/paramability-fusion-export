@@ -1,4 +1,4 @@
-"""Tokens the capture records so the size probe can find sketch geometry again (docs/capture-format.md)."""
+"""Tokens the capture records so the size probe can find sketch geometry again (agent-docs/capture-format.md)."""
 import math
 import unittest
 from types import SimpleNamespace

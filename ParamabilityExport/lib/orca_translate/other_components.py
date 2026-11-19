@@ -17,7 +17,7 @@ part's coordinates:
 from ..capture_model import step_kinds
 from ..design_model import refs, step_links, tool_chains
 
-# What a step does with a reference, by its slot (`docs/capture-format.md`, "Measured references").
+# What a step does with a reference, by its slot (`agent-docs/capture-format.md`, "Measured references").
 _VERBS = {"start": "starts from", "side_one": "reaches to", "side_two": "reaches to",
           "direction_one": "spreads copies along", "direction_two": "spreads copies along", "positions": "is placed on"}
 

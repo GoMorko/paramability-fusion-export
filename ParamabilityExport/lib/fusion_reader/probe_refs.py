@@ -1,4 +1,4 @@
-"""One probe state of the measured references (docs/capture-format.md, "Measured references" and "Probe states").
+"""One probe state of the measured references (agent-docs/capture-format.md, "Measured references" and "Probe states").
 
 A reference is a plane, axis, direction or point of another component that a step uses. It is found again by the
 token of its native entity, shown through the occurrence it was captured through as that occurrence sits now, and

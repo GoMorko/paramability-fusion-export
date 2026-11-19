@@ -1,4 +1,4 @@
-"""A flat face of a body as an outline record (docs/capture-format.md, section 4).
+"""A flat face of a body as an outline record (agent-docs/capture-format.md, section 4).
 
 The face's plane becomes the record's frame: z is the outward normal, x the plane's u direction. Its loops are the
 face's edges as curves in that plane, read like sketch curves, in the target component's coordinates. `made_by` names

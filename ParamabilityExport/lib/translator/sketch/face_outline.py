@@ -1,6 +1,6 @@
 """A flat face of the part used as an extrude outline.
 
-The reader gives such a face as an outline record (docs/capture-format.md, section 4): its plane as a frame whose z is
+The reader gives such a face as an outline record (agent-docs/capture-format.md, section 4): its plane as a frame whose z is
 the outward normal, its loops in that plane and, when it knows, the earlier extrude whose faces hold it (`made_by`).
 `prepare` turns it into the outline the extrude handler writes, in one of three ways:
 

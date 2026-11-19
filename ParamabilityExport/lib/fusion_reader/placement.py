@@ -139,7 +139,7 @@ def _failed(path, reason, uses, linked):
 
 
 def read_placement(body, root, component=None):
-    """The placement record of a picked body (docs/capture-format.md), or None for a body of the root itself.
+    """The placement record of a picked body (agent-docs/capture-format.md), or None for a body of the root itself.
 
     `component` is the body's native component. A failure is not raised: the record then holds `error` and no
     `frame`, and the export lands a fixed shape.
@@ -342,7 +342,7 @@ def _back_move(entity, ctx):
 
 
 def ref_record(entity, ctx, slot, geometry=None):
-    """The measured reference to an entity of another component (docs/capture-format.md "Measured references").
+    """The measured reference to an entity of another component (agent-docs/capture-format.md "Measured references").
 
     `slot` says where the step uses it (`start`, `side_one`, `side_two`, `plane`, `axis`, `positions.<n>`). The
     record names the entity the way the sketch scan can find it again (`token` of the native entity, its `type`, the
