@@ -1272,3 +1272,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Paramability and Export for Orca with all parameters ticked: each of the four steps is left out with the reason
     that Fusion does not tell add-ins where it sits or how it joins the part, and the tip to draw the shape in a
     sketch and extrude or revolve it; `orca.left_out[]` has the cause `primitive`. Afterwards the design is as before.
+
+102. EX7, an intersect of two separate outlines, for Export for Orca. On the XY plane draw a 40 x 40 mm rectangle
+    centred on the origin and extrude it 10 mm up. On the same plane draw two circles of 16 mm diameter, centred at
+    (-10, 0) and (10, 0), and extrude both profiles as an intersect, All, through the body. Note in the Text Commands
+    window whether Fusion lists one body or two after the step.
+    Export: Export for Orca, tick no size. When Fusion lists one body, the step is copied as a tool body of two
+    extrudes and a Boolean Intersect, and the copy is two discs 16 mm across, 10 high, in one body (2010.6 mm3 each).
+    When Fusion lists two bodies, the step is left out because it splits the part. Afterwards the design is as before.

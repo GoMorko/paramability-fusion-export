@@ -102,7 +102,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | An outline that is one circle | simple circle | `radius` |
 | Any other outline of lines, arcs, circles, full ellipses and elliptical arcs (centre, major and minor radius, major axis direction, and for an arc two angles, worked out from the exact curve Fusion gives and written only when its ends come out as measured to 0.000001 mm), and splines (a spline whose exact shape Fusion gives, see "Sweeps, lofts and splines"), and an outline the cuts cannot build | sketch entities at their current values | no |
 | The first body's outline with holes | the outer outline, then a cut through all per hole, so each stays a simple rectangle or circle where it is one; a circle hole whose centre moves, in a one sided extrude without taper, is an Orca Hole through all instead (see "Outlines built from plane cuts") | as above; the drilled hole: `hole_x`, `hole_y`, `hole_diameter` |
-| Extrude: one side, symmetric, two sides; new body, join, cut, intersect; a distance, or through all for a cut or intersect; a start offset | Extrude | `distance`, `distance2` |
+| Extrude: one side, symmetric, two sides; new body, join, cut, intersect; a distance, or through all for a cut or intersect; a start offset | Extrude; an intersect of several outlines, or of the two tapered halves of a two sided extrude, is a tool body of Extrudes (the first New, the others Add) and one Boolean Intersect | `distance`, `distance2` |
 | Extrude side "To" a flat face or plane square to the extrude, with an offset | the measured distance (Blind, or a side of Two sides) | `distance` when the plane follows: an offset plane, or an end face of a copied extrude (see "Extents") |
 | Extrude "From" a flat face or plane square to the extrude, at an offset from it or not | the sketch plane moved to that plane, and by the offset (the way the measured start face shows) | no |
 | Thin extrude of one rectangle or one circle, one way or symmetric, no taper (see "Thin extrudes") | the outer outline as a new body less the inner outline cut through all; on a part, as a tool body and a Boolean with the step's operation | `width`, `height`, `radius` (the drawn size plus or minus the thickness), `distance` |
@@ -200,7 +200,8 @@ Orca stops the whole rebuild on a cut or hole that removes nothing, so the copy 
 against the part it has built so far (`orca_translate/solid.py`: every copied extrude and hole as an outline swept
 along its normal, tested along lines through the tool's outline). A cut or intersect that meets no material is left
 out ("does not meet the part as the Orca copy builds it", often after a left out step); of a step with several
-outlines or hole points, only those that miss are left out, with a note. The shape also holds revolves (an outline
+outlines or hole points, only those that miss are left out, with a note (for an intersect this is exact: an outline
+that meets nothing keeps nothing). The shape also holds revolves (an outline
 turned about its axis, sampled along each line), tapered extrudes (the outline moved in or out with the height, read
 along each line in steps no longer than the distance to the nearest wall, so a thin slot or a thin wall is not
 stepped over; only a part of a line shorter than 1/4096 of its reach through the shape, next to a wall, can be
@@ -308,9 +309,18 @@ not judged to meet material where Orca removes nothing.
   corners when the outline shrinks, inward corners when it grows (a growing polygon is always left out). Arcs must
   meet their neighbours smoothly (a slot, a rounded rectangle). Every line and arc must keep at least 0.05 mm at the
   far end. Holes in the outline (Orca stops on them), a taper of 80 degrees or more, a taper on a through all
-  extrude and a tapered intersect to both sides are left out. Causes: `taperShape`, `taperExtent`.
+  extrude are left out. Causes: `taperShape`, `taperExtent`.
 - A taper angle follows its size only for an outline without sharp corners: at the other sign Orca would round them.
   Otherwise it keeps its number and the size is marked.
+- Intersect (`steps.extrude`): Fusion keeps the part inside the extruded shape, which for several outlines (or the two
+  tapered halves of a two sided extrude) is the union of their extrudes. One intersect after the other would keep only
+  what all of them share, so the extrudes are joined in a tool body (the first New, the others Add) and one Boolean
+  Intersect applies it, as for a revolve of several outlines. One outline, also with holes, is one extrude with mode
+  Intersect (Orca's `BRepAlgoAPI_Common` of the part with the extruded face). An outline that meets no material of the
+  part is left out of the tool, which is exact for an intersect; when none meets it, the step is left out (cause
+  `missesPart`). An intersect after which Fusion lists another body (the pieces fell apart) is left out, as a cut is:
+  the copy would keep all pieces in one body. Pieces that Fusion keeps in one body (it lists none) are one body in
+  Orca too. The hand check EX7 is in `docs/hand-checks.md`.
 - Limits (`extents.guard`, `limits.guard`): Orca variables have no ranges, and past some values Orca builds these
   extrudes wrong without an error. A "To" length below zero extrudes the other way, and a taper that shrinks a side
   of its outline to nothing builds a straight extrude. So for each variable a bound length, taper or outline size
@@ -1539,6 +1549,14 @@ sides of the axis, into that rod: Orca gets one cut, 4320 pi - 252 pi = 4068 pi 
 `symmetric_ring` (the ring without the hole, 45 degrees to each side, the angle the variable `half_deg`: 750 pi =
 2356.19, then `--set half_deg=90` 1500 pi = 4712.39 and `--set half_deg=200` the closed ring 3000 pi = 9424.78). All four built with these volumes in OrcaSlicer 2.5.1 on
 2026-11-18, and `symmetric_ring` followed `half_deg`.
+
+Extrude intersects with several outlines have captures in `tests/orca_intersects.py`. Save one with
+`python3 -m tests.orca_intersects <name> <file>` and give the file to `write`. A 40 x 40 x 10 block is intersected with
+an extrude through all. All four built with these boxes and volumes in OrcaSlicer 2.5.1 on 2026-11-19, as one body:
+`two_circles` (two separate circles of diameter `hole_d` 16 at x -10 and 10: 1280 pi = 4021.2 mm3, box 36 x 16 x 10,
+then `--set hole_d=12` 720 pi = 2261.9), `ring` (outer radius 15, inner 5: 2000 pi = 6283.2), `ring_and_disc` (a ring
+of radius 15 and 8 and a disc of radius 4 in its hole, two outlines: 1770 pi = 5560.6) and `tapered_both_sides` (a disc
+of radius 15 extruded 5 to each side narrowing by 10 degrees: 6661.3).
 
 A hole up to a plane and extrudes that start at a distance from a face have captures in `tests/orca_to_faces.py`. Save
 one with `python3 -m tests.orca_to_faces <name> <file>` and give the file to `write`. The volumes are exact. All three

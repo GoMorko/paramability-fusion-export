@@ -11,7 +11,7 @@ from tests.orca_extents import B1, UP, capture, extrude, profile, side, sketch_i
 from tests.probe_helpers import user
 from tests.sketch_solve_helpers import L, P, Sketch
 
-from lib.orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
+from lib.orca_recipe.enums import BooleanMode, EntityType, ExtrudeEnd, FeatureType, SketchShape
 from lib.orca_translate import halfplanes
 from lib.orca_translate.formulas import orca_value, variable_values
 
@@ -400,6 +400,15 @@ class Section:
                            and not any(halfplanes.in_polygon(hole, uv) for hole in region[1:])
                            for region in f.imported_regions)
             return in_regions
+        if f.entities and all(e.type == EntityType.CIRCLE for e in f.entities):
+            # Circles drawn together (a ring): inside when an odd number of them hold the point.
+            circles = [(tuple(e.center), e.radius) for e in f.entities]
+
+            def in_rings(p):
+                d = _sub(p, origin)
+                uv = (_dot(d, x), _dot(d, y))
+                return sum(1 for c, r in circles if (uv[0] - c[0]) ** 2 + (uv[1] - c[1]) ** 2 < r * r) % 2 == 1
+            return in_rings
         if f.entities:
             loop = [tuple(e.p0) for e in f.entities]
 
