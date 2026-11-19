@@ -5402,7 +5402,7 @@ counterbore or a countersink, the depth must also stay deeper than the counterbo
 not, Orca drills only the recess and gives no error. The guard tells this limit on the line of the parameter (cause
 `limits.HOLE_SHALLOW`). The guard does this for a hole "To" a face and for a hole of a given depth. The Paramability
 copy has its own range check (`hole.step._keep_fit`). It keeps the depth deeper than a counterbore. It checks the cone
-of a countersink only in a hole with a drill tip.
+of a countersink in every hole that stops, with a drill tip or with a flat end.
 
 ### 3.13 How a coil is translated
 

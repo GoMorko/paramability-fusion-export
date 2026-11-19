@@ -452,6 +452,30 @@ class HoleFitOverRangeTest(unittest.TestCase):
         self.assertEqual((hole["diameter"], hole["countersink"]["diameter"]), (12, 20))
 
 
+    def flat_countersink(self, sink_diameter, depth):
+        def edit(data):
+            data.update(hole_type="countersink", countersink={"diameter": 20.0, "angle_deg": 90.0},
+                        extent={"kind": "distance", "depth": 10.0}, diameter=12.0)
+            data["end_points"] = [[10, 10, 0]]
+            data["end_face_types"] = ["plane"]
+            data["params"] = {"diameter": param("d4", "pipe_d_mm", 12.0),
+                              "countersink.diameter": param("d5", sink_diameter, 20.0),
+                              "extent.depth": param("d7", depth, 10.0)}
+        return on_fixture("hole_counterbore_blind", edit)
+
+    def test_a_flat_countersunk_hole_whose_depth_can_fall_below_the_cone_is_written_as_numbers(self):
+        capture, ticked = self.flat_countersink("pipe_d_mm * 2 - 4 mm", "wall_mm * 5")
+        result, _ = run(capture, ticked)
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual((hole["depth"], hole["countersink"]["diameter"]), (10, 20))
+
+    def test_a_flat_countersunk_hole_whose_depth_stays_below_the_cone_keeps_following(self):
+        capture, ticked = self.flat_countersink("pipe_d_mm + 8 mm", "wall_mm * 5")
+        result, _ = run(capture, ticked)
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual(hole["depth"], {"expr": "wall_mm * 5"})
+
+
 def _turn(degrees):
     import math
     c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))

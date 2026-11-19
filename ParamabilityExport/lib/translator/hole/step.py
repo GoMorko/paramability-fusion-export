@@ -133,7 +133,7 @@ def _stays_positive(ctx, difference):
 def _keep_fit(ctx, item, sizes, tipped):
     """A counterbore or countersink that fits at the current values must fit at every size of the ranges: its
     diameter stays wider than the hole's, its depth shallower than the hole's (for a countersink the cone's run, in
-    a hole with a drill tip). When it does not, the values involved are written as numbers and their sizes marked."""
+    a hole that stops: with a drill tip or flat). When it does not, the values involved are written as numbers and their sizes marked."""
     name = item.get("name", "a hole")
     diameter, depth = sizes.diameter, sizes.depth
     bore, sink = sizes.counterbore, sizes.countersink
@@ -147,7 +147,7 @@ def _keep_fit(ctx, item, sizes, tipped):
         why = "the countersink of %s would stop fitting its hole at some sizes" % name
         if not _stays_positive(ctx, sink["diameter"].plus(diameter.scaled(-1))):
             sink["diameter"], diameter = _unfollow(ctx, why, sink["diameter"], diameter)
-        if tipped:
+        if depth is not None:
             half = math.tan(math.radians(sink["angle_deg"].n) / 2.0)
             run = sink["diameter"].plus(diameter.scaled(-1)).scaled(0.5 / half)
             if not _stays_positive(ctx, depth.plus(run.scaled(-1))):

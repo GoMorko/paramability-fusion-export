@@ -1197,7 +1197,8 @@ What the copy writes:
   line and the thickness keep their numbers, and the sizes that move them are marked.
 
 A cut or intersect that does not meet the part is left out (cause `missesPart`). A pattern or mirror cannot repeat a
-thin wall, since its first extrude starts a new body (cause `notRepeatable`).
+thin wall, since its first extrude starts a new body, or a revolve that the copy builds from several turns or a tool
+body (cause `notRepeatable` for both).
 
 Left out:
 
