@@ -183,7 +183,9 @@ the rest.
 
 A pipe with a round section is copied as a sweep of its circle (see "Pipes"). A pipe with a square or triangle
 section is left out (cause `pipe`), with the tip to draw the section on a sketch and sweep it. Every coil is left out
-(cause `coilShape`, no tip, see "Coils").
+(cause `coilShape`, no tip, see "Coils"). A Box, Cylinder, Sphere or Torus step is left out as in the recipe
+(cause `primitive`), with the tip to draw the shape in a sketch and extrude or revolve it, since the Fusion API gives
+no place, direction or operation of these steps (`docs/feature-support.md`).
 
 When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
 the problem as it is (`Skip.of`). An extrude that starts from or reaches to a face or plane of another component that

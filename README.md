@@ -24,7 +24,8 @@ The add-in adds three buttons to Fusion:
   must lie on that face or plane. A body made by Copy and Paste copies as its source was at the paste, also when
   you move it and join it to the part or cut it from the part; the sizes of the source follow. A coil is left out:
   Orca's sweep along a helix keeps the wire square to its turns, so the ends and the thickness of the wire would not
-  be as in Fusion.
+  be as in Fusion. A Box, Cylinder, Sphere or Torus step is left out in both exports, because Fusion does not tell
+  add-ins where it sits or how it joins the part. Draw the shape in a sketch and extrude or revolve it instead.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.

@@ -54,6 +54,7 @@ PATH_PATTERN = "pathPattern"
 REVOLVE_SIDES = "revolveSides"
 REVOLVE_AXIS_SIDE = "revolveAxisSide"
 BOUNDARY_FILL = "boundaryFill"
+PRIMITIVE = "primitive"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
 OLD_EXPORT = "oldExport"
@@ -116,6 +117,7 @@ HINTS = {
     REVOLVE_AXIS_SIDE: "Type size ranges that keep the outline on one side of the axis, or leave the ranges to the "
                        "add-in.",
     BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
+    PRIMITIVE: "Draw it in a sketch instead: extrude a rectangle or a circle, or revolve a half circle or a circle.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
     OLD_EXPORT: "Export again with this version of the add-in.",
