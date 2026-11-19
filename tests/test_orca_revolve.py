@@ -1,5 +1,6 @@
 """Revolves in the Orca copy (`orca_translate/revolve.py`): the outline with a construction line on the axis, the
 turning sense from the measured start face, the angle bound to its parameter, and what Orca cannot turn."""
+import copy
 import math
 import unittest
 
@@ -180,6 +181,17 @@ class HolesAndOutlinesTest(unittest.TestCase):
                                          (FeatureType.BOOLEAN, BooleanMode.ADD)])
         made = result.recipe.features[-1]
         self.assertEqual((made.target_body, made.bool_tool_body), (0, 1))
+
+    def test_a_pattern_of_a_holed_revolve_is_left_out_with_its_own_cause(self):
+        capture = ring_on_rod()
+        pattern = copy.deepcopy(fixture("rpattern_row")["items"][-1])
+        pattern["index"], pattern["data"]["sources"] = 4, [3]
+        capture["items"].append(pattern)
+        result = translate(capture)
+        (gap,) = [g for g in result.left_out if g["type"] == "RectangularPatternFeature"]
+        self.assertEqual(gap["cause"], causes.NOT_REPEATABLE)
+        self.assertNotIn("separate body", gap["reason"])
+        self.assertEqual([f for f in result.recipe.features if f.type == FeatureType.PATTERN], [])
 
     def test_a_holed_cut_is_a_tool_body_cut_from_the_part(self):
         capture = ring_on_rod()
