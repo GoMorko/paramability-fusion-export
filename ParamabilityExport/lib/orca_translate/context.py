@@ -326,6 +326,10 @@ class Body:
         # The steps that changed the body's edges in ways `solid` does not show (rounds, chamfers, threads), as
         # `finish_body` records them.
         self.finishes = []
+        # Timeline indexes of the steps that a paste wrote again into this body (`paste`). Their entries in
+        # `Context.written` and `Context.shapes` may be those of another body, so a later step of this body must not
+        # look their features up by index.
+        self.pasted = set()
 
 
 # Features that build no body, and those that start a new one (Orca's `produces_body` and `route_feature`).

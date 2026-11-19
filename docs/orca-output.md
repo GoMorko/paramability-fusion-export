@@ -646,7 +646,11 @@ not judged to meet material where Orca removes nothing.
   does not sit where its source sat (cause `pastePlace`: Fusion pastes in place), and a source with a step that the
   copy cannot build before the paste (cause `afterGap`, the reason names that step). A Combine that takes such a
   pasted body is left out with the same reason. When the part is pasted and joined to its copy, the part's steps are
-  written twice; the later steps of the part keep working on the part's own features (`paste._keep_earlier`).
+  written twice; the later steps of the part keep working on the part's own features (`paste._keep_earlier`). A
+  later step of the pasted body does not look up the features of the source's steps by their timeline index
+  (`Body.pasted`): a pattern of features of the pasted body that repeats one of them is left out (cause
+  `notRepeatable`). A round or chamfer finds the outline it changes by its shape, so on the pasted body it redraws the
+  outline of the pasted body.
 - Split Body: the part's piece (followed through the split by `lineage`, so a piece with a new name is built by the
   steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
