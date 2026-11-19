@@ -51,7 +51,20 @@ class WallsTest(unittest.TestCase):
             self.assertEqual((wall.side, wall.width, wall.way, wall.length), ("middle", 2.0, 1, 10.0))
             self.assertTrue(wall.clear)
             self.assertFalse(wall.measured)
-        self.assertEqual(rib_web.marks(data_of("web_on_plate"), found[0], "Web2"), [])
+
+    def test_a_clear_wall_marks_the_sizes_of_the_part_unless_it_stands_on_its_sketch_face(self):
+        # The sketch of the fixture sits on a plane that is not a face of the part: the plate could move into the wall.
+        data = data_of("web_on_plate")
+        self.assertEqual([names for names, _ in rib_web.marks(data, walls(data)[0], "Web2")], [()])
+        for path in data["paths"]:
+            path["reference"] = {"kind": "face", "token": "top"}
+        (first, _) = walls(data)
+        self.assertTrue(first.stands)
+        self.assertEqual(rib_web.marks(data, first, "Web2"), [])
+        # A face of the part under the sketch that faces the other way does not hold the wall.
+        for face in data["target_faces_before"]:
+            face["normal"] = [-c for c in face["normal"]]
+        self.assertFalse(walls(data)[0].stands)
 
     def test_a_rib_between_two_walls_is_the_band_of_its_depth_on_one_side_of_the_plane(self):
         (wall,) = walls(data_of("rib_distance_channel"))
@@ -111,6 +124,27 @@ class WallsTest(unittest.TestCase):
         self.assertEqual(walls(data), rib_web.NEXT_SHAPE)
         data = data_of("web_tonext_grid")
         self.assertEqual(rib_web.walls(data, None), rib_web.NEXT_SHAPE)
+
+    def test_a_wall_whose_body_was_not_measured_says_so(self):
+        data = data_of("web_on_plate")
+        data["volume_after"] = None
+        self.assertEqual(walls(data), rib_web.BODY_UNMEASURED)
+
+    def test_a_wall_flush_with_a_side_of_the_part_is_refused_as_flush(self):
+        # A side face of the first wall (y = 21) that Fusion merged with a side of the part on that plane: its point
+        # and corners lie on the part's face, past the end of the wall.
+        data = data_of("web_on_plate")
+        side = next(f for f in data["wall_faces"] if f["normal"] == [0.0, 1.0, 0.0] and f["point"][1] == 21.0)
+        side["point"] = [2.0, 21.0, 9.0]
+        side["vertices"] = [[0.0, 21.0, 4.0], [55.0, 21.0, 4.0], [55.0, 21.0, 14.0], [0.0, 21.0, 14.0]]
+        data["target_faces_before"].append({"surface": "Plane", "point": [0.0, 21.0, 2.0], "normal": [0.0, 1.0, 0.0]})
+        self.assertEqual(walls(data), rib_web.FLUSH)
+
+    def test_a_to_next_depth_keeps_no_parameter(self):
+        data = data_of("web_tonext_grid")
+        data["params"]["depth"] = {"name": "d20", "expression": "wd", "value": 17.0}
+        built = rib_web.as_extrude(data, walls(data)[0])
+        self.assertEqual(set(built["params"]), {"thin.thickness"})
 
     def test_a_distance_wall_whose_volume_differs_from_its_band_is_refused(self):
         data = data_of("web_on_plate")

@@ -418,6 +418,12 @@ RIB_NEXT_SHAPE = ("This rib or web reaches the part in a shape that is not a wal
 RIB_NEXT_LINE = "A rib that reaches to the part is copied only along one straight line."
 RIB_EXTENDED = ("Fusion stretches the lines of this web to the faces of the part, so it is not copied. Draw the lines up "
                 "to the faces, or turn off extending them.")
+RIB_BODY_UNMEASURED = ("The volume of the body this rib or web is built on was not measured, so the copy cannot check "
+                       "the wall and it is not copied.")
+RIB_FLUSH = ("A face of this rib or web is merged with a face of the part (a wall flush with a side of the part), and "
+             "the copy cannot check such a wall, so it is not copied.")
+RIB_PART_MOVES_MARK = ("%s does not stand on the face its sketch is drawn on, so a size that moves the part may move it "
+                       "into the wall, where Fusion stops it, or away from it")
 RIB_MEASURED_MARK = "%s reaches to the faces of the part, and the copy keeps the depth Fusion measured"
 RIB_MEETS_MARK = "%s may run into the part at other sizes, where Fusion stops it and the copy does not"
 RIB_EXTENDED_MARK = "%s stretches its lines to the faces of the part, and the copy keeps them as drawn"

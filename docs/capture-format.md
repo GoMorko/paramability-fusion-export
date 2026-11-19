@@ -1668,9 +1668,9 @@ them. `curves` can be read only with the marker just before the feature:
 - `thickness` and `depth` in mm; `depth` is null for To Next (`extent` `toNext`; `distance` for a depth, `other` for
   an extent type the reader does not know). `symmetric` is `isSymmetric`, `flipped` is `isFlipped`. The API does not
   say which side or way they choose, so the translator does not use `flipped`: the faces decide.
-- `draft_deg` and `fillet`: 0 when Fusion gives no parameter for them (no draft, no fillet), the value otherwise, null
-  when the member cannot be read. A web also has `extended` (`isExtended`: Fusion stretches the curves to the nearest
-  faces of the part).
+- `draft_deg` and `fillet`: 0 when Fusion gives no parameter for them (no draft, no fillet), the value otherwise,
+  null when the member cannot be read. `params` holds `depth` only for the Distance extent. A web also has
+  `extended` (`isExtended`: Fusion stretches the curves to the nearest faces of the part).
 - The curves: `geometry/chains.py` groups the curves whose ends meet into chains and orders each chain from a free
   end. Each chain is a path record like the open line of a thin extrude (`read_sweep.chain_record`, the `path` of an
   ExtrudeFeature): `opposed` is true for a curve drawn against the chain, and `check` is null. One chain is `path`, so
