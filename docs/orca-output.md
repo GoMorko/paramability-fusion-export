@@ -1533,7 +1533,8 @@ these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set
 Pasted bodies: the captures of `tests/orca_pastes.py`. Save one with `python3 -m tests.orca_pastes <name> <file>`
 and give the file to `write`. Each is a 6 x 6 mm square body (Body2) pasted in place as Body3, Body3 moved 20 mm
 along X, and one Combine that takes Body2 and Body3. The volumes are exact, and the boxes are in the capture's
-coordinates.
+coordinates. Both built with these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the
+`--set` changes; the source's steps written twice under the same names did not disturb Orca.
 
 - `pasted_peg`: a 40 x 20 x 4 plate (box 0 to 40, 0 to 20, 0 to 10) and a peg at (8, 10) on its top face, `peg_h`
   (6) high, its copy at (28, 10), both joined: 3200 + 2 x 216 = 3632 mm3. `--set peg_h=10` gives 3920 mm3 with the
