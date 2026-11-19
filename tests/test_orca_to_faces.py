@@ -70,10 +70,13 @@ class HoleToFaceTest(unittest.TestCase):
         def end_unread(data):
             data["end_points"] = []
 
+        def offset(data):
+            data["extent"]["offset"] = 2.0
+
         cases = {"tilted": (tilted, gap_hints.EXTRUDE_END_FACE), "curved": (curved, gap_hints.EXTRUDE_END_FACE),
                  "another component": (other_component, gap_hints.OTHER_COMPONENT),
                  "drill point": (drill_point, gap_hints.REFUSED), "end elsewhere": (ends_elsewhere, gap_hints.REFUSED),
-                 "end not measured": (end_unread, gap_hints.REFUSED)}
+                 "end not measured": (end_unread, gap_hints.REFUSED), "offset": (offset, gap_hints.REFUSED)}
         for name, (change, cause) in cases.items():
             with self.subTest(name):
                 capture = faces.hole_to_plane()

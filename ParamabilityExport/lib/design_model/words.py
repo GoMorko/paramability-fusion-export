@@ -168,6 +168,7 @@ def outline_in(sketch):
 HOLE_UNREAD = "This hole has no readable position or size."
 HOLE_KIND = "This kind of hole is not copied."
 HOLE_EXTENT = "This way of setting the hole depth is not copied."
+HOLE_TO_OFFSET = "This hole goes up to a face or plane with an offset, which is not copied."
 HOLE_NO_DEPTH = "This hole has no depth."
 HOLE_END_UNREAD = "The end of this hole could not be measured."
 HOLE_DRILL_POINT = "A hole that ends at a face with a drill point is not copied."

@@ -176,6 +176,13 @@ class HoleKindTest(unittest.TestCase):
         self.assertIsInstance(hole.extent_of(hole_data(extent={"kind": "distance", "depth": 0})), Problem)
         self.assertIsInstance(hole.extent_of(hole_data(extent={"kind": "toOffset"})), Problem)
 
+    def test_an_offset_of_the_face_a_hole_goes_up_to_is_not_followed(self):
+        # A hole made up to a face has no offset member; one that has it, and is not zero or not read, is refused.
+        for offset in (0.0, None, 2.0):
+            found = hole.extent_of(hole_data(extent={"kind": "toEntity", "offset": offset}))
+            self.assertEqual(isinstance(found, Problem), offset != 0.0, offset)
+        self.assertEqual(hole.extent_of(hole_data(extent={"kind": "toEntity"})).kind, hole.TO_ENTITY)
+
     def test_a_hole_with_no_position_direction_or_size_is_a_problem(self):
         self.assertIsNone(hole.placed(hole_data()))
         for change in ({"positions": []}, {"direction": None}, {"diameter": 0}, {"diameter": None}):

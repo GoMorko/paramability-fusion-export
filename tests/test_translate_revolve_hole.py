@@ -271,6 +271,7 @@ class HoleTest(unittest.TestCase):
         cases = {
             "to entity": lambda i: i["data"].update(extent={"kind": "toEntity"}),
             "other extent": lambda i: i["data"].update(extent={"kind": "other"}),
+            "to entity with an offset": lambda i: i["data"].update(extent={"kind": "toEntity", "offset": 2.0}),
             "no positions": lambda i: i["data"].update(positions=[]),
             "counterbore deeper than hole": lambda i: i["data"].update(
                 hole_type="counterbore", counterbore={"diameter": 9.0, "depth": 9.0}, extent={"kind": "distance", "depth": 8.0}),
