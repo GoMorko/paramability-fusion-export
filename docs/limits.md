@@ -265,7 +265,8 @@ What the copy can and cannot do, step by step. The README lists only the main li
   sizes or anywhere in the size range of its distance, are left out or keep the distance as a number; the whole step is left out, also when it moves flat faces too, so the copy never moves only part of what Fusion moved; the end faces
   are checked as exported, so when other sizes move an edge near the ring, Paramability may refuse the move at those
   sizes), and every
-  step type not listed above. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
+  step type not listed above. A Box, Cylinder, Sphere or Torus step is left out in both exports: Fusion does not tell
+  add-ins where it sits or how it joins the part. Draw the shape in a sketch and extrude or revolve it instead. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
   helical edges read back as one plain helix; at most 8 coils, and 100 turns of coils and threads together in timeline order (later ones are left out), never as a tool
   with other steps (a spiral, a taper and a half-turn count of revolutions are left out). The Orca output leaves every coil out
   (`docs/orca-output.md`, "Coils"). A draft is copied when its faces all lie on one side of its plane, with one angle

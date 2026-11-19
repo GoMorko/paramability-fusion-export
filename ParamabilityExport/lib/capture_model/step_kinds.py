@@ -135,6 +135,9 @@ class RecipeKind:
     factors: tuple = ()
 
 
+# The reason a Box, Cylinder, Sphere or Torus step is left out.
+_PRIMITIVE = "Fusion does not tell add-ins where this %s sits or how it joins the part, so it is not copied."
+
 STEP_TYPES = (
     StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE, PATH),
              pattern_faces=PATTERN_FACES_ONE_SIDED),
@@ -174,6 +177,17 @@ STEP_TYPES = (
     StepType("OffsetFeature", "surface offset", unsupported="Offsetting a surface is not copied.",
              gap_cause=gap_hints.SURFACE, reaches_bodies=True),
     StepType("CoilFeature", "coil", reader="read_coil", gap_cause=gap_hints.COIL),
+    # Fusion's API gives an existing box, cylinder, sphere or torus only the members every feature has: no place,
+    # direction or operation (docs/feature-support.md). They stay left out, and may reach bodies until a live check
+    # shows otherwise.
+    StepType("BoxFeature", "box", unsupported=_PRIMITIVE % "box", gap_cause=gap_hints.PRIMITIVE,
+             reaches_bodies=True),
+    StepType("CylinderFeature", "cylinder", unsupported=_PRIMITIVE % "cylinder", gap_cause=gap_hints.PRIMITIVE,
+             reaches_bodies=True),
+    StepType("SphereFeature", "sphere", unsupported=_PRIMITIVE % "sphere", gap_cause=gap_hints.PRIMITIVE,
+             reaches_bodies=True),
+    StepType("TorusFeature", "torus", unsupported=_PRIMITIVE % "torus", gap_cause=gap_hints.PRIMITIVE,
+             reaches_bodies=True),
     StepType("SplitBodyFeature", "split body", reader="read_split", splits_bodies=True, reaches_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", moves_bodies=True, reaches_bodies=True),

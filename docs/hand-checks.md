@@ -1258,3 +1258,17 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     In Paramability and in OrcaSlicer set `rt` to 4: the channel rib is 22784 mm3. Set `wd` to 16: the L web is
     18420 mm3. In Fusion turn Extend on for the L web with its line shortened to start at x = 10: that web is left
     out with a reason that says Fusion stretches its lines. Afterwards each design is as before.
+
+101. PM1, Box, Cylinder, Sphere and Torus steps for both exports. Add user parameters `bl` = 30 mm, `bw` = 20 mm,
+    `bh` = 10 mm, `cd` = 16 mm, `ch` = 15 mm, `sd` = 20 mm, `ta` = 30 mm and `tb` = 8 mm. Make each step in the
+    Fusion dialog (Solid > Create), not with a script: a Box on the XY plane centred on the origin with length `bl`,
+    width `bw` and height `bh`, as a new body; a Cylinder on the top face of the box, centred on it, diameter `cd`,
+    height `ch`, Join; a Sphere of diameter `sd` centred at (40, 0, 10), as a new body; a Torus on the XZ plane centred
+    at (0, 40, 0) with major diameter `ta` and minor diameter `tb`, as a new body.
+    Export: In the Fusion Text Commands window (Python) list, for each of the four steps, the model parameters whose
+    `createdBy` is the step, with `role` and `expression`; note the type name of each timeline entity. Write down
+    which roles name the length, width, height and diameters, and whether the expressions read `bl`, `cd` and so on.
+    Then change `bh` to 20 and note whether the cylinder on the box top moves up with the face. Export for
+    Paramability and Export for Orca with all parameters ticked: each of the four steps is left out with the reason
+    that Fusion does not tell add-ins where it sits or how it joins the part, and the tip to draw the shape in a
+    sketch and extrude or revolve it; `orca.left_out[]` has the cause `primitive`. Afterwards the design is as before.
