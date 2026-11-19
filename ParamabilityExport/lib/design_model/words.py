@@ -305,6 +305,17 @@ PATH_PATTERN_OFF_ROUND = ("This path pattern starts part way along a round path 
                           "can put the copies off the path, which is not copied.")
 MIRROR_FACES = "Mirrors of faces are not copied."
 REPEAT_TOOL_KEEPS = "%s keeps only what its tool shares with the part, so this %s cannot repeat it."
+# A pattern or mirror of bodies whose copies a Combine takes (`steps/body_pattern.py`); %s is the name of the pattern
+# or mirror.
+BODY_COPIES_UNMATCHED = "The copies of %s could not be matched to the bodies it made."
+BODY_COPIES_ELSEWHERE = "The copies of %s are made in another component, which is not copied."
+BODY_COPIES_SOURCE_LEFT = "This Combine takes the copies made by %s but not the body they copy."
+BODY_COPIES_SOURCE_CHANGED = ("A step changes the body that %s copies before this Combine takes it, so the copies no "
+                              "longer match it.")
+BODY_COPIES_SOME = "This Combine takes only some of the copies made by %s."
+BODY_COPIES_CHANGED = "A step changes a copy made by %s on its own before this Combine takes it."
+# Why the count of such a pattern keeps its number (a doubt, no full stop).
+BODY_COPIES_COUNT = "%s makes more or fewer copies with it, and Fusion may not change what its Combine takes"
 
 # Splits and tool bodies.
 SPLIT_BODY_UNLISTED = "This split does not list the body it cuts."

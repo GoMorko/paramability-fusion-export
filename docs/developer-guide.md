@@ -2837,7 +2837,20 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   Press Pull moves (a pin, a boss or a bore): its axis, its ends and its side of the material (`Ring`), the room
   between the other edges of its end faces (`whole`, `room`), and the checks of one move (`problem`,
   `radius_problem`). See 3.20. `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
-  (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
+  (`fit`). `steps/body_pattern.py`: the copies of a pattern or a mirror of bodies, and whether a Combine takes all of
+  them. `match` pairs each copy with a body that the pattern made. It uses the points of the bodies: the move of an
+  element must put each point of a source on a point of one new body. The move of each copy is a
+  `geometry.rigid.Move` of numbers. `pattern_that_made` gives the pattern that made a copy, when no step changed the
+  copy after the pattern. `stays_as_copied` tells whether a step changed a source between the pattern and the
+  Combine. `whole` gives a `Group` (the pattern item, its sources, its copies) when the Combine takes the pattern
+  whole. Else it gives a `Problem`: the copies do not pair up (`copiesUnmatched`), the copies are in another
+  component (`copiesElsewhere`), the Combine does not take the source (`sourceNotTaken`), a step changed the source
+  (`sourceChanged`), the Combine takes only some copies (`someCopies`), or a step changed a copy on its own
+  (`copyChanged`). `groups` gives a `Group` or a `Problem` for each pattern whose copies the Combine takes. A source
+  that is the target of the Combine is not checked there: the output decides about it, because the answer depends on
+  what the output wrote for the target after the pattern. `overlaps` tells whether a tool is in two groups. The recipe
+  output (`repeat/body_copies.py`) and the Orca output (`orca_translate/body_pattern.py`) both read these facts.
+  `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
   `ResolvedStep` for each item of the capture, in timeline order. The walk of the recipe (also for a tool body), the
@@ -4607,7 +4620,8 @@ A Combine joins, cuts or intersects tool bodies with the part. Each tool body is
      a gap inside is always a tool step. Only a gap of a step that finishes surfaces can stay inside a tool (see
      "A gap inside a tool body" below).
    - A pattern of bodies that the Combine takes whole becomes a tool per source and one `pattern` or `mirror` step
-     (`body_copies.py`), so its count and spacing can follow sizes.
+     (`body_copies.py`), so its count and spacing can follow sizes. The shared layer tells which patterns the
+     Combine takes whole (`design_model/steps/body_pattern.py`, `groups`).
 4. It checks the volumes. A Combine that changes the part by more than its tools can give is left out ("This combine
    changes the part by more than its tool bodies hold ...").
 5. An intersect of several tools: Fusion does not document whether it keeps what every tool holds or what any tool
@@ -4677,10 +4691,50 @@ a Combine whose tool is one coil body. There the coil is written onto the part w
 flat form). The reader tells the handler which bodies a coil made (`data.made`), so the check "the step makes one body"
 looks at those bodies and not at every body of the component (`_writes_flat`).
 
+**A pattern of bodies in the Orca output.** The Orca output (`orca_translate/combine.py` with
+`orca_translate/body_pattern.py`) also copies a Combine that takes the copies of a rectangular pattern, a circular
+pattern or a mirror of bodies. It reads the same facts of the shared layer as the recipe output
+(`design_model/steps/body_pattern.py`, `groups`). The Combine handler does these steps:
+
+1. It gets the groups (`body_pattern.split`). Each group is a pattern whose copies the Combine takes. When a pattern
+   has a `Problem`, the whole Combine is left out. The `Problem` gives the reason, and the code gives the cause:
+   `copiesTaken` (only some copies, or the copies without their source), `copyChanged` (a step changed a copy or the
+   source on its own before the Combine), `otherComponent` (the copies are in another component) or `copiesUneven`
+   (the copies do not pair up with the bodies). An intersect with copies is left out with the cause
+   `copiesIntersect`, because a pattern always gives several tools.
+2. It writes each group before the other tools (`body_pattern.write`). For a group whose source is not the part, it
+   builds each source as a tool body (`tools.build`). The anchor is the pattern item, so the tool is as the source
+   was just before the pattern. Several sources are joined into one tool body.
+3. It writes the layout on that tool body. A rectangular pattern uses `repeat.rectangular_layout` and
+   `repeat.linear_copies`. A circular pattern uses `repeat.circular_layout`. A mirror uses an Orca Mirror with the
+   mode Add. These are the same functions that the patterns of features use, so the spacing and the angle follow
+   variables in the same way. Orca's Pattern keeps the body and fuses each copy into it. Orca's Mirror with the mode
+   Add fuses the body with its image.
+4. The count keeps its number. The Combine holds a fixed list of bodies, and it is not known if Fusion adds a new
+   copy to that list when the count changes. The layout functions take the reason (`count_why`,
+   `design_model.words.BODY_COPIES_COUNT`), write the count as a number, and give the reason to the sizes of the
+   count.
+5. It checks that the copies land on the bodies that Fusion made (`_lands`). Each move of the layout, except the
+   original, must put each point of a source on the points of one copy. Each copy must get one move. Else the
+   Combine is left out with the cause `copiesUneven`.
+6. For a cut, the repeated tool must meet the part as the copy builds it (`solid.meets`). Else the Combine is left
+   out with the cause `missesPart`. For a join, a copy that only touches the part is correct, because Fusion joins
+   it too.
+7. One Boolean adds the tool to the part or cuts it from the part, with the operation of the Combine. The pattern
+   item gets the note "Copied with Combine1".
+
+When the source of the pattern is the part itself, the Combine joins the copies to the part. Then the Orca output
+writes the Pattern or the Mirror on the part, and it writes no Boolean. This needs a join, the part as the only
+source, one layout (not to both sides), and no step that changed the part between the pattern and the Combine
+(`body_pattern.stays_as_copied`). Else the Combine is left out. Example, made up: a block of 10 x 10 x 5 mm, a
+rectangular pattern of the block with a quantity of 3 and a spacing of 8 mm, and a Combine that joins the two copies
+to the block. The copy writes one Orca Pattern of the part with `pattern_spacing` bound to the spacing. The part is
+26 x 10 x 5 mm.
+
 ### 3.6 How a mirror is translated
 
 `repeat.body_copies:mirror` is the handler of every mirror item. A mirror of bodies is handled like a pattern of bodies
-(`body_copies.py`: the copies are matched to their sources by their corners). A mirror of features goes to
+(`body_copies.py`: the copies are matched to their sources by their corners, `body_pattern.match`). A mirror of features goes to
 `repeat.mirror` (`repeat/repeat_mirror.py`). This section is about the mirror of features and of the whole body.
 
 - A mirror of features writes a recipe `mirror` step that repeats the source steps (`of`) across the plane. The source
@@ -6554,7 +6608,8 @@ Thus the add-in does not take the place of a copy from the transform alone. The 
    the count when no copy is suppressed (`suppressed_ids` empty and no element marked suppressed). A missing place
    is then not a copy that the user left out, so the step is left out. A rectangular pattern with a direction whose
    distance is 0 makes copies on top of one another by design. There the check uses the merged copies.
-6. A pattern of bodies pairs each copy with a result body by its points (`body_copies.match`). A circular pattern of
+6. A pattern of bodies pairs each copy with a result body by its points (`design_model/steps/body_pattern.py`,
+   `match`). A circular pattern of
    bodies that turns to one side tries the places from the ids, one way and then the other (`id_frames`). The way
    whose copies land on the result bodies is taken.
 

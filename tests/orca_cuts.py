@@ -353,7 +353,8 @@ class Section:
     outline between the heights along its sketch plane's normal that its end gives (as `steps._Side.ends` writes
     them: one side from the plane, `flip` the other way; symmetric about the plane; two sides; through all).
     Reads the features the outline cuts and corner tools write: sketches (rectangles, circles, lines), extrudes,
-    cuts, transforms, Booleans, patterns along a line, holes through all, and sketches of imported regions (text)."""
+    cuts, transforms, Booleans, patterns along a line and round an axis, mirrors that join a body with its image,
+    holes through all, and sketches of imported regions (text)."""
 
     def __init__(self, recipe, changed=None):
         variables = dict(recipe.variables)
@@ -374,6 +375,10 @@ class Section:
                 self._boolean(f)
             elif f.type == FeatureType.PATTERN and not f.pattern_circular:
                 self._pattern(f)
+            elif f.type == FeatureType.PATTERN:
+                self._round_pattern(f)
+            elif f.type == FeatureType.MIRROR and f.mode == BooleanMode.ADD:
+                self._mirror(f)
             elif f.type == FeatureType.HOLE and f.hole_through and f.hole_style == 0:
                 self._hole(f)
             else:
@@ -490,6 +495,26 @@ class Section:
             self._number(f, "pattern_spacing")
         step = list(f.plane.x_axis)
         self.bodies[at] = lambda p: any(body([p[i] - k * spacing * step[i] for i in range(3)]) for k in range(count))
+
+    def _round_pattern(self, f):
+        """Orca's circular Pattern: copy i turned i steps about the plane normal through the plane origin; the step
+        is the angle over count - 1 with `pattern_inclusive` for less than a full turn, else over the count."""
+        at = self._index(f)
+        body, count, angle = self.bodies[at], int(round(self._number(f, "pattern_count"))), \
+            self._number(f, "pattern_angle")
+        full = abs(abs(angle) - 360.0) < 1e-9
+        step = angle / (count - 1 if f.pattern_inclusive and not full and count > 1 else count)
+        axis, pivot = list(f.plane.normal), list(f.plane.origin)
+        self.bodies[at] = lambda p: any(body(_turned(p, axis, pivot, -k * step)) for k in range(count))
+
+    def _mirror(self, f):
+        at = self._index(f)
+        body, origin, normal = self.bodies[at], list(f.plane.origin), list(f.plane.normal)
+
+        def image(p):
+            gap = 2.0 * _dot(_sub(p, origin), normal)
+            return [p[i] - gap * normal[i] for i in range(3)]
+        self.bodies[at] = lambda p: body(p) or body(image(p))
 
     def _boolean(self, f):
         target, tool = self._index(f), self._index(f, "bool_tool_body")

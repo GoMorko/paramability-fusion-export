@@ -1287,7 +1287,7 @@ copied stops that walk, and the Combine is refused with the reason naming the to
 - An intersect with several tools has the model `every` (one `toolBody` per tool, each `intersect`) or `any` (one
   `intersect` step that holds the tools as inner steps, the first `new` and the rest `add`); `unknown` refuses.
 - A pattern or mirror of bodies that the Combine takes whole is written as a `pattern` or `mirror` step over the tool
-  steps (`body_copies.groups`, `write`); a subset of the copies, or a layout the `repeat` package refuses, is one tool per copy
+  steps (`body_pattern.groups`, `body_copies.write`); a subset of the copies, or a layout the `repeat` package refuses, is one tool per copy
   with a `move`. An intersect never uses the pattern form. A size the count reads is marked, since it is not known
   whether Fusion adds new copies to the Combine (hand test B6); spacing and angle follow without a mark.
 - A later pattern or mirror of features may hold the Combine and the items that built its tools as sources; it then
