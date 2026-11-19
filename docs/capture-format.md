@@ -1689,7 +1689,9 @@ for a rib the depth is the wall thickness (`thin.thickness`) and the thickness t
 It refuses a draft or fillet that is not zero, a setting that cannot be read, curves that are not open chains of
 straight lines of one sketch, faces without corners, faces that fit no wall or more than one (side and way), and a
 part that did not grow by the whole wall. To Next also needs the far end on a flat face of the part. A rib with To
-Next takes one straight line.
+Next takes one straight line. A rib with To Next that Fusion filled up to the part (a gusset) is written instead as
+the extrude of the closed outline that its faces show (`design_model/steps/rib_fill.py`), from `wall_faces`,
+`target_faces_before` and the two volumes.
 
 **SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep/step.py` and
 `lib/translator/loft/step.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):

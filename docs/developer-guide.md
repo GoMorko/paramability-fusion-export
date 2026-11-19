@@ -1826,7 +1826,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
 | `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face other than a whole round face, or a round face it cannot move, also with flat faces in the same step (`finishes/offset.py`, `finishes/offset_round.py`, with the checks of `design_model/steps/offset_round.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
-| `ribWeb` | a rib or a web that is not copied: a draft, a fillet, arcs, faces that do not show one wall, a wall that runs into the part, a To Next wall that is not one band, lines that Fusion stretches (`design_model/steps/rib_web.py`) | Draw the rib or web along straight lines, with no draft or fillet, or draw its outline in a sketch and extrude it. |
+| `ribWeb` | a rib or a web that is not copied: a draft, a fillet, arcs, faces that do not show one wall, a wall that runs into the part, a To Next wall that is not one band and not a filled outline that the faces prove, lines that Fusion stretches (`design_model/steps/rib_web.py`, `rib_fill.py`) | Draw the rib or web along straight lines, with no draft or fillet, or draw its outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
 | `revolveAxisSide` | a revolve whose outline would reach or cross its axis inside size ranges that the person typed (3.14) | Type size ranges that keep the outline on one side of the axis, or leave the ranges to the add-in. |
@@ -3437,6 +3437,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     the faces that Fusion made, and it checks that the part grew by the whole wall. `as_extrude` gives the data of
     the thin extrude of an open line that each wall is, and `marks` tells which sizes the outputs mark. See "A rib or
     a web" in 3.15.
+  - `rib_fill.py`: a rib with To Next that Fusion fills up to the part, such as a gusset (`fill`). It finds the closed
+    outline that Fusion made from the faces of the feature, the faces of the part and the volume. `as_extrude` gives
+    the data of the extrude of that outline, which keeps its numbers. See "A rib or a web" in 3.15.
   - `loft.py`: the volumes of a ruled loft between two parallel outlines of straight lines, one for each pairing of
     corners that the kernel can choose (`ruled_volumes`), and the check of a measured volume against them
     (`matches`).
@@ -6156,9 +6159,49 @@ followed it. `marks` tells the sizes that the outputs mark:
 - A web with `isExtended` marks each size that the steps before it read. At other sizes, Fusion can stretch its lines
   to faces that moved.
 
-What the add-in leaves out. A gusset in the corner of a bracket with To Next: Fusion fills the triangle between the
-line and the part. That is not a band, so the volume does not agree. A rib with a depth into the part: the band goes
-into the part. A web whose lines Fusion stretched. A rib or a web with a draft or a fillet, or along arcs. A wall
+A rib with To Next that Fusion fills up to the part. Example: a gusset in the corner of an L bracket. Fusion fills
+the triangle between the line and the part. That is not a band, so the volume does not agree, and `walls` gives
+`NEXT_SHAPE`. For a rib To Next along two or more lines, `walls` gives `NEXT_LINE`. After these two problems, the
+handlers ask `design_model/steps/rib_fill.fill` for the outline that Fusion filled. The module tries each way that
+the thickness can go (`thin.spans`): centred on the sketch plane, or to one side. For each way, it does these checks:
+
+1. The ends. Each face that Fusion made must be flat. Exactly one face must point along the sketch normal, at the
+   high end of the span. Exactly one face must point against the sketch normal, at the low end of the span. The other
+   faces must stand square to the sketch plane. The corners of the two ends must give the same points in the sketch
+   frame. These points are the corners of the outline.
+2. The lines. Each line of the rib must go from one corner to another corner. Each line is an edge of the outline.
+3. The edges on the part. The add-in looks at each flat face of the part before the step that stands square to the
+   sketch plane. It finds the corners that are on the plane of that face, and it sorts them along the face. Each two
+   corners that follow each other make an edge.
+4. The loop. Each corner must have exactly two edges, and all edges must make one closed loop. The loop must not
+   cross itself. Each edge on the part must lie on a face of the part whose outward normal points into the outline.
+   Thus the part is outside the outline.
+5. The sides. Each other face that Fusion made must go from the low end to the high end. It must lie along one edge
+   of the outline, and it must point out of the outline. Each line of the rib must have such a face.
+6. The volume. The part must grow by the area of the outline times the thickness, with the tolerance of `rib_web`.
+   Thus the wall touches the part only on its faces.
+
+Exactly one way must agree. If no way agrees, or two ways agree, the step keeps the problem that `walls` gave.
+
+Example. The L bracket has a base of 60 x 40 x 4 mm and a back wall of 4 mm at x = 0 to 4, 40 mm high. The rib line
+goes from (4, 34) to (50, 4) in x and height, on the plane y = 20. The thickness is 2 mm, centred. The ends are at
+y = 19 and y = 21, and each end has the corners (4, 4), (4, 34) and (50, 4). The face of the back wall at x = 4 holds
+(4, 4) and (4, 34). The top face of the base at a height of 4 holds (4, 4) and (50, 4). The sloped face of the rib
+lies along the line. The area is 690 mm2, and 690 x 2 = 1380 mm3. The part grew from 15360 to 16740 mm3, which is
+1380 mm3. Thus the gusset is copied.
+
+`rib_fill.as_extrude` makes the data of an extrude of the outline: one profile of straight lines in the sketch frame
+of the rib, a join from the sketch plane, symmetric or one way (`side_one.direction`), and as long as the thickness.
+The profile is `measured`. Thus the Orca output does not give it the formulas of a sketch graph
+(`orca_translate/sketches.graph_for`). The Paramability output finds no values of the probe for it, so it keeps its
+numbers too. The handlers give these data to the extrude handler of each output. The parameter of the thickness goes
+to the distance of the extrude, so the thickness follows its size. The edges on the part stand square to the sketch
+plane, so a thicker rib fills the same outline while the faces of the part go that far. `rib_fill.marks` marks each
+size that the steps before it read, because the line, the corners and the faces of the part keep their numbers.
+
+What the add-in leaves out. A gusset whose faces or volume do not prove the outline. A rib with a depth into the
+part: the band goes into the part. The add-in does not use the outline check for a rib with a depth (Distance). The
+depth must follow its size, and a measured outline cannot follow it. A web whose lines Fusion stretched. A rib or a web with a draft or a fillet, or along arcs. A wall
 flush with a side of the part: Fusion merges a face of the wall with a face of the part, and the corners of that face
 are also on the face of the part. The add-in cannot prove that such a wall is the band, so it leaves the step out with
 the reason `FLUSH`. A wall whose body has no measured volume (`BODY_UNMEASURED`): this occurs in the walk of a tool
