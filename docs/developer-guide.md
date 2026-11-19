@@ -2758,7 +2758,7 @@ one folder per family of steps.
     `design_model/steps/path_pattern.py` (see 3.17). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
   - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `set_split.py` (the sets of one round or chamfer step copied one after the other, and a set left out alone), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py` and `offset_round.py` (offsets of faces, see 3.20).
-  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `scale.py` (see 3.18), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
+  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `scale.py` (see 3.18), `paste.py` (the source of a pasted body and its place are in `design_model/steps/paste.py`), `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
@@ -2850,6 +2850,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   that is the target of the Combine is not checked there: the output decides about it, because the answer depends on
   what the output wrote for the target after the pattern. `overlaps` tells whether a tool is in two groups. The recipe
   output (`repeat/body_copies.py`) and the Orca output (`orca_translate/body_pattern.py`) both read these facts.
+  `steps/paste.py`: the body that a Copy Paste Body step made and the body that it copied for it. `result_of` gives
+  the record of the pasted body that a walk builds. `pair` gives a `Pasted` with the source of that body and the
+  rigid move from the source to the pasted body. The move is the identity when the paste is in place. When the step
+  copied more than one body, `pair` pairs each pasted body with a source by the points of the bodies. A source at the
+  same place counts first, then a source of the same shape. When the sources and the pasted bodies do not pair one to
+  one, `pair` gives a `Problem` (`pasteNotPaired`). A pasted body whose points do not fit a rigid move from its source
+  also gives a `Problem` (`pasteCornersUnread`, `pasteNoMatch`). The recipe output (`bodies/paste.py`) reads these
+  facts.
   `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one

@@ -1377,7 +1377,7 @@ identity keys of a foreign tool. `result_bodies` is null when `bodies` cannot be
 The handler (`translator/bodies/paste.py`) walks the source up to the paste (`tool_walk.build`) and writes its steps again,
 with ids of their own, in the list of the pasted body. It needs as many sources as results, a result among
 `result_bodies`, and a pasted body that has no steps yet. Several sources are paired with the results by their points:
-one at the same place first, else one rigid move apart; a result with no single source refuses. The first vertices of source and result must be the same points (a paste in place) or one
+one at the same place first, else one rigid move apart (`design_model/steps/paste.py`, `pair`); a result with no single source refuses. The first vertices of source and result must be the same points (a paste in place) or one
 rigid move apart (`design_model/steps/move.py`, `fit`); then a `move` step in plain numbers follows, and the sizes that could change that place
 are marked.
 
