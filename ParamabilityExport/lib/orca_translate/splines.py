@@ -40,7 +40,7 @@ def _usable(nurbs):
     try:
         degree = int(nurbs["degree"])
         knots = [float(k) for k in nurbs["knots"]]
-        poles = [(float(p[0]), float(p[1])) for p in nurbs["poles"]]
+        poles = [tuple(float(v) for v in p) for p in nurbs["poles"]]
     except (KeyError, TypeError, ValueError, IndexError):
         return None
     if not 1 <= degree <= 3 or len(poles) < degree + 1 or len(knots) != len(poles) + degree + 1:
@@ -62,7 +62,7 @@ def _usable(nurbs):
 
 
 def _insert(degree, knots, poles, u):
-    """The knots and poles with the knot `u` inserted once (Boehm)."""
+    """The knots and poles with the knot `u` inserted once (Boehm). A pole is a tuple of any length."""
     k = max(i for i in range(len(knots) - 1) if knots[i] <= u < knots[i + 1])
     out = []
     for i in range(len(poles) + 1):
@@ -72,13 +72,13 @@ def _insert(degree, knots, poles, u):
             out.append(poles[i - 1])
         else:
             a = (u - knots[i]) / (knots[i + degree] - knots[i])
-            out.append(((1 - a) * poles[i - 1][0] + a * poles[i][0], (1 - a) * poles[i - 1][1] + a * poles[i][1]))
+            out.append(tuple((1 - a) * p + a * q for p, q in zip(poles[i - 1], poles[i])))
     return knots[:k + 1] + [u] + knots[k + 1:], out
 
 
 def bezier_pieces(nurbs):
     """The pole lists of the Bezier pieces of a spline, in order (each `degree + 1` poles), or None when Orca cannot
-    draw it exactly."""
+    draw it exactly. A pole may have more than two numbers (a homogeneous pole of a rational curve)."""
     found = _usable(nurbs)
     if found is None:
         return None

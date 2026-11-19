@@ -4,8 +4,9 @@ One outline (an outer loop with its holes) becomes one Orca sketch:
 - one rectangle: the simple rectangle (`SketchShape.RECTANGLE`), centred on its plane's origin, so the plane origin
   moves to the rectangle's centre and its x axis runs along a side; `width` and `height` may follow variables;
 - one circle: the simple circle (`SketchShape.CIRCLE`) on a plane at its centre; `radius` may follow variables;
-- anything else of lines, arcs, circles, ellipses and splines (`splines`): entities at their current values. Orca cannot tie
-  sketch dimensions to variables yet, so such an outline keeps its numbers.
+- anything else of lines, arcs, circles, ellipses, elliptical arcs (`ellipse_arcs`) and splines (`splines`):
+  entities at their current values. Orca cannot tie sketch dimensions to variables yet, so such an outline keeps its
+  numbers.
 
 Which variables a rectangle or circle follows comes from the sketch's own dimensions (`capture.sketch_graphs`),
 worked out as formulas by `sketch_solve`: a side length is the difference of two corners, each a formula of the
@@ -22,7 +23,7 @@ from ..sketch_solve import outcome
 from ..sketch_solve.constants import constants_of
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.expr import ExprDomainError
-from . import splines
+from . import ellipse_arcs, splines
 
 # Whether Fusion keeps two lines parallel when only a driving distance dimension ties them (hand test OR18). Until
 # that is seen in Fusion, the sizes whose formulas rest on it follow only partly (`SketchFormulas.unconfirmed`).
@@ -177,8 +178,8 @@ def _ellipse_entity(c):
 
 
 def entities_of(loops):
-    """Orca entities for capture curves (lines, arcs, circles, ellipses, and splines Orca draws exactly: `splines`), or None
-    when a curve is of another kind."""
+    """Orca entities for capture curves (lines, arcs, circles, ellipses, and splines and elliptical arcs that Orca
+    draws exactly), or None when a curve is of another kind."""
     out = []
     for curves in loops:
         for c in curves:
@@ -198,6 +199,9 @@ def entities_of(loops):
                 out.append(entity)
             elif kind == "other" and c.get("nurbs"):
                 drawn = splines.entities(c)
+                if drawn is None:
+                    arc = ellipse_arcs.entity(c)
+                    drawn = [arc] if arc is not None else None
                 if drawn is None:
                     return None
                 out += drawn
