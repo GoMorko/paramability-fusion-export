@@ -447,10 +447,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the depth the length. Fusion does not say which side or way it builds the wall, so the faces that Fusion made decide
   it, as for a thin extrude. Fusion stops the wall where it meets the part, also for a depth that you type. So the
   step is copied only when the part grew by the whole wall. These are left out: a wall that runs into the part (a rib
-  drawn into a corner with a depth), a rib that Fusion fills up to the part (a gusset with To Next in a corner), and a
-  web whose lines Fusion stretches to the part (Extend on, lines that stop short of the faces). A wall flush with a
-  side of the part (Fusion merges their faces) and a wall on a body whose volume was not measured are left out too,
-  since the copy cannot check them. To Next is copied when
+  drawn into a corner with a depth), and a web whose lines Fusion stretches to the part (Extend on, lines that stop
+  short of the faces). A wall flush with a side of the part (Fusion merges their faces) and a wall on a body whose
+  volume was not measured are left out too, since the copy cannot check them. A rib with To Next that Fusion fills up
+  to the part (a gusset in the corner of a bracket) is copied as the outline that Fusion made, extruded by the
+  thickness. The copy checks that outline: both ends of the wall show the same corners, the other edges lie on faces
+  of the part that stand square to the sketch plane, each line of the rib has its side face, and the part grew by the
+  area of the outline times the thickness. The outline keeps its numbers, so every size that the steps before it read
+  may give unexpected results. The thickness follows its size. When the check fails, the rib is left out. To Next is
+  copied when
   the wall reaches one flat face of the part all along its line (a rib across a channel down to its floor, a divider
   web down to the floor of a tray). Its depth keeps the number that Fusion measured, and every size that the steps
   before it read may give unexpected results. A wall inside the box of the part could run into the part at a larger

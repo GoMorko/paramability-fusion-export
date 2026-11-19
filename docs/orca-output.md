@@ -1255,6 +1255,12 @@ it. A web whose lines Fusion stretches to the part is left out, and so is every 
 not show, a wall flush with a side of the part, and a wall on a body whose volume was not measured (cause
 `ribWeb`).
 
+A rib To Next that Fusion fills up to the part (a gusset in a corner) is the outline Fusion made
+(`design_model/steps/rib_fill.py`, with the same proof as the Paramability output, see `docs/developer-guide.md`). It
+goes to the extrude as a sketch of lines that keeps its numbers (the outline is `measured`, so no sketch graph gives it
+formulas) and one Extrude of the thickness, symmetric or to one side, whose distance follows the thickness variable.
+The sizes read before the step are marked.
+
 Checked in OrcaSlicer 2.5.1 on 2026-11-19 with exports of test designs built in Fusion (the volume Fusion measured in
 brackets):
 
@@ -1265,6 +1271,7 @@ brackets):
 | web grid To Next | three lines from wall to wall in the tray, down to the floor, `wt` 2 | 20800 (20800) | `wt=4`: 24540 (24540) |
 | rib in a channel | a line from wall to wall of a U channel, `rd` 8 down, `rt` 2 on one side | 21952 (21952) | `rt=4`: 22784 (22784) |
 | rib To Next | the same line down to the floor of the channel, `rt` 2 centred | 23824 (23824) | `rt=4`: 26528 (26528) |
+| gusset To Next | an L bracket 60 x 40 x 40, `bt` 4, a diagonal (4, 34) to (50, 4) into the corner, `rt` 2 centred | 16740 (16740) | `rt=4`: 18120 (15360 + 690 x 4) |
 
 ### Press Pull of a round face
 

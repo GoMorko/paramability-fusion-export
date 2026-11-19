@@ -450,8 +450,9 @@ def _free_reads(table, size_names):
 def graph_for(capture, profile):
     """The sketch graph record of a profile's sketch (by token, else by name), or None. An outline of another
     component's sketch (`borrowed`, or still `foreign`) has none: it is written as numbers where the capture places
-    it, and its sketch may share its name with one of the part's own."""
-    if profile.get("borrowed") or profile.get("foreign"):
+    it, and its sketch may share its name with one of the part's own. An outline measured from what Fusion made
+    (`measured`, as `rib_fill.as_extrude` writes it) has none either: it keeps its numbers."""
+    if profile.get("borrowed") or profile.get("foreign") or profile.get("measured"):
         return None
     token, name = profile.get("sketch_token"), profile.get("sketch")
     graphs = [g for g in capture.get("sketch_graphs") or [] if isinstance(g, dict) and not g.get("error")

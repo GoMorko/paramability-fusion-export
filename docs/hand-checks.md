@@ -1253,9 +1253,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: Export for Paramability and Export for Orca, each design with its parameters ticked. Both channel
     ribs, the L web and the grid web are copied, each line as a thin wall; the volumes are 21952, 23824 (To Next), 17604
     and 20800 mm3 as in Fusion. To Next marks `bt` or `wt` "may give unexpected results"; the rib and the L web in
-    the channel and the tray also mark their depth. The gusset is left out with the tip "Draw the rib or web along
-    straight lines, with no draft or fillet, or draw its outline in a sketch and extrude it.", and `rt` is marked.
-    In Paramability and in OrcaSlicer set `rt` to 4: the channel rib is 22784 mm3. Set `wd` to 16: the L web is
+    the channel and the tray also mark their depth. The gusset is copied as one extrude of a triangle (4, 4), (4, 34),
+    (50, 4), 2 mm thick about y = 20: the bracket is 16740 mm3 as in Fusion, `bt` is marked and `rt` follows. In
+    Paramability and in OrcaSlicer set `rt` to 4: the channel rib is 22784 mm3 and the gusset bracket 18120 mm3; in
+    Fusion set `rt` to 4 and note the volume of the bracket (the copy expects 18120). Set `wd` to 16: the L web is
     18420 mm3. In Fusion turn Extend on for the L web with its line shortened to start at x = 10: that web is left
     out with a reason that says Fusion stretches its lines. Afterwards each design is as before.
 

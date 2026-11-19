@@ -79,7 +79,7 @@ can be.
 | Loft: two outlines | Copied | - | Partly | Needs Orca | Both: free ends, no rails. Paramability: straight faces between the outlines. Orca: two circles, or two straight outlines in parallel planes whose corners pair up, no holes. |
 | Loft: three or more outlines | Left out | Yes, add-in only | Left out | Needs Orca | The app lofts through many outlines; check that the smooth shape matches Fusion's. |
 | Loft: rails, centre line, point or tangent ends, closed | Left out | Yes, needs an app change | Left out | Needs Orca | |
-| Rib, Web | Partly | Yes, add-in only | Partly | Yes, add-in only | Both: straight lines drawn one after the other, no draft, no fillet, as a thin wall along each line. The faces Fusion made must show the wall, and the part must grow by the whole wall: a wall that runs into the part (where Fusion stops it), a rib that Fusion fills up to the part (a gusset in a corner), and a web whose lines Fusion stretches to the part are left out. To Next keeps the depth Fusion measured, and the sizes before the step are marked. A wall that may run into the part at other sizes marks its depth. The sizes before the step are marked unless the wall stands on the face its sketch is drawn on. Orca: the thickness and depth follow as for a thin extrude of an open line. Orca's own Rib is not used yet. |
+| Rib, Web | Partly | Yes, add-in only | Partly | Yes, add-in only | Both: straight lines drawn one after the other, no draft, no fillet, as a thin wall along each line. The faces Fusion made must show the wall, and the part must grow by the whole wall: a wall that runs into the part (where Fusion stops it), and a web whose lines Fusion stretches to the part are left out. A rib To Next that Fusion fills up to the part (a gusset in a corner) is copied as the outline Fusion made, with numbers, when the faces and the volume prove it; only its thickness follows. To Next keeps the depth Fusion measured, and the sizes before the step are marked. A wall that may run into the part at other sizes marks its depth. The sizes before the step are marked unless the wall stands on the face its sketch is drawn on. Orca: the thickness and depth follow as for a thin extrude of an open line. Orca's own Rib is not used yet. |
 | Emboss: flat face | Copied | - | Partly | Yes, add-in only | Both: as an extrude from the face. Not moved or turned on the face. Orca: the depth follows; an outline that Fusion trims to its face is left out. |
 | Emboss: curved face, tangent chain | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Hole: simple, counterbore, countersink | Copied | - | Copied | - | |
@@ -197,9 +197,8 @@ Sorted by how many printing projects it helps:
    Fillet and Full Round Fillet.
 2. Picks that follow sizes on the end faces of a revolve whose angle is a size, and on the inner walls a shell leaves
    on a part turn (add-in only).
-3. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side), and the Rib that Fusion
-   fills up to the part, such as a gusset in the corner of a bracket (add-in only, as the outline Fusion measured):
-   walls, brackets and stiffeners.
+3. Thin extrudes of an open line with arcs (add-in only, after a hand check of the side): walls, brackets and
+   stiffeners.
 4. Box, Cylinder, Sphere, Torus, pipes with a square or triangle section or a closed path of lines (add-in only),
    and sweeps that make a new component (add-in only).
 5. Join extrudes through all where the far side cannot be checked, and new body extrudes through all.
