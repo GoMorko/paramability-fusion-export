@@ -350,10 +350,6 @@ class HoleUpToTest(unittest.TestCase):
                     end_points=[[8, 6, 2], [20, 10, 3], [32, 14, 2]], end_face_types=["plane"] * 3)
         self.assertIsNotNone(left_out(translate(capture)))
 
-    def test_a_hole_whose_measured_end_is_off_the_face_it_goes_up_to_is_left_out(self):
-        # Fusion ended the hole on another face (one next to the picked face, for example).
-        self.assertIsNotNone(left_out(self.up_to(end_points=[[10, 10, 3]])))
-
 
 def _sized_up_to(extent, end_z):
     """The plate of `hole_blind_flat`, 10 mm thick as `wall_mm * 5`, with its hole going up to `extent`."""

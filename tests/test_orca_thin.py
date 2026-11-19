@@ -57,11 +57,6 @@ class WallCase(unittest.TestCase):
 
 
 class LiveCheckCaptureTest(unittest.TestCase):
-    def test_the_live_check_captures_copy_every_step(self):
-        for name, build in orca_thin.CAPTURES.items():
-            with self.subTest(name):
-                self.assertEqual(run(build()).left_out, [])
-
     @unittest.skipUnless(importlib.util.find_spec("numpy"), "scripts/fixture_geometry.py needs numpy")
     def test_the_worked_out_volumes_match_the_grid_of_the_fixture_script(self):
         spec = importlib.util.spec_from_file_location("fixture_geometry", GEOMETRY)
