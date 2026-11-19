@@ -9,6 +9,10 @@ The shared layer (`design_model/steps/thin.py`) reads the line (`line_of`: lines
 other along the path), its shape (`line_problem`, `band`) and the side of the wall from the faces Fusion made
 (`line_side`). This module writes the loop, the `thin` record and the placer.
 
+A line with arcs (`thin_arc.py`) is written as a plain extrude of the closed outline of its wall, lines and arcs,
+with numbers (`ArcWall`): the line keeps its place and shape and the wall its thickness, and the sizes that move them
+are marked. The wall is copied only when the part's volume changed by the outline's area times the length.
+
 The line at other sizes. Its points follow the probe's values for the path (`sketch_values.keys.path`). The wall
 must keep its shape over the size ranges (`keep_line_valid`): each line longer than what its corners take from it,
 no corner sharper than `thin.MAX_TURN_DEG`, and no two lines that do not meet nearer than twice the farthest the wall
@@ -17,7 +21,8 @@ reaches from its line. The ranges are cut where it stops, or the sizes are marke
 from ...capture_model import gap_hints
 from ...design_model.problem import is_problem
 from ...design_model.reach import sketch_sizes
-from ...design_model.steps import thin
+from ...design_model.loops import loop_of
+from ...design_model.steps import thin, thin_arc
 from ...design_model.steps.thin import SWAPPED, band, band_profile, is_line, line_problem, reaches
 from ...geometry import vec
 from ...package.numbers import round9
@@ -41,7 +46,15 @@ def open_loop(points):
 
 def outline(ctx, item, line):
     """`(loop, drawn)`: the written loop as numbers and its `sketch_motion.Outline` when the line follows sizes, else
-    None. A line the probe did not follow keeps its numbers, and the sizes of its sketch are marked."""
+    None. A line the probe did not follow keeps its numbers, and the sizes of its sketch are marked. A line with arcs
+    has no open loop (None): its wall is written as a closed outline (`ArcWall`), with numbers."""
+    if line.curved:
+        names = sketch_sizes(ctx.table, line.sketch) if line.sketch and ctx.table is not None else ()
+        if names:
+            ctx.doubt(names, "%s copies its line with arcs from %s as measured" % (
+                item.get("name", "a thin extrude"), line.sketch))
+        sketch_motion.placement_doubts(ctx, item, line.path)
+        return None, None
     loop = open_loop(line.points)
     if not sketch_motion.active(ctx):
         sketch_motion.placement_doubts(ctx, item, line.path)
@@ -111,6 +124,8 @@ def wall_step(ctx, item, data, wall, line, drawn, start, entry):
     `thin_wall.decided` when the step that was written as this extrude found it), the thickness that follows its
     parameter, and the line's shape kept over the size ranges."""
     thickness = wall["thickness"]
+    if line.curved:
+        return arc_wall(ctx, item, data, wall, line, start, entry)
     # The line alone first: a line that turns back on itself has no wall to compare the faces with.
     problem = line_problem(line.points, 0.0, 0.0)
     side = None
@@ -130,6 +145,48 @@ def wall_step(ctx, item, data, wall, line, drawn, start, entry):
     if drawn is not None:
         keep_line_valid(ctx, item, drawn.preview()[0], thickness_q, side)
     return LineWall(side, thickness_q, band_profile(line.frame, band(line.points, *reaches(side, thickness))))
+
+
+class ArcWall:
+    """The wall of a thin extrude along a line with arcs: `loop` the recipe loop of its closed outline and `profile`
+    that outline as a capture profile (for the material placer), both as measured."""
+
+    def __init__(self, loop, profile):
+        self.loop, self.profile = loop, profile
+
+
+def _shape_refusal(problem):
+    return Refusal("The wall of this thin extrude does not follow its line: %s." % problem,
+                   cause=gap_hints.THIN_OUTLINE)
+
+
+def arc_wall(ctx, item, data, wall, line, start, entry):
+    """The `ArcWall` of a thin extrude along a line with arcs, or a Refusal: the side from the measured faces
+    (`decide`), the band kept in shape (`thin_arc.problem`), and the part's volume changed by the band's area times
+    the length (`thin_arc.size_problem`). The thickness keeps its number, so its sizes are marked."""
+    thickness = wall["thickness"]
+    problem = thin.shape_problem(line, 0.0, 0.0)
+    if problem:
+        return _shape_refusal(problem)
+    side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry,
+                  faces_of_built_body(ctx, data))
+    if isinstance(side, Refusal):
+        return side
+    problem = thin.shape_problem(line, *reaches(side, thickness))
+    if problem:
+        return _shape_refusal(problem)
+    curves = thin.wall_curves(line, side, thickness)
+    found = thin_arc.size_problem(item, data, curves, entry.distance)
+    if found is not None:
+        return _refusal(found)
+    loop = loop_of(curves, line.sketch)
+    if is_problem(loop):
+        return Refusal(loop.words, cause=gap_hints.THIN_OUTLINE)
+    names = values.quantity(ctx, item, "thin.thickness", thickness, absolute=True).reads
+    if names:
+        ctx.doubt(names, "%s keeps the thickness of its wall along a line with arcs as measured"
+                  % item.get("name", "a thin extrude"))
+    return ArcWall(loop, thin_arc.profile(line.frame, curves))
 
 
 def keep_line_valid(ctx, item, loop, thickness_q, side):

@@ -11,11 +11,13 @@ and so does every shape written here.
   the thickness (by the side of the wall), so both follow their variables, and the length follows.
 - One straight line with the wall centred on it: an Orca rectangle centred on the line, as long as the line and as
   wide as the wall. The length and the thickness follow.
-- Any other open line of straight lines: the outline of the wall (`thin.band`) drawn with numbers. The line and the
-  thickness keep their numbers, and the sizes that move them are marked.
+- Any other open line of straight lines, or of lines and arcs that meet tangent at each arc (`thin_arc.py`): the
+  outline of the wall (`thin.wall_curves`) drawn with numbers, lines and arcs. The line and the thickness keep their
+  numbers, and the sizes that move them are marked. A line with arcs is copied only when the part's volume changed by
+  the outline's area times the length (`thin_arc.size_problem`).
 
-Several outlines, outlines with holes, other closed outlines, lines with arcs, two ways, To a face or through all and
-a taper are left out with their reasons.
+Several outlines, outlines with holes, other closed outlines, lines with other curves or with a corner next to an
+arc, two ways, To a face or through all and a taper are left out with their reasons.
 """
 import math
 
@@ -24,6 +26,7 @@ from ..capture_model.capture import same_body
 from ..design_model import reach, roles
 from ..design_model.problem import is_problem
 from ..design_model.steps import thin as facts
+from ..design_model.steps import thin_arc
 from ..design_model.values import Quantity
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
@@ -42,7 +45,7 @@ _OFFSETS = {"inside": (0.0, -1.0), "outside": (1.0, 0.0), "middle": (0.5, -0.5)}
 # A wall thinner than this (mm) between the outer and the inner outline is no wall.
 _GAP = 1e-6
 
-_SHAPE = ("A thin extrude is copied to Orca only for one rectangle, one circle or a line of straight lines, so this "
+_SHAPE = ("A thin extrude is copied to Orca only for one rectangle, one circle or a line of lines and arcs, so this "
           "one is left out.")
 _ROUNDED = ("The wall of this thin extrude has rounded corners in Fusion, and the Orca copy builds sharp ones, so it "
             "is left out.")
@@ -249,7 +252,7 @@ def _line(ctx, item, data, wall):
     line = facts.line_of(data)
     if is_problem(line):
         return Skip.of(line)
-    problem = facts.line_problem(line.points, 0.0, 0.0)
+    problem = facts.shape_problem(line, 0.0, 0.0)
     if problem:
         return Skip("The wall of this thin extrude does not follow its line: %s." % problem, gap_hints.THIN_OUTLINE)
     found = _one_side(ctx, item, data, line.frame)
@@ -267,12 +270,15 @@ def _line(ctx, item, data, wall):
                                     faces_of_part(ctx, data))
     if is_problem(side_name):
         return Skip.of(side_name)
-    problem = facts.line_problem(line.points, *facts.reaches(side_name, thickness))
+    problem = facts.shape_problem(line, *facts.reaches(side_name, thickness))
     if problem:
         return Skip("The wall of this thin extrude does not follow its line: %s." % problem, gap_hints.THIN_OUTLINE)
     name = _label(item)
-    corners = facts.band(line.points, *facts.reaches(side_name, thickness))
-    loop = [{"kind": "line", "start": list(a), "end": list(b)} for a, b in zip(corners, corners[1:] + corners[:1])]
+    loop = facts.wall_curves(line, side_name, thickness)
+    if line.curved:
+        found = thin_arc.size_problem(item, data, loop, side.distance.n)
+        if found is not None:
+            return Skip.of(found)
     low, high = _heights(side)
     shape = Prism(frame, [loop], low, high)
     if _must_meet(data) and not ctx.solid.meets(shape):
@@ -280,7 +286,7 @@ def _line(ctx, item, data, wall):
     path = line.path
     _plane_doubts(ctx, item, path)
     drawn = [{"kind": "line", "start": list(a), "end": list(b)} for a, b in zip(line.points, line.points[1:])]
-    if side_name == "middle" and len(line.points) == 2:
+    if side_name == "middle" and not line.curved and len(line.points) == 2:
         made = _centred(ctx, item, line, frame, thickness, name + " sketch")
         sketch_doubts(ctx, item, [(path, Outline(drawn, []))], [(_formulas_view(made), Outline(drawn, []), path)])
     else:

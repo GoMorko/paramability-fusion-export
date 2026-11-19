@@ -18,7 +18,8 @@ The add-in adds three buttons to Fusion:
   - extrudes, also with a start offset, a taper, "To" a face or a plane, and a start "From" a face, and the text and
     embosses on a flat face, where the depth follows a parameter;
   - full ellipses, with the numbers they have now;
-  - thin walls along one rectangle, one circle or straight lines, and ribs and webs along straight lines;
+  - thin walls along one rectangle, one circle, straight lines, or lines and arcs that meet smoothly, and ribs and
+    webs along straight lines;
   - revolves, also with holes in the outline, with several outlines, and with a symmetric angle that follows a
     parameter (the copy makes two turns, one to each side);
   - holes, also "To" a face or a plane, and threads;
@@ -77,8 +78,10 @@ For some steps the add-in measures the shape that Fusion made, for example the r
 length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
 A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
 A thin extrude of an open line (a fence or a divider) is copied only when the faces that Fusion made show on which
-side of the line the wall stands. Export for Orca copies a thin wall along one rectangle, one circle or one line of
-straight lines; the side of the wall comes from what Fusion measured, as for the other export.
+side of the line the wall stands. A line with arcs is copied only where each arc meets the next piece smoothly, and
+only when the part grew by exactly the wall; its wall then keeps its shape and thickness as measured. Export for Orca
+copies a thin wall along one rectangle, one circle or one line of lines and arcs; the side of the wall comes from
+what Fusion measured, as for the other export.
 A Rib or a Web along straight lines is copied in both exports as a thin wall along each line. It is copied only when
 the faces that Fusion made show the wall and the part grew by the whole wall. Fusion stops a rib or a web where it
 meets the part, so a wall that runs into the part is left out. A rib with To Next that Fusion fills into a corner (a

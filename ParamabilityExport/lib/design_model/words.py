@@ -390,7 +390,7 @@ THIN_SIDE_UNSURE = "The side the wall of this thin extrude sits on could not be 
 THIN_AREA_DIFFERS = "The wall of this thin extrude does not match its outline and thickness, so it is not copied."
 THIN_LINE_UNREADABLE = "The line of this thin extrude could not be read."
 THIN_NOT_ONE_LINE = "The line of this thin extrude is not one open line of one sketch, so it is not copied."
-THIN_LINE_CURVES = "A thin extrude of a line with arcs or curves is not copied."
+THIN_LINE_CURVES = "A thin extrude of a line with curves other than arcs is not copied."
 THIN_LINE_OPPOSED = ("The lines of this thin extrude do not all run the same way along it, so the side of its wall is not "
                      "known.")
 THIN_LINE_APART = "The lines of this thin extrude do not run one after the other, so it is not copied."
@@ -399,6 +399,10 @@ THIN_NOT_MATCHING = ("The wall Fusion made does not match the line, side and len
                      "copied.")
 THIN_UNSURE = ("The side the wall of this thin extrude stands on could not be told from what Fusion made, so it is "
                "not copied.")
+THIN_ARC_UNMEASURED = ("The size of the part was not measured around this thin extrude along a line with arcs, so it is "
+                       "not copied.")
+THIN_ARC_VOLUME = ("The wall Fusion made along this line with arcs is not the wall of its line and thickness alone, so "
+                   "it is not copied.")
 
 # Ribs and webs (`steps/rib_web.py`).
 RIB_UNREADABLE = "A setting of this rib or web could not be read from Fusion."
