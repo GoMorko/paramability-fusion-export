@@ -186,7 +186,7 @@ def arc_wall(ctx, item, data, wall, line, start, entry):
     if names:
         ctx.doubt(names, "%s keeps the thickness of its wall along a line with arcs as measured"
                   % item.get("name", "a thin extrude"))
-    return ArcWall(loop, thin_arc.profile(line.frame, curves))
+    return ArcWall(loop, thin.wall_profile(line, side, thickness))
 
 
 def keep_line_valid(ctx, item, loop, thickness_q, side):

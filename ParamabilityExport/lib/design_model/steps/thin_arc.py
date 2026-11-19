@@ -46,8 +46,17 @@ VOLUME_UNMEASURED = Problem("arc_volume_unmeasured", words.THIN_ARC_UNMEASURED, 
 VOLUME_DIFFERS = Problem("arc_volume_differs", words.THIN_ARC_VOLUME, gap_hints.THIN_OUTLINE)
 
 
-def has_arcs(pieces):
-    return any(piece["kind"] == "arc" for piece in pieces)
+def _shape(code, text):
+    return Problem(code, text, gap_hints.THIN_OUTLINE)
+
+
+TOO_SHORT = _shape("arc_piece_too_short", "a piece of it is too short")
+ARC_TOO_WIDE = _shape("arc_turns_too_far", "an arc of it turns more than half a circle")
+ARC_CORNER = _shape("arc_corner", "it has a corner next to an arc")
+CORNER_TOO_SHARP = _shape("arc_corner_too_sharp", "a corner of it is too sharp")
+WALL_TOO_THICK = _shape("arc_wall_too_thick", "the wall is thicker than the radius of an arc of it")
+LINE_TOO_SHORT = _shape("arc_line_too_short", "a line of it is shorter than its corners take")
+PIECES_TOO_NEAR = _shape("arc_pieces_too_near", "two of its pieces come too near")
 
 
 def sweep(arc):
@@ -192,64 +201,67 @@ def _gap(a, b):
     return min(_segment_gap(p, q, r, s) for p, q in zip(pa, pa[1:]) for r, s in zip(pb, pb[1:])) - ea - eb
 
 
-def problem(pieces, left, right):
-    """Why a wall reaching `left` and `right` of the line of `pieces` is not the band copied here, or None: a piece
+def check(pieces, left, right):
+    """The Problem (a code and a short reason) why a wall reaching `left` and `right` of the line of `pieces` is not the band copied here, or None: a piece
     too short, an arc that turns more than half a circle, a joint next to an arc that is not tangent, a corner of two
     lines sharper than MAX_TURN_DEG, an arc whose moved radius reaches zero, a line shorter than its corners take, or
-    two pieces that do not meet nearer than twice the farthest the wall reaches from its line."""
+    two pieces that do not meet nearer than twice the farthest the wall reaches from its line. None when the
+    band is the one copied here."""
     for piece in pieces:
         if _length(piece) <= LENGTH_TOL:
-            return "a piece of it is too short"
+            return TOO_SHORT
         if piece["kind"] == "arc" and math.degrees(abs(sweep(piece))) > MAX_SWEEP_DEG + _TURN_TOL_DEG:
-            return "an arc of it turns more than half a circle"
+            return ARC_TOO_WIDE
     spread = max(left, right)
     for a, b in zip(pieces, pieces[1:]):
         turn = math.degrees(_turn(a, b))
         if "arc" in (a["kind"], b["kind"]):
             if abs(turn) > TANGENT_TOL_DEG:
-                return "it has a corner next to an arc"
+                return ARC_CORNER
             continue
         if abs(turn) > MAX_TURN_DEG + _TURN_TOL_DEG:
-            return "a corner of it is too sharp"
+            return CORNER_TOO_SHARP
         # The outer side of a corner of two lines meets in a tip past the corner.
         outer = right if turn > 0 else left
         spread = max(spread, outer / math.cos(math.radians(abs(turn)) / 2.0))
     for offset in (left, -right):
         moved = side_of(pieces, offset)
         if moved is None:
-            return "the wall is thicker than the radius of an arc of it"
+            return WALL_TOO_THICK
         for piece, now in zip(pieces, moved):
             if piece["kind"] == "line":
                 if math.dist(now["start"], now["end"]) <= LENGTH_TOL:
-                    return "a line of it is shorter than its corners take"
+                    return LINE_TOO_SHORT
                 u, v = direction(piece, False), direction(now, False)
                 if u[0] * v[0] + u[1] * v[1] <= 0:
-                    return "a line of it is shorter than its corners take"
+                    return LINE_TOO_SHORT
     reach = 2.0 * spread
     for i in range(len(pieces)):
         for j in range(i + 2, len(pieces)):
             if _gap(pieces[i], pieces[j]) <= reach + LENGTH_TOL:
-                return "two of its pieces come too near"
+                return PIECES_TOO_NEAR
     return None
 
 
-def profile(frame, curves):
-    """A capture profile of the closed outline `curves` in `frame`."""
-    return {"frame": frame, "loops": [{"outer": True, "curves": curves}]}
+def problem(pieces, left, right):
+    """The short reason `check` gives, or None."""
+    found = check(pieces, left, right)
+    return None if found is None else found.words
 
 
 def volume_change(item, data):
     """How much the step changed the volume of the body the walk builds (mm3, below zero when it took material
     away), or None when it was not measured. The data's `volume_before` and `volume_after` stand when the walk read
-    them on its own body (`roles.seen_on`), else the item's `target_before` and `target_after`; a new body that did
-    not exist before the step grows from nothing."""
+    them on its own body (`roles.seen_on`), else the item's `target_before` and `target_after`. A new body grows from
+    nothing: its volume after the step is the change."""
     if "volume_before" in data or "volume_after" in data:
         before, after = data.get("volume_before"), data.get("volume_after")
     else:
         before = (item.get("target_before") or {}).get("volume_mm3")
         after = (item.get("target_after") or {}).get("volume_mm3")
-        if item.get("target_before") is None and data.get("operation") == "newBody":
-            before = 0.0
+    if data.get("operation") == "newBody":
+        # The body is new: it grows from nothing, whatever body was measured before the step.
+        before = 0.0
     if not is_number(before) or not is_number(after):
         return None
     return after - before
