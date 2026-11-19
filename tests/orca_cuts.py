@@ -353,8 +353,8 @@ class Section:
     outline between the heights along its sketch plane's normal that its end gives (as `steps._Side.ends` writes
     them: one side from the plane, `flip` the other way; symmetric about the plane; two sides; through all).
     Reads the features the outline cuts and corner tools write: sketches (rectangles, circles, lines), extrudes,
-    cuts, transforms, Booleans, patterns along a line and round an axis, mirrors that join a body with its image,
-    holes through all, and sketches of imported regions (text)."""
+    cuts, transforms (a turn, then a shift), Booleans, patterns along a line and round an axis, mirrors that join a
+    body with its image, holes through all, and sketches of imported regions (text)."""
 
     def __init__(self, recipe, changed=None):
         variables = dict(recipe.variables)
@@ -472,7 +472,9 @@ class Section:
         at = self._index(f)
         body, deg = self.bodies[at], self._number(f, "xf_angle_deg")
         axis, pivot = list(f.xf_axis), list(f.xf_pivot)
-        self.bodies[at] = lambda p: body(_turned(p, axis, pivot, -deg))
+        # Orca turns about the pivot, then shifts.
+        shift = [float(v) for v in (f.xf_translate or (0.0, 0.0, 0.0))]
+        self.bodies[at] = lambda p: body(_turned(_sub(p, shift), axis, pivot, -deg))
 
     def _hole(self, f):
         """A plain hole through all: Orca cuts a cylinder through its plane's place, both ways."""

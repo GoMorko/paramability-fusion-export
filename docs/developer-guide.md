@@ -2856,8 +2856,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   copied more than one body, `pair` pairs each pasted body with a source by the points of the bodies. A source at the
   same place counts first, then a source of the same shape. When the sources and the pasted bodies do not pair one to
   one, `pair` gives a `Problem` (`pasteNotPaired`). A pasted body whose points do not fit a rigid move from its source
-  also gives a `Problem` (`pasteCornersUnread`, `pasteNoMatch`). The recipe output (`bodies/paste.py`) reads these
-  facts.
+  also gives a `Problem` (`pasteCornersUnread`, `pasteNoMatch`). The recipe output (`bodies/paste.py`) and the Orca
+  output (`orca_translate/paste.py`) both read these facts.
   `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
@@ -4738,6 +4738,41 @@ source, one layout (not to both sides), and no step that changed the part betwee
 rectangular pattern of the block with a quantity of 3 and a spacing of 8 mm, and a Combine that joins the two copies
 to the block. The copy writes one Orca Pattern of the part with `pattern_spacing` bound to the spacing. The part is
 26 x 10 x 5 mm.
+
+**A pasted body in the Orca output.** The Orca output (`orca_translate/paste.py`) copies a body that Copy and Paste
+made (the `CopyPasteBody` step). In Fusion, the pasted body follows the steps of its source up to the paste. Steps of
+the source after the paste do not change the pasted body. The Orca output reads the same facts of the shared layer
+as the recipe output (`design_model/steps/paste.py`, `result_of` and `pair`). The handler of the paste does these
+steps:
+
+1. It finds the pasted body that the walk builds (`result_of`). This body is the part when the exported body is
+   pasted. This body is a tool body when a Combine takes the pasted body (`tools.build` walks the steps of that tool,
+   and the paste is the first of them). When the paste or its bodies cannot be read, the step is left out with the
+   sentence of the `Problem`.
+2. It checks that the body has no steps yet. A paste always makes a new body.
+3. It finds the source of the pasted body (`pair`). When the paste copied several bodies and the bodies do not pair
+   one to one, the step is left out.
+4. It checks the source. A source of another component is left out with the cause `madeInOtherComponent`. The points
+   of that source can be in other coordinates.
+5. It checks the place. Fusion pastes a body in place, so the move from the source to the pasted body must be the
+   identity. Else the step is left out with the cause `pastePlace`, because the copy does not know what put the body
+   at another place.
+6. It builds the source as it was just before the paste (`tools.build` with the paste as the anchor). Each step of
+   the source is written again by its own handler, with the same bound fields. Thus a size that changes the source
+   before the paste changes the pasted body in Orca too. When a step of the source cannot be copied, the paste is
+   left out with the cause `afterGap`. The reason names that step.
+7. The body that the walk builds takes the place of the new Orca body (`_take_over`): its index in Orca's list of
+   bodies, its shape and its rounds. Thus the later steps of the pasted body work on it. A Move becomes a Transform
+   (`bodies.move`), and a Combine adds the body to the part or cuts it from the part with a Boolean.
+8. When the source is the part itself (the part pasted and joined to its copy), the steps of the part are written
+   twice. The second time writes over the features that the walk keeps for each step (`ctx.written`, `ctx.shapes`).
+   The handler puts back the features of the first time (`_keep_earlier`). Thus a later step of the part (a round
+   drawn into an outline, a pattern of features) changes the part and not the copy.
+
+Example, made up: a 40 x 20 x 4 mm plate, a 6 x 6 mm peg body on the plate, `PegH` high, a paste of the peg, a Move
+of the pasted peg 20 mm along X, and a Combine that joins both pegs to the plate. The Orca recipe holds the plate, the
+peg as a tool body, the peg again as the second tool body, a Transform of 20 mm and two Booleans. Both extrudes of
+the peg have `distance` bound to `PegH`. When `PegH` changes in Orca, both pegs follow.
 
 ### 3.6 How a mirror is translated
 

@@ -60,7 +60,8 @@ The modules of `lib/orca_translate/`:
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
   pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py` (with `body_pattern.py`, the
-  copies of a pattern or mirror of bodies that a Combine takes), `bodies.py` (split and move), `finishes.py` (fillet
+  copies of a pattern or mirror of bodies that a Combine takes), `paste.py` (a pasted body, built as its source stood
+  at the paste), `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler) and
   `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"), and `coils.py`, which
   leaves every coil out (see "Coils"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
@@ -130,6 +131,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Mirror of the body joined to it | Mirror of the part (Add) | no |
 | Rectangular or circular pattern, or mirror, of bodies whose copies one Combine joins to the part or cuts from it | the sources as one tool body, as they are just before the pattern, one Pattern per direction or a circular Pattern or a Mirror of that tool, a Boolean with the Combine's operation; copies of the part joined to it: a Pattern or Mirror of the part | `pattern_spacing`, `pattern_angle`; the count keeps its number |
 | Combine: join, cut, intersect | each tool body from the steps that made it, then a Boolean (Add, Cut, Intersect) | as the tool's steps |
+| Copy and paste of a body, in place: the part itself, or a body that a Combine takes, moved first or not | the steps of the source before the paste written again as a body of its own (later steps of the source do not reach it), then the later steps of the pasted body (a Move as a Transform, a Combine as a Boolean) | as the source's steps |
 | Combine with a tool body of another component | the tool from its steps in its component's coordinates, a Transform to its place, then the Boolean (see "Other components") | as the tool's steps, never only that: the sizes acting on that component are marked |
 | Split Face that leaves the solid as it was (the reader saw the part unchanged) | nothing: the step is skipped, as in the other export. A Split Face that may have changed the solid is left out | no |
 | Split Body by a plane or a flat face | Cut by that plane, keeping the part's side | no |
@@ -144,7 +146,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Loft between two circles, or two outlines of straight lines whose corners pair up clearly, in parallel planes, free ends | a sketch per outline, Loft with `loft_ruled` | the outlines' sizes |
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
-pasted body, scale (Orca has no step that scales a body)...), the Press Pulls in "Press Pull of a round
+scale (Orca has no step that scales a body)...), the pastes in "Patterns, mirrors, Combine, split, move and revolve", the Press Pulls in "Press Pull of a round
 face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", every coil (see "Coils"), the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns, and Combines that take copies of
 a pattern of bodies in a way that is not copied, among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
@@ -619,6 +621,19 @@ not judged to meet material where Orca removes nothing.
   up with the bodies (cause `copiesUneven`); the part cut by its own copies, copies of the part with other sources or
   to both sides, and copies of copies (cause `unsupported`). The reasons come from the shared layer where it gives
   them (`design_model.words`, `BODY_COPIES_*`).
+- Copy and paste of a body (`paste.py`). Fusion keeps a pasted body tied to its source up to the paste. The copy
+  builds the source as it stood just before the paste (`tools.build` with the paste as the anchor), each step by its
+  own handler with the same bound fields, so a variable that changes the source before the paste changes the pasted
+  body too. Steps of the source after the paste do not reach it. That body is then the body the walk builds: the part
+  when the exported body is pasted, or a tool body when a Combine takes the pasted body, as for any tool. Later steps
+  of the pasted body are copied by their own handlers on it: a Move as a Transform, a Combine as a Boolean. The shared
+  layer tells which source a pasted body copies and where it sits (`design_model/steps/paste.py`: the only source,
+  else the one at its place, else the one of its shape). Left out: a paste whose bodies cannot be read or paired with
+  their sources (cause `refused`), a source of another component (cause `madeInOtherComponent`), a pasted body that
+  does not sit where its source sat (cause `pastePlace`: Fusion pastes in place), and a source with a step that the
+  copy cannot build before the paste (cause `afterGap`, the reason names that step). A Combine that takes such a
+  pasted body is left out with the same reason. When the part is pasted and joined to its copy, the part's steps are
+  written twice; the later steps of the part keep working on the part's own features (`paste._keep_earlier`).
 - Split Body: the part's piece (followed through the split by `lineage`, so a piece with a new name is built by the
   steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
@@ -1514,6 +1529,18 @@ these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set
 - `cutter_row`: a 60 x 20 x 10 block (box 0 to 60, 0 to 20, 0 to 10) and a 6 x 6 cutter from z 4 to 14 at
   (8, 10), patterned 4 times `pitch` (14) mm apart and cut by one Combine, each pocket 6 deep: 12000 - 4 x 216 =
   11136 mm3. `--set pitch=12` gives 11136 mm3; `--set pitch=18` puts the last pocket 1 mm into the block, 11316 mm3.
+
+Pasted bodies: the captures of `tests/orca_pastes.py`. Save one with `python3 -m tests.orca_pastes <name> <file>`
+and give the file to `write`. Each is a 6 x 6 mm square body (Body2) pasted in place as Body3, Body3 moved 20 mm
+along X, and one Combine that takes Body2 and Body3. The volumes are exact, and the boxes are in the capture's
+coordinates.
+
+- `pasted_peg`: a 40 x 20 x 4 plate (box 0 to 40, 0 to 20, 0 to 10) and a peg at (8, 10) on its top face, `peg_h`
+  (6) high, its copy at (28, 10), both joined: 3200 + 2 x 216 = 3632 mm3. `--set peg_h=10` gives 3920 mm3 with the
+  box to z 14.
+- `pasted_cutter`: a 40 x 20 x 10 block (box 0 to 40, 0 to 20, 0 to 10) and a cutter at (8, 10) from z -2, `cut_h`
+  (8) high, its copy at (28, 10), both cut, each a pocket 6 deep from the bottom face: 8000 - 2 x 216 = 7568 mm3.
+  `--set cut_h=10` gives 7424 mm3 (pockets 8 deep), `--set cut_h=4` 7856 mm3 (pockets 2 deep); the box stays.
 
 Pipes: the captures of `tests/orca_pipes.py`. Save one with `python3 -m tests.orca_pipes <name> <file>` and give
 the file to `write`. The volumes are exact (a circle of radius r whose centre runs along a path of length L makes
