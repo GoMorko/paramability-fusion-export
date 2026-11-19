@@ -36,6 +36,7 @@ from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, drilled, extents, outline_cuts, text_regions
+from .context import Body
 from ..design_model.loops import outline_problem
 from ..design_model.values import Quantity
 from ..design_model import words as shared
@@ -196,8 +197,6 @@ def extrude_sides(ctx, item, data, frame, shift):
         if gap is not None:
             return gap
         if any(side.taper for side in read):
-            if operation == "intersect":
-                return Skip("A tapered intersect to both sides is not copied to Orca yet.", causes.TAPER_EXTENT)
             return [_Side(ExtrudeEnd.BLIND, flip=side.sign < 0, distance=length, taper=side.taper,
                           taper_path=side.taper_path) for side, length in zip(read, lengths)]
         if first.sign < 0:
@@ -349,10 +348,8 @@ def extrude(ctx, step):
     others = roles.new_bodies(item, [ctx.target])
     if operation == "newBody" and len(profiles) > 1 and others:
         return Skip("This extrude makes several bodies, and the Orca copy cannot tell which outline is the part.")
-    if operation == "cut" and others:
-        return Skip("This cut splits the part into pieces, which is not copied to Orca yet.")
-    if operation == "intersect" and len(profiles) > 1:
-        return Skip("An intersect with several outlines is not copied to Orca yet.")
+    if operation in ("cut", "intersect") and others:
+        return Skip("This %s splits the part into pieces, which is not copied to Orca yet." % operation)
     first_body = not ctx.has_body
     frame = profiles[0]["frame"]
     shift = extents.start(ctx, item, data, frame)
@@ -361,8 +358,6 @@ def extrude(ctx, step):
     sides = extrude_sides(ctx, item, data, frame, shift)
     if isinstance(sides, Skip):
         return sides
-    if operation == "intersect" and len(sides) > 1:
-        return Skip("A tapered intersect to both sides is not copied to Orca yet.", causes.TAPER_EXTENT)
     refused = extents.taper_measured(data, sides, len(profiles))
     if refused is not None:
         return refused
@@ -451,6 +446,25 @@ def extrude(ctx, step):
     sketch_doubts(ctx, item, parts, list({id(w[0]): (w[0], pieces_of[id(w[0])][0], pieces_of[id(w[0])][1])
                                           for w in written}.values()))
 
+    if operation == "intersect" and len(written) > 1:
+        # Several Orca extrudes (several outlines, or the two tapered halves of a two sided extrude) are one tool
+        # that Fusion intersects with the part. One intersect after the other would keep only what all of them
+        # share, so they are joined in a tool body first.
+        from . import tools  # tools reads this module
+        name = _label(item)
+        tool = ctx.push(Body(None, "%s tool" % name))
+        try:
+            out = _write(ctx, item, written, "join")
+        finally:
+            ctx.pop()
+        out.append(tools.boolean(ctx, tool, BooleanMode.INTERSECT, name))
+        return out
+    return _write(ctx, item, written, operation)
+
+
+def _write(ctx, item, written, operation):
+    """The Orca features of the sketches and extrudes in `written` (`(made, role, name, shape, side, taper)`), worked
+    into the innermost body by `operation`."""
     out = []
     sketches = {}
     for made, role, name, shape, side, taper in written:
