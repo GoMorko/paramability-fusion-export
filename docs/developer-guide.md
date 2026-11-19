@@ -6193,8 +6193,8 @@ lies along the line. The area is 690 mm2, and 690 x 2 = 1380 mm3. The part grew 
 `rib_fill.as_extrude` makes the data of an extrude of the outline: one profile of straight lines in the sketch frame
 of the rib, a join from the sketch plane, symmetric or one way (`side_one.direction`), and as long as the thickness.
 The profile is `measured`. Thus the Orca output does not give it the formulas of a sketch graph
-(`orca_translate/sketches.graph_for`). The Paramability output finds no values of the probe for it, so it keeps its
-numbers too. The handlers give these data to the extrude handler of each output. The parameter of the thickness goes
+(`orca_translate/sketches.graph_for`). The Paramability output does not ask the probe for its values
+(`translator/sketch/sketch_motion.outline`), so it keeps its numbers too. The handlers give these data to the extrude handler of each output. The parameter of the thickness goes
 to the distance of the extrude, so the thickness follows its size. The edges on the part stand square to the sketch
 plane, so a thicker rib fills the same outline while the faces of the part go that far. `rib_fill.marks` marks each
 size that the steps before it read, because the line, the corners and the faces of the part keep their numbers.

@@ -465,8 +465,9 @@ def outline(ctx, item, profile, outer, inners, parts):
     is, several for an outline merged from touching profiles (its values are taken from theirs). A corner that the
     probe could not fit is rebuilt from the sketch curves that cross there (sketch/sketch_crossings.py). The ranges
     are cut where the written loops would cross themselves (`order_ranges` for rebuilt corners, else
-    `simple_ranges`)."""
-    if not active(ctx):
+    `simple_ranges`). An outline measured from what Fusion made (`measured`, `rib_fill.as_extrude`) has no probe values
+    and keeps its numbers."""
+    if not active(ctx) or profile.get("measured"):
         placement_doubts(ctx, item, profile)
         return None
     sketch = profile.get("sketch") or ""
