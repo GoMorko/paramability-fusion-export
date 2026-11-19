@@ -55,6 +55,7 @@ UNSURE = Problem("unsure", words.RIB_UNSURE, gap_hints.RIB_WEB)
 NEXT_SHAPE = Problem("next_shape", words.RIB_NEXT_SHAPE, gap_hints.RIB_WEB)
 NEXT_LINE = Problem("next_line", words.RIB_NEXT_LINE, gap_hints.RIB_WEB)
 MEETS_PART = Problem("meets_part", words.RIB_MEETS_PART, gap_hints.RIB_WEB)
+EXTENDED = Problem("extended", words.RIB_EXTENDED, gap_hints.RIB_WEB)
 
 # The shared line problems of `thin.line_of`, in the words of a rib or web.
 _LINE_PROBLEMS = {thin.LINE_CURVES.code: CURVES, thin.LINE_OPPOSED.code: OPPOSED}
@@ -342,7 +343,8 @@ def walls(data, before=None):
     if len(found) > 1:
         return UNSURE
     if not found:
-        return NOT_MATCHING
+        # A web that Fusion extends to the part has faces past the ends of its lines.
+        return EXTENDED if data.get("extended") else NOT_MATCHING
     chosen = found[0]
     for line in lines:
         reason = thin.line_problem(line.points, *thin.reaches(chosen.side, chosen.width))

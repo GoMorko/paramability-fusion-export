@@ -416,6 +416,8 @@ RIB_UNSURE = ("The side the wall of this rib or web stands on could not be told 
 RIB_NEXT_SHAPE = ("This rib or web reaches the part in a shape that is not a wall of one depth (Fusion fills up to "
                   "the faces it meets), so it is not copied.")
 RIB_NEXT_LINE = "A rib that reaches to the part is copied only along one straight line."
+RIB_EXTENDED = ("Fusion stretches the lines of this web to the faces of the part, so it is not copied. Draw the lines up "
+                "to the faces, or turn off extending them.")
 RIB_MEASURED_MARK = "%s reaches to the faces of the part, and the copy keeps the depth Fusion measured"
 RIB_MEETS_MARK = "%s may run into the part at other sizes, where Fusion stops it and the copy does not"
 RIB_EXTENDED_MARK = "%s stretches its lines to the faces of the part, and the copy keeps them as drawn"
