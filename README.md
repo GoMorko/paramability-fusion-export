@@ -14,18 +14,22 @@ The add-in adds three buttons to Fusion:
 - **Export size choices** saves fixed sizes of one body, for example S, M and L. In Paramability, you select a size
   from a list.
 - **Export for Orca (experimental)** saves one body as an OrcaSlicer 2.5 project. The Design tab of OrcaSlicer
-  rebuilds the part, and your user parameters become its variables (`docs/orca-output.md`). A revolve copies with
-  holes in its outline and with several outlines. When the angle of a symmetric revolve follows a parameter, the
-  copy makes two turns, one to each side, so the angle follows in OrcaSlicer too. A pattern on a path of one line,
-  arc or circle copies too, and its count and distance follow. A pipe with a round section copies as a sweep of
-  its circle, solid or hollow, and its diameter and wall follow your parameters. A pattern or mirror of bodies
-  whose copies one Combine joins to the part or cuts from it copies too; its spacing and angle follow, and its
-  count keeps its number. A hole "To" a face or plane copies to the depth Fusion made, in both exports, and its end
-  must lie on that face or plane. A body made by Copy and Paste copies as its source was at the paste, also when
-  you move it and join it to the part or cut it from the part; the sizes of the source follow. A coil is left out:
-  Orca's sweep along a helix keeps the wire square to its turns, so the ends and the thickness of the wire would not
-  be as in Fusion. A Box, Cylinder, Sphere or Torus step is left out in both exports, because Fusion does not tell
-  add-ins where it sits or how it joins the part. Draw the shape in a sketch and extrude or revolve it instead.
+  rebuilds the part, and your user parameters become its variables (`docs/orca-output.md`). It copies:
+  - extrudes, also with a start offset, a taper, "To" a face or a plane, and a start "From" a face, and the text and
+    embosses on a flat face, where the depth follows a parameter;
+  - full ellipses, with the numbers they have now;
+  - thin walls along one rectangle, one circle or straight lines, and ribs and webs along straight lines;
+  - revolves, also with holes in the outline, with several outlines, and with a symmetric angle that follows a
+    parameter (the copy makes two turns, one to each side);
+  - holes, also "To" a face or a plane, and threads;
+  - sweeps, lofts of two outlines, and pipes with a round section, solid or hollow;
+  - patterns on a straight line, an arc or a circle, and patterns and mirrors of bodies that one Combine joins to
+    the part or cuts from it (the count keeps its number);
+  - a Press Pull of one whole round face, a body made by Copy and Paste, and Combine, split and move.
+  Export for Orca leaves out a coil, because Orca's sweep along a helix keeps the wire square to its turns, so the
+  ends and the thickness of the wire would not be as in Fusion. It also leaves out a Box, Cylinder, Sphere or Torus
+  step, as the other export does, because Fusion does not tell add-ins where it sits or how it joins the part. Draw
+  the shape in a sketch and extrude or revolve it instead.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.
