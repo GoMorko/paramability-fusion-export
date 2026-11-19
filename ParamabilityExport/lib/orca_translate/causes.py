@@ -50,6 +50,12 @@ COPIES_UNEVEN = "copiesUneven"
 REPEATS_FINISH = "repeatsFinish"
 NOT_REPEATABLE = "notRepeatable"
 HOLE_PLACE_IN_TOOL = "holePlaceInTool"
+# A Combine that takes the copies of a pattern or mirror of bodies (`body_pattern`): it takes only some copies, or the
+# copies without the body they copy; a step changes a copy or the source on its own before the Combine; or the
+# Combine keeps what the part shares with the copies.
+COPIES_TAKEN = "copiesTaken"
+COPY_CHANGED = "copyChanged"
+COPIES_INTERSECT = "copiesIntersect"
 
 # Combine, split and move.
 INTERSECT_RULE = "intersectRule"

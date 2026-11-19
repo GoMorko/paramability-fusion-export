@@ -98,7 +98,7 @@ can be.
 | Rectangular pattern of features | Copied | - | Copied | - | Count and spacing follow. Orca: no rounds or chamfers among the copied steps. |
 | Circular pattern of features | Copied | - | Copied | - | Count and angle follow. Paramability: an even count may give unexpected results. |
 | Pattern with suppressed copies | Copied | - | Left out | Needs Orca | Orca's pattern cannot leave copies out. |
-| Pattern of bodies, joined by a Combine | Copied | - | Left out | Yes, add-in only | |
+| Pattern of bodies, joined by a Combine | Copied | - | Partly | Yes, add-in only | Orca: a rectangular or circular pattern, or a mirror, whose copies one Combine joins or cuts together with their source; spacing and angle follow, the count keeps its number. Left out when the Combine takes only some copies, intersects, or a step changes a copy on its own. |
 | Pattern or mirror of faces | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Path pattern | Partly | Yes, needs an app change | Partly | Needs Orca | Paramability: a path of one line, arc or circle; count and distance follow, and their ranges stop where the copies would leave the path. Other paths need an app change. Orca: a path of one line, arc or circle, and also an arc whose copies keep their direction (then the distance keeps its number); count and distance follow, and the parameter's line says how far they may go before the copies leave the path. Orca's pattern along a curve does not space copies by length on other curves. |
 | Mirror of features | Copied | - | Copied | - | Orca: the mirror plane keeps its place. |

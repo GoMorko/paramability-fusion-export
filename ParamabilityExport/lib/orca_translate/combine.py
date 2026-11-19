@@ -5,11 +5,14 @@ Orca drops the tool body after the Boolean even when Fusion keeps it: only the e
 Combine that takes the same tool writes it again. An intersect with several tools follows the rule the capture
 measured: keep what the part shares with every tool (one Boolean per tool), or with any of them (the tools joined
 first). A Combine that changes another body and keeps the part as a tool does not change the part.
+
+Tools that are copies made by a pattern or mirror of bodies are written as one repeated tool body per pattern
+(`body_pattern`), before the other tools.
 """
 from ..capture_model import gap_hints
 from ..capture_model.capture import same_body
 from ..orca_recipe.enums import BooleanMode
-from . import causes
+from . import body_pattern, causes
 from .steps import Skip
 from .tools import OPERATIONS, Pass, boolean, build, label
 
@@ -28,6 +31,10 @@ def combine(ctx, step):
         return Skip("The part this Combine works on is not in the copy.", gap_hints.AFTER_GAP)
     if not tools:
         return Skip("The tool bodies of this Combine could not be read.")
+    found = body_pattern.split(ctx, item, tools, mode)
+    if isinstance(found, Skip):
+        return found
+    groups, tools = found
     joined = False
     if mode == BooleanMode.INTERSECT and len(tools) > 1:
         model = data.get("intersect_model")
@@ -37,6 +44,11 @@ def combine(ctx, step):
         joined = model == "any"
     start = len(ctx.features)
     mark = ctx.checkpoint()
+    if groups:
+        made = body_pattern.write(ctx, item, groups, mode)
+        if isinstance(made, Skip):
+            ctx.rollback(mark)
+            return made
     built = []
     for tool in tools:
         body = build(ctx, tool, item)

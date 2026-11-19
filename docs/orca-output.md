@@ -59,7 +59,8 @@ The modules of `lib/orca_translate/`:
   parameters follow").
 - Handler modules, one per kind of step: `steps.py` (extrude; `thin.py` builds a thin extrude, see "Thin extrudes"), `holes.py` (hole), `revolve.py` (with
   `revolve_parts.py`, which writes its sketches, revolves and tool bodies), `sweeps.py`, `pipes.py` (a round
-  pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
+  pipe as a sweep of its circle, see "Pipes"), `lofts.py`, `repeat.py` (patterns and mirrors; `repeat_path.py` patterns along a path), `combine.py` (with `body_pattern.py`, the
+  copies of a pattern or mirror of bodies that a Combine takes), `bodies.py` (split and move), `finishes.py` (fillet
   and chamfer), `threads.py`, `emboss.py` (an emboss on a flat face, written by the extrude handler) and
   `press_round.py` (a Press Pull of one whole round face, see "Press Pull of a round face"). `holes.py` and `threads.py` read the hole and the thread through the shared readers
   `design_model/steps/hole.py` and `thread.py` (the kind, the direction, the measured sizes, the thread numbers and
@@ -126,6 +127,7 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 | Path pattern along one arc, the copies keeping their direction | a sketch arc from the start of the path to the last copy, Orca's pattern along that curve | `pattern_count` for a distance over the whole extent; the distance keeps its number |
 | Mirror of features | the repeated steps as a tool body joined with its Mirror, a Boolean | no |
 | Mirror of the body joined to it | Mirror of the part (Add) | no |
+| Rectangular or circular pattern, or mirror, of bodies whose copies one Combine joins to the part or cuts from it | the sources as one tool body, as they are just before the pattern, one Pattern per direction or a circular Pattern or a Mirror of that tool, a Boolean with the Combine's operation; copies of the part joined to it: a Pattern or Mirror of the part | `pattern_spacing`, `pattern_angle`; the count keeps its number |
 | Combine: join, cut, intersect | each tool body from the steps that made it, then a Boolean (Add, Cut, Intersect) | as the tool's steps |
 | Combine with a tool body of another component | the tool from its steps in its component's coordinates, a Transform to its place, then the Boolean (see "Other components") | as the tool's steps, never only that: the sizes acting on that component are marked |
 | Split Face that leaves the solid as it was (the reader saw the part unchanged) | nothing: the step is skipped, as in the other export. A Split Face that may have changed the solid is left out | no |
@@ -142,7 +144,8 @@ that meets nothing), and for holes `toward_material` and `behind` (the side of a
 
 Left out, with the reason in the result window and the report: every other step type (shell, draft,
 pasted body, scale (Orca has no step that scales a body)...), the Press Pulls in "Press Pull of a round
-face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
+face" (flat faces, several faces, round faces that are not whole), the sweeps and lofts in "Sweeps, lofts and splines", the pipes in "Pipes", the cases in "Patterns, mirrors, Combine, split, move and revolve" (path patterns, and Combines that take copies of
+a pattern of bodies in a way that is not copied, among them), fillets and chamfers on hand-picked edges that do not all run along straight extrudes, the thin extrudes in "Thin extrudes", the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), the sketch text and embosses in "Sketch text and
 embosses", outlines of another component's sketch that cannot be placed (the capture lacks the frame of the outline, the frame of its sketch or the place of its component in the assembly, so the outline stays marked foreign), elliptical arcs, splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a countersink and a modeled thread, left hand threads,
@@ -489,7 +492,7 @@ not judged to meet material where Orca removes nothing.
 
 ### Patterns, mirrors, Combine, split, move and revolve
 
-`orca_translate/repeat.py`, `combine.py`, `tools.py`, `bodies.py` and `revolve.py`, checked against Orca 2.5.1
+`orca_translate/repeat.py`, `combine.py`, `body_pattern.py`, `tools.py`, `bodies.py` and `revolve.py`, checked against Orca 2.5.1
 (`CadDocument::route_feature`, `apply_feature` Pattern and Revolve, `apply_boolean`, `apply_cut`, `apply_mirror`,
 `apply_transform`) and live.
 
@@ -584,7 +587,36 @@ not judged to meet material where Orca removes nothing.
   without an error. A variable whose limit cannot be told keeps its number.
 - Mirror of features: the tool body and an Orca Mirror of it (Add), then the Boolean. Mirror of the body joined to it
   (`combine` true): an Orca Mirror of the part. A pattern or mirror of bodies that leaves its copies apart does not
-  change the part and is passed by; a part that is such a copy, or a Combine that takes such a copy, is left out.
+  change the part and is passed by; a part that is such a copy is left out.
+- Pattern or mirror of bodies whose copies a Combine takes (`body_pattern.py`). Orca's Pattern keeps the body it
+  works on and fuses each copy into it (`CadDocument::apply_feature`, Pattern: copies 1 to count - 1 of the seed,
+  `BRepAlgoAPI_Fuse`). Its Mirror with mode Add fuses the body with its image (`apply_mirror`;
+  `mirror_keep_original` counts only for mode New). The shared layer tells which patterns the Combine takes whole
+  (`design_model/steps/body_pattern.py`, `groups`): the copies pair up with the bodies the pattern made by their
+  points, the Combine takes every copy and every source, and no step changed a copy or a source between the pattern
+  and the Combine. The copy then builds the sources as one tool body (`tools.build` with the pattern as the anchor,
+  so each source is built as it is just before the pattern; several sources are joined first). It repeats that tool
+  with the layout of a pattern of features (`repeat.rectangular_layout`, `repeat.circular_layout`, or a Mirror), and
+  adds it to the part or cuts it away with one Boolean with the Combine's operation. The other tools of the Combine
+  follow, each built from its own steps. A direction to both sides is a tool body each way, as for features.
+- The Combine holds a fixed list of bodies, and it is not known whether Fusion adds new copies to it when a count
+  changes (hand test B6). So the count keeps its number, and its sizes get the reason "... makes more or fewer copies
+  with it, and Fusion may not change what its Combine takes". The spacing and the angle follow variables, and an
+  extent becomes a spacing of the distance over the count less one.
+- Copies of the part joined to it (the Combine's target is the source of the pattern): an Orca Pattern or Mirror of
+  the part itself, with no Boolean. This needs one layout (not to both sides), a join, the part as the only source,
+  and no step that changed the part between the pattern and the Combine (`body_pattern.stays_as_copied`).
+- The copies Orca makes from the numbers written must land on the bodies Fusion made: each move of the written
+  layout must put every point of each source on the points of one copy, one move per copy (`_lands`, cause
+  `copiesUneven`). The layout checks of a pattern of features apply too (an even grid, the places of circular copies
+  from their ids, suppressed copies). A cut whose repeated tool meets nothing of the part as the copy builds it is
+  left out (cause `missesPart`). A join of copies that only touch the part is copied, as Fusion joins them.
+- Left out: a Combine that takes only some of the copies, or the copies without their source (cause `copiesTaken`);
+  a step that changes a copy or a source on its own before the Combine (cause `copyChanged`); copies made in another
+  component (cause `otherComponent`); an intersect with the copies (cause `copiesIntersect`); copies that do not pair
+  up with the bodies (cause `copiesUneven`); the part cut by its own copies, copies of the part with other sources or
+  to both sides, and copies of copies (cause `unsupported`). The reasons come from the shared layer where it gives
+  them (`design_model.words`, `BODY_COPIES_*`).
 - Split Body: the part's piece (followed through the split by `lineage`, so a piece with a new name is built by the
   steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
@@ -1365,6 +1397,8 @@ mesh was raised (`mesh_lift`), and the result window says the two differ.
   ring next to the face, without an error. The sizes that may do this are marked.
 - A Boolean that adds or cuts nothing does not stop Orca's rebuild, but a pattern whose count or spacing a variable
   changes can put copies where the part has none; they then add material there or cut nothing.
+- The count of a pattern or mirror of bodies that a Combine takes keeps its number in Orca: Fusion's Combine holds a
+  fixed list of copies.
 - A thin wall along an open line of more than one line, or not centred on its line, keeps its line and its
   thickness as numbers in Orca.
 - One body per file. The recipe format is Orca's internal one (version 6) and may change.
@@ -1429,6 +1463,22 @@ y = 40. The parameter lines say count under 5.58 and pitch under 13.7 mm. `pegs_
 5 pegs over 48 mm of the arc keeping their direction: 9080 mm3, box 0 to 50, 0 to 42.31, 0 to 10; `--set count=4`
 8864 and `--set count=3` 8648, the box the same (the last peg stays at 48 mm). `pitch` keeps its number. All three
 built with these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set` changes.
+
+Patterns and mirrors of bodies that a Combine takes: the captures of `tests/orca_body_patterns.py`. Save one with
+`python3 -m tests.orca_body_patterns <name> <file>` and give the file to `write`. Each peg is a 6 x 6 mm square body
+standing on the top face of the plate (z 4), `peg_h` high (6 mm, 216 mm3). The volumes are exact, and the boxes are
+in the capture's coordinates. `count` keeps its number in Orca, so `--set count=5` leaves each body as it is.
+
+- `peg_row`: a 60 x 20 x 4 plate (box 0 to 60, 0 to 20, 0 to 10) and a peg at (8, 10), patterned 4 times `pitch`
+  (14) mm apart along X and joined by one Combine: 4800 + 4 x 216 = 5664 mm3. `--set pitch=18` gives 5664 mm3 with
+  the box to x 65; `--set peg_h=10` gives 6240 mm3 with the box to z 14.
+- `peg_ring`: a 60 x 60 x 4 plate round the origin (box -30 to 30, -30 to 30, 0 to 10) and a peg at (20, 0),
+  patterned 6 times round the Z axis and joined: 14400 + 6 x 216 = 15696 mm3. `--set peg_h=10` gives 16560 mm3.
+- `mirrored_peg`: a 40 x 20 x 4 plate round the origin (box -20 to 20, -10 to 10, 0 to 10) and a peg at (-12, 0),
+  mirrored across the YZ plane and joined: 3200 + 2 x 216 = 3632 mm3. `--set peg_h=10` gives 3920 mm3.
+- `cutter_row`: a 60 x 20 x 10 block (box 0 to 60, 0 to 20, 0 to 10) and a 6 x 6 cutter from z 4 to 14 at
+  (8, 10), patterned 4 times `pitch` (14) mm apart and cut by one Combine, each pocket 6 deep: 12000 - 4 x 216 =
+  11136 mm3. `--set pitch=12` gives 11136 mm3; `--set pitch=18` puts the last pocket 1 mm into the block, 11316 mm3.
 
 Pipes: the captures of `tests/orca_pipes.py`. Save one with `python3 -m tests.orca_pipes <name> <file>` and give
 the file to `write`. The volumes are exact (a circle of radius r whose centre runs along a path of length L makes

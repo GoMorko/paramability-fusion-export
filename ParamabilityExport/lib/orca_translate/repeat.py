@@ -90,7 +90,8 @@ def _turn(point, axis, degrees):
     return rows, vec.sub(point, [sum(rows[i][k] * point[k] for k in range(3)) for i in range(3)])
 
 
-def _reflection(point, normal):
+def reflection(point, normal):
+    """`(rows, offset)` of the reflection across the plane through `point` with the normal `normal`."""
     n = vec.unit(normal)
     rows = [[(1.0 if i == j else 0.0) - 2.0 * n[i] * n[j] for j in range(3)] for i in range(3)]
     return rows, vec.scale(n, 2.0 * vec.dot(point, n))
@@ -101,7 +102,7 @@ def _bind_count(ctx, made, value, where):
     made.pattern_count = int(round(value.n))
 
 
-def _params_doubt(ctx, item, used, why):
+def params_doubt(ctx, item, used, why):
     """Sizes behind the step's parameters that no written field follows get `why`."""
     for path, found in design.params_of(item).items():
         if path not in used and isinstance(found, dict) and found.get("name"):
@@ -328,11 +329,20 @@ def _grid(data, elements, directions):
     return Skip(shared.PATTERN_UNEVEN_GRID, causes.COPIES_UNEVEN)
 
 
-def _parts(ctx, item, direction, kind, step, places):
+def _fixed_count(ctx, value, count, why):
+    """The count `value` of a pattern, or its number `count` when `why` says why it keeps it (the sizes it reads
+    get `why`)."""
+    if why is None:
+        return value
+    ctx.doubt(value.reads, why)
+    return Quantity(count)
+
+
+def _parts(ctx, item, direction, kind, step, places, count_why=None):
     """The runs of one direction (`_Part`), or a Skip."""
     which, forward, n, distance, symmetric = direction
     name = label(item)
-    count_value = ctx.quantity(item, "quantity_" + which, n, "scalar")
+    count_value = _fixed_count(ctx, ctx.quantity(item, "quantity_" + which, n, "scalar"), n, count_why)
     distance_value = ctx.quantity(item, "distance_" + which, distance).magnitude()
     if kind == "spacing":
         step_value = distance_value
@@ -370,7 +380,9 @@ def _parts(ctx, item, direction, kind, step, places):
     return out
 
 
-def _linear_copies(ctx, tool, layout, name):
+def linear_copies(ctx, tool, layout, name):
+    """The Orca Patterns of one layout of a rectangular pattern (`rectangular_layout`) on the body `tool`, and the
+    `(rows, offset)` of every copy they make, the original included."""
     moves = [(IDENTITY, [0.0, 0.0, 0.0])]
     for n, part in enumerate(layout, start=1):
         made = feature(FeatureType.PATTERN, "%s: pattern%s" % (name, " %d" % n if len(layout) > 1 else ""),
@@ -392,6 +404,21 @@ def rectangular(ctx, step):
     groups = sources(ctx, data, "pattern")
     if isinstance(groups, Skip):
         return groups
+    found = rectangular_layout(ctx, item, data)
+    if isinstance(found, Skip):
+        return found
+    layouts, used = found
+    made = write(ctx, item, groups, layouts, linear_copies, "pattern")
+    if not isinstance(made, Skip):
+        params_doubt(ctx, item, used, "%s: a direction without copies" % label(item))
+    return made
+
+
+def rectangular_layout(ctx, item, data, count_why=None):
+    """`(layouts, used)` of the rectangular pattern `item` (`data`, the data of its step): one layout per tool body
+    to write, each a tuple of runs (`_Part`) that `linear_copies` writes, and the paths of the values the runs
+    follow. A Skip when the copies do not sit where Orca's Patterns would put them. With `count_why`, the counts keep
+    their numbers and the sizes they read get that reason."""
     raw = data
     data = data_in_component(data, ctx.component_frame(), merge=True)
     elements = data.get("elements") or []
@@ -421,15 +448,12 @@ def rectangular(ctx, step):
         return Skip(shared.PATTERN_FACES_DISAGREE, causes.COPIES_UNEVEN)
     runs = []
     for k, direction in enumerate(directions):
-        found = _parts(ctx, item, direction, kind, steps[k], [p[k] for p in steps_of_copies])
+        found = _parts(ctx, item, direction, kind, steps[k], [p[k] for p in steps_of_copies], count_why)
         if isinstance(found, Skip):
             return found
         runs.append(found)
     used = {"%s_%s" % (key, d[0]) for d in directions for key in ("quantity", "distance")}
-    made = write(ctx, item, groups, list(product(*runs)), _linear_copies, "pattern")
-    if not isinstance(made, Skip):
-        _params_doubt(ctx, item, used, "%s: a direction without copies" % label(item))
-    return made
+    return list(product(*runs)), used
 
 
 # ---- circular --------------------------------------------------------------------------------------------------
@@ -481,6 +505,19 @@ def circular(ctx, step, angle_of=None):
     groups = sources(ctx, data, "pattern")
     if isinstance(groups, Skip):
         return groups
+    found = circular_layout(ctx, item, data, angle_of)
+    if isinstance(found, Skip):
+        return found
+    layouts, copies = found
+    return write(ctx, item, groups, layouts, copies, "pattern")
+
+
+def circular_layout(ctx, item, data, angle_of=None, count_why=None):
+    """`(layouts, copies)` of the circular pattern `item` (`data`, the data of its step): one layout per tool body
+    to write, and `copies(ctx, tool, layout, name)`, which writes the Orca Pattern of a layout on the body `tool` and
+    gives the `(rows, offset)` of every copy, the original included. A Skip when the copies do not sit where Orca's
+    Pattern would put them. `angle_of` as for `circular`. With `count_why`, the count keeps its number and the sizes
+    it reads get that reason."""
     axis = data.get("axis") or {}
     if axis.get("foreign"):
         return Skip("The axis of this pattern belongs to another component and could not be brought into the "
@@ -524,7 +561,7 @@ def circular(ctx, step, angle_of=None):
         else:
             return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
     axis_dir = vec.scale(direction, sign)
-    count_value = ctx.quantity(item, "quantity", n, "scalar")
+    count_value = _fixed_count(ctx, ctx.quantity(item, "quantity", n, "scalar"), n, count_why)
     if angle_of is not None and not full:
         angle_value = angle_of(count_value)
     else:
@@ -554,12 +591,13 @@ def circular(ctx, step, angle_of=None):
         ctx_.add(made)
         return [_turn(point, turn_axis, k * delta) for k in range(count)]
 
-    return write(ctx, item, groups, layouts, copies, "pattern")
+    return layouts, copies
 
 
 # ---- mirror ----------------------------------------------------------------------------------------------------
 
-def _mirror_feature(ctx, name, plane, body):
+def mirror_feature(ctx, name, plane, body):
+    """An Orca Mirror that joins the body `body` with its image across `plane` (`{origin, normal}`)."""
     return feature(FeatureType.MIRROR, name, plane=_plane_about(ctx, plane["origin"], plane["normal"]),
                    mode=BooleanMode.ADD, mirror_keep_original=True, target_body=body.index)
 
@@ -574,14 +612,14 @@ def mirror(ctx, step):
     if plane is None:
         return Skip(shared.MIRROR_PLANE)
     kept_refs.mark(ctx, item, found, "mirrors across")
-    reflect = _reflection(plane["origin"], plane["normal"])
+    reflect = reflection(plane["origin"], plane["normal"])
     entity = data.get("entity_type")
     if entity == "bodies":
         if not data.get("combine"):
             return separate_copies(ctx, data, "mirror")
         if not ctx.has_body:
             return Skip("The part this mirror copies is not in the copy.", gap_hints.AFTER_GAP)
-        made = _mirror_feature(ctx, label(item), plane, ctx.scope)
+        made = mirror_feature(ctx, label(item), plane, ctx.scope)
         ctx.add(made)
         ctx.solid.add(ADD, Moved(ctx.solid.copy(), *reflect))
         return [made]
@@ -592,7 +630,7 @@ def mirror(ctx, step):
         return groups
 
     def copies(ctx_, tool, layout, tag):
-        ctx_.add(_mirror_feature(ctx_, "%s: mirror" % tag, plane, tool))
+        ctx_.add(mirror_feature(ctx_, "%s: mirror" % tag, plane, tool))
         return [(IDENTITY, [0.0, 0.0, 0.0]), reflect]
 
     return write(ctx, item, groups, [None], copies, "mirror")

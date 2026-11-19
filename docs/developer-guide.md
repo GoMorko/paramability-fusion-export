@@ -4691,6 +4691,46 @@ a Combine whose tool is one coil body. There the coil is written onto the part w
 flat form). The reader tells the handler which bodies a coil made (`data.made`), so the check "the step makes one body"
 looks at those bodies and not at every body of the component (`_writes_flat`).
 
+**A pattern of bodies in the Orca output.** The Orca output (`orca_translate/combine.py` with
+`orca_translate/body_pattern.py`) also copies a Combine that takes the copies of a rectangular pattern, a circular
+pattern or a mirror of bodies. It reads the same facts of the shared layer as the recipe output
+(`design_model/steps/body_pattern.py`, `groups`). The Combine handler does these steps:
+
+1. It gets the groups (`body_pattern.split`). Each group is a pattern whose copies the Combine takes. When a pattern
+   has a `Problem`, the whole Combine is left out. The `Problem` gives the reason, and the code gives the cause:
+   `copiesTaken` (only some copies, or the copies without their source), `copyChanged` (a step changed a copy or the
+   source on its own before the Combine), `otherComponent` (the copies are in another component) or `copiesUneven`
+   (the copies do not pair up with the bodies). An intersect with copies is left out with the cause
+   `copiesIntersect`, because a pattern always gives several tools.
+2. It writes each group before the other tools (`body_pattern.write`). For a group whose source is not the part, it
+   builds each source as a tool body (`tools.build`). The anchor is the pattern item, so the tool is as the source
+   was just before the pattern. Several sources are joined into one tool body.
+3. It writes the layout on that tool body. A rectangular pattern uses `repeat.rectangular_layout` and
+   `repeat.linear_copies`. A circular pattern uses `repeat.circular_layout`. A mirror uses an Orca Mirror with the
+   mode Add. These are the same functions that the patterns of features use, so the spacing and the angle follow
+   variables in the same way. Orca's Pattern keeps the body and fuses each copy into it. Orca's Mirror with the mode
+   Add fuses the body with its image.
+4. The count keeps its number. The Combine holds a fixed list of bodies, and it is not known if Fusion adds a new
+   copy to that list when the count changes. The layout functions take the reason (`count_why`,
+   `design_model.words.BODY_COPIES_COUNT`), write the count as a number, and give the reason to the sizes of the
+   count.
+5. It checks that the copies land on the bodies that Fusion made (`_lands`). Each move of the layout, except the
+   original, must put each point of a source on the points of one copy. Each copy must get one move. Else the
+   Combine is left out with the cause `copiesUneven`.
+6. For a cut, the repeated tool must meet the part as the copy builds it (`solid.meets`). Else the Combine is left
+   out with the cause `missesPart`. For a join, a copy that only touches the part is correct, because Fusion joins
+   it too.
+7. One Boolean adds the tool to the part or cuts it from the part, with the operation of the Combine. The pattern
+   item gets the note "Copied with Combine1".
+
+When the source of the pattern is the part itself, the Combine joins the copies to the part. Then the Orca output
+writes the Pattern or the Mirror on the part, and it writes no Boolean. This needs a join, the part as the only
+source, one layout (not to both sides), and no step that changed the part between the pattern and the Combine
+(`body_pattern.stays_as_copied`). Else the Combine is left out. Example, made up: a block of 10 x 10 x 5 mm, a
+rectangular pattern of the block with a quantity of 3 and a spacing of 8 mm, and a Combine that joins the two copies
+to the block. The copy writes one Orca Pattern of the part with `pattern_spacing` bound to the spacing. The part is
+26 x 10 x 5 mm.
+
 ### 3.6 How a mirror is translated
 
 `repeat.body_copies:mirror` is the handler of every mirror item. A mirror of bodies is handled like a pattern of bodies

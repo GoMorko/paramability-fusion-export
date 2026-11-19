@@ -1179,3 +1179,23 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (9539.38 with `Grow` = 2), 15363.83 mm3 (15214.60 with `Fit` = 1) and 8502.65 mm3 (8282.74 with `Grow` = 2).
     The line of the parameter tells how far it may go (under 14.9, 15.9 and 4.99 mm). Afterwards each design is as
     before.
+
+97. BP1, patterns of bodies that a Combine joins or cuts, for Export for Orca. Add user parameters `Count` = 4,
+    `Pitch` = 14 mm and `PegH` = 6 mm. Model a 60 x 20 x 4 mm plate with its corner at the origin (Body1). On the top
+    face sketch a 6 x 6 mm square centred at (8, 10) and extrude it `PegH` up as a new body (Body2). Make a
+    Rectangular Pattern of Bodies of Body2 along X: quantity `Count`, distance `Pitch`, spacing. Then Combine Join
+    with Body1 as the target and Body2 and its three copies as the tools. In a second design make a 60 x 60 x 4 mm
+    plate centred on the origin, a 6 x 6 mm peg centred at (20, 0) as a new body, a Circular Pattern of Bodies of the
+    peg about the Z axis, quantity 6, full circle, and a Combine Join of all six pegs into the plate. In a third
+    design make a 40 x 20 x 4 mm plate centred on the origin, a peg centred at (-12, 0) as a new body, a Mirror of
+    the peg body across the YZ plane, and a Combine Join of the peg and its mirror image into the plate. In a fourth
+    design make a 60 x 20 x 10 mm block with its corner at the origin, a 6 x 6 mm square centred at (8, 10) on a
+    plane 4 mm above the XY plane extruded 10 mm up as a new body, a Rectangular Pattern of Bodies of it (quantity
+    `Count`, distance `Pitch`), and a Combine Cut of the four bodies from the block.
+    Export: Export for Orca each design with all parameters ticked. Each Combine is copied with nothing left out, as
+    one tool body, a Pattern or a Mirror of it and one Boolean (Add, or Cut for the fourth design); the pattern says
+    "Copied with Combine1". `Count` is fixed with the reason that Fusion may not change what its Combine takes,
+    `Pitch` and `PegH` follow. The volume in Orca is 5664, 15696, 3632 and 11136 mm3, as in Fusion (Inspect >
+    Properties). In OrcaSlicer set `Pitch` to 18: the first body reaches x = 65 with 5664 mm3, the fourth has
+    11316 mm3. Set `PegH` to 10: the first three are 6240, 16560 and 3920 mm3. In Fusion set `Count` to 5 and look
+    whether the Combine takes the new copy: note what it does. Afterwards each design is as before.

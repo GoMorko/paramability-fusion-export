@@ -376,6 +376,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   behind the layout are marked. A count that follows a size is written as if the Combine also takes the new copies.
   Since it is not known whether Fusion does this (hand test B6), that size is marked "may give unexpected results". A mirror of bodies is copied only in a Combine, together
   with its source. A body that is a copy in a pattern is copied by writing its source's steps and a Move.
+  Export for Orca copies such a Combine only when it takes the whole pattern: the copies become one Orca Pattern or
+  Mirror. The spacing and the angle follow your parameters, and the count keeps its number. A Combine that takes only
+  some of the copies, that keeps only the shared part, or whose copies a later step changes one by one, is left out.
 - A pattern or mirror of features whose sources hold a Combine of the part, together with every step that built its tool
   bodies, repeats the Combine as it was copied, so its count, spacing and skipped copies follow sizes as for any
   pattern. A pattern that holds only some of those steps, the steps of a tool without its Combine, or a Combine that
