@@ -24,7 +24,7 @@ UNREAD = "unread"       # an item whose Fusion entity could not be read (type "n
 PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
-PATH = "path"           # data.path: the curves of one sketch a sweep follows, or the open line of a thin extrude
+PATH = "path"           # data.path: the curves of one sketch a sweep follows, or the open line of a thin extrude, rib or web
 OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
 # When a missing step of a type only finishes surfaces (`StepType.finishing`).
@@ -165,9 +165,9 @@ STEP_TYPES = (
              turns_faces=True),
     StepType("ReplaceFaceFeature", "replace face", unsupported="Replace Face is not copied.",
              gap_cause=gap_hints.REPLACE_FACE, reaches_bodies=True, turns_faces=True),
-    StepType("RibFeature", "rib", unsupported="Rib is not copied.", gap_cause=gap_hints.RIB_WEB,
+    StepType("RibFeature", "rib", reader="read_rib", sketches=(PATH,), gap_cause=gap_hints.RIB_WEB,
              reaches_bodies=True),
-    StepType("WebFeature", "web", unsupported="Web is not copied.", gap_cause=gap_hints.RIB_WEB,
+    StepType("WebFeature", "web", reader="read_rib", sketches=(PATH,), gap_cause=gap_hints.RIB_WEB,
              reaches_bodies=True),
     StepType("PathPatternFeature", "path pattern", reader="read_repeat", sketches=(PATH,),
              gap_cause=gap_hints.PATH_PATTERN, reaches_bodies=True, repeats_sources=True),

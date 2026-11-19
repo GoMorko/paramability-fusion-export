@@ -400,6 +400,23 @@ THIN_NOT_MATCHING = ("The wall Fusion made does not match the line, side and len
 THIN_UNSURE = ("The side the wall of this thin extrude stands on could not be told from what Fusion made, so it is "
                "not copied.")
 
+# Ribs and webs (`steps/rib_web.py`).
+RIB_UNREADABLE = "A setting of this rib or web could not be read from Fusion."
+RIB_DRAFT = "A rib or web with a draft is not copied."
+RIB_FILLET = "A rib or web with a fillet where it meets the part is not copied."
+RIB_EXTENT = "This rib or web ends in a way that is not copied."
+RIB_LINES = "The lines of this rib or web could not be read as open lines of one sketch, so it is not copied."
+RIB_CURVES = "A rib or web along arcs or curves is not copied."
+RIB_OPPOSED = "The lines of this rib or web do not all run the same way along it, so it is not copied."
+RIB_FOLDS = "The wall of this rib or web does not follow its lines: %s."
+RIB_UNMEASURED = "The wall of this rib or web could not be measured, so it is not copied."
+RIB_NOT_MATCHING = "The wall Fusion made does not match the lines and settings of this rib or web, so it is not copied."
+RIB_UNSURE = ("The side the wall of this rib or web stands on could not be told from what Fusion made, so it is not "
+              "copied.")
+RIB_NEXT_SHAPE = ("This rib or web reaches the part in a shape that is not a wall of one depth (Fusion fills up to "
+                  "the faces it meets), so it is not copied.")
+RIB_NEXT_LINE = "A rib that reaches to the part is copied only along one straight line."
+
 # Press Pull of a whole round face (`steps/offset_round.py`).
 OFFSET_ROUND_UNREAD = "The round face of this offset could not be read, so it is not copied."
 OFFSET_ROUND_NOT_WHOLE = ("A round face is copied only when it goes all the way round and both its ends are flat faces "

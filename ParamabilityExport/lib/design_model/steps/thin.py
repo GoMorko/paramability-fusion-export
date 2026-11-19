@@ -351,6 +351,13 @@ def _segment_gap(a, b, c, d):
     return min(to_segment(a, c, d), to_segment(b, c, d), to_segment(c, a, b), to_segment(d, a, b))
 
 
+def band_pieces(points, left, right):
+    """The wall of `band` as one four-cornered piece per line, in line order: each piece runs along its line between
+    the corners where the wall turns, so the pieces meet only along their ends."""
+    lefts, rights = _side_points(points, left), _side_points(points, -right)
+    return [[lefts[k], lefts[k + 1], rights[k + 1], rights[k]] for k in range(len(points) - 1)]
+
+
 def band(points, left, right):
     """The corners of the wall as one closed outline (not repeating its first corner): along the left side from the
     start of the line, across its end, back along the right side."""
@@ -368,7 +375,7 @@ def _vector(v):
     return isinstance(v, list) and len(v) == 3 and all(is_number(c) for c in v)
 
 
-def _on_wall(footprint, face, frame, start, span):
+def on_wall(footprint, face, frame, start, span):
     """True when a flat face (a `wall_faces` record) lies on the wall whose outline is `footprint` in `frame`, running
     `span` (low, high, mm) along the sketch normal from `start`: across the normal at an end of the span on the
     outline, or along the normal on a side of the outline."""
@@ -392,7 +399,7 @@ def _on_wall(footprint, face, frame, start, span):
     return gap <= FACE_TOL and abs(across[0] * d[0] + across[1] * d[1]) <= NORMAL_TOL
 
 
-def _flat(face):
+def flat_face(face):
     return (isinstance(face, dict) and face.get("surface") == "Plane" and _vector(face.get("point"))
             and _vector(face.get("normal")))
 
@@ -423,18 +430,36 @@ def merged(footprint, face, frame, start, span, before):
     Fusion merged with a face of the part: it lies on the plane of a face of the target body before the step
     (`before`, `target_faces_before`) and on the plane of a face of the wall, both facing the way it faces."""
     normal = vec.unit(face["normal"])
-    if not any(_flat(other) and _same_plane(other, face["point"], normal) for other in before or []):
+    if not any(flat_face(other) and _same_plane(other, face["point"], normal) for other in before or []):
         return False
     return any(_same_plane(face, point, outward) for point, outward in _wall_planes(footprint, frame, start, span))
 
 
 def fits(footprint, faces, frame, start, span, before=None):
-    """True when each face of `faces` (`wall_faces` records) is flat and lies on the wall (`_on_wall`), or is a face
-    of the wall merged with a face of the part (`merged`), and at least one lies on the wall."""
-    if not all(_flat(face) for face in faces):
+    """True when each face of `faces` (`wall_faces` records) is flat and lies on the wall (`on_wall`), or is a face
+    of the wall merged with a face of the part (`merged`), and at least one lies on the wall (`on_wall`)."""
+    if not all(flat_face(face) for face in faces):
         return False
-    on = [_on_wall(footprint, face, frame, start, span) for face in faces]
+    on = [on_wall(footprint, face, frame, start, span) for face in faces]
     return any(on) and all(ok or merged(footprint, face, frame, start, span, before) for ok, face in zip(on, faces))
+
+
+def spans(length, symmetric):
+    """[(way, (low, high))]: where a wall `length` long along the sketch normal can run from its start, centred on it
+    (way 0) or to either side (way +1 or -1)."""
+    if symmetric:
+        return [(0, (-length / 2.0, length / 2.0))]
+    return [(1, (0.0, length)), (-1, (-length, 0.0))]
+
+
+def line_fits(line, sides, thickness, faces, start, ways, before=None):
+    """[(side, way)]: each side of `sides` and each `(way, span)` of `ways` whose wall along the open `Line` fits the
+    measured `faces` (`fits`)."""
+    found = []
+    for side in sides:
+        footprint = Footprint(band_profile(line.frame, band(line.points, *reaches(side, thickness))))
+        found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
+    return found
 
 
 def line_side(line, location, thickness, faces, start, length, symmetric, sign, before=None):
@@ -444,15 +469,7 @@ def line_side(line, location, thickness, faces, start, length, symmetric, sign, 
     `before` the faces of the target body before the step (`target_faces_before`), for faces Fusion merged."""
     if not isinstance(faces, list) or not faces:
         return WALL_UNMEASURED
-    if symmetric:
-        ways = [(1, (-length / 2.0, length / 2.0))]
-    else:
-        ways = [(1, (0.0, length)), (-1, (-length, 0.0))]
-    found = []
-    for side in LOCATIONS[location]:
-        corners = band(line.points, *reaches(side, thickness))
-        footprint = Footprint(band_profile(line.frame, corners))
-        found += [(side, way) for way, span in ways if fits(footprint, faces, line.frame, start, span, before)]
+    found = line_fits(line, LOCATIONS[location], thickness, faces, start, spans(length, symmetric), before)
     if len(found) > 1:
         return UNSURE
     if not found:

@@ -174,9 +174,26 @@ def path_record(path, ctx):
     unreadable)."""
     if path is None:
         return None
-    items = _listed(lambda: path, MAX_PATH_ENTITIES + 1)
-    record = {"closed": geo.safe(lambda: bool(path.isClosed), None), "kind": "other",
-              "curves": None, "edges": []}
+    return _record(_listed(lambda: path, MAX_PATH_ENTITIES + 1), geo.safe(lambda: bool(path.isClosed), None), ctx)
+
+
+class _ChainEntry:
+    """One curve of an open chain, read like a `PathEntity`: the curve, whether it runs against the chain, and no
+    curve of its own to check against."""
+
+    def __init__(self, entity, opposed):
+        self.entity, self.isOpposedToEntity, self.curve = entity, opposed, None
+
+
+def chain_record(entries, ctx):
+    """An open chain of sketch curves as a path record (`path_record`, `closed` false): `entries` lists (curve,
+    reversed) in chain order, `reversed` true for a curve that runs against the chain (its `opposed`)."""
+    return _record([_ChainEntry(curve, bool(reverse)) for curve, reverse in entries[:MAX_PATH_ENTITIES + 1]], False,
+                   ctx)
+
+
+def _record(items, closed, ctx):
+    record = {"closed": closed, "kind": "other", "curves": None, "edges": []}
     if items is None:
         return record
     if len(items) > MAX_PATH_ENTITIES:

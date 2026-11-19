@@ -98,7 +98,7 @@ class LineWall:
                 "ends": "square", "corners": "sharp"}
 
 
-def _faces_of_built_body(ctx, data):
+def faces_of_built_body(ctx, data):
     """The faces of the body before the step (`target_faces_before`) when they are the faces of the body this walk
     builds (`target_faces_body`), else None: in the walk of a tool body the reader's target is another body, and a
     face of that body proves nothing about a face of the tool."""
@@ -107,13 +107,19 @@ def _faces_of_built_body(ctx, data):
 
 
 def wall_step(ctx, item, data, wall, line, drawn, start, entry):
-    """The `LineWall` of a thin extrude of an open line, or a Refusal: the side from the measured faces (`decide`),
-    the thickness that follows its parameter, and the line's shape kept over the size ranges."""
+    """The `LineWall` of a thin extrude of an open line, or a Refusal: the side from the measured faces (`decide`, or
+    `thin_wall.decided` when the step that was written as this extrude found it), the thickness that follows its
+    parameter, and the line's shape kept over the size ranges."""
     thickness = wall["thickness"]
     # The line alone first: a line that turns back on itself has no wall to compare the faces with.
     problem = line_problem(line.points, 0.0, 0.0)
-    side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry,
-                  _faces_of_built_body(ctx, data)) if not problem else None
+    side = None
+    if not problem and wall.get("decided") in SWAPPED:
+        # A step written as a thin extrude (a rib or web) whose side its own handler found from what Fusion made.
+        side = wall["decided"]
+    elif not problem:
+        side = decide(line, wall["location"], thickness, data.get("wall_faces"), start, entry,
+                      faces_of_built_body(ctx, data))
     if isinstance(side, Refusal):
         return side
     problem = problem or line_problem(line.points, *reaches(side, thickness))

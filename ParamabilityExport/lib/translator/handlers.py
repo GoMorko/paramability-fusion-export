@@ -5,7 +5,7 @@ from . import extrude
 from .bodies import move, paste, scale, split
 from .coil import step as coil
 from .combine import step as combine
-from .extrude import emboss
+from .extrude import emboss, rib_web
 from .finishes import draft, finish, offset
 from .hole import step as hole
 from .loft import step as loft
@@ -33,6 +33,8 @@ HANDLERS = {
     "MoveFeature": move.handle,
     "ScaleFeature": scale.handle,
     "EmbossFeature": emboss.handle,
+    "RibFeature": rib_web.handle,
+    "WebFeature": rib_web.handle,
     "CoilFeature": coil.handle,
     "SweepFeature": sweep.handle,
     "PipeFeature": pipe.handle,
