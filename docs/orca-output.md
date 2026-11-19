@@ -1467,7 +1467,8 @@ built with these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after
 Patterns and mirrors of bodies that a Combine takes: the captures of `tests/orca_body_patterns.py`. Save one with
 `python3 -m tests.orca_body_patterns <name> <file>` and give the file to `write`. Each peg is a 6 x 6 mm square body
 standing on the top face of the plate (z 4), `peg_h` high (6 mm, 216 mm3). The volumes are exact, and the boxes are
-in the capture's coordinates. `count` keeps its number in Orca, so `--set count=5` leaves each body as it is.
+in the capture's coordinates. `count` keeps its number in Orca, so `--set count=5` leaves each body as it is. All four built with
+these volumes and boxes in OrcaSlicer 2.5.1 on 2026-11-19, also after the `--set` changes below.
 
 - `peg_row`: a 60 x 20 x 4 plate (box 0 to 60, 0 to 20, 0 to 10) and a peg at (8, 10), patterned 4 times `pitch`
   (14) mm apart along X and joined by one Combine: 4800 + 4 x 216 = 5664 mm3. `--set pitch=18` gives 5664 mm3 with
