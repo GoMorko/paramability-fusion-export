@@ -9,116 +9,39 @@ Autodesk and Fusion are trademarks of Autodesk, Inc. Paramability is not affilia
 
 The add-in adds three buttons to Fusion:
 
-- **Export for Paramability** saves one or more bodies with their modeling steps and your user parameters. In
-  Paramability, you change a parameter and the part rebuilds.
-- **Export size choices** saves fixed sizes of one body, for example S, M and L. In Paramability, you select a size
-  from a list.
-- **Export for Orca (experimental)** saves one body as an OrcaSlicer 2.5 project. The Design tab of OrcaSlicer
-  rebuilds the part, and your user parameters become its variables (`agent-docs/orca-output.md`). It copies:
-  - extrudes, also with a start offset, a taper, "To" a face or a plane, and a start "From" a face, and the text and
-    embosses on a flat face, where the depth follows a parameter;
-  - full ellipses, with the numbers they have now;
-  - thin walls along one rectangle, one circle, straight lines, or lines and arcs that meet smoothly, and ribs and
-    webs along straight lines;
-  - revolves, also with holes in the outline, with several outlines, and with a symmetric angle that follows a
-    parameter (the copy makes two turns, one to each side);
-  - holes, also "To" a face or a plane, and threads;
-  - sweeps, lofts of two outlines, and pipes with a round section, solid or hollow;
-  - patterns on a straight line, an arc or a circle, and patterns and mirrors of bodies that one Combine joins to
-    the part or cuts from it (the count keeps its number);
-  - a Press Pull of one whole round face, a body made by Copy and Paste, and Combine, split and move.
-  Export for Orca leaves out a coil, because Orca's sweep along a helix keeps the wire square to its turns, so the
-  ends and the thickness of the wire would not be as in Fusion. It also leaves out a Box, Cylinder, Sphere or Torus
-  step, as the other export does, because Fusion does not tell add-ins where it sits or how it joins the part. Draw
-  the shape in a sketch and extrude or revolve it instead.
+| Button | What it saves | What you get |
+| --- | --- | --- |
+| **Export for Paramability** | One or more bodies, their modeling steps and your user parameters | In Paramability, you change a parameter and the part rebuilds. |
+| **Export size choices** | Fixed sizes of one body, for example S, M and L | In Paramability, you select a size from a list. |
+| **Export for Orca (experimental)** | One body as an OrcaSlicer 2.5 project | The Design tab of OrcaSlicer rebuilds the part. Your user parameters become its variables. |
+
+Both exports copy the common steps: sketches, extrudes, revolves, holes and threads, fillets and chamfers, shells,
+patterns and mirrors, sweeps, lofts, pipes, ribs and Combine. `agent-docs/feature-support.md` lists each Fusion
+step and which export copies it.
 
 Your Fusion licence applies to the files that you export. Personal is for non-commercial use. Education is for
 learning only.
 
 ## How it works
 
-1. The add-in reads the steps of the body in the Fusion timeline: sketches, extrudes, holes, fillets and more.
-2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
-   moves, and how much. Where a step of the body does not rebuild, or shows a new warning, the range of that
-   parameter stops before that value. A step that is red in the timeline now is left out of the copy; where it builds
-   at a value tried, the range stops before that value too. The add-in finds the step by its place in the timeline, so a step of another
-   component with the same name (two components can each have a "Chamfer1") does not hide it. The add-in tries the
-   range ends one size at a time, and finds the last value that builds for that size before it goes to the next size.
-   A size that also changes steps of another component gets its range ends after the other sizes (your favourites
-   still come first), since its tries are the most likely to break the design. Such a size (a width or a wall that a
-   box and its lid share) is a normal size of the part when it changes the part only through the part's own steps,
-   for example the length of an extrude, and the sketches drawn around the other component stay where they are in
-   its tries.
-   When the tries end early, the range stops at the last value that built, and its note says that the values after it
-   were not tried. This is also true for a size whose range ends were not tried yet: its range stops at the values
-   that built in its first tries. A range end that you typed is kept.
-3. It sets all parameters back to their values. Your design does not change. When the check at the end cannot
-   confirm this, the add-in asks Fusion to undo the whole export, and the result window says so. This also happens
-   for an export that you cancel or that stops, when the add-in cannot confirm that your design came back. A file
-   that was saved stays saved (with "Lighter on memory" ticked the add-in cannot undo, and the window says so; when the
-   design was saved in the cloud, the window gives the steps to get the design back as it was saved: close it without
-   saving and open it again from the Data Panel; the add-in does not close the design itself; when Fusion showed
-   unsaved changes before the export, the window says that they are lost too).
-   A parameter that no copied step uses
-   is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
-   When a change leaves a step in a new warning or error, or a sketch on its other solution, also with the values
-   back, the add-in tries to bring the design back: it sets the sizes of the recent changes a little past their
-   values from the other side and back, one change or one size at a time. If it cannot, it stops the changes there and
-   tells you which step. When only steps of another component stay changed and the part is as before, it stops only the
-   changes of the sizes behind it and tries the other sizes in full. Your design is changed then, so the add-in asks
-   Fusion to undo the export at its end. At the end it compares the sketches and the volume and size of the body with
-   the start, and tells you when they differ. A very small difference with nothing else changed counts as "not
-   confirmed", not as a change.
-4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
-   Fusion made it.
-5. Paramability builds the part from the steps and compares it with the STEP shape.
+1. **Read.** The add-in reads the timeline steps that make the body.
+2. **Try.** It changes each parameter for a short time and lets Fusion rebuild. This shows what each parameter
+   moves, and how far it can go before a step fails. These tries give the Min and Max of each size.
+3. **Put back.** It sets all parameters back and checks that the design is the same as before. If it cannot confirm
+   this, it asks Fusion to undo the whole export. The result window tells you.
+4. **Write.** It writes the steps, the parameters and a STEP copy of the body to a `.paramability` file.
+5. **Rebuild.** Paramability builds the part from the steps and compares it with the STEP copy.
 
-The add-in cannot copy all Fusion steps. If it cannot copy a step, it leaves the step out and tells you why.
-For some steps the add-in measures the shape that Fusion made, for example the radius of a round set by chord
-length, or of a round whose radius changes along its edge. It copies such a step only when the measure agrees.
-A shell that grows outward or has rounded corners is copied only when the volume of the part changed as the shell says.
-A thin extrude of an open line (a fence or a divider) is copied only when the faces that Fusion made show on which
-side of the line the wall stands. A line with arcs is copied only where each arc meets the next piece smoothly, and
-only when the part grew by exactly the wall; its wall then keeps its shape and thickness as measured. Export for Orca
-copies a thin wall along one rectangle, one circle or one line of lines and arcs; the side of the wall comes from
-what Fusion measured, as for the other export.
-A Rib or a Web along straight lines is copied in both exports as a thin wall along each line. It is copied only when
-the faces that Fusion made show the wall and the part grew by the whole wall. Fusion stops a rib or a web where it
-meets the part, so a wall that runs into the part is left out. A rib with To Next that Fusion fills into a corner (a
-gusset) is copied as the outline that Fusion made, with its numbers, when the faces and the volume prove that outline.
-Fusion does not record which way some steps go, for example a join whose end merges into the part. The add-in then
-tells the way from where the body grew. When that does not show it, the add-in leaves the step out.
-For example, a Pattern on Path is copied only when its path is one straight line, one arc or one circle, and a
-Scale of a body is copied only when the body measured after it has the size and volume that its factors give. A Press
-Pull on the wall of a hole or of a pin (to tune a fit) is copied only when the new radius that Fusion made agrees.
-Export for Orca copies such a Press Pull of one round face as a ring that it adds to the part or cuts from it, and
-the distance follows its parameter.
-A Pipe with a round section is copied as a sweep of a circle. A pipe with a square or triangle section is left out.
-The add-in checks where Fusion says each copy of a pattern is against the faces of that copy, and leaves the
-pattern out when the two do not agree.
-A join "through all" is copied only when it joins this body alone and Fusion ended it on the far side of this body.
-The add-in marks the sizes that change the body before it "may give unexpected results" (`agent-docs/limits.md`).
-A revolve turns toward one side of its sketch in Fusion. When a parameter moves its axis past the outline, the
-range of that parameter stops before the outline reaches the axis.
-A shell, round or chamfer on the faces or edges of a revolve follows the sizes of the revolve, for example the open
-top and the rounded outer rim of a cup. A round or chamfer inside a shelled cup (its inner rim, its inner bottom edge)
-follows the sizes and the thickness of the shell, and one on a flat end face of a part turn follows the outline.
-Outlines that share a line and are revolved together (a lid and its rim) count as one outline, so a round or chamfer
-where they meet follows the sizes too. Where the add-in cannot be sure (the end face turns with a size, the outlines
-overlap, a size moves one outline so that they meet in another way), the sizes are marked.
-Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
-across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
-what a place is, it marks every size that the steps before it use (`agent-docs/limits.md`).
-The same holds when Fusion picked the edges of a round or chamfer from faces or chains of edges and the copy has to
-pick the edges one by one: at other sizes those faces or chains may hold other edges.
-One fillet or chamfer can hold several sets of edges, each picked in its own way and with its own size. When the sets
-lie apart from each other, the copy makes one step for each way of picking, one after the other. Then each set keeps
-the pick that Fusion used. When one set cannot be copied, only that set is left out, and the copy keeps the others.
-The sizes used before such a step are still marked, since the add-in cannot see whether they move the sets nearer.
-A set that Fusion cannot list (a face picked with Tangent Chain on, where no other face meets it smoothly) leaves its
-whole step out, with a tip. A step that cannot be read from Fusion is left out when the part changed around it, so
-the rest of the part is still copied.
-Paramability then shows the original shape and a list of the missing steps.
+**When the add-in is not sure, it leaves a step out.** A wrong copy is worse than a missing step. Each step that is
+left out has a reason and a tip. Paramability shows the original shape and the list of missing steps.
+
+For some steps, the add-in measures the shape that Fusion made. It copies the step only when the measure agrees.
+
+Some sizes can move a place that stays fixed in the copy, for example a mirror plane. The add-in marks these sizes
+"may give unexpected results".
+
+`agent-docs/user-guide.md` tells more about the tries, the size ranges and the put back. `agent-docs/limits.md`
+gives the rules for each step.
 
 ## Install
 
@@ -136,7 +59,8 @@ The three buttons are in the **Utilities** tab, in the **Paramability** panel.
 
 1. Optional: in Fusion, mark the user parameters that you want to change in Paramability as favourites.
 2. Click **Export for Paramability**.
-3. Select the body. (*Upon initial selection there's a timeline rewind which can take its time.*) To put more bodies in one file, select up to 32 bodies.
+3. Select the body. To put more bodies in one file, select up to 32 bodies. The add-in then moves the timeline back to
+   read the steps. On a large design, this can take some time.
 4. Look at the parameter table. The add-in ticks the parameters that the body uses. Tick or untick parameters as
    necessary. Each ticked parameter becomes a size in Paramability. You can type a Min and a Max for it.
 5. If a warning shows below the body picker, read it. It tells you which steps the copy cannot use and how to change
@@ -156,19 +80,32 @@ The three buttons are in the **Utilities** tab, in the **Paramability** panel.
 6. Click **OK** and select where to save the file.
 7. Open the file in Paramability.
 
+### Export for Orca
+
+1. Click **Export for Orca (experimental)**.
+2. Select the body. Tick the parameters that you want as variables in Orca.
+3. Save the `.3mf` file.
+4. In OrcaSlicer 2.5, turn on Preferences > General > Features > "CAD feature (experimental)". Restart Orca.
+5. Open the file. Change the variables in the Design tab.
+
+This export copies fewer kinds of steps than Export for Paramability. `agent-docs/orca-output.md` tells what it
+copies.
+
 After each export, the add-in sets your parameters back to their values. This also occurs if you cancel the export
 or if an error occurs.
 
 ### When something goes wrong
 
-Each export writes a short trail of what it does in Fusion to the file `export-trail.log`, in the folder
-`ParamabilityExport` of your temporary folder (`%TEMP%\ParamabilityExport` on Windows). The file is kept when
-Fusion closes suddenly. Send it with your bug report (`agent-docs/user-guide.md`, "The export trail, for a bug report").
+Each export writes a short trail of what it does to the file `export-trail.log`. The file is in the folder
+`ParamabilityExport` of your temporary folder (`%TEMP%\ParamabilityExport` on Windows). The file stays when Fusion
+closes suddenly. Send it with your bug report (`agent-docs/user-guide.md`, "The export trail, for a bug report").
 
 ## Main limits
 
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `agent-docs/limits.md` gives the full list.
+- Export for Orca leaves out a coil. Both exports leave out a Box, Cylinder, Sphere or Torus step: draw the shape in a
+  sketch and extrude or revolve it instead.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
 - This is version 0.14.6. It needs Paramability 1.7.0 or newer to open its files.
 
@@ -179,7 +116,7 @@ Fusion closes suddenly. Send it with your bug report (`agent-docs/user-guide.md`
 | `agent-docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
 | `agent-docs/orca-output.md` | Export for Orca: what it copies, what it leaves out, the report |
 | `agent-docs/limits.md` | What the copy can and cannot do, step by step |
-| `agent-docs/feature-support.md` | Which Fusion actions each export copies, and what could be copied later |
+| `agent-docs/feature-support.md` | Which Fusion steps each export copies, and what could be copied later |
 | `agent-docs/development.md` | Code layout and tests |
 | `agent-docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
 | `agent-docs/capture-format.md`, `agent-docs/expressions.md`, `agent-docs/recipe-gaps.md` | File formats and how formulas are copied |
